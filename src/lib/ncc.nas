@@ -417,6 +417,13 @@
 .equ W_PF_IDX   60987
 .equ W_PF_ARGC  60988
 .equ W_PF_CASE  60991
+.equ W_PF_W     60992
+.equ W_PF_FLAGS 60993
+.equ W_PF_VAL   60994
+.equ W_PF_LEN   60995
+.equ W_PF_PAD   60996
+.equ W_PF_NEG   60997
+.equ W_PF_TMP   60998
 .equ W_TKPTR    60990
 .equ W_CASEBASE 60971
 .equ W_DEFSET   60972
@@ -10079,12 +10086,95 @@ SUB r14,r14,r13
 LD r15,r14,0
 RET
 
+; ni_pad: r1=count r2=char -> emit count copies
+ni_pad:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r14,0
+ADD r14,r14,r13
+ST r2,r14,0
+ADD r14,r14,r13
+nip_l:
+ADDI r3,r14,-2
+LD r1,r3,0
+CMP r1,r0
+JMP[EQ] @nip_d
+SUB r1,r1,r13
+ST r1,r3,0
+ADDI r3,r14,-1
+LD r1,r3,0
+CALL @ncc_putc
+JMP @nip_l
+nip_d:
+ADDI r14,r14,-3
+LD r15,r14,0
+RET
+
+; ni_field_pre: r1=len r2=width r3=padchar -> left padding
+ni_field_pre:
+ST r15,r14,0
+ADD r14,r14,r13
+CMP r2,r1
+JMP[LE] @nfp_d
+SUB r1,r2,r1
+ADD r2,r3,r0
+CALL @ni_pad
+nfp_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; ni_field_post: r1=len r2=width -> right padding with spaces
+ni_field_post:
+ST r15,r14,0
+ADD r14,r14,r13
+CMP r2,r1
+JMP[LE] @nfo_d
+SUB r1,r2,r1
+MOVI r2,32
+CALL @ni_pad
+nfo_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; ni_field_tail: r1=len r2=width -> pad spaces only when the '-' flag is set
+ni_field_tail:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r3,r0,#W_PF_FLAGS
+MOVI r4,1
+BOOL.8 r3,r3,r4
+CMP r3,r0
+JMP[EQ] @nft_d
+CMP r2,r1
+JMP[LE] @nft_d
+SUB r1,r2,r1
+MOVI r2,32
+CALL @ni_pad
+nft_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; ni_decdigits: r1=value (non-negative) -> r2=digits
+ni_decdigits:
+MOVI r2,1
+nid_l:
+MOVI r3,10
+CMP r1,r3
+JMP[LT] @nid_d
+DIVU r1,r1,r3
+ADD r2,r2,r13
+JMP @nid_l
+nid_d:
+RET
+
 ni_printf:
 ST r15,r14,0
 ADD r14,r14,r13
 ST r1,r0,#W_PF_ARGC
 ST r0,r0,#W_PF_IDX
-; first argument is the format pointer
 MOVI r1,0
 CALL @ni_arg
 ST r1,r0,#W_PF_FMT
@@ -10106,13 +10196,58 @@ npf_pct:
 LD r1,r0,#W_PF_FMT
 ADD r1,r1,r13
 ST r1,r0,#W_PF_FMT
+ST r0,r0,#W_PF_W
+ST r0,r0,#W_PF_FLAGS
+npf_flag_l:
+LD r1,r0,#W_PF_FMT
 LDB r2,r1,0
 CMP r2,r0
 JMP[EQ] @npf_done
+MOVI r3,45
+CMP r2,r3
+JMP[NE] @npf_flag_z
+LD r3,r0,#W_PF_FLAGS
+MOVI r4,1
+BOOL.14 r3,r3,r4
+ST r3,r0,#W_PF_FLAGS
+ADD r1,r1,r13
+ST r1,r0,#W_PF_FMT
+JMP @npf_flag_l
+npf_flag_z:
+MOVI r3,48
+CMP r2,r3
+JMP[NE] @npf_w_l
+LD r3,r0,#W_PF_FLAGS
+MOVI r4,2
+BOOL.14 r3,r3,r4
+ST r3,r0,#W_PF_FLAGS
+ADD r1,r1,r13
+ST r1,r0,#W_PF_FMT
+JMP @npf_flag_l
+npf_w_l:
+LD r1,r0,#W_PF_FMT
+LDB r2,r1,0
+MOVI r3,48
+CMP r2,r3
+JMP[LT] @npf_w_d
+MOVI r3,58
+CMP r2,r3
+JMP[GE] @npf_w_d
+LD r3,r0,#W_PF_W
+MOVI r4,10
+MUL r3,r3,r4
+ADDI r2,r2,-48
+ADD r3,r3,r2
+ST r3,r0,#W_PF_W
+ADD r1,r1,r13
+ST r1,r0,#W_PF_FMT
+JMP @npf_w_l
+npf_w_d:
+LD r1,r0,#W_PF_FMT
+LDB r2,r1,0
 MOVI r3,108
 CMP r2,r3
 JMP[NE] @npf_fmt
-; skip 'l' and read the real conversion
 ADD r1,r1,r13
 ST r1,r0,#W_PF_FMT
 LDB r2,r1,0
@@ -10144,7 +10279,6 @@ JMP[EQ] @npf_hex_low
 MOVI r3,37
 CMP r2,r3
 JMP[EQ] @npf_pctc
-; unknown: print it literally after '%'
 ADD r1,r2,r0
 CALL @ncc_putc
 JMP @npf_adv
@@ -10153,16 +10287,108 @@ LD r1,r0,#W_PF_IDX
 ADD r1,r1,r13
 ST r1,r0,#W_PF_IDX
 CALL @ni_arg
-ADD r5,r1,r0
+ST r1,r0,#W_PF_VAL
+ST r0,r0,#W_PF_NEG
+CMPS r1,r0
+JMP[GE] @npf_i_abs
+MOVI r2,1
+ST r2,r0,#W_PF_NEG
+SUB r1,r0,r1
+npf_i_abs:
+ST r1,r0,#W_PF_TMP
+CALL @ni_decdigits
+LD r1,r0,#W_PF_NEG
+ADD r2,r2,r1
+ST r2,r0,#W_PF_LEN
+MOVI r1,32
+LD r2,r0,#W_PF_FLAGS
+MOVI r3,2
+BOOL.8 r2,r2,r3
+CMP r2,r0
+JMP[EQ] @npf_i_pad
+LD r2,r0,#W_PF_NEG
+CMP r2,r0
+JMP[NE] @npf_i_pad
+MOVI r1,48
+npf_i_pad:
+ST r1,r0,#W_PF_PAD
+; negative zero-padded: sign first, zeros, then magnitude
+LD r2,r0,#W_PF_NEG
+CMP r2,r0
+JMP[EQ] @npf_i_normal
+LD r2,r0,#W_PF_FLAGS
+MOVI r3,2
+BOOL.8 r2,r2,r3
+CMP r2,r0
+JMP[EQ] @npf_i_normal
+LD r2,r0,#W_PF_FLAGS
+MOVI r3,1
+BOOL.8 r2,r2,r3
+CMP r2,r0
+JMP[NE] @npf_i_normal
+MOVI r1,45
+CALL @ncc_putc
+LD r1,r0,#W_PF_LEN
+LD r2,r0,#W_PF_W
+CMP r2,r1
+JMP[LE] @npf_i_negmag
+SUB r1,r2,r1
+MOVI r2,48
+CALL @ni_pad
+npf_i_negmag:
+LD r5,r0,#W_PF_TMP
+CALL @putudec
+JMP @npf_i_adv
+npf_i_normal:
+LD r2,r0,#W_PF_FLAGS
+MOVI r3,1
+BOOL.8 r2,r2,r3
+CMP r2,r0
+JMP[NE] @npf_i_print
+LD r1,r0,#W_PF_LEN
+LD r2,r0,#W_PF_W
+LD r3,r0,#W_PF_PAD
+CALL @ni_field_pre
+npf_i_print:
+LD r5,r0,#W_PF_VAL
 CALL @putdec
+npf_i_adv:
+LD r1,r0,#W_PF_LEN
+LD r2,r0,#W_PF_W
+CALL @ni_field_tail
 JMP @npf_adv
 npf_uint:
 LD r1,r0,#W_PF_IDX
 ADD r1,r1,r13
 ST r1,r0,#W_PF_IDX
 CALL @ni_arg
-ADD r5,r1,r0
+ST r1,r0,#W_PF_VAL
+CALL @ni_decdigits
+ST r2,r0,#W_PF_LEN
+MOVI r1,32
+LD r2,r0,#W_PF_FLAGS
+MOVI r3,2
+BOOL.8 r2,r2,r3
+CMP r2,r0
+JMP[EQ] @npf_u_pad
+MOVI r1,48
+npf_u_pad:
+ST r1,r0,#W_PF_PAD
+LD r2,r0,#W_PF_FLAGS
+MOVI r3,1
+BOOL.8 r2,r2,r3
+CMP r2,r0
+JMP[NE] @npf_u_print
+LD r1,r0,#W_PF_LEN
+LD r2,r0,#W_PF_W
+LD r3,r0,#W_PF_PAD
+CALL @ni_field_pre
+npf_u_print:
+LD r5,r0,#W_PF_VAL
 CALL @putudec
+LD r1,r0,#W_PF_LEN
+LD r2,r0,#W_PF_W
+CALL @ni_field_tail
 JMP @npf_adv
 npf_hex_low:
 MOVI r2,0
@@ -10176,24 +10402,84 @@ LD r1,r0,#W_PF_IDX
 ADD r1,r1,r13
 ST r1,r0,#W_PF_IDX
 CALL @ni_arg
+ST r1,r0,#W_PF_VAL
+CALL @ni_hexdigits
+ST r2,r0,#W_PF_LEN
+MOVI r1,32
+LD r2,r0,#W_PF_FLAGS
+MOVI r3,2
+BOOL.8 r2,r2,r3
+CMP r2,r0
+JMP[EQ] @npf_h_pad
+MOVI r1,48
+npf_h_pad:
+ST r1,r0,#W_PF_PAD
+LD r2,r0,#W_PF_FLAGS
+MOVI r3,1
+BOOL.8 r2,r2,r3
+CMP r2,r0
+JMP[NE] @npf_h_print
+LD r1,r0,#W_PF_LEN
+LD r2,r0,#W_PF_W
+LD r3,r0,#W_PF_PAD
+CALL @ni_field_pre
+npf_h_print:
+LD r1,r0,#W_PF_VAL
 LD r2,r0,#W_PF_CASE
 CALL @ni_hexmin
+LD r1,r0,#W_PF_LEN
+LD r2,r0,#W_PF_W
+CALL @ni_field_tail
 JMP @npf_adv
 npf_char:
 LD r1,r0,#W_PF_IDX
 ADD r1,r1,r13
 ST r1,r0,#W_PF_IDX
 CALL @ni_arg
+ST r1,r0,#W_PF_VAL
+MOVI r1,1
+ST r1,r0,#W_PF_PAD
+LD r1,r0,#W_PF_FLAGS
+MOVI r2,1
+BOOL.8 r1,r1,r2
+CMP r1,r0
+JMP[NE] @npf_c_print
+MOVI r1,1
+LD r2,r0,#W_PF_W
+MOVI r3,32
+CALL @ni_field_pre
+npf_c_print:
+LD r1,r0,#W_PF_VAL
 MOVI r2,255
 BOOL.8 r1,r1,r2
 CALL @ncc_putc
+MOVI r1,1
+LD r2,r0,#W_PF_W
+CALL @ni_field_tail
 JMP @npf_adv
 npf_str:
 LD r1,r0,#W_PF_IDX
 ADD r1,r1,r13
 ST r1,r0,#W_PF_IDX
 CALL @ni_arg
+ST r1,r0,#W_PF_VAL
+CALL @ni_strlen
+ST r1,r0,#W_PF_LEN
+LD r2,r0,#W_PF_FLAGS
+MOVI r3,1
+BOOL.8 r2,r2,r3
+CMP r2,r0
+JMP[NE] @npf_s_print
+LD r1,r0,#W_PF_LEN
+LD r2,r0,#W_PF_W
+MOVI r3,32
+CALL @ni_field_pre
+npf_s_print:
+LD r1,r0,#W_PF_VAL
 CALL @ni_puts
+LD r1,r0,#W_PF_LEN
+LD r2,r0,#W_PF_W
+CALL @ni_field_tail
 JMP @npf_adv
 npf_pctc:
 MOVI r1,37
@@ -10213,6 +10499,7 @@ CALL @ni_push
 SUB r14,r14,r13
 LD r15,r14,0
 RET
+
 
 ; byte helpers
 ni_memcpy_raw: ; r1=dst r2=src r3=n
