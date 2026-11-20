@@ -48,6 +48,7 @@ Implemented:
   comparisons, casts, and built-in `sin`/`cos`
 - `printf` with `%d %i %u %x %X %c %s %p %f %%`, flags `-`/`0`, field
   width, and precision (including `%.2f` and `%.3s`)
+- variadic functions: `va_list`, `va_start`, `va_arg`, `va_end`
 - string and character literals with escapes (`\n`, `\t`, `\xNN`, octal)
 - `char` arrays with string-literal initializers, including unsized
   `char s[] = "..."`
@@ -73,7 +74,8 @@ Not implemented (honest list):
 - nested aggregate initializers and brace initializers for array members
   inside a struct or union
 - bit-fields; `const`/`volatile`/`register` are accepted but not enforced
-- user variadic functions; `printf` is a built-in variadic function
+- user variadic functions are supported (`va_list`, `va_start`, `va_arg`,
+  `va_end`; up to 16 variadic argument words per call)
 - `%e`/`%g` conversions and zero-padding for `%f` fields (`%08.2f`)
 - the path filesystem is RAM-backed (it resets on reboot); no disk
   persistence yet
@@ -163,6 +165,7 @@ tools/ncc_m8.sh     float literals/arithmetic/casts and sin/cos
 tools/ncc_m9.sh     function pointers: globals/locals/assignment/indirect calls
 tools/ncc_m10.sh    printf %f, precision, float width/flags
 tools/ncc_m11.sh    struct/union pass-by-value and return-by-value
+tools/ncc_m12.sh    user variadic functions (int/char/float/struct)
 tools/ncc_donut.sh  original C donut (one frame) in raw NaN16
 tools/nfs2.sh       path-addressed RAM filesystem API
 tools/ncc_gui.sh    boot image, open terminal, .demo runs C in the vbuf

@@ -214,6 +214,7 @@
 .equ I_CALLI    66
 .equ I_CALLB    67
 .equ I_RETSTRUCT 68
+.equ I_VAARG    69
 .equ CALB_SCRATCH 2700000
 
 ; symbol entry: 16 words
@@ -439,6 +440,9 @@
 .equ W_F2I      61004
 .equ W_F2F      61005
 .equ W_F2L      61006
+.equ W_VARNP    61390
+.equ W_VARFLAG  61391
+.equ W_VARCNT   61393
 .equ W_TKPTR    60990
 .equ W_CASEBASE 60971
 .equ W_DEFSET   60972
@@ -5521,6 +5525,12 @@ MOVI r4,#B_EXIT
 MOVI r5,1
 MOVI r6,#T_INT
 CALL @ncc_add_builtin
+; va_list typedef = char *
+LA r1,0xF232A721
+LA r2,@ncc_s_va_list
+MOVI r3,7
+LD r4,r0,#W_PTRC
+CALL @ncc_add_typedef
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -5553,6 +5563,32 @@ LD r5,r0,#W_BRET
 ST r5,r1,#SY_TYPE
 ST r0,r1,#SY_ARG
 ST r0,r1,#SY_SIZE
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; ncc_add_typedef: r1=hash r2=name(word addr) r3=len r4=type
+ncc_add_typedef:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r4,r0,#W_BRET
+ST r1,r0,#W_TKA+2
+ST r3,r0,#W_TKA+3
+ST r0,r0,#W_TKA
+ST r0,r0,#W_TKA+1
+LA r6,#W_TKA+#TK_TEXT
+MOVI r7,3
+ADD r7,r7,r3
+SHR r7,r7,2
+BCOPY r6,r2,r7
+MOVI r1,#SK_TYPE
+CALL @sym_get_cur
+CALL @sym_entry
+LD r4,r0,#W_BRET
+ST r4,r1,#SY_TYPE
+MOVI r4,4
+ST r4,r1,#SY_SIZE
+ST r0,r1,#SY_CLS
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -5601,6 +5637,14 @@ ncc_s_abs:
 .str "abs"
 ncc_s_exit:
 .str "exit"
+ncc_s_va_start:
+.str "va_start"
+ncc_s_va_arg:
+.str "va_arg"
+ncc_s_va_end:
+.str "va_end"
+ncc_s_va_list:
+.str "va_list"
 ncc_s_sin:
 .str "sin"
 ncc_s_cos:
@@ -6117,6 +6161,18 @@ ST r0,r0,#W_LVAL
 CALL @p_adv
 JMP @pp_done
 pp_ident:
+LA r2,@ncc_s_va_start
+CALL @tok_is_str
+CMP r1,r0
+JMP[NE] @pp_va_start
+LA r2,@ncc_s_va_arg
+CALL @tok_is_str
+CMP r1,r0
+JMP[NE] @pp_va_arg
+LA r2,@ncc_s_va_end
+CALL @tok_is_str
+CMP r1,r0
+JMP[NE] @pp_va_end
 CALL @p_peek
 LD r1,r0,#W_TKB
 MOVI r2,#K_PUNCT
@@ -6322,6 +6378,99 @@ CALL @ty_funcptr_ret
 ST r1,r0,#W_ETYPE
 CALL @p_set_call_result
 JMP @pp_done
+pp_va_start:
+CALL @p_adv
+MOVI r1,#P_LPAREN
+MOVI r2,9
+CALL @p_expect_p
+CALL @p_assign
+LD r1,r0,#W_LVAL
+CMP r1,r0
+JMP[NE] @pvs_ok
+MOVI r1,6
+CALL @p_err
+pvs_ok:
+LA r1,#I_LADDR
+MOVI r2,16
+CALL @ir_emit
+LA r1,#I_STORE
+MOVI r2,#SZ_32
+CALL @ir_emit
+MOVI r1,#P_COMMA
+MOVI r2,24
+CALL @p_expect_p
+CALL @p_assign
+CALL @p_emit_rv
+LA r1,#I_POP
+CALL @ir_op
+MOVI r1,#P_RPAREN
+MOVI r2,10
+CALL @p_expect_p
+LA r1,#I_PUSH
+MOVI r2,0
+CALL @ir_emit
+MOVI r1,#T_INT
+ST r1,r0,#W_ETYPE
+ST r0,r0,#W_LVAL
+JMP @pp_done
+
+pp_va_arg:
+CALL @p_adv
+MOVI r1,#P_LPAREN
+MOVI r2,9
+CALL @p_expect_p
+CALL @p_assign
+LA r1,#I_VAARG
+CALL @ir_op
+MOVI r1,#P_COMMA
+MOVI r2,24
+CALL @p_expect_p
+CALL @p_typespec
+CALL @p_ptr_suffix
+ST r1,r0,#W_TY_ID
+MOVI r1,#P_RPAREN
+MOVI r2,10
+CALL @p_expect_p
+LD r1,r0,#W_TY_ID
+CALL @ty_kind
+MOVI r2,#TY_STRUCT
+CMP r1,r2
+JMP[EQ] @pva_agg
+MOVI r2,#TY_UNION
+CMP r1,r2
+JMP[EQ] @pva_agg
+LD r1,r0,#W_TY_ID
+ST r1,r0,#W_ETYPE
+ST r0,r0,#W_LVAL
+JMP @pp_done
+pva_agg:
+LD r1,r0,#W_TY_ID
+ST r1,r0,#W_ETYPE
+ST r1,r0,#W_LTYPE
+MOVI r1,1
+ST r1,r0,#W_LVAL
+JMP @pp_done
+
+pp_va_end:
+CALL @p_adv
+MOVI r1,#P_LPAREN
+MOVI r2,9
+CALL @p_expect_p
+CALL @p_assign
+CALL @p_emit_rv
+LA r1,#I_POP
+CALL @ir_op
+MOVI r1,#P_RPAREN
+MOVI r2,10
+CALL @p_expect_p
+LA r1,#I_PUSH
+MOVI r2,0
+CALL @ir_emit
+MOVI r1,#T_INT
+ST r1,r0,#W_ETYPE
+ST r0,r0,#W_LVAL
+JMP @pp_done
+
 pp_punct:
 LD r1,r0,#W_TKA+1
 MOVI r2,#P_LPAREN
@@ -8757,6 +8906,28 @@ SUB r14,r14,r13
 LD r15,r14,0
 RET
 
+; tok_is_str: r1=current token text, r2=packed string -> 1/0
+tok_is_str:
+LA r1,#W_TKA+#TK_TEXT
+SHL r1,r1,2
+SHL r2,r2,2
+tis_l:
+LDB r3,r1,0
+LDB r4,r2,0
+CMP r3,r4
+JMP[NE] @tis_n
+CMP r3,r0
+JMP[EQ] @tis_y
+ADD r1,r1,r13
+ADD r2,r2,r13
+JMP @tis_l
+tis_y:
+MOVI r1,1
+RET
+tis_n:
+MOVI r1,0
+RET
+
 ; local declarations
 p_decl:
 ST r15,r14,0
@@ -10263,7 +10434,7 @@ CALL @p_adv
 MOVI r1,#P_LPAREN
 MOVI r2,9
 CALL @p_expect_p
-MOVI r1,16
+MOVI r1,80
 ST r1,r0,#W_LOCALB
 ST r0,r0,#W_FUNCNP
 LD r1,r0,#W_PARAMP
@@ -10282,6 +10453,35 @@ CALL @p_at_p
 CMP r1,r0
 JMP[NE] @pfu_done_params
 pfu_param_l:
+LD r1,r0,#W_TKA
+MOVI r2,#K_PUNCT
+CMP r1,r2
+JMP[NE] @pfu_not_dots
+LD r1,r0,#W_TKA+1
+MOVI r2,#P_DOT
+CMP r1,r2
+JMP[NE] @pfu_not_dots
+CALL @p_adv
+LD r1,r0,#W_TKA+1
+MOVI r2,#P_DOT
+CMP r1,r2
+JMP[NE] @pfu_bad_dots
+CALL @p_adv
+LD r1,r0,#W_TKA+1
+MOVI r2,#P_DOT
+CMP r1,r2
+JMP[NE] @pfu_bad_dots
+CALL @p_adv
+ADDI r3,r14,-1
+LD r1,r3,0
+CALL @sym_entry
+MOVI r2,1
+ST r2,r1,#SY_OFF
+JMP @pfu_done_params
+pfu_bad_dots:
+MOVI r1,23
+CALL @p_err
+pfu_not_dots:
 CALL @p_typespec
 ST r1,r0,#W_TY_ID
 CALL @p_at_funcptr_decl
@@ -12017,6 +12217,10 @@ BOOL.8 r1,r2,r3
 SHR r2,r2,16
 ST r2,r0,#R_T1
 CALL @sym_entry
+LD r3,r1,#SY_OFF
+ST r3,r0,#W_VARFLAG
+LD r3,r1,#SY_NP
+ST r3,r0,#W_VARNP
 LD r3,r1,#SY_KIND
 MOVI r4,#SK_BUILTIN
 CMP r3,r4
@@ -12049,6 +12253,14 @@ LD r5,r1,#SY_NP
 LD r6,r0,#R_T1
 CMP r5,r6
 JMP[EQ] @ncl_argc_ok
+LD r5,r1,#SY_OFF
+CMP r5,r0
+JMP[EQ] @ncl_argc_bad
+LD r5,r1,#SY_NP
+LD r6,r0,#R_T1
+CMP r6,r5
+JMP[GE] @ncl_argc_ok
+ncl_argc_bad:
 MOVI r1,40
 CALL @ncc_err
 ncl_argc_ok:
@@ -12091,9 +12303,9 @@ ST r5,r12,0
 ST r0,r0,#W_TY_KIND
 ncl_copy:
 LD r1,r0,#W_TY_KIND
-LD r2,r0,#R_T1
+LD r2,r0,#W_VARNP
 CMP r1,r2
-JMP[GE] @ncl_copy_d
+JMP[GE] @ncl_varstore
 LD r3,r0,#W_TY_BASE
 SHL r4,r1,1
 ADD r4,r3,r4
@@ -12147,6 +12359,41 @@ LD r1,r0,#W_TY_KIND
 ADD r1,r1,r13
 ST r1,r0,#W_TY_KIND
 JMP @ncl_copy
+ncl_varstore:
+; copy variadic arguments into the callee's 64-byte varargs area at fp+16
+LD r1,r0,#W_VARFLAG
+CMP r1,r0
+JMP[EQ] @ncl_copy_d
+LD r2,r0,#R_T1
+LD r3,r0,#W_VARNP
+SUB r2,r2,r3
+ST r2,r0,#W_VARCNT
+MOVI r6,0
+ncl_vcopy:
+LD r2,r0,#W_VARCNT
+CMP r6,r2
+JMP[GE] @ncl_copy_d
+MOVI r1,16
+CMP r6,r1
+JMP[GE] @ncl_copy_d
+LD r1,r0,#R_SP
+LD r2,r0,#R_T1
+SUB r1,r1,r2
+LD r2,r0,#W_VARNP
+ADD r1,r1,r2
+ADD r1,r1,r6
+LD r1,r1,0
+LD r2,r0,#W_TY_ID
+ADDI r2,r2,16
+SHL r3,r6,2
+ADD r2,r2,r3
+ADD r5,r1,r0
+ADD r1,r2,r0
+ADD r2,r5,r0
+MOVI r3,#SZ_32
+CALL @ni_storev
+ADD r6,r6,r13
+JMP @ncl_vcopy
 ncl_copy_d:
 SUB r14,r14,r13
 LD r1,r14,0
@@ -12378,6 +12625,9 @@ JMP[EQ] @nil_callb
 MOVI r2,#I_RETSTRUCT
 CMP r1,r2
 JMP[EQ] @nil_retstruct
+MOVI r2,#I_VAARG
+CMP r1,r2
+JMP[EQ] @nil_vaarg
 JMP @nil_bad
 
 nil_calli:
@@ -12428,6 +12678,22 @@ LD r2,r0,#R_T0
 BOOL.14 r1,r1,r2
 ST r1,r0,#R_T0
 CALL @ni_call
+JMP @nil_again
+nil_vaarg:
+CALL @ni_pop
+ST r1,r0,#R_T2
+MOVI r2,#SZ_32
+CALL @ni_loadv
+ST r1,r0,#R_T0
+ADD r1,r1,r0
+MOVI r2,#SZ_32
+CALL @ni_loadv
+CALL @ni_push
+LD r1,r0,#R_T0
+ADDI r2,r1,4
+LD r1,r0,#R_T2
+MOVI r3,#SZ_32
+CALL @ni_storev
 JMP @nil_again
 nil_retstruct:
 CALL @ni_pop
