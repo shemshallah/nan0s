@@ -69,6 +69,7 @@
 .equ TK_LEN     3
 .equ TK_LINE    4
 .equ TK_AUX     5
+.equ TK_AUXHI   6
 .equ TK_TEXT    8
 .equ TKSZ       72
 
@@ -220,6 +221,14 @@
 .equ I_CALLB    67
 .equ I_RETSTRUCT 68
 .equ I_VAARG    69
+.equ I_LLEXT    70
+.equ I_LLTRUNC  71
+.equ I_LLOP     72
+.equ I_LLOAD    73
+.equ I_LLSTORE  74
+.equ I_WORDS    75
+.equ I_LLF2I   76
+.equ I_LLI2F   77
 .equ CALB_SCRATCH 2700000
 
 ; symbol entry: 16 words
@@ -260,6 +269,7 @@
 .equ TY_FUNC    7
 .equ TY_ENUM    8
 .equ TY_BOOL    9
+.equ TY_LL      10
 
 ; type entry fields (8 words)
 .equ TY_KIND    0
@@ -285,6 +295,8 @@
 .equ T_FLOAT    10
 .equ T_DOUBLE   11
 .equ T_BOOL     12
+.equ T_LONGLONG 13
+.equ T_ULONGLONG 14
 
 ; load/store size codes
 .equ SZ_8S      0
@@ -464,6 +476,15 @@
 .equ W_TSIGN    60930
 .equ W_TSHORT   60931
 .equ W_TLONG    60932
+.equ W_TLL      61576
+.equ W_CALLWORDS 61589
+.equ W_SRCOFF  61592
+.equ W_CALLSYM 61593
+.equ W_ARGIDX  61594
+.equ W_CASTTYPE 61595
+.equ W_FPSTART  61596
+.equ W_CALLFTYPE 61597
+.equ W_FPTMP   61598
 .equ W_TCHAR    60933
 .equ W_TVOID    60934
 .equ W_TFLOAT   60935
@@ -495,6 +516,7 @@
 .equ W_PF_IDX   60987
 .equ W_PF_ARGC  60988
 .equ W_PF_OFF   60989
+.equ W_PF_LL    60990
 .equ W_PF_CASE  60991
 .equ W_PF_W     60992
 .equ W_PF_FLAGS 60993
@@ -511,6 +533,7 @@
 .equ W_F2I      61004
 .equ W_F2F      61005
 .equ W_F2L      61006
+.equ W_F2BIG    61007
 .equ W_VARNP    61390
 .equ W_VARFLAG  61391
 .equ W_VARCNT   61393
@@ -594,6 +617,9 @@
 .equ L_TMP5     60462
 .equ L_KIND     60463
 .equ L_VAL      60464
+.equ L_LL       60469
+.equ L_UNS      60470
+.equ L_VALH     60471
 .equ L_HASH     60465
 .equ L_LEN      60466
 .equ L_TLINE    60467
@@ -670,6 +696,7 @@
 .include "nfs2.nas"
 .include "stdio.nas"
 .include "scanf.nas"
+.include "ll.nas"
 
 ; q2_skipsp: consume spaces and tabs
 q2_skipsp:
@@ -1665,6 +1692,21 @@ MOVI r4,4
 MOVI r5,1
 MOVI r6,0
 CALL @ty_set
+; 13 long long, 14 unsigned long long
+MOVI r1,13
+MOVI r2,#TY_LL
+MOVI r3,8
+MOVI r4,4
+MOVI r5,1
+MOVI r6,0
+CALL @ty_set
+MOVI r1,14
+MOVI r2,#TY_LL
+MOVI r3,8
+MOVI r4,4
+MOVI r5,0
+MOVI r6,0
+CALL @ty_set
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -1847,6 +1889,15 @@ SUB r14,r14,r13
 LD r15,r14,0
 RET
 
+; ty_func_set_params: r1=func type, r2=param type array ptr, r3=count
+ty_func_set_params:
+SHL r1,r1,3
+LA r4,#NCC_TYPEB
+ADD r1,r1,r4
+ST r2,r1,#TY_MEM
+ST r3,r1,#TY_NMEM
+RET
+
 ; ty_struct: r1=5 struct / 6 union -> new type id
 ty_struct:
 ST r15,r14,0
@@ -1927,6 +1978,16 @@ ADD r14,r14,r13
 ST r1,r0,#W_TY_TMP
 ST r2,r0,#W_TY_ID
 CALL @ty_kind
+MOVI r3,#TY_LL
+CMP r1,r3
+JMP[EQ] @tyc_ll
+LD r1,r0,#W_TY_ID
+CALL @ty_kind
+MOVI r3,#TY_LL
+CMP r1,r3
+JMP[EQ] @tyc_ll
+LD r1,r0,#W_TY_TMP
+CALL @ty_kind
 MOVI r3,#TY_FLOAT
 CMP r1,r3
 JMP[EQ] @tyc_float
@@ -1965,6 +2026,21 @@ MOVI r1,#T_UINT
 JMP @tyc_d
 tyc_int:
 MOVI r1,#T_INT
+JMP @tyc_d
+tyc_ll:
+LD r1,r0,#W_TY_TMP
+CALL @ty_sign
+ST r1,r0,#W_TY_SIGN
+LD r1,r0,#W_TY_ID
+CALL @ty_sign
+LD r2,r0,#W_TY_SIGN
+BOOL.8 r1,r1,r2
+CMP r1,r0
+JMP[EQ] @tyc_ull
+MOVI r1,#T_LONGLONG
+JMP @tyc_d
+tyc_ull:
+MOVI r1,#T_ULONGLONG
 JMP @tyc_d
 tyc_float:
 MOVI r1,#T_FLOAT
@@ -2073,7 +2149,18 @@ LD r1,r0,#L_LEN
 ST r1,r2,#TK_LEN
 LD r1,r0,#L_TLINE
 ST r1,r2,#TK_LINE
-ST r0,r2,#TK_AUX
+LD r1,r0,#L_KIND
+MOVI r3,#K_INT
+CMP r1,r3
+JMP[NE] @lxf_auxd
+LD r1,r0,#L_LL
+LD r3,r0,#L_UNS
+SHL r3,r3,1
+BOOL.14 r1,r1,r3
+ST r1,r2,#TK_AUX
+LD r1,r0,#L_VALH
+ST r1,r2,#TK_AUXHI
+lxf_auxd:
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -2432,11 +2519,14 @@ RET
 scan_num:
 ST r15,r14,0
 ADD r14,r14,r13
+ST r0,r0,#L_LL
+ST r0,r0,#L_UNS
 CALL @lx_get
 MOVI r1,1
 ST r1,r0,#L_LEN
 MOVI r1,0
 ST r1,r0,#L_VAL
+ST r1,r0,#L_VALH
 MOVI r1,10
 ST r1,r0,#L_TMP0
 LD r1,r0,#L_CH
@@ -2471,6 +2561,7 @@ JMP @sn_loop
 sn_first:
 SUB r1,r1,r2
 ST r1,r0,#L_VAL
+ST r0,r0,#L_VALH
 sn_loop:
 CALL @lx_peek
 LD r2,r0,#L_TMP0
@@ -2478,11 +2569,23 @@ CALL @digitv
 MOVI r2,255
 CMP r1,r2
 JMP[EQ] @sn_fin
+ADD r8,r1,r0
 LD r3,r0,#L_VAL
 LD r4,r0,#L_TMP0
-MUL r3,r3,r4
-ADD r3,r3,r1
-ST r3,r0,#L_VAL
+MUL r5,r3,r4
+MULHU r6,r3,r4
+LD r3,r0,#L_VALH
+MUL r7,r3,r4
+ADD r6,r6,r7
+ADD r5,r5,r8
+MOVI r9,0
+CMP r5,r8
+JMP[GE] @sn_noc
+MOVI r9,1
+sn_noc:
+ADD r6,r6,r9
+ST r5,r0,#L_VAL
+ST r6,r0,#L_VALH
 LD r3,r0,#L_LEN
 ADD r3,r3,r13
 ST r3,r0,#L_LEN
@@ -2500,6 +2603,7 @@ MOVI r2,255
 CMP r1,r2
 JMP[EQ] @sn_int
 CALL @scan_float
+CALL @scan_flt_suf
 JMP @sn_done
 sn_expchk:
 MOVI r2,101
@@ -2514,10 +2618,50 @@ LD r1,r0,#L_VAL
 CVTIF r2,r1
 ST r2,r0,#L_VAL
 CALL @scan_exp
+CALL @scan_flt_suf
 MOVI r1,9
 ST r1,r0,#L_KIND
 JMP @sn_done
 sn_int:
+; integer suffix: LL / ULL (single L is left as 32-bit long)
+sn_suf:
+CALL @lx_peek
+MOVI r2,108
+CMP r1,r2
+JMP[EQ] @sn_suf_l
+MOVI r2,76
+CMP r1,r2
+JMP[EQ] @sn_suf_l
+MOVI r2,117
+CMP r1,r2
+JMP[EQ] @sn_suf_u
+MOVI r2,85
+CMP r1,r2
+JMP[EQ] @sn_suf_u
+JMP @sn_int_plain
+sn_suf_l:
+CALL @lx_get
+LD r1,r0,#L_LL
+ADD r1,r1,r13
+ST r1,r0,#L_LL
+JMP @sn_suf
+sn_suf_u:
+CALL @lx_get
+MOVI r1,1
+ST r1,r0,#L_UNS
+JMP @sn_suf
+sn_int_plain:
+LD r1,r0,#L_LL
+MOVI r2,2
+CMP r1,r2
+JMP[GE] @sn_ll
+LD r1,r0,#L_VALH
+CMP r1,r0
+JMP[EQ] @sn_int_kind
+sn_ll:
+MOVI r2,1
+ST r2,r0,#L_LL
+sn_int_kind:
 MOVI r1,2
 ST r1,r0,#L_KIND
 sn_done:
@@ -2597,6 +2741,30 @@ LD r15,r14,0
 RET
 
 ; scan_float: integer part in L_VAL, cursor at '.', consume fraction.
+; scan_flt_suf: consume float suffix f/F/l/L
+scan_flt_suf:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @lx_peek
+MOVI r2,102
+CMP r1,r2
+JMP[EQ] @sfs_go
+MOVI r2,70
+CMP r1,r2
+JMP[EQ] @sfs_go
+MOVI r2,108
+CMP r1,r2
+JMP[EQ] @sfs_go
+MOVI r2,76
+CMP r1,r2
+JMP[NE] @sfs_d
+sfs_go:
+CALL @lx_get
+sfs_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
 scan_float:
 ST r15,r14,0
 ADD r14,r14,r13
@@ -2623,7 +2791,11 @@ CALL @lx_get
 JMP @sf_l
 sf_done:
 LD r1,r0,#L_VAL
-CVTIF r2,r1
+LD r2,r0,#L_VALH
+ST r1,r0,#W_LLD0
+ST r2,r0,#W_LLD1
+CALL @ll_pair_to_f
+ADD r2,r1,r0
 LD r1,r0,#L_TMP1
 CVTIF r3,r1
 LD r1,r0,#L_TMP2
@@ -3678,6 +3850,7 @@ ST r0,r0,#W_SCLASS
 ST r0,r0,#W_TSIGN
 ST r0,r0,#W_TSHORT
 ST r0,r0,#W_TLONG
+ST r0,r0,#W_TLL
 ST r0,r0,#W_TCHAR
 ST r0,r0,#W_TVOID
 ST r0,r0,#W_TFLOAT
@@ -3806,6 +3979,12 @@ MOVI r1,1
 ST r1,r0,#W_TSEEN
 JMP @pts_skip
 pts_long:
+LD r2,r0,#W_TLONG
+CMP r2,r0
+JMP[EQ] @pts_long1
+MOVI r2,1
+ST r2,r0,#W_TLL
+pts_long1:
 MOVI r1,1
 ST r1,r0,#W_TLONG
 MOVI r1,1
@@ -3910,6 +4089,9 @@ pts_ushort:
 MOVI r1,#T_USHORT
 JMP @pts_ret
 pts_notshort:
+LD r1,r0,#W_TLL
+CMP r1,r0
+JMP[NE] @pts_ll
 LD r1,r0,#W_TLONG
 CMP r1,r0
 JMP[EQ] @pts_notlong
@@ -3921,6 +4103,16 @@ MOVI r1,#T_LONG
 JMP @pts_ret
 pts_ulong:
 MOVI r1,#T_ULONG
+JMP @pts_ret
+pts_ll:
+LD r1,r0,#W_TSIGN
+MOVI r2,2
+CMP r1,r2
+JMP[EQ] @pts_ull
+MOVI r1,#T_LONGLONG
+JMP @pts_ret
+pts_ull:
+MOVI r1,#T_ULONGLONG
 JMP @pts_ret
 pts_notlong:
 LD r1,r0,#W_TSIGN
@@ -6749,11 +6941,38 @@ SUB r14,r14,r13
 LD r15,r14,0
 RET
 
+; px_discard: pop an expression result (two words for long long)
+px_discard:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_ETYPE
+CALL @ty_kind
+MOVI r2,#TY_LL
+CMP r1,r2
+JMP[NE] @pxd_one
+LA r1,#I_POP
+CALL @ir_op
+pxd_one:
+LA r1,#I_POP
+CALL @ir_op
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
 ; px_emit_load: r1=type -> emit I_LOAD
 px_emit_load:
 ST r15,r14,0
 ADD r14,r14,r13
 ST r1,r0,#W_TY_ID
+CALL @ty_kind
+MOVI r2,#TY_LL
+CMP r1,r2
+JMP[NE] @pxl_notll
+LA r1,#I_LLOAD
+CALL @ir_op
+JMP @pxl_d
+pxl_notll:
+LD r1,r0,#W_TY_ID
 CALL @ty_store_code
 ADD r2,r1,r0
 LA r1,#I_LOAD
@@ -6805,6 +7024,16 @@ ST r15,r14,0
 ADD r14,r14,r13
 ST r1,r0,#W_TY_ID
 ST r2,r0,#W_TY_COUNT
+LD r1,r0,#W_TY_ID
+CALL @ty_kind
+MOVI r3,#TY_LL
+CMP r1,r3
+JMP[NE] @pxs_notll
+LA r1,#I_LLSTORE
+LD r2,r0,#W_TY_COUNT
+CALL @ir_emit
+JMP @pxs_d
+pxs_notll:
 LD r1,r0,#W_TY_ID
 CALL @ty_bitwidth
 CMP r2,r0
@@ -6917,6 +7146,19 @@ ST r1,r0,#W_TY_KIND
 LD r1,r0,#W_TY_ID
 CALL @ty_kind
 ST r1,r0,#W_TY_BASE
+MOVI r2,#TY_LL
+LD r1,r0,#W_TY_BASE
+CMP r1,r2
+JMP[NE] @pxc_not_lldst
+LD r1,r0,#W_TY_KIND
+CMP r1,r2
+JMP[EQ] @pxc_done
+JMP @pxc_to_ll
+pxc_not_lldst:
+LD r1,r0,#W_TY_KIND
+MOVI r2,#TY_LL
+CMP r1,r2
+JMP[EQ] @pxc_from_ll
 MOVI r2,#TY_FLOAT
 LD r1,r0,#W_TY_KIND
 CMP r1,r2
@@ -6944,6 +7186,48 @@ JMP[EQ] @pxc_done
 ADD r2,r1,r0
 pxc_emit:
 LA r1,#I_CAST
+CALL @ir_emit
+JMP @pxc_done
+pxc_to_ll:
+LD r1,r0,#W_TY_KIND
+MOVI r2,#TY_FLOAT
+CMP r1,r2
+JMP[NE] @pxc_to_ll_int
+LD r1,r0,#W_TY_ID
+CALL @ty_sign
+MOVI r2,0
+CMP r1,r0
+JMP[NE] @pxc_f2i_u
+MOVI r2,1
+pxc_f2i_u:
+LA r1,#I_LLF2I
+CALL @ir_emit
+JMP @pxc_done
+pxc_to_ll_int:
+LD r1,r0,#W_ETYPE
+CALL @ty_sign
+CMP r1,r0
+JMP[EQ] @pxc_ll_uns
+MOVI r2,0
+JMP @pxc_ll_go
+pxc_ll_uns:
+LA r2,0x10000
+pxc_ll_go:
+LA r1,#I_LLEXT
+CALL @ir_emit
+JMP @pxc_done
+pxc_from_ll:
+LD r1,r0,#W_TY_BASE
+MOVI r2,#TY_FLOAT
+CMP r1,r2
+JMP[NE] @pxc_from_ll_i
+LA r1,#I_LLI2F
+MOVI r2,0
+CALL @ir_emit
+JMP @pxc_done
+pxc_from_ll_i:
+LA r1,#I_LLTRUNC
+MOVI r2,0
 CALL @ir_emit
 pxc_done:
 SUB r14,r14,r13
@@ -7016,10 +7300,46 @@ JMP[EQ] @pp_punct
 MOVI r1,5
 CALL @p_err
 pp_lit:
+LD r1,r0,#W_TKA+5
+MOVI r2,1
+BOOL.8 r3,r1,r2
+CMP r3,r0
+JMP[EQ] @pp_lit_int
+; long long literal: low word then high word
 LD r2,r0,#W_TKA+1
 LA r1,#I_PUSH
 CALL @ir_emit
+LA r1,#I_PUSH
+LD r2,r0,#W_TKA+6
+CALL @ir_emit
+LD r1,r0,#W_TKA+5
+MOVI r2,2
+BOOL.8 r1,r1,r2
+CMP r1,r0
+JMP[NE] @pp_lit_ull
+MOVI r1,#T_LONGLONG
+JMP @pp_lit_set
+pp_lit_ull:
+MOVI r1,#T_ULONGLONG
+pp_lit_set:
+ST r1,r0,#W_ETYPE
+ST r0,r0,#W_LVAL
+CALL @p_adv
+JMP @pp_done
+pp_lit_int:
+LD r2,r0,#W_TKA+1
+LA r1,#I_PUSH
+CALL @ir_emit
+LD r1,r0,#W_TKA+5
+MOVI r2,2
+BOOL.8 r1,r1,r2
+CMP r1,r0
+JMP[NE] @pp_lit_uint
 MOVI r1,#T_INT
+JMP @pp_lit_tset
+pp_lit_uint:
+MOVI r1,#T_UINT
+pp_lit_tset:
 ST r1,r0,#W_ETYPE
 ST r0,r0,#W_LVAL
 CALL @p_adv
@@ -7168,11 +7488,17 @@ ST r1,r0,#W_FPTR_TYPE
 CALL @ty_is_funcptr
 CMP r1,r0
 JMP[EQ] @pp_call_bad
+ST r0,r0,#W_CALLSYM
+LD r1,r0,#W_FPTR_TYPE
+CALL @ty_base
+ST r1,r0,#W_CALLFTYPE
 MOVI r1,1
 ST r1,r14,0
 ADD r14,r14,r13
 JMP @pp_call_args
 pp_call_normal:
+ST r1,r0,#W_CALLSYM
+ST r0,r0,#W_CALLFTYPE
 ST r1,r14,0
 ADD r14,r14,r13
 ST r0,r14,0
@@ -7186,6 +7512,7 @@ CALL @p_adv
 MOVI r1,#P_LPAREN
 MOVI r2,9
 CALL @p_expect_p
+ST r0,r0,#W_ARGIDX
 ST r0,r14,0
 ADD r14,r14,r13
 MOVI r1,#P_RPAREN
@@ -7195,9 +7522,18 @@ JMP[NE] @pp_args_done
 pp_args_l:
 CALL @p_assign
 CALL @p_emit_rv
+CALL @px_arg_cast
+LD r1,r0,#W_ETYPE
+CALL @ty_kind
+MOVI r2,#TY_LL
+MOVI r3,1
+CMP r1,r2
+JMP[NE] @pp_w1
+MOVI r3,2
+pp_w1:
 ADDI r1,r14,-1
 LD r2,r1,0
-ADD r2,r2,r13
+ADD r2,r2,r3
 ST r2,r1,0
 MOVI r1,#P_COMMA
 CALL @p_take_p
@@ -7304,8 +7640,6 @@ MOVI r1,#P_LPAREN
 MOVI r2,9
 CALL @p_expect_p
 CALL @p_assign
-LA r1,#I_VAARG
-CALL @ir_op
 MOVI r1,#P_COMMA
 MOVI r2,24
 CALL @p_expect_p
@@ -7315,6 +7649,17 @@ ST r1,r0,#W_TY_ID
 MOVI r1,#P_RPAREN
 MOVI r2,10
 CALL @p_expect_p
+LD r1,r0,#W_TY_ID
+CALL @ty_kind
+MOVI r2,#TY_LL
+MOVI r3,4
+CMP r1,r2
+JMP[NE] @pva_emit
+MOVI r3,8
+pva_emit:
+ADD r2,r3,r0
+LA r1,#I_VAARG
+CALL @ir_emit
 LD r1,r0,#W_TY_ID
 CALL @ty_kind
 MOVI r2,#TY_STRUCT
@@ -7371,16 +7716,15 @@ JMP[EQ] @pp_paren_expr
 CALL @p_adv
 CALL @p_typespec
 CALL @p_ptr_suffix
-ST r1,r0,#W_TY_ID
-ST r1,r0,#W_TY_SIGN
+ST r1,r0,#W_CASTTYPE
 MOVI r1,#P_RPAREN
 MOVI r2,10
 CALL @p_expect_p
 CALL @p_unary
 CALL @p_emit_rv
-LD r1,r0,#W_TY_SIGN
+LD r1,r0,#W_CASTTYPE
 CALL @px_cast_stack
-LD r1,r0,#W_TY_SIGN
+LD r1,r0,#W_CASTTYPE
 ST r1,r0,#W_ETYPE
 ST r0,r0,#W_LVAL
 JMP @pp_done
@@ -7514,7 +7858,12 @@ JMP[EQ] @pxf_badcall
 LD r1,r0,#W_ETYPE
 CALL @ty_funcptr_ret
 ST r1,r0,#W_FPRET
+LD r1,r0,#W_ETYPE
+CALL @ty_base
+ST r1,r0,#W_CALLFTYPE
+ST r0,r0,#W_CALLSYM
 CALL @p_adv
+ST r0,r0,#W_ARGIDX
 ST r0,r14,0
 ADD r14,r14,r13
 MOVI r1,#P_RPAREN
@@ -7524,9 +7873,18 @@ JMP[NE] @pxf_call_done
 pxf_call_args:
 CALL @p_assign
 CALL @p_emit_rv
+CALL @px_arg_cast
+LD r1,r0,#W_ETYPE
+CALL @ty_kind
+MOVI r2,#TY_LL
+MOVI r3,1
+CMP r1,r2
+JMP[NE] @pxf_w1
+MOVI r3,2
+pxf_w1:
 ADDI r1,r14,-1
 LD r2,r1,0
-ADD r2,r2,r13
+ADD r2,r2,r3
 ST r2,r1,0
 MOVI r1,#P_COMMA
 CALL @p_take_p
@@ -7575,6 +7933,11 @@ LA r1,#I_DUP
 CALL @ir_op
 LD r1,r0,#W_TY_ID
 CALL @px_emit_load
+LD r1,r0,#W_TY_ID
+CALL @ty_kind
+MOVI r2,#TY_LL
+CMP r1,r2
+JMP[EQ] @pxf_ll
 LA r1,#I_PUSH
 LD r2,r0,#W_TY_COUNT
 CALL @ir_emit
@@ -7611,6 +7974,45 @@ ST r1,r0,#W_ETYPE
 ST r0,r0,#W_LVAL
 CALL @p_adv
 JMP @pxf_loop
+pxf_ll:
+LA r1,#I_PUSH
+LD r2,r0,#W_TY_COUNT
+CALL @ir_emit
+LA r1,#I_PUSH
+MOVI r2,0
+CALL @ir_emit
+LD r1,r0,#W_TY_RET
+MOVI r2,#P_INC
+CMP r1,r2
+JMP[EQ] @pxf_ll_add
+MOVI r2,#BIN_SUB
+JMP @pxf_ll_op
+pxf_ll_add:
+MOVI r2,#BIN_ADD
+pxf_ll_op:
+LA r1,#I_LLOP
+CALL @ir_emit
+LD r1,r0,#W_TY_ID
+MOVI r2,1
+CALL @px_emit_store
+LA r1,#I_PUSH
+LD r2,r0,#W_TY_COUNT
+CALL @ir_emit
+LA r1,#I_PUSH
+MOVI r2,0
+CALL @ir_emit
+LD r1,r0,#W_TY_RET
+MOVI r2,#P_INC
+CMP r1,r2
+JMP[EQ] @pxf_ll_old
+MOVI r2,#BIN_ADD
+JMP @pxf_ll_oldop
+pxf_ll_old:
+MOVI r2,#BIN_SUB
+pxf_ll_oldop:
+LA r1,#I_LLOP
+CALL @ir_emit
+JMP @pxf_old_done
 pxf_done:
 SUB r14,r14,r13
 LD r15,r14,0
@@ -7797,8 +8199,7 @@ ST r1,r0,#W_TY_ID
 MOVI r1,#P_RPAREN
 MOVI r2,10
 CALL @p_expect_p
-LA r1,#I_POP
-CALL @ir_op
+CALL @px_discard
 JMP @pu_sz_push
 pu_sz_simple:
 CALL @p_is_type
@@ -7823,8 +8224,7 @@ CALL @p_emit_rv
 LD r1,r0,#W_ETYPE
 CALL @ty_size
 ST r1,r0,#W_TY_ID
-LA r1,#I_POP
-CALL @ir_op
+CALL @px_discard
 pu_sz_push:
 LD r2,r0,#W_TY_ID
 LA r1,#I_PUSH
@@ -7863,6 +8263,8 @@ LD r15,r14,0
 RET
 
 pu_incdec:
+LD r1,r0,#W_TKA+1
+ST r1,r0,#W_TY_RET
 CALL @p_adv
 CALL @p_unary
 LD r1,r0,#W_LVAL
@@ -7871,16 +8273,20 @@ JMP[NE] @pu_inc_ok
 MOVI r1,11
 CALL @p_err
 pu_inc_ok:
-LD r1,r0,#W_TKA+1
-ST r1,r0,#W_TY_RET
 LD r1,r0,#W_LTYPE
 ST r1,r0,#W_TY_ID
 CALL @px_inc_step
+ST r1,r0,#W_TY_COUNT
 ADD r2,r1,r0
 LA r1,#I_DUP
 CALL @ir_op
 LD r1,r0,#W_TY_ID
 CALL @px_emit_load
+LD r1,r0,#W_TY_ID
+CALL @ty_kind
+MOVI r2,#TY_LL
+CMP r1,r2
+JMP[EQ] @pu_inc_ll
 LA r1,#I_PUSH
 LD r2,r0,#W_TY_COUNT
 CALL @ir_emit
@@ -7901,6 +8307,31 @@ LD r1,r0,#W_TY_ID
 ST r1,r0,#W_ETYPE
 ST r0,r0,#W_LVAL
 CALL @p_adv
+JMP @pu_done
+pu_inc_ll:
+LA r1,#I_PUSH
+LD r2,r0,#W_TY_COUNT
+CALL @ir_emit
+LA r1,#I_PUSH
+MOVI r2,0
+CALL @ir_emit
+LD r1,r0,#W_TY_RET
+MOVI r2,#P_INC
+CMP r1,r2
+JMP[EQ] @pu_ll_add
+MOVI r2,#BIN_SUB
+JMP @pu_ll_op
+pu_ll_add:
+MOVI r2,#BIN_ADD
+pu_ll_op:
+LA r1,#I_LLOP
+CALL @ir_emit
+LD r1,r0,#W_TY_ID
+MOVI r2,1
+CALL @px_emit_store
+LD r1,r0,#W_TY_ID
+ST r1,r0,#W_ETYPE
+ST r0,r0,#W_LVAL
 JMP @pu_done
 pu_post:
 CALL @p_postfix
@@ -8027,6 +8458,13 @@ JMP[EQ] @pb_float
 LD r1,r0,#W_TY_COUNT
 CMP r1,r2
 JMP[EQ] @pb_float
+MOVI r2,#TY_LL
+LD r1,r0,#W_TY_KIND
+CMP r1,r2
+JMP[EQ] @pb_ll
+LD r1,r0,#W_TY_COUNT
+CMP r1,r2
+JMP[EQ] @pb_ll
 ADDI r3,r14,-2
 LD r1,r3,0
 ADDI r3,r14,-1
@@ -8223,6 +8661,30 @@ MOVI r1,#T_INT
 ST r1,r0,#W_ETYPE
 JMP @pb_done
 pb_float:
+; convert long long operands to float first (pair is two words)
+MOVI r2,#TY_LL
+LD r1,r0,#W_TY_KIND
+CMP r1,r2
+JMP[NE] @pbf_lnotll
+LA r1,#I_LLI2F
+MOVI r2,1
+CALL @ir_emit
+MOVI r1,#T_FLOAT
+ADDI r3,r14,-2
+ST r1,r3,0
+JMP @pbf_both
+pbf_lnotll:
+MOVI r2,#TY_LL
+LD r1,r0,#W_TY_COUNT
+CMP r1,r2
+JMP[NE] @pbf_both
+LA r1,#I_LLI2F
+MOVI r2,0
+CALL @ir_emit
+MOVI r1,#T_FLOAT
+ADDI r3,r14,-1
+ST r1,r3,0
+pbf_both:
 LA r1,#I_SWAP
 CALL @ir_op
 ADDI r3,r14,-2
@@ -8301,6 +8763,74 @@ LA r1,#I_FEQ
 pb_f_go:
 CALL @ir_op
 MOVI r1,#T_INT
+ST r1,r0,#W_ETYPE
+JMP @pb_done
+pb_ll:
+; widen the right operand if needed (depth 0)
+LD r1,r0,#W_TY_COUNT
+MOVI r2,#TY_LL
+CMP r1,r2
+JMP[EQ] @pb_ll_left
+ADDI r3,r14,-1
+LD r1,r3,0
+CALL @ty_sign
+CMP r1,r0
+JMP[EQ] @pb_ll_ru
+MOVI r2,0
+JMP @pb_ll_rg
+pb_ll_ru:
+LA r2,0x10000
+pb_ll_rg:
+LA r1,#I_LLEXT
+CALL @ir_emit
+pb_ll_left:
+; widen the left operand if needed (depth 2)
+LD r1,r0,#W_TY_KIND
+MOVI r2,#TY_LL
+CMP r1,r2
+JMP[EQ] @pb_ll_op
+ADDI r3,r14,-2
+LD r1,r3,0
+CALL @ty_sign
+CMP r1,r0
+JMP[EQ] @pb_ll_lu
+MOVI r2,2
+JMP @pb_ll_lg
+pb_ll_lu:
+LA r2,0x10002
+pb_ll_lg:
+LA r1,#I_LLEXT
+CALL @ir_emit
+pb_ll_op:
+ADDI r3,r14,-2
+LD r1,r3,0
+ADDI r3,r14,-1
+LD r2,r3,0
+CALL @ty_common
+ST r1,r0,#W_TY_RET
+CALL @ty_sign
+ST r1,r0,#W_TY_SIGN
+ADDI r3,r14,-3
+LD r1,r3,0
+LD r2,r0,#W_TY_SIGN
+CMP r2,r0
+JMP[NE] @pb_ll_go2
+MOVI r3,0x100
+BOOL.14 r1,r1,r3
+pb_ll_go2:
+ADD r2,r1,r0
+LA r1,#I_LLOP
+CALL @ir_emit
+ADDI r3,r14,-3
+LD r1,r3,0
+MOVI r2,#BIN_LT
+CMP r1,r2
+JMP[LT] @pb_ll_val
+MOVI r1,#T_INT
+ST r1,r0,#W_ETYPE
+JMP @pb_done
+pb_ll_val:
+LD r1,r0,#W_TY_RET
 ST r1,r0,#W_ETYPE
 pb_done:
 ADDI r14,r14,-3
@@ -9047,8 +9577,7 @@ CALL @p_at_p
 CMP r1,r0
 JMP[EQ] @pex_d
 CALL @p_emit_rv
-LA r1,#I_POP
-CALL @ir_op
+CALL @px_discard
 CALL @p_adv
 CALL @p_assign
 JMP @pex_l
@@ -9220,8 +9749,7 @@ JMP @pst_d
 pst_expr:
 CALL @p_expr
 CALL @p_emit_rv
-LA r1,#I_POP
-CALL @ir_op
+CALL @px_discard
 MOVI r1,#P_SEMI
 MOVI r2,22
 CALL @p_expect_p
@@ -9909,6 +10437,8 @@ MOVI r1,#P_LPAREN
 MOVI r2,9
 CALL @p_expect_p
 ST r0,r0,#W_FPNP
+LD r1,r0,#W_PARAMP
+ST r1,r0,#W_FPSTART
 MOVI r1,#P_RPAREN
 CALL @p_at_p
 CMP r1,r0
@@ -9931,12 +10461,19 @@ JMP @pfpd_params_done
 pfpd_param_l:
 CALL @p_typespec
 CALL @p_ptr_suffix
+ST r1,r0,#W_FPTMP
 LD r1,r0,#W_TKA
 MOVI r2,#K_IDENT
 CMP r1,r2
 JMP[NE] @pfpd_noid
 CALL @p_adv
 pfpd_noid:
+LD r2,r0,#W_PARAMP
+ADD r3,r2,r0
+LD r1,r0,#W_FPTMP
+ST r1,r3,0
+ADD r2,r2,r13
+ST r2,r0,#W_PARAMP
 LD r1,r0,#W_FPNP
 ADD r1,r1,r13
 ST r1,r0,#W_FPNP
@@ -9951,6 +10488,11 @@ CALL @p_expect_p
 LD r1,r0,#W_FPRET
 LD r2,r0,#W_FPNP
 CALL @ty_func
+ST r1,r0,#W_TY_TMP
+LD r2,r0,#W_FPSTART
+LD r3,r0,#W_FPNP
+CALL @ty_func_set_params
+LD r1,r0,#W_TY_TMP
 CALL @ty_ptr
 ST r1,r0,#W_FPTR_TYPE
 LD r1,r0,#W_FPSYM
@@ -10990,8 +11532,7 @@ JMP @pf_cond
 pf_expinit:
 CALL @p_expr
 CALL @p_emit_rv
-LA r1,#I_POP
-CALL @ir_op
+CALL @px_discard
 MOVI r1,#P_SEMI
 MOVI r2,22
 CALL @p_expect_p
@@ -11249,9 +11790,7 @@ CMP r1,r0
 JMP[NE] @pret_cast
 LA r1,#I_POP
 CALL @ir_op
-LA r1,#I_PUSH
-MOVI r2,0
-CALL @ir_emit
+CALL @px_ret_zero
 JMP @pret_go
 pret_cast:
 LD r1,r0,#W_FUNCRET
@@ -11267,13 +11806,103 @@ pret_go:
 MOVI r1,#P_SEMI
 MOVI r2,24
 CALL @p_expect_p
-LA r1,#I_RET
-CALL @ir_op
+CALL @px_ret_emit
 SUB r14,r14,r13
 LD r15,r14,0
 RET
 
 ; external declarations and function definitions
+; px_ret_emit: I_RET with a 2-word operand for long long returns
+px_ret_emit:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_FUNCRET
+CALL @ty_kind
+MOVI r2,#TY_LL
+CMP r1,r2
+JMP[NE] @pxre_one
+LA r1,#I_RET
+MOVI r2,2
+CALL @ir_emit
+JMP @pxre_d
+pxre_one:
+LA r1,#I_RET
+CALL @ir_op
+pxre_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; px_ret_zero: push a zero return value (two words for long long)
+px_ret_zero:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_FUNCRET
+CALL @ty_kind
+MOVI r2,#TY_LL
+CMP r1,r2
+JMP[NE] @pxrz_one
+LA r1,#I_PUSH
+MOVI r2,0
+CALL @ir_emit
+pxrz_one:
+LA r1,#I_PUSH
+MOVI r2,0
+CALL @ir_emit
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; px_arg_cast: cast the current call argument to its declared parameter type
+px_arg_cast:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_CALLSYM
+CMP r1,r0
+JMP[NE] @pxac_direct
+LD r1,r0,#W_CALLFTYPE
+CMP r1,r0
+JMP[EQ] @pxac_d
+SHL r2,r1,3
+LA r3,#NCC_TYPEB
+ADD r2,r2,r3
+LD r3,r2,#TY_NMEM
+LD r4,r0,#W_ARGIDX
+CMP r4,r3
+JMP[GE] @pxac_d
+LD r2,r2,#TY_MEM
+ADD r2,r2,r4
+LD r1,r2,0
+ST r1,r0,#W_TLL
+CALL @px_cast_stack
+LD r1,r0,#W_TLL
+ST r1,r0,#W_ETYPE
+JMP @pxac_d
+pxac_direct:
+LD r1,r0,#W_CALLSYM
+CALL @sym_entry
+LD r2,r1,#SY_ARG
+CMP r2,r0
+JMP[EQ] @pxac_d
+LD r3,r1,#SY_NP
+LD r4,r0,#W_ARGIDX
+CMP r4,r3
+JMP[GE] @pxac_d
+SHL r4,r4,1
+ADD r2,r2,r4
+LD r1,r2,1
+ST r1,r0,#W_TLL
+CALL @px_cast_stack
+LD r1,r0,#W_TLL
+ST r1,r0,#W_ETYPE
+pxac_d:
+LD r1,r0,#W_ARGIDX
+ADD r1,r1,r13
+ST r1,r0,#W_ARGIDX
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
 ; p_decl_external: r1=base type, current token begins a declarator or name
 p_decl_external:
 ST r15,r14,0
@@ -11811,11 +12440,8 @@ ST r2,r1,#SY_ENTRY
 ST r0,r0,#W_GOTO_N
 CALL @p_block
 CALL @p_goto_resolve
-LA r1,#I_PUSH
-MOVI r2,0
-CALL @ir_emit
-LA r1,#I_RET
-CALL @ir_op
+CALL @px_ret_zero
+CALL @px_ret_emit
 CALL @ir_here
 ST r1,r0,#W_FENTRY
 LD r1,r0,#W_FSKIP
@@ -12073,7 +12699,7 @@ ni_arg:
 LD r3,r0,#W_PF_OFF
 ADD r1,r1,r3
 LD r2,r0,#R_SP
-LD r3,r0,#W_PF_ARGC
+LD r3,r0,#W_CALLWORDS
 SUB r2,r2,r3
 ADD r2,r2,r1
 LD r1,r2,0
@@ -12313,6 +12939,7 @@ ADD r1,r1,r13
 ST r1,r0,#W_PF_FMT
 ST r0,r0,#W_PF_W
 ST r0,r0,#W_PF_FLAGS
+ST r0,r0,#W_PF_LL
 LA r3,0xFFFFFFFF
 ST r3,r0,#W_PF_PREC
 npf_flag_l:
@@ -12407,7 +13034,16 @@ JMP[NE] @npf_fmt
 ADD r1,r1,r13
 ST r1,r0,#W_PF_FMT
 LDB r2,r1,0
+MOVI r3,108
+CMP r2,r3
+JMP[NE] @npf_fmt
+ADD r1,r1,r13
+ST r1,r0,#W_PF_FMT
+LDB r2,r1,0
+MOVI r3,1
+ST r3,r0,#W_PF_LL
 npf_fmt:
+ST r2,r0,#W_PF_CASE
 MOVI r3,100
 CMP r2,r3
 JMP[EQ] @npf_int
@@ -12415,6 +13051,9 @@ MOVI r3,105
 CMP r2,r3
 JMP[EQ] @npf_int
 MOVI r3,117
+CMP r2,r3
+JMP[EQ] @npf_uint
+MOVI r3,111
 CMP r2,r3
 JMP[EQ] @npf_uint
 MOVI r3,120
@@ -12457,6 +13096,9 @@ ADD r1,r2,r0
 CALL @ncc_putc
 JMP @npf_adv
 npf_int:
+LD r1,r0,#W_PF_LL
+CMP r1,r0
+JMP[NE] @npf_ll_signed
 LD r1,r0,#W_PF_IDX
 ADD r1,r1,r13
 ST r1,r0,#W_PF_IDX
@@ -12567,6 +13209,178 @@ CALL @ni_field_tail
 JMP @npf_adv
 
 
+; ---- long long printf ------------------------------------------------
+npf_ll_get:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_PF_IDX
+ADD r1,r1,r13
+ST r1,r0,#W_PF_IDX
+CALL @ni_arg
+ST r1,r0,#W_LLD0
+LD r1,r0,#W_PF_IDX
+ADD r1,r1,r13
+ST r1,r0,#W_PF_IDX
+CALL @ni_arg
+ST r1,r0,#W_LLD1
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+npf_ll_signed:
+CALL @npf_ll_get
+ST r0,r0,#W_PF_NEG
+LD r2,r0,#W_LLD1
+CMPS r2,r0
+JMP[GE] @npf_ll_sp
+MOVI r2,1
+ST r2,r0,#W_PF_NEG
+LD r1,r0,#W_LLD0
+LD r2,r0,#W_LLD1
+CALL @ll_neg_pair
+ST r1,r0,#W_LLD0
+ST r2,r0,#W_LLD1
+npf_ll_sp:
+MOVI r1,10
+CALL @ll_fmt_base
+JMP @npf_ll_emit
+
+npf_ll_unsigned:
+CALL @npf_ll_get
+ST r0,r0,#W_PF_NEG
+LD r1,r0,#W_PF_CASE
+MOVI r2,111
+CMP r1,r2
+JMP[EQ] @npf_ll_oct
+MOVI r1,10
+CALL @ll_fmt_base
+JMP @npf_ll_emit
+npf_ll_oct:
+MOVI r1,8
+CALL @ll_fmt_base
+JMP @npf_ll_emit
+
+npf_ll_hex:
+CALL @npf_ll_get
+ST r0,r0,#W_PF_NEG
+CALL @ll_fmt16
+LD r3,r0,#W_PF_CASE
+CMP r3,r0
+JMP[NE] @npf_ll_emit
+; lowercase a-f in place
+LA r4,#LLFMT
+MOVI r5,0
+nllx_lc:
+CMP r5,r2
+JMP[GE] @npf_ll_emit
+ADD r6,r4,r5
+LDB r7,r6,0
+MOVI r8,65
+CMP r7,r8
+JMP[LT] @nllx_n
+MOVI r8,70
+CMP r7,r8
+JMP[GT] @nllx_n
+ADDI r7,r7,32
+STB r7,r6,0
+nllx_n:
+ADD r5,r5,r13
+JMP @nllx_lc
+
+npf_ll_emit:
+ST r2,r0,#W_PF_TMP
+ST r0,r0,#W_PF_VAL
+LD r3,r0,#W_PF_PREC
+LA r4,0xFFFFFFFF
+CMP r3,r4
+JMP[EQ] @nll_zpd
+CMP r3,r2
+JMP[LE] @nll_zpd
+SUB r3,r3,r2
+ST r3,r0,#W_PF_VAL
+nll_zpd:
+LD r1,r0,#W_PF_TMP
+LD r2,r0,#W_PF_VAL
+ADD r1,r1,r2
+LD r3,r0,#W_PF_NEG
+ADD r1,r1,r3
+ST r1,r0,#W_PF_LEN
+; leading spaces unless zero flag or left flag
+LD r2,r0,#W_PF_FLAGS
+MOVI r3,1
+BOOL.8 r2,r2,r3
+CMP r2,r0
+JMP[NE] @nll_nolead
+LD r2,r0,#W_PF_FLAGS
+MOVI r3,2
+BOOL.8 r2,r2,r3
+CMP r2,r0
+JMP[NE] @nll_nolead
+LD r1,r0,#W_PF_LEN
+LD r2,r0,#W_PF_W
+CMP r2,r1
+JMP[LE] @nll_nolead
+SUB r1,r2,r1
+MOVI r2,32
+CALL @ni_pad
+nll_nolead:
+; sign
+LD r2,r0,#W_PF_NEG
+CMP r2,r0
+JMP[EQ] @nll_nosign
+MOVI r1,45
+CALL @ncc_putc
+nll_nosign:
+; zero flag padding
+LD r2,r0,#W_PF_FLAGS
+MOVI r3,2
+BOOL.8 r2,r2,r3
+CMP r2,r0
+JMP[EQ] @nll_nozero
+LD r1,r0,#W_PF_LEN
+LD r2,r0,#W_PF_W
+CMP r2,r1
+JMP[LE] @nll_nozero
+SUB r1,r2,r1
+MOVI r2,48
+CALL @ni_pad
+nll_nozero:
+; precision zeros
+LD r1,r0,#W_PF_VAL
+CMP r1,r0
+JMP[EQ] @nll_digits
+MOVI r2,48
+CALL @ni_pad
+nll_digits:
+LA r4,#LLFMT
+LD r5,r0,#W_PF_TMP
+nll_dl:
+CMP r5,r0
+JMP[EQ] @nll_tail
+LDB r1,r4,0
+ST r4,r0,#W_PF_TMP
+ST r5,r0,#W_PF_VAL
+CALL @ncc_putc
+LD r4,r0,#W_PF_TMP
+LD r5,r0,#W_PF_VAL
+ADD r4,r4,r13
+SUB r5,r5,r13
+JMP @nll_dl
+nll_tail:
+LD r2,r0,#W_PF_FLAGS
+MOVI r3,1
+BOOL.8 r2,r2,r3
+CMP r2,r0
+JMP[EQ] @npf_adv
+LD r1,r0,#W_PF_LEN
+LD r2,r0,#W_PF_W
+CMP r2,r1
+JMP[LE] @npf_adv
+SUB r1,r2,r1
+MOVI r2,32
+CALL @ni_pad
+JMP @npf_adv
+
 npf_exp:
 MOVI r3,101
 CMP r2,r3
@@ -12629,7 +13443,8 @@ JMP[EQ] @nec_pos
 MOVI r6,1
 ST r6,r0,#W_F2NEG
 ST r6,r0,#W_F2SIGN2
-BOOL.6 r5,r5,r4
+LA r4,0x7FFFFFFF
+BOOL.8 r5,r5,r4
 nec_pos:
 ST r0,r0,#W_F2EXP
 CMP r5,r0
@@ -13006,8 +13821,20 @@ JMP @npf_adv
 ni_fcalc:
 ST r15,r14,0
 ADD r14,r14,r13
+ST r0,r0,#W_F2BIG
 ST r1,r0,#W_F2V
 ST r2,r0,#W_F2P
+; large magnitudes use decimal scaling instead of int32 conversion
+LD r5,r0,#W_F2V
+LA r4,0x7FFFFFFF
+BOOL.8 r5,r5,r4
+LA r4,0x4F000000
+FCMP r5,r4
+JMP[LT] @nfc_norm
+SUB r14,r14,r13
+LD r15,r14,0
+JMP @ni_fbig_calc
+nfc_norm:
 LA r4,0xFFFFFFFF
 CMP r2,r4
 JMP[NE] @nfc_have
@@ -13029,7 +13856,8 @@ CMP r6,r0
 JMP[EQ] @nfc_pos
 MOVI r6,1
 ST r6,r0,#W_F2NEG
-BOOL.6 r5,r5,r4
+LA r4,0x7FFFFFFF
+BOOL.8 r5,r5,r4
 ST r5,r0,#W_F2V
 nfc_pos:
 MOVI r7,1
@@ -13080,6 +13908,13 @@ RET
 ni_femit:
 ST r15,r14,0
 ADD r14,r14,r13
+LD r4,r0,#W_F2BIG
+CMP r4,r0
+JMP[EQ] @nfe_norm
+SUB r14,r14,r13
+LD r15,r14,0
+JMP @ni_fbig_emit
+nfe_norm:
 LD r4,r0,#W_F2NEG
 CMP r4,r0
 JMP[EQ] @nfe_nosign
@@ -13105,6 +13940,159 @@ nfe_frac:
 LD r5,r0,#W_F2F
 CALL @putudec
 nfe_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; ni_big_pair: r1=abs float bits (<2^64) -> W_LLD pair, r2=digit length at LLFMT
+ni_big_pair:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r2,r0,#R_SP
+ST r1,r2,0
+ADD r2,r2,r13
+ST r2,r0,#R_SP
+ST r0,r0,#W_LLS
+CALL @ll_from_f
+LD r2,r0,#R_SP
+ADDI r2,r2,-2
+LD r3,r2,0
+LD r4,r2,1
+ST r2,r0,#R_SP
+ST r3,r0,#W_LLD0
+ST r4,r0,#W_LLD1
+MOVI r1,10
+CALL @ll_fmt_base
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; ni_fbig_calc: r1=float bits r2=precision -> r3=length (|v| >= 2^31)
+ni_fbig_calc:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_F2V
+ST r2,r0,#W_F2P
+MOVI r1,1
+ST r1,r0,#W_F2BIG
+LA r4,0xFFFFFFFF
+LD r2,r0,#W_F2P
+CMP r2,r4
+JMP[NE] @nfb_have
+MOVI r2,6
+ST r2,r0,#W_F2P
+nfb_have:
+LD r2,r0,#W_F2P
+MOVI r4,9
+CMP r2,r4
+JMP[LE] @nfb_ok
+MOVI r2,9
+ST r2,r0,#W_F2P
+nfb_ok:
+LD r5,r0,#W_F2V
+LA r4,0x80000000
+BOOL.8 r6,r5,r4
+ST r0,r0,#W_F2NEG
+CMP r6,r0
+JMP[EQ] @nfb_pos
+MOVI r6,1
+ST r6,r0,#W_F2NEG
+LA r4,0x7FFFFFFF
+BOOL.8 r5,r5,r4
+ST r5,r0,#W_F2V
+nfb_pos:
+LD r5,r0,#W_F2V
+LA r4,0x5F800000
+FCMP r5,r4
+JMP[GE] @nfb_scaled
+ADD r1,r5,r0
+CALL @ni_big_pair
+ADD r1,r2,r0
+JMP @nfb_have_d
+nfb_scaled:
+MOVI r1,1
+LA r4,0x41200000
+nfb_c:
+FCMP r5,r4
+JMP[LT] @nfb_cd
+FDIV r5,r5,r4
+ADD r1,r1,r13
+JMP @nfb_c
+nfb_cd:
+nfb_have_d:
+ST r1,r0,#W_F2I
+ST r5,r0,#W_F2S
+LD r3,r0,#W_F2NEG
+ADD r3,r3,r1
+LD r1,r0,#W_F2P
+CMP r1,r0
+JMP[EQ] @nfb_d
+ADD r3,r3,r1
+ADD r3,r3,r13
+nfb_d:
+ST r3,r0,#W_F2L
+ADD r1,r3,r0
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; ni_fbig_emit: print W_F2* fixed-point for large magnitudes
+ni_fbig_emit:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r4,r0,#W_F2NEG
+CMP r4,r0
+JMP[EQ] @nfe_b_nosign
+MOVI r1,45
+CALL @ncc_putc
+nfe_b_nosign:
+LD r5,r0,#W_F2V
+LA r4,0x5F800000
+FCMP r5,r4
+JMP[GE] @nfe_b_scaled
+ADD r1,r5,r0
+CALL @ni_big_pair
+ST r2,r0,#W_F2L
+LA r4,#LLFMT
+MOVI r6,0
+nfe_b_lll:
+LD r1,r0,#W_F2L
+CMP r6,r1
+JMP[GE] @nfe_b_frac0
+ADD r7,r4,r6
+LDB r1,r7,0
+CALL @ncc_putc
+ADD r6,r6,r13
+JMP @nfe_b_lll
+nfe_b_scaled:
+LD r6,r0,#W_F2I
+LD r5,r0,#W_F2S
+nfe_b_int:
+CVTFI r7,r5
+ADDI r1,r7,48
+CALL @ncc_putc
+ADDI r1,r7,48
+CVTIF r8,r7
+FSUB r5,r5,r8
+LA r4,0x41200000
+FMUL r5,r5,r4
+SUB r6,r6,r13
+CMP r6,r0
+JMP[NE] @nfe_b_int
+nfe_b_frac0:
+LD r1,r0,#W_F2P
+CMP r1,r0
+JMP[EQ] @nfe_b_d
+MOVI r1,46
+CALL @ncc_putc
+LD r6,r0,#W_F2P
+nfe_b_frac:
+MOVI r1,48
+CALL @ncc_putc
+SUB r6,r6,r13
+CMP r6,r0
+JMP[NE] @nfe_b_frac
+nfe_b_d:
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -13135,6 +14123,9 @@ LD r15,r14,0
 RET
 
 npf_uint:
+LD r1,r0,#W_PF_LL
+CMP r1,r0
+JMP[NE] @npf_ll_unsigned
 LD r1,r0,#W_PF_IDX
 ADD r1,r1,r13
 ST r1,r0,#W_PF_IDX
@@ -13175,6 +14166,9 @@ npf_hex_up:
 MOVI r2,1
 ST r2,r0,#W_PF_CASE
 npf_hex:
+LD r1,r0,#W_PF_LL
+CMP r1,r0
+JMP[NE] @npf_ll_hex
 LD r1,r0,#W_PF_IDX
 ADD r1,r1,r13
 ST r1,r0,#W_PF_IDX
@@ -13277,7 +14271,7 @@ ADD r1,r1,r13
 ST r1,r0,#W_PF_FMT
 JMP @npf_l
 npf_done:
-LD r1,r0,#W_PF_ARGC
+LD r1,r0,#W_CALLWORDS
 LD r2,r0,#R_SP
 SUB r2,r2,r1
 ST r2,r0,#R_SP
@@ -14024,8 +15018,8 @@ CALL @ni_push
 JMP @nbi_d
 nbi_fabs:
 CALL @ni_pop
-LA r2,0x80000000
-BOOL.6 r1,r1,r2
+LA r2,0x7FFFFFFF
+BOOL.8 r1,r1,r2
 CALL @ni_push
 JMP @nbi_d
 nbi_exp:
@@ -14476,6 +15470,7 @@ MOVI r3,0xFFFF
 BOOL.8 r1,r2,r3
 SHR r2,r2,16
 ST r2,r0,#R_T1
+ST r2,r0,#W_CALLWORDS
 CALL @sym_entry
 LD r3,r1,#SY_OFF
 ST r3,r0,#W_VARFLAG
@@ -14490,8 +15485,8 @@ MOVI r4,0xFFFF
 CMP r5,r4
 JMP[EQ] @ncl_bok
 LD r6,r0,#R_T1
-CMP r5,r6
-JMP[EQ] @ncl_bok
+CMP r6,r5
+JMP[GE] @ncl_bok
 MOVI r1,40
 CALL @ncc_err
 ncl_bok:
@@ -14511,16 +15506,8 @@ CALL @ncc_err
 ncl_def:
 LD r5,r1,#SY_NP
 LD r6,r0,#R_T1
-CMP r5,r6
-JMP[EQ] @ncl_argc_ok
-LD r5,r1,#SY_OFF
-CMP r5,r0
-JMP[EQ] @ncl_argc_bad
-LD r5,r1,#SY_NP
-LD r6,r0,#R_T1
 CMP r6,r5
 JMP[GE] @ncl_argc_ok
-ncl_argc_bad:
 MOVI r1,40
 CALL @ncc_err
 ncl_argc_ok:
@@ -14561,6 +15548,7 @@ ADDI r12,r12,1
 ST r5,r12,0
 ; copy args
 ST r0,r0,#W_TY_KIND
+ST r0,r0,#W_SRCOFF
 ncl_copy:
 LD r1,r0,#W_TY_KIND
 LD r2,r0,#W_VARNP
@@ -14583,6 +15571,11 @@ MOVI r3,#TY_UNION
 CMP r1,r3
 JMP[EQ] @ncl_copy_agg
 LD r1,r0,#W_TY_RET
+CALL @ty_kind
+MOVI r3,#TY_LL
+CMP r1,r3
+JMP[EQ] @ncl_copy_ll
+LD r1,r0,#W_TY_RET
 CALL @ty_store_code
 ST r1,r0,#W_TY_SIGN
 LD r1,r0,#W_TY_ID
@@ -14591,7 +15584,7 @@ ADD r1,r1,r2
 LD r2,r0,#R_SP
 LD r3,r0,#R_T1
 SUB r2,r2,r3
-LD r3,r0,#W_TY_KIND
+LD r3,r0,#W_SRCOFF
 ADD r2,r2,r3
 LD r2,r2,0
 LD r3,r0,#W_TY_SIGN
@@ -14599,6 +15592,28 @@ CALL @ni_storev
 LD r1,r0,#W_TY_KIND
 ADD r1,r1,r13
 ST r1,r0,#W_TY_KIND
+LD r1,r0,#W_SRCOFF
+ADD r1,r1,r13
+ST r1,r0,#W_SRCOFF
+JMP @ncl_copy
+ncl_copy_ll:
+LD r1,r0,#R_SP
+LD r2,r0,#R_T1
+SUB r1,r1,r2
+LD r2,r0,#W_SRCOFF
+ADD r1,r1,r2
+LD r2,r1,0
+LD r3,r1,1
+LD r1,r0,#W_TY_ID
+LD r4,r0,#W_TY_ALIGN
+ADD r1,r1,r4
+CALL @ni_store64
+LD r1,r0,#W_TY_KIND
+ADD r1,r1,r13
+ST r1,r0,#W_TY_KIND
+LD r1,r0,#W_SRCOFF
+ADDI r1,r1,2
+ST r1,r0,#W_SRCOFF
 JMP @ncl_copy
 ncl_copy_agg:
 LD r1,r0,#W_TY_RET
@@ -14607,7 +15622,7 @@ ST r1,r0,#W_TY_TMP
 LD r2,r0,#R_SP
 LD r3,r0,#R_T1
 SUB r2,r2,r3
-LD r3,r0,#W_TY_KIND
+LD r3,r0,#W_SRCOFF
 ADD r2,r2,r3
 LD r2,r2,0
 LD r1,r0,#W_TY_ID
@@ -14618,6 +15633,9 @@ CALL @ni_memcpy_raw
 LD r1,r0,#W_TY_KIND
 ADD r1,r1,r13
 ST r1,r0,#W_TY_KIND
+LD r1,r0,#W_SRCOFF
+ADD r1,r1,r13
+ST r1,r0,#W_SRCOFF
 JMP @ncl_copy
 ncl_varstore:
 ; copy variadic arguments into the callee's 64-byte varargs area at fp+16
@@ -14678,6 +15696,10 @@ LD r2,r0,#R_FP
 SHR r2,r2,2
 LD r3,r2,2
 LD r4,r0,#R_SP
+LD r6,r0,#R_T0
+MOVI r7,2
+CMP r6,r7
+JMP[EQ] @nrt_ll
 CMP r4,r3
 JMP[LE] @nrt_none
 SUB r4,r4,r13
@@ -14689,6 +15711,29 @@ nrt_have:
 ST r3,r0,#R_SP
 ADD r1,r5,r0
 CALL @ni_push
+JMP @nrt_restore
+nrt_ll:
+CMP r4,r3
+JMP[LE] @nrt_ll_zero
+ADDI r7,r4,-1
+LD r6,r7,0
+ADDI r7,r4,-2
+LD r5,r7,0
+ST r3,r0,#R_SP
+ADD r1,r5,r0
+ST r6,r0,#W_LLD1
+CALL @ni_push
+LD r1,r0,#W_LLD1
+CALL @ni_push
+JMP @nrt_restore
+nrt_ll_zero:
+ST r3,r0,#R_SP
+MOVI r1,0
+CALL @ni_push
+MOVI r1,0
+CALL @ni_push
+nrt_restore:
+LD r2,r0,#R_FP
 LD r2,r0,#R_FP
 SHR r2,r2,2
 LD r1,r2,1
@@ -14888,7 +15933,64 @@ JMP[EQ] @nil_retstruct
 MOVI r2,#I_VAARG
 CMP r1,r2
 JMP[EQ] @nil_vaarg
+MOVI r2,#I_LLEXT
+CMP r1,r2
+JMP[EQ] @nil_llext
+MOVI r2,#I_LLTRUNC
+CMP r1,r2
+JMP[EQ] @nil_lltrunc
+MOVI r2,#I_LLOP
+CMP r1,r2
+JMP[EQ] @nil_llop
+MOVI r2,#I_LLOAD
+CMP r1,r2
+JMP[EQ] @nil_llload
+MOVI r2,#I_LLSTORE
+CMP r1,r2
+JMP[EQ] @nil_llstore
+MOVI r2,#I_WORDS
+CMP r1,r2
+JMP[EQ] @nil_words
+MOVI r2,#I_LLF2I
+CMP r1,r2
+JMP[EQ] @nil_llf2i
+MOVI r2,#I_LLI2F
+CMP r1,r2
+JMP[EQ] @nil_lli2f
 JMP @nil_bad
+
+nil_words:
+LD r1,r0,#R_T0
+ST r1,r0,#W_CALLWORDS
+JMP @nil_again
+nil_llf2i:
+LD r1,r0,#R_T0
+ST r1,r0,#W_LLS
+CALL @ll_from_f
+JMP @nil_again
+nil_lli2f:
+CALL @ll_to_f
+JMP @nil_again
+
+nil_llext:
+LD r1,r0,#R_T0
+CALL @ll_ext
+JMP @nil_again
+nil_lltrunc:
+LD r1,r0,#R_T0
+CALL @ll_trunc
+JMP @nil_again
+nil_llop:
+LD r1,r0,#R_T0
+CALL @ll_op
+JMP @nil_again
+nil_llload:
+CALL @ll_load
+JMP @nil_again
+nil_llstore:
+LD r1,r0,#R_T0
+CALL @ll_store
+JMP @nil_again
 
 nil_calli:
 LD r1,r0,#R_T0
@@ -14940,17 +16042,41 @@ ST r1,r0,#R_T0
 CALL @ni_call
 JMP @nil_again
 nil_vaarg:
+LD r1,r0,#R_T0
+ST r1,r0,#W_TY_TMP
 CALL @ni_pop
 ST r1,r0,#R_T2
 MOVI r2,#SZ_32
 CALL @ni_loadv
 ST r1,r0,#R_T0
-ADD r1,r1,r0
+LD r2,r0,#W_TY_TMP
+MOVI r3,8
+CMP r2,r3
+JMP[NE] @nva_one
+LD r1,r0,#R_T0
+MOVI r2,#SZ_32
+CALL @ni_loadv
+ST r1,r0,#W_LLD0
+LD r1,r0,#R_T0
+ADDI r1,r1,4
+MOVI r2,#SZ_32
+CALL @ni_loadv
+ST r1,r0,#W_LLD1
+LD r1,r0,#W_LLD0
+CALL @ni_push
+LD r1,r0,#W_LLD1
+CALL @ni_push
+LD r1,r0,#R_T0
+ADDI r2,r1,8
+JMP @nva_adv
+nva_one:
+LD r1,r0,#R_T0
 MOVI r2,#SZ_32
 CALL @ni_loadv
 CALL @ni_push
 LD r1,r0,#R_T0
 ADDI r2,r1,4
+nva_adv:
 LD r1,r0,#R_T2
 MOVI r3,#SZ_32
 CALL @ni_storev

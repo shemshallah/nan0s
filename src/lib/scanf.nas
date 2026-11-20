@@ -19,6 +19,8 @@
 .equ CS_DIG   61573
 .equ CS_I     61574
 .equ CS_ENT   61575
+.equ CS_LEN   61577
+.equ CS_TMPH  61578
 .equ CS_FBUF  11020700
 
 ; cs_getc -> r1=char or -1
@@ -175,6 +177,80 @@ LD r1,r0,#CS_DST
 CALL @cs_ungetc
 csu_d:
 LD r1,r0,#CS_DIG
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; cs_ull: r2=base -> r1=1 if any digit; value in CS_TMP/CS_TMPH
+cs_ull:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r2,r0,#CS_BASE
+ST r0,r0,#CS_TMP
+ST r0,r0,#CS_TMPH
+ST r0,r0,#CS_DIG
+csu2_l:
+CALL @cs_getc
+CMPS r1,r0
+JMP[LT] @csu2_d
+ST r1,r0,#CS_DST
+LD r2,r0,#CS_BASE
+CALL @cs_digit
+CMPS r1,r0
+JMP[LT] @csu2_nod
+ST r1,r0,#CS_PBC
+LD r3,r0,#CS_TMP
+LD r4,r0,#CS_TMPH
+LD r5,r0,#CS_BASE
+MUL r6,r3,r5
+MULHU r7,r3,r5
+MUL r8,r4,r5
+ADD r7,r7,r8
+LD r8,r0,#CS_PBC
+ADD r6,r6,r8
+MOVI r9,0
+CMP r6,r8
+JMP[GE] @csu2_nc
+MOVI r9,1
+csu2_nc:
+ADD r7,r7,r9
+ST r6,r0,#CS_TMP
+ST r7,r0,#CS_TMPH
+MOVI r1,1
+ST r1,r0,#CS_DIG
+JMP @csu2_l
+csu2_nod:
+LD r1,r0,#CS_DST
+CALL @cs_ungetc
+csu2_d:
+LD r1,r0,#CS_DIG
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; cs_store_ll: store CS_TMP/CS_TMPH to the next destination arg
+cs_store_ll:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r1,r0,#CS_SUP
+CMP r1,r0
+JMP[NE] @csll_ok
+LD r1,r0,#CS_ARG
+CALL @ni_arg
+ST r1,r0,#CS_DST
+LD r2,r0,#CS_TMP
+MOVI r3,4
+CALL @ni_storev
+LD r1,r0,#CS_DST
+ADDI r1,r1,4
+LD r2,r0,#CS_TMPH
+MOVI r3,4
+CALL @ni_storev
+LD r1,r0,#CS_ARG
+ADD r1,r1,r13
+ST r1,r0,#CS_ARG
+csll_ok:
+MOVI r1,1
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -364,6 +440,10 @@ JMP[NE] @csdi_go
 CALL @cs_getc
 csdi_go:
 CALL @cs_ungetc
+LD r1,r0,#CS_LEN
+MOVI r3,2
+CMP r1,r3
+JMP[EQ] @csdi_ll
 LD r2,r0,#CS_BASE
 CALL @cs_uint
 CMP r1,r0
@@ -376,6 +456,29 @@ SUB r1,r0,r1
 ST r1,r0,#CS_TMP
 csdi_store:
 CALL @cs_store
+JMP @csd_d
+csdi_ll:
+LD r2,r0,#CS_BASE
+CALL @cs_ull
+CMP r1,r0
+JMP[EQ] @csd_fail
+LD r1,r0,#CS_SGN
+CMP r1,r0
+JMP[EQ] @csdi_llstore
+LD r1,r0,#CS_TMP
+SUB r1,r0,r1
+ST r1,r0,#CS_TMP
+MOVI r3,1
+CMP r1,r0
+JMP[NE] @csdi_llb
+MOVI r3,0
+csdi_llb:
+LD r1,r0,#CS_TMPH
+SUB r1,r0,r1
+SUB r1,r1,r3
+ST r1,r0,#CS_TMPH
+csdi_llstore:
+CALL @cs_store_ll
 JMP @csd_d
 csdf:
 CALL @cs_skipws
@@ -578,6 +681,44 @@ ADD r1,r1,r13
 ST r1,r0,#CS_FMT
 JMP @csr_wl
 csr_conv:
+LD r1,r0,#CS_FMT
+LDB r2,r1,0
+CMP r2,r0
+JMP[EQ] @csr_done
+ST r0,r0,#CS_LEN
+csr_lenl:
+MOVI r3,108
+CMP r2,r3
+JMP[NE] @csr_lenh
+LD r1,r0,#CS_LEN
+ADD r1,r1,r13
+ST r1,r0,#CS_LEN
+LD r1,r0,#CS_FMT
+ADD r1,r1,r13
+ST r1,r0,#CS_FMT
+LD r1,r0,#CS_LEN
+MOVI r3,2
+CMP r1,r3
+JMP[GE] @csr_conv_char
+LD r1,r0,#CS_FMT
+LDB r2,r1,0
+JMP @csr_lenl
+csr_lenh:
+MOVI r3,104
+CMP r2,r3
+JMP[NE] @csr_conv_char
+LD r1,r0,#CS_FMT
+ADD r1,r1,r13
+ST r1,r0,#CS_FMT
+LD r1,r0,#CS_FMT
+LDB r2,r1,0
+MOVI r3,104
+CMP r2,r3
+JMP[NE] @csr_conv_char
+ADD r1,r1,r13
+ST r1,r0,#CS_FMT
+LDB r2,r1,0
+csr_conv_char:
 LD r1,r0,#CS_FMT
 LDB r2,r1,0
 CMP r2,r0

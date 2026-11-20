@@ -16,6 +16,7 @@ C memory is byte-addressed on top of the 32-bit NaN word:
 | `short`, `unsigned short` | 2 | 2 |
 | `int`, `unsigned int` | 4 | 4 |
 | `long`, `unsigned long` | 4 | 4 |
+| `long long`, `unsigned long long` | 8 | 4 |
 | pointers | 4 | 4 |
 | `float`, `double` (storage only) | 4 | 4 |
 
@@ -44,6 +45,12 @@ Implemented:
   array elements, struct members, and `(*fp)(...)`, comparison
 - global and local arrays, multidimensions, pointer arithmetic/indexing
 - `char`/`short`/`int`/`long`, signed and unsigned, `sizeof` in bytes
+- 64-bit `long long`/`unsigned long long`: two-word stack representation,
+  literals (including values above 2^32 in decimal/hex/octal), add/sub/mul/
+  div/mod (signed and unsigned), shifts, bitwise operators, comparisons,
+  compound assignment, `++`/`--`, arrays, structs/unions, globals, function
+  parameters/returns (including mixed int/LL and indirect calls), `va_arg`,
+  `%lld/%llu/%llx/%llo` in printf and scanf, and LL<->float casts
 - `float`/`double` (32-bit IEEE storage), float literals, arithmetic,
   comparisons, casts, and built-in `sin`/`cos`
 - `printf` with `%d %i %u %x %X %c %s %p %f %e %E %g %G %%`, flags
@@ -74,8 +81,6 @@ Implemented:
 
 Not implemented (honest list):
 
-- `long long` is parsed but currently uses the 32-bit ILP32 slot; there is no
-  64-bit arithmetic or `%lld` conversion yet
 - the explicit function-returning-function-pointer declarator syntax
   (`int (*f(void))(int,int)`); use a typedef'd function-pointer return type
 - packed bit-field ABI: fields are laid out one per declared storage unit
@@ -198,6 +203,8 @@ tools/ncc_m21.sh    printf %g/%G, # flag, float exponent literals
 tools/ncc_m22.sh    time/locale/signal, struct tm/lconv, atof/strtod, limits
 tools/ncc_m23.sh    stdio FILE streams over the path filesystem
 tools/ncc_m24.sh    scanf/fscanf/sscanf conversions and widths
+tools/ncc_m25.sh    64-bit long long: literals, arithmetic, casts, printf/scanf,
+                    structs/arrays, varargs, function pointers, LL<->float
 tools/ncc_donut.sh  original C donut (one frame) in raw NaN16
 tools/nfs2.sh       path-addressed RAM filesystem API
 tools/ncc_gui.sh    boot image, open terminal, .demo runs C in the vbuf
