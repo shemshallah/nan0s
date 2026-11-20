@@ -77,7 +77,9 @@ Not implemented (honest list):
 - `#include <...>` system headers (they are skipped; the libc is built in)
 - the explicit function-returning-function-pointer declarator syntax
   (`int (*f(void))(int,int)`); use a typedef'd function-pointer return type
-- `const`/`volatile`/`register` are accepted but not enforced
+- `const`/`volatile`/`register`/`inline`/`restrict` are accepted but not enforced
+- `_Bool`/`bool`/`true`/`false`, with `_Bool` values normalized to 0/1
+- `long long` is parsed but uses the 32-bit ILP32 slot (no 64-bit arithmetic yet)
 - user variadic functions are supported (`va_list`, `va_start`, `va_arg`,
   `va_end`; up to 16 variadic argument words per call)
 - `%g` conversion
@@ -185,6 +187,7 @@ tools/ncc_m15.sh    math built-ins (sqrt/pow/exp/log/floor/ceil/fmod/...)
 tools/ncc_m16.sh    string/ctype/stdlib built-ins
 tools/ncc_m17.sh    sprintf/snprintf into guest buffers
 tools/ncc_m18.sh    printf %e/%E
+tools/ncc_m19.sh    _Bool/bool, inline/restrict
 tools/ncc_donut.sh  original C donut (one frame) in raw NaN16
 tools/nfs2.sh       path-addressed RAM filesystem API
 tools/ncc_gui.sh    boot image, open terminal, .demo runs C in the vbuf

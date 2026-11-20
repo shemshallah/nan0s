@@ -103,6 +103,9 @@
 .equ KW_VOID     30
 .equ KW_VOLATILE 31
 .equ KW_WHILE    32
+.equ KW_INLINE   33
+.equ KW_RESTRICT 34
+.equ KW_BOOL     35
 
 ; punctuator ids
 .equ P_PLUS     1
@@ -254,6 +257,7 @@
 .equ TY_UNION   6
 .equ TY_FUNC    7
 .equ TY_ENUM    8
+.equ TY_BOOL    9
 
 ; type entry fields (8 words)
 .equ TY_KIND    0
@@ -278,6 +282,7 @@
 .equ T_ULONG    9
 .equ T_FLOAT    10
 .equ T_DOUBLE   11
+.equ T_BOOL     12
 
 ; load/store size codes
 .equ SZ_8S      0
@@ -1555,6 +1560,14 @@ MOVI r1,7
 MOVI r2,#TY_INT
 MOVI r3,4
 MOVI r4,4
+MOVI r5,0
+MOVI r6,0
+CALL @ty_set
+; 12 _Bool
+MOVI r1,12
+MOVI r2,#TY_BOOL
+MOVI r3,1
+MOVI r4,1
 MOVI r5,0
 MOVI r6,0
 CALL @ty_set
@@ -3208,6 +3221,9 @@ kw_tab:
 .word 0x48B5725F, 30
 .word 0x94E1036D, 31
 .word 0x0DC628CE, 32
+.word 0xC2CB5034, 33
+.word 0xFDD57AE5, 34
+.word 0xAE76E4A2, 35
 .word 0
 
 ; ================================================================== IR EMITTER
@@ -3471,6 +3487,15 @@ JMP[EQ] @kit_y
 MOVI r2,31
 CMP r1,r2
 JMP[EQ] @kit_y
+MOVI r2,33
+CMP r1,r2
+JMP[EQ] @kit_y
+MOVI r2,34
+CMP r1,r2
+JMP[EQ] @kit_y
+MOVI r2,35
+CMP r1,r2
+JMP[EQ] @kit_y
 MOVI r2,1
 CMP r1,r2
 JMP[EQ] @kit_y
@@ -3531,6 +3556,15 @@ JMP[EQ] @pts_qual
 MOVI r2,#KW_VOLATILE
 CMP r1,r2
 JMP[EQ] @pts_qual
+MOVI r2,#KW_INLINE
+CMP r1,r2
+JMP[EQ] @pts_qual
+MOVI r2,#KW_RESTRICT
+CMP r1,r2
+JMP[EQ] @pts_qual
+MOVI r2,#KW_BOOL
+CMP r1,r2
+JMP[EQ] @pts_bool
 MOVI r2,#KW_SIGNED
 CMP r1,r2
 JMP[EQ] @pts_signed
@@ -3586,6 +3620,10 @@ ST r1,r0,#W_SCLASS
 JMP @pts_skip
 pts_qual:
 JMP @pts_skip
+pts_bool:
+CALL @p_adv
+MOVI r1,#T_BOOL
+JMP @pts_ret
 pts_signed:
 MOVI r1,1
 ST r1,r0,#W_TSIGN
@@ -3762,6 +3800,10 @@ CALL @p_at_k
 CMP r1,r0
 JMP[NE] @pps_qadv
 MOVI r1,#KW_VOLATILE
+CALL @p_at_k
+CMP r1,r0
+JMP[NE] @pps_qadv
+MOVI r1,#KW_RESTRICT
 CALL @p_at_k
 CMP r1,r0
 JMP[EQ] @pps_go
@@ -4898,6 +4940,22 @@ LA r2,@ncc_s_va_list
 MOVI r3,7
 LD r4,r0,#W_PTRC
 CALL @ncc_add_typedef
+; bool typedef and true/false constants (stdbool.h is skipped)
+LA r1,0xC894953D
+LA r2,@ncc_s_bool
+MOVI r3,4
+MOVI r4,#T_BOOL
+CALL @ncc_add_typedef
+LA r1,0x4DB211E5
+LA r2,@ncc_s_true
+MOVI r3,4
+MOVI r4,1
+CALL @ncc_add_enum_const
+LA r1,0x0B069958
+LA r2,@ncc_s_false
+MOVI r3,5
+MOVI r4,0
+CALL @ncc_add_enum_const
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -4952,6 +5010,37 @@ MOVI r1,#SK_TYPE
 CALL @sym_get_cur
 CALL @sym_entry
 LD r4,r0,#W_BRET
+ST r4,r1,#SY_TYPE
+ST r1,r0,#W_TY_TMP
+LD r1,r0,#W_BRET
+CALL @ty_size
+LD r4,r0,#W_TY_TMP
+ST r1,r4,#SY_SIZE
+ST r0,r4,#SY_CLS
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; ncc_add_enum_const: r1=hash r2=name r3=len r4=value
+ncc_add_enum_const:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r4,r0,#W_BRET
+ST r1,r0,#W_TKA+2
+ST r3,r0,#W_TKA+3
+ST r0,r0,#W_TKA
+ST r0,r0,#W_TKA+1
+LA r6,#W_TKA+#TK_TEXT
+MOVI r7,3
+ADD r7,r7,r3
+SHR r7,r7,2
+BCOPY r6,r2,r7
+MOVI r1,#SK_ENUM
+CALL @sym_get_cur
+CALL @sym_entry
+LD r4,r0,#W_BRET
+ST r4,r1,#SY_AUX
+MOVI r4,#T_INT
 ST r4,r1,#SY_TYPE
 MOVI r4,4
 ST r4,r1,#SY_SIZE
@@ -5012,6 +5101,12 @@ ncc_s_va_end:
 .str "va_end"
 ncc_s_va_list:
 .str "va_list"
+ncc_s_bool:
+.str "bool"
+ncc_s_true:
+.str "true"
+ncc_s_false:
+.str "false"
 ncc_s_sprintf:
 .str "sprintf"
 ncc_s_snprintf:
@@ -5424,6 +5519,16 @@ CALL @ir_emit
 LA r1,#I_AND
 CALL @ir_op
 pxs_nomask:
+LD r1,r0,#W_TY_ID
+CALL @ty_kind
+MOVI r2,#TY_BOOL
+CMP r1,r2
+JMP[NE] @pxs_notbool
+LA r1,#I_LNOT
+CALL @ir_op
+LA r1,#I_LNOT
+CALL @ir_op
+pxs_notbool:
 LD r1,r0,#W_TY_ID
 CALL @ty_kind
 MOVI r2,#TY_STRUCT
