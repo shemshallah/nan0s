@@ -39,7 +39,9 @@ Implemented:
 - `if`/`else`, `while`, `for`, `do`/`while`, `break`, `continue`
 - functions, prototypes, parameters, recursion, `return`
 - function pointers: `RET (*name)(params)` at global or block scope,
-  function-designator values, assignment, indirect calls, comparison
+  typedefs, parameters (explicit and typedef), typedef'd returns, arrays,
+  function-designator values, assignment, indirect calls through variables,
+  array elements, struct members, and `(*fp)(...)`, comparison
 - global and local arrays, multidimensions, pointer arithmetic/indexing
 - `char`/`short`/`int`/`long`, signed and unsigned, `sizeof` in bytes
 - `float`/`double` (32-bit IEEE storage), float literals, arithmetic,
@@ -61,8 +63,8 @@ Not implemented (honest list):
 
 - function-like macros, `#`/`##`, recursive macro expansion
 - `#include <...>` system headers (they are skipped; the libc is built in)
-- function-pointer parameters, arrays, and returns (plain function-pointer
-  variables, globals, assignment, and indirect calls work)
+- the explicit function-returning-function-pointer declarator syntax
+  (`int (*f(void))(int,int)`); use a typedef'd function-pointer return type
 - struct/union pass-by-value, return-by-value, comparison
 - nested aggregate initializers and brace initializers for array members
   inside a struct or union

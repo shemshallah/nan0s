@@ -212,6 +212,8 @@
 .equ I_FEQ      64
 .equ I_FNE      65
 .equ I_CALLI    66
+.equ I_CALLB    67
+.equ CALB_SCRATCH 2700000
 
 ; symbol entry: 16 words
 .equ SY_HASH    0
@@ -6437,6 +6439,54 @@ MOVI r1,1
 ST r1,r0,#W_LVAL
 JMP @pxf_loop
 pxf_inc:
+MOVI r1,#P_LPAREN
+CALL @p_at_p
+CMP r1,r0
+JMP[EQ] @pxf_inc_orig
+; call through a function-pointer expression
+CALL @p_emit_rv
+LD r1,r0,#W_ETYPE
+CALL @ty_is_funcptr
+CMP r1,r0
+JMP[EQ] @pxf_badcall
+LD r1,r0,#W_ETYPE
+CALL @ty_funcptr_ret
+ST r1,r0,#W_FPRET
+CALL @p_adv
+ST r0,r14,0
+ADD r14,r14,r13
+MOVI r1,#P_RPAREN
+CALL @p_at_p
+CMP r1,r0
+JMP[NE] @pxf_call_done
+pxf_call_args:
+CALL @p_assign
+CALL @p_emit_rv
+ADDI r1,r14,-1
+LD r2,r1,0
+ADD r2,r2,r13
+ST r2,r1,0
+MOVI r1,#P_COMMA
+CALL @p_take_p
+CMP r1,r0
+JMP[NE] @pxf_call_args
+pxf_call_done:
+MOVI r1,#P_RPAREN
+MOVI r2,10
+CALL @p_expect_p
+ADDI r3,r14,-1
+LD r2,r3,0
+LA r1,#I_CALLB
+CALL @ir_emit
+ADDI r14,r14,-1
+LD r1,r0,#W_FPRET
+ST r1,r0,#W_ETYPE
+ST r0,r0,#W_LVAL
+JMP @pxf_loop
+pxf_badcall:
+MOVI r1,8
+CALL @p_err
+pxf_inc_orig:
 LD r1,r0,#W_LVAL
 CMP r1,r0
 JMP[EQ] @pxf_done
@@ -6612,6 +6662,10 @@ pu_deref:
 CALL @p_adv
 CALL @p_unary
 CALL @p_emit_rv
+LD r1,r0,#W_ETYPE
+CALL @ty_is_funcptr
+CMP r1,r0
+JMP[NE] @pu_done
 LD r1,r0,#W_ETYPE
 CALL @ty_kind
 MOVI r2,#TY_PTR
@@ -8501,6 +8555,9 @@ MOVI r1,23
 CALL @p_err
 pfpd_nm:
 LD r1,r0,#W_FPGLOBAL
+MOVI r2,2
+CMP r1,r2
+JMP[EQ] @pfpd_typedef
 CMP r1,r0
 JMP[EQ] @pfpd_local
 MOVI r1,#SK_GLOBAL
@@ -8509,6 +8566,10 @@ JMP @pfpd_sym
 pfpd_local:
 MOVI r1,#SK_LOCAL
 CALL @sym_new_cur
+JMP @pfpd_sym
+pfpd_typedef:
+MOVI r1,#SK_TYPE
+CALL @sym_get_cur
 pfpd_sym:
 ST r1,r0,#W_FPSYM
 CALL @p_adv
@@ -8571,6 +8632,9 @@ MOVI r3,4
 ST r3,r1,#SY_SIZE
 ST r0,r1,#SY_CLS
 LD r1,r0,#W_FPGLOBAL
+MOVI r2,2
+CMP r1,r2
+JMP[EQ] @pfpd_setaux
 CMP r1,r0
 JMP[EQ] @pfpd_alloc_l
 LD r1,r0,#W_GLOBP
@@ -8588,11 +8652,53 @@ ST r1,r0,#W_TY_BASE
 ADDI r2,r1,4
 ST r2,r0,#W_LOCALB
 pfpd_setaux:
+LD r1,r0,#W_FPGLOBAL
+MOVI r2,2
+CMP r1,r2
+JMP[EQ] @pfpd_ret
 LD r1,r0,#W_FPSYM
 CALL @sym_entry
 LD r2,r0,#W_TY_BASE
 ST r2,r1,#SY_AUX
+pfpd_ret:
 LD r1,r0,#W_FPTR_TYPE
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; p_funcptr_init: optional '= expr' initializer for the function pointer
+; declared by p_funcptr_decl (W_FPSYM/W_FPGLOBAL). Emits the store.
+p_funcptr_init:
+ST r15,r14,0
+ADD r14,r14,r13
+MOVI r1,#P_ASSIGN
+CALL @p_at_p
+CMP r1,r0
+JMP[EQ] @pfpi_d
+CALL @p_adv
+LD r1,r0,#W_FPGLOBAL
+MOVI r2,2
+CMP r1,r2
+JMP[EQ] @pfpi_d
+LD r1,r0,#W_FPSYM
+CALL @sym_entry
+LD r1,r1,#SY_AUX
+LD r2,r0,#W_FPGLOBAL
+CMP r2,r0
+JMP[NE] @pfpi_g
+CALL @px_addr_l
+JMP @pfpi_val
+pfpi_g:
+CALL @px_addr_g
+pfpi_val:
+CALL @p_assign
+CALL @p_emit_rv
+LD r1,r0,#W_FPTR_TYPE
+CALL @px_cast_stack
+LD r1,r0,#W_FPTR_TYPE
+MOVI r2,0
+CALL @px_emit_store
+pfpi_d:
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -8608,7 +8714,14 @@ CMP r1,r0
 JMP[EQ] @pd_one
 LD r1,r0,#W_TY_RET
 MOVI r2,0
+LD r3,r0,#W_SCLASS
+MOVI r4,3
+CMP r3,r4
+JMP[NE] @pd_fp_go
+MOVI r2,2
+pd_fp_go:
 CALL @p_funcptr_decl
+CALL @p_funcptr_init
 MOVI r1,#P_SEMI
 MOVI r2,24
 CALL @p_expect_p
@@ -9758,7 +9871,14 @@ CMP r1,r0
 JMP[EQ] @pde_not_fp
 LD r1,r0,#W_TY_RET
 MOVI r2,1
+LD r3,r0,#W_SCLASS
+MOVI r4,3
+CMP r3,r4
+JMP[NE] @pde_fp_go
+MOVI r2,2
+pde_fp_go:
 CALL @p_funcptr_decl
+CALL @p_funcptr_init
 MOVI r1,#P_SEMI
 MOVI r2,24
 CALL @p_expect_p
@@ -10094,6 +10214,29 @@ CMP r1,r0
 JMP[NE] @pfu_done_params
 pfu_param_l:
 CALL @p_typespec
+ST r1,r0,#W_TY_ID
+CALL @p_at_funcptr_decl
+CMP r1,r0
+JMP[EQ] @pfu_plain_type
+LD r1,r0,#W_TY_ID
+MOVI r2,0
+CALL @p_funcptr_decl
+LD r2,r0,#W_FUNCARG
+LD r3,r0,#W_FUNCNP
+ADD r3,r3,r3
+ADD r2,r2,r3
+LD r3,r0,#W_TY_BASE
+ST r3,r2,0
+LD r3,r0,#W_FPTR_TYPE
+ST r3,r2,1
+ADDI r2,r2,2
+ST r2,r0,#W_PARAMP
+LD r3,r0,#W_FUNCNP
+ADD r3,r3,r13
+ST r3,r0,#W_FUNCNP
+JMP @pfu_param_next
+pfu_plain_type:
+LD r1,r0,#W_TY_ID
 CALL @p_ptr_suffix
 ST r1,r0,#W_TY_ID
 MOVI r2,0
@@ -10119,6 +10262,7 @@ CALL @ty_base
 CALL @ty_ptr
 ST r1,r0,#W_TY_ID
 pfu_alloc:
+LD r1,r0,#W_LOCALB
 LD r1,r0,#W_TY_ID
 CALL @ty_size
 ST r1,r0,#W_TY_TMP
@@ -10162,6 +10306,7 @@ ST r2,r0,#W_PARAMP
 LD r3,r0,#W_FUNCNP
 ADD r3,r3,r13
 ST r3,r0,#W_FUNCNP
+pfu_param_next:
 MOVI r1,#P_COMMA
 CALL @p_take_p
 CMP r1,r0
@@ -11894,6 +12039,9 @@ JMP[EQ] @nil_halt
 MOVI r2,#I_CALLI
 CMP r1,r2
 JMP[EQ] @nil_calli
+MOVI r2,#I_CALLB
+CMP r1,r2
+JMP[EQ] @nil_callb
 JMP @nil_bad
 
 nil_calli:
@@ -11902,6 +12050,45 @@ SHL r1,r1,16
 ST r1,r0,#R_T2
 CALL @ni_pop
 LD r2,r0,#R_T2
+BOOL.14 r1,r1,r2
+ST r1,r0,#R_T0
+CALL @ni_call
+JMP @nil_again
+
+; I_CALLB: fp value is below the arguments on the eval stack
+nil_callb:
+LD r1,r0,#R_T0
+ST r1,r0,#R_T2
+MOVI r5,0
+nilcb_pop:
+LD r1,r0,#R_T2
+CMP r5,r1
+JMP[GE] @nilcb_fp
+CALL @ni_pop
+LA r2,#CALB_SCRATCH
+SHL r3,r5,2
+ADD r2,r2,r3
+ST r1,r2,0
+ADD r5,r5,r13
+JMP @nilcb_pop
+nilcb_fp:
+CALL @ni_pop
+ST r1,r0,#R_T0
+LD r5,r0,#R_T2
+nilcb_push:
+CMP r5,r0
+JMP[EQ] @nilcb_call
+SUB r5,r5,r13
+LA r2,#CALB_SCRATCH
+SHL r3,r5,2
+ADD r2,r2,r3
+LD r1,r2,0
+CALL @ni_push
+JMP @nilcb_push
+nilcb_call:
+LD r1,r0,#R_T2
+SHL r1,r1,16
+LD r2,r0,#R_T0
 BOOL.14 r1,r1,r2
 ST r1,r0,#R_T0
 CALL @ni_call
