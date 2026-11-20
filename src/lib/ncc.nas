@@ -379,6 +379,23 @@
 .equ B_RAISE    65
 .equ B_ATOF     66
 .equ B_STRTOD   67
+.equ B_FOPEN    68
+.equ B_FCLOSE   69
+.equ B_FGETC    70
+.equ B_FPUTC    71
+.equ B_FGETS    72
+.equ B_FPUTS    73
+.equ B_FREAD    74
+.equ B_FWRITE   75
+.equ B_FPRINTF  76
+.equ B_FSEEK    77
+.equ B_FTELL    78
+.equ B_REWIND   79
+.equ B_FEOF     80
+.equ B_FERROR   81
+.equ B_FFLUSH   82
+.equ B_REMOVE   83
+.equ B_RENAME   84
 
 ; ------------------------------------------------------------------ compiler state
 ; Kept below word 65536 so ST/LD can use the 16-bit immediate form directly.
@@ -647,6 +664,8 @@
 .equ W_FPNP     61355
 .equ W_SCOPEPAR 2001200
 .include "timeb.nas"
+.include "nfs2.nas"
+.include "stdio.nas"
 
 ; q2_skipsp: consume spaces and tabs
 q2_skipsp:
@@ -5506,6 +5525,126 @@ MOVI r4,#B_STRTOD
 MOVI r5,2
 MOVI r6,#T_DOUBLE
 CALL @ncc_add_builtin
+; stdio streams
+LA r1,0x4DC909C5
+LA r2,@ncc_s_fopen
+MOVI r3,5
+MOVI r4,#B_FOPEN
+MOVI r5,2
+LD r6,r0,#W_PTRV
+CALL @ncc_add_builtin
+LA r1,0xC3DEBAF7
+LA r2,@ncc_s_fclose
+MOVI r3,6
+MOVI r4,#B_FCLOSE
+MOVI r5,1
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0x9466DD68
+LA r2,@ncc_s_fgetc
+MOVI r3,5
+MOVI r4,#B_FGETC
+MOVI r5,1
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0x23C63DEB
+LA r2,@ncc_s_fputc
+MOVI r3,5
+MOVI r4,#B_FPUTC
+MOVI r5,2
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0x8466C438
+LA r2,@ncc_s_fgets
+MOVI r3,5
+MOVI r4,#B_FGETS
+MOVI r5,3
+LD r6,r0,#W_PTRC
+CALL @ncc_add_builtin
+LA r1,0x33C6571B
+LA r2,@ncc_s_fputs
+MOVI r3,5
+MOVI r4,#B_FPUTS
+MOVI r5,2
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0x854B1879
+LA r2,@ncc_s_fread
+MOVI r3,5
+MOVI r4,#B_FREAD
+MOVI r5,4
+MOVI r6,#T_UINT
+CALL @ncc_add_builtin
+LA r1,0x8AF06C60
+LA r2,@ncc_s_fwrite
+MOVI r3,6
+MOVI r4,#B_FWRITE
+MOVI r5,4
+MOVI r6,#T_UINT
+CALL @ncc_add_builtin
+LA r1,0x937D1EF6
+LA r2,@ncc_s_fprintf
+MOVI r3,7
+MOVI r4,#B_FPRINTF
+MOVI r5,0xFFFF
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0x806806E5
+LA r2,@ncc_s_fseek
+MOVI r3,5
+MOVI r4,#B_FSEEK
+MOVI r5,3
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0x457B0DA6
+LA r2,@ncc_s_ftell
+MOVI r3,5
+MOVI r4,#B_FTELL
+MOVI r5,1
+MOVI r6,#T_LONG
+CALL @ncc_add_builtin
+LA r1,0xDA112EAE
+LA r2,@ncc_s_rewind
+MOVI r3,6
+MOVI r4,#B_REWIND
+MOVI r5,1
+MOVI r6,#T_VOID
+CALL @ncc_add_builtin
+LA r1,0xA94D67E5
+LA r2,@ncc_s_feof
+MOVI r3,4
+MOVI r4,#B_FEOF
+MOVI r5,1
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0x6E4CC81D
+LA r2,@ncc_s_ferror
+MOVI r3,6
+MOVI r4,#B_FERROR
+MOVI r5,1
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0x9798BBC1
+LA r2,@ncc_s_fflush
+MOVI r3,6
+MOVI r4,#B_FFLUSH
+MOVI r5,1
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0xDB9215FD
+LA r2,@ncc_s_remove
+MOVI r3,6
+MOVI r4,#B_REMOVE
+MOVI r5,1
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0x81F2B7D3
+LA r2,@ncc_s_rename
+MOVI r3,6
+MOVI r4,#B_RENAME
+MOVI r5,2
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -5857,6 +5996,8 @@ BCOPY r6,r2,r7
 MOVI r1,4
 CALL @sym_get_cur
 CALL @sym_entry
+LD r4,r0,#W_TKA+2
+ST r4,r1,#SY_HASH
 LD r4,r0,#W_BID
 ST r4,r1,#SY_AUX
 LD r5,r0,#W_BNP
@@ -6192,6 +6333,42 @@ ncc_s_lc_int_p_sign_posn:
 .str "int_p_sign_posn"
 ncc_s_lc_int_n_sign_posn:
 .str "int_n_sign_posn"
+ncc_s_fopen:
+.str "fopen"
+ncc_s_fclose:
+.str "fclose"
+ncc_s_fgetc:
+.str "fgetc"
+ncc_s_fputc:
+.str "fputc"
+ncc_s_fgets:
+.str "fgets"
+ncc_s_fputs:
+.str "fputs"
+ncc_s_fread:
+.str "fread"
+ncc_s_fwrite:
+.str "fwrite"
+ncc_s_fprintf:
+.str "fprintf"
+ncc_s_fseek:
+.str "fseek"
+ncc_s_ftell:
+.str "ftell"
+ncc_s_rewind:
+.str "rewind"
+ncc_s_feof:
+.str "feof"
+ncc_s_ferror:
+.str "ferror"
+ncc_s_fflush:
+.str "fflush"
+ncc_s_remove:
+.str "remove"
+ncc_s_rename:
+.str "rename"
+ncc_s_mysscanf:
+.str "mysscanf"
 ncc_s_va_list:
 .str "va_list"
 ncc_s_bool:
@@ -13574,6 +13751,57 @@ JMP[EQ] @nbi_atof
 MOVI r2,#B_STRTOD
 CMP r1,r2
 JMP[EQ] @nbi_strtod
+MOVI r2,#B_FOPEN
+CMP r1,r2
+JMP[EQ] @nbi_fopen
+MOVI r2,#B_FCLOSE
+CMP r1,r2
+JMP[EQ] @nbi_fclose
+MOVI r2,#B_FGETC
+CMP r1,r2
+JMP[EQ] @nbi_fgetc
+MOVI r2,#B_FPUTC
+CMP r1,r2
+JMP[EQ] @nbi_fputc
+MOVI r2,#B_FGETS
+CMP r1,r2
+JMP[EQ] @nbi_fgets
+MOVI r2,#B_FPUTS
+CMP r1,r2
+JMP[EQ] @nbi_fputs
+MOVI r2,#B_FREAD
+CMP r1,r2
+JMP[EQ] @nbi_fread
+MOVI r2,#B_FWRITE
+CMP r1,r2
+JMP[EQ] @nbi_fwrite
+MOVI r2,#B_FPRINTF
+CMP r1,r2
+JMP[EQ] @nbi_fprintf
+MOVI r2,#B_FSEEK
+CMP r1,r2
+JMP[EQ] @nbi_fseek
+MOVI r2,#B_FTELL
+CMP r1,r2
+JMP[EQ] @nbi_ftell
+MOVI r2,#B_REWIND
+CMP r1,r2
+JMP[EQ] @nbi_rewind
+MOVI r2,#B_FEOF
+CMP r1,r2
+JMP[EQ] @nbi_feof
+MOVI r2,#B_FERROR
+CMP r1,r2
+JMP[EQ] @nbi_ferror
+MOVI r2,#B_FFLUSH
+CMP r1,r2
+JMP[EQ] @nbi_fflush
+MOVI r2,#B_REMOVE
+CMP r1,r2
+JMP[EQ] @nbi_remove
+MOVI r2,#B_RENAME
+CMP r1,r2
+JMP[EQ] @nbi_rename
 MOVI r2,#B_EXIT
 CMP r1,r2
 JMP[EQ] @nbi_exit

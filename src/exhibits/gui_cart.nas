@@ -19,7 +19,6 @@ JMP @cart_entry
 .include "../lib/kbd.nas"
 .include "../lib/wm.nas"
 .include "../lib/ncc.nas"
-.include "../lib/nfs2.nas"
 cart_entry:
 ST r15,r0,@g_ret
 MOVI r13,1

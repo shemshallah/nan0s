@@ -1,0 +1,8 @@
+R:hello 42
+R:second
+R:!
+tell=18 eof=1
+first=h
+read=5 hello
+rm=1
+out 7
