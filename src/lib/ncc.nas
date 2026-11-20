@@ -443,6 +443,16 @@
 .equ W_VARNP    61390
 .equ W_VARFLAG  61391
 .equ W_VARCNT   61393
+.equ W_ITYPE    61420
+.equ W_INOFF    61421
+.equ W_INTYPE   61422
+.equ W_INMEM    61423
+.equ W_INNMEM   61424
+.equ W_INUM     61425
+.equ W_II       61426
+.equ W_IELEM    61427
+.equ W_IESZ     61428
+.equ W_INNUM    61429
 .equ W_TKPTR    60990
 .equ W_CASEBASE 60971
 .equ W_DEFSET   60972
@@ -4811,21 +4821,26 @@ MOVI r1,#P_LBRACE
 CALL @p_at_p
 CMP r1,r0
 JMP[EQ] @pss_no_body
-; create the type if the tag did not already have one
-LD r1,r0,#W_STRUCTID
-CMP r1,r0
-JMP[NE] @pss_have_type
+; a definition body always gets a fresh complete type; update the tag
+pss_have_type:
 LD r1,r0,#W_STRUCTKIND
 CALL @ty_struct
 ST r1,r0,#W_STRUCTID
 LD r2,r0,#W_STAG
 CMP r2,r0
-JMP[EQ] @pss_have_type
+JMP[EQ] @pss_type_ok
 ADD r1,r2,r0
 CALL @sym_entry
 LD r2,r0,#W_STRUCTID
 ST r2,r1,#SY_TYPE
-pss_have_type:
+pss_type_ok:
+; save this definition's type/kind across nested member specifiers
+LD r1,r0,#W_STRUCTID
+ST r1,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_STRUCTKIND
+ST r1,r14,0
+ADD r14,r14,r13
 LD r1,r0,#W_STRUCTID
 CALL @ty_addr
 ST r0,r1,#TY_SIZE
@@ -4934,6 +4949,12 @@ CALL @p_expect_p
 JMP @pss_mem_l
 pss_final:
 CALL @p_adv
+ADDI r3,r14,-1
+LD r2,r3,0
+ADDI r3,r3,-1
+LD r1,r3,0
+ST r1,r0,#W_STRUCTID
+ST r2,r0,#W_STRUCTKIND
 LD r1,r0,#W_SSIZE
 LD r2,r0,#W_SALIGN
 CALL @px_align_up
@@ -4947,6 +4968,8 @@ ST r2,r1,#TY_ALIGN
 LD r2,r0,#W_SNMEM
 ST r2,r1,#TY_NMEM
 LD r1,r0,#W_STRUCTID
+SUB r14,r14,r13
+SUB r14,r14,r13
 JMP @pss_d
 pss_no_body:
 LD r1,r0,#W_STRUCTID
@@ -8568,6 +8591,27 @@ ADD r2,r2,r3
 LD r1,r0,#W_SKIND
 LD r3,r0,#W_STYPE
 CALL @p_decl_store_addr
+MOVI r1,#P_LBRACE
+CALL @p_at_p
+CMP r1,r0
+JMP[EQ] @psi_mem_plain
+LD r1,r0,#W_STYPE
+CALL @ty_kind
+MOVI r2,#TY_ARRAY
+CMP r1,r2
+JMP[EQ] @psi_mem_nested
+MOVI r2,#TY_STRUCT
+CMP r1,r2
+JMP[EQ] @psi_mem_nested
+MOVI r2,#TY_UNION
+CMP r1,r2
+JMP[EQ] @psi_mem_nested
+JMP @psi_mem_plain
+psi_mem_nested:
+LD r1,r0,#W_STYPE
+CALL @p_init_braced
+JMP @psi_mem_next
+psi_mem_plain:
 CALL @p_assign
 CALL @p_emit_rv
 LD r1,r0,#W_STYPE
@@ -8575,6 +8619,7 @@ CALL @px_cast_stack
 LD r1,r0,#W_STYPE
 MOVI r2,0
 CALL @px_emit_store
+psi_mem_next:
 ; union: stop after one member
 LD r1,r0,#W_STRUCTID
 CALL @ty_addr
@@ -8601,6 +8646,251 @@ SUB r14,r14,r13
 LD r15,r14,0
 RET
 
+
+; ------------------------------------------------------------------ nested initializers
+; p_init_value: r1=type; destination address is on the eval stack.
+; Parses a braced initializer or a scalar/aggregate expression, and consumes
+; the destination address.
+p_init_value:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_ITYPE
+MOVI r1,#P_LBRACE
+CALL @p_at_p
+CMP r1,r0
+JMP[NE] @piv_brace
+LD r1,r0,#W_ITYPE
+CALL @ty_kind
+MOVI r2,#TY_STRUCT
+CMP r1,r2
+JMP[EQ] @piv_agg
+MOVI r2,#TY_UNION
+CMP r1,r2
+JMP[EQ] @piv_agg
+MOVI r2,#TY_ARRAY
+CMP r1,r2
+JMP[EQ] @piv_agg
+CALL @p_assign
+CALL @p_emit_rv
+LD r1,r0,#W_ITYPE
+CALL @px_cast_stack
+LD r1,r0,#W_ITYPE
+MOVI r2,0
+CALL @px_emit_store
+JMP @piv_d
+piv_agg:
+CALL @p_assign
+CALL @p_emit_rv
+LD r1,r0,#W_ITYPE
+CALL @ty_size
+ADD r2,r1,r0
+LA r1,#I_PUSH
+CALL @ir_emit
+LA r1,#I_MEMCPY
+CALL @ir_op
+JMP @piv_d
+piv_brace:
+LD r1,r0,#W_ITYPE
+CALL @p_init_braced
+piv_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; p_init_braced: r1=aggregate type; destination address on the eval stack.
+p_init_braced:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_ITYPE
+; zero the object (keep the base address on the stack)
+CALL @ty_size
+ST r1,r0,#W_INUM
+LA r1,#I_DUP
+CALL @ir_op
+LA r1,#I_PUSH
+MOVI r2,0
+CALL @ir_emit
+LA r1,#I_PUSH
+LD r2,r0,#W_INUM
+CALL @ir_emit
+LA r1,#I_MEMSET
+CALL @ir_op
+MOVI r1,#P_LBRACE
+MOVI r2,35
+CALL @p_expect_p
+LD r1,r0,#W_ITYPE
+CALL @ty_kind
+MOVI r2,#TY_ARRAY
+CMP r1,r2
+JMP[EQ] @pib_array
+MOVI r2,#TY_STRUCT
+CMP r1,r2
+JMP[EQ] @pib_struct
+MOVI r2,#TY_UNION
+CMP r1,r2
+JMP[EQ] @pib_struct
+; braced scalar
+CALL @p_assign
+CALL @p_emit_rv
+LD r1,r0,#W_ITYPE
+CALL @px_cast_stack
+LD r1,r0,#W_ITYPE
+MOVI r2,0
+CALL @px_emit_store
+JMP @pib_close
+pib_struct:
+LD r1,r0,#W_ITYPE
+CALL @ty_addr
+LD r2,r1,#TY_MEM
+ST r2,r0,#W_INMEM
+LD r2,r1,#TY_NMEM
+ST r2,r0,#W_INNMEM
+MOVI r1,0
+ST r1,r0,#W_II
+pib_s_l:
+LD r1,r0,#W_II
+LD r2,r0,#W_INNMEM
+CMP r1,r2
+JMP[GE] @pib_close
+MOVI r1,#P_RBRACE
+CALL @p_at_p
+CMP r1,r0
+JMP[NE] @pib_close
+LD r2,r0,#W_INMEM
+LD r1,r0,#W_II
+SHL r1,r1,2
+ADD r2,r2,r1
+LD r1,r2,1
+ST r1,r0,#W_INOFF
+LD r1,r2,2
+ST r1,r0,#W_INTYPE
+LA r1,#I_DUP
+CALL @ir_op
+LA r1,#I_PUSH
+LD r2,r0,#W_INOFF
+CALL @ir_emit
+LA r1,#I_ADD
+CALL @ir_op
+; save this level's loop state across a nested initializer
+LD r1,r0,#W_ITYPE
+ST r1,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_INMEM
+ST r1,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_INNMEM
+ST r1,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_II
+ST r1,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_INTYPE
+CALL @p_init_value
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_II
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_INNMEM
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_INMEM
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_ITYPE
+LD r1,r0,#W_II
+ADD r1,r1,r13
+ST r1,r0,#W_II
+; union: only the first member
+LD r1,r0,#W_ITYPE
+CALL @ty_kind
+MOVI r2,#TY_UNION
+CMP r1,r2
+JMP[EQ] @pib_close
+MOVI r1,#P_COMMA
+CALL @p_take_p
+CMP r1,r0
+JMP[EQ] @pib_close
+JMP @pib_s_l
+pib_array:
+LD r1,r0,#W_ITYPE
+CALL @ty_count
+ST r1,r0,#W_INNUM
+LD r1,r0,#W_ITYPE
+CALL @ty_base
+ST r1,r0,#W_IELEM
+CALL @ty_size
+ST r1,r0,#W_IESZ
+MOVI r1,0
+ST r1,r0,#W_II
+pib_a_l:
+LD r1,r0,#W_II
+LD r2,r0,#W_INNUM
+CMP r1,r2
+JMP[GE] @pib_close
+MOVI r1,#P_RBRACE
+CALL @p_at_p
+CMP r1,r0
+JMP[NE] @pib_close
+LA r1,#I_DUP
+CALL @ir_op
+LA r1,#I_PUSH
+LD r2,r0,#W_II
+LD r3,r0,#W_IESZ
+MUL r2,r2,r3
+CALL @ir_emit
+LA r1,#I_ADD
+CALL @ir_op
+; save loop state across a nested initializer
+LD r1,r0,#W_ITYPE
+ST r1,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_INNUM
+ST r1,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_IELEM
+ST r1,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_IESZ
+ST r1,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_II
+ST r1,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_IELEM
+CALL @p_init_value
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_II
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_IESZ
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_IELEM
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_INNUM
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_ITYPE
+LD r1,r0,#W_II
+ADD r1,r1,r13
+ST r1,r0,#W_II
+MOVI r1,#P_COMMA
+CALL @p_take_p
+CMP r1,r0
+JMP[EQ] @pib_close
+JMP @pib_a_l
+pib_close:
+MOVI r1,#P_RBRACE
+MOVI r2,35
+CALL @p_expect_p
+LA r1,#I_POP
+CALL @ir_op
+SUB r14,r14,r13
+LD r15,r14,0
+RET
 
 ; p_infer_str_array: r1=type. If it is an unsized char array followed by
 ; '=' and a string literal, return a sized array type; else return r1.
@@ -9140,6 +9430,27 @@ pd_ai_g:
 MOVI r1,1
 CALL @p_decl_store_addr
 pd_ai_val:
+MOVI r1,#P_LBRACE
+CALL @p_at_p
+CMP r1,r0
+JMP[EQ] @pd_ai_plain
+LD r1,r0,#W_TY_RET
+CALL @ty_kind
+MOVI r2,#TY_ARRAY
+CMP r1,r2
+JMP[EQ] @pd_ai_nested
+MOVI r2,#TY_STRUCT
+CMP r1,r2
+JMP[EQ] @pd_ai_nested
+MOVI r2,#TY_UNION
+CMP r1,r2
+JMP[EQ] @pd_ai_nested
+JMP @pd_ai_plain
+pd_ai_nested:
+LD r1,r0,#W_TY_RET
+CALL @p_init_braced
+JMP @pd_ai_next
+pd_ai_plain:
 CALL @p_assign
 CALL @p_emit_rv
 ADDI r3,r14,-2
@@ -9153,6 +9464,7 @@ CALL @px_cast_stack
 LD r1,r0,#W_TY_RET
 MOVI r2,0
 CALL @px_emit_store
+pd_ai_next:
 ADDI r3,r14,-1
 LD r4,r3,0
 ADD r4,r4,r13
@@ -10283,6 +10595,27 @@ LD r2,r1,#SY_AUX
 ADD r2,r2,r4
 MOVI r1,1
 CALL @p_decl_store_addr
+MOVI r1,#P_LBRACE
+CALL @p_at_p
+CMP r1,r0
+JMP[EQ] @pde_ai_plain
+LD r1,r0,#W_TY_COUNT
+CALL @ty_kind
+MOVI r2,#TY_ARRAY
+CMP r1,r2
+JMP[EQ] @pde_ai_nested
+MOVI r2,#TY_STRUCT
+CMP r1,r2
+JMP[EQ] @pde_ai_nested
+MOVI r2,#TY_UNION
+CMP r1,r2
+JMP[EQ] @pde_ai_nested
+JMP @pde_ai_plain
+pde_ai_nested:
+LD r1,r0,#W_TY_COUNT
+CALL @p_init_braced
+JMP @pde_ai_next
+pde_ai_plain:
 CALL @p_assign
 CALL @p_emit_rv
 ADDI r3,r14,-2
@@ -10296,6 +10629,7 @@ CALL @px_cast_stack
 LD r1,r0,#W_TY_COUNT
 MOVI r2,0
 CALL @px_emit_store
+pde_ai_next:
 ADDI r3,r14,-1
 LD r4,r3,0
 ST r4,r0,#W_NLOC

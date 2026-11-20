@@ -56,8 +56,9 @@ Implemented:
 - struct/union assignment as a byte copy of the object
 - struct/union pass-by-value and return-by-value (including nested
   expressions; returned objects are heap copies)
-- aggregate brace initializers for structs and unions (flat member lists;
-  unions initialise the first member)
+- aggregate brace initializers for structs, unions, and arrays, including
+  nested struct/array members and partial brace elision (unions initialise
+  the first member)
 - `enum` constants in expressions and `case` labels
 - `typedef`
 - `switch`/`case`/`default` with fallthrough, `goto`/labels
@@ -70,9 +71,6 @@ Not implemented (honest list):
 - `#include <...>` system headers (they are skipped; the libc is built in)
 - the explicit function-returning-function-pointer declarator syntax
   (`int (*f(void))(int,int)`); use a typedef'd function-pointer return type
-- struct/union comparison (`==`, `!=`)
-- nested aggregate initializers and brace initializers for array members
-  inside a struct or union
 - bit-fields; `const`/`volatile`/`register` are accepted but not enforced
 - user variadic functions are supported (`va_list`, `va_start`, `va_arg`,
   `va_end`; up to 16 variadic argument words per call)
@@ -166,6 +164,7 @@ tools/ncc_m9.sh     function pointers: globals/locals/assignment/indirect calls
 tools/ncc_m10.sh    printf %f, precision, float width/flags
 tools/ncc_m11.sh    struct/union pass-by-value and return-by-value
 tools/ncc_m12.sh    user variadic functions (int/char/float/struct)
+tools/ncc_m13.sh    nested aggregate initializers and brace elision
 tools/ncc_donut.sh  original C donut (one frame) in raw NaN16
 tools/nfs2.sh       path-addressed RAM filesystem API
 tools/ncc_gui.sh    boot image, open terminal, .demo runs C in the vbuf
