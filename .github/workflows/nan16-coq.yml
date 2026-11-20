@@ -24,10 +24,23 @@ jobs:
       - name: Check formal proofs with the Coq kernel
         run: |
           cd formal/nan16
+          set +e
           coqc -q NaN16Mirror.v
+          mirror_status=$?
           coqc -q NaN16Bits.v
-          coqc -q NaN16Signed.v
+          bits_status=$?
+          if [ "$mirror_status" -eq 0 ]; then
+            coqc -q NaN16Signed.v
+            signed_status=$?
+          else
+            echo 'Signed module deferred: mirror foundation did not compile.'
+            signed_status=1
+          fi
+          if [ "$mirror_status" -ne 0 ] || [ "$bits_status" -ne 0 ] || [ "$signed_status" -ne 0 ]; then
+            exit 1
+          fi
       - name: Run exhaustive arithmetic regression
+        if: always()
         run: |
           python3 formal/nan16/check_counts.py
           python3 formal/nan16/check_bit_reverse.py
