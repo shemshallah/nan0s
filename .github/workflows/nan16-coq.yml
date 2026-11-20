@@ -26,7 +26,9 @@ jobs:
           cd formal/nan16
           coqc -q NaN16Mirror.v
           coqc -q NaN16Bits.v
+          coqc -q NaN16Signed.v
       - name: Run exhaustive arithmetic regression
         run: |
           python3 formal/nan16/check_counts.py
           python3 formal/nan16/check_bit_reverse.py
+          python3 formal/nan16/check_signed.py

@@ -11,9 +11,11 @@ Date: 2026-11-19 (UTC) / 2026-11-19 (Pacific)
 | Flat coordinate address injective | `NaN16Mirror.v` | PASS | pending CI |
 | Bit reversal swaps physical coordinate bytes | `NaN16Bits.v` | PASS | pending CI |
 | Physical bit encoding injective and fixed iff diagonal | `NaN16Bits.v` | PASS | pending CI |
+| S+/S− pair orientation coverage and uniqueness | `NaN16Signed.v` | PASS | pending CI |
+| Signed mirror channel selector algebra | `NaN16Signed.v` | PASS | pending CI |
 
-Computational checks: `python3 check_counts.py` and `python3 check_bit_reverse.py`.
+Computational checks: `python3 check_counts.py`, `python3 check_bit_reverse.py`, and `python3 check_signed.py`.
 
 The computational checks are finite exhaustive experiments; only a passing `coqc` workflow can change the kernel column to PASS. No axioms or admitted proofs are intentionally used.
 
-This is a new formalization of established NaN16 geometry, not a recovered earlier Coq project. Open obligations: (1) fully connect bit-list words to the numeric `rev8`/`rev16` address functions, (2) prove the signed S+/S− mirror-channel algebra, and (3) formalize triangle/tetrahedron incidence separately.
+This is a new formalization of established NaN16 geometry, not a recovered earlier Coq project. Open obligations: (1) fully connect bit-list words to the numeric `rev8`/`rev16` address functions, (2) extend the signed S+/S− algebra to trainable state and memory update invariants, and (3) formalize triangle/tetrahedron incidence separately.
