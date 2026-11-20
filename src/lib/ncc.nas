@@ -315,7 +315,7 @@ LA r1,#NCC_FSB
 ST r1,r0,#R_FP
 LA r1,#NCC_IRB
 ST r1,r0,#R_IP
-CALL @ni_loop
+CALL @ncc_ir_loop
 SUB r14,r14,r13
 LD r15,r14,0
 LD r14,r0,#W_PSAVE2
@@ -5240,7 +5240,7 @@ SUB r14,r14,r13
 LD r15,r14,0
 RET
 
-ni_loop:
+ncc_ir_loop:
 ST r15,r14,0
 ADD r14,r14,r13
 nil_again:
