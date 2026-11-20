@@ -416,6 +416,7 @@
 .equ W_PF_FMT   60986
 .equ W_PF_IDX   60987
 .equ W_PF_ARGC  60988
+.equ W_PF_CASE  60991
 .equ W_TKPTR    60990
 .equ W_CASEBASE 60971
 .equ W_DEFSET   60972
@@ -2394,6 +2395,22 @@ phx_d:
 ADDI r1,r1,48
 CALL @ncc_putc
 phx_e:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+puthex1l:
+ST r15,r14,0
+ADD r14,r14,r13
+MOVI r2,10
+CMP r1,r2
+JMP[LT] @phxl_d
+ADDI r1,r1,87
+CALL @ncc_putc
+JMP @phxl_e
+phxl_d:
+ADDI r1,r1,48
+CALL @ncc_putc
+phxl_e:
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -10009,6 +10026,59 @@ ADD r2,r2,r1
 LD r1,r2,0
 RET
 
+; ni_hexdigits: r1=value -> r2=significant nibbles (>=1)
+ni_hexdigits:
+MOVI r2,1
+ni_hd_l:
+MOVI r3,16
+CMP r1,r3
+JMP[LT] @ni_hd_d
+SHR r1,r1,4
+ADD r2,r2,r13
+JMP @ni_hd_l
+ni_hd_d:
+RET
+
+; ni_hexmin: r1=value r2=case(0 lower,1 upper) -> print significant hex
+ni_hexmin:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_TY_TMP
+ST r2,r0,#W_TY_COUNT
+CALL @ni_hexdigits
+ST r2,r0,#W_TY_ID
+MOVI r4,8
+SUB r4,r4,r2
+SHL r4,r4,2
+LD r1,r0,#W_TY_TMP
+ADD r2,r4,r0
+CALL @ni_shl
+ST r1,r0,#W_TY_TMP
+ni_hm_l:
+LD r2,r0,#W_TY_ID
+CMP r2,r0
+JMP[EQ] @ni_hm_d
+SUB r2,r2,r13
+ST r2,r0,#W_TY_ID
+LD r1,r0,#W_TY_TMP
+SHR r1,r1,28
+LD r2,r0,#W_TY_COUNT
+CMP r2,r0
+JMP[EQ] @ni_hm_low
+CALL @puthex1
+JMP @ni_hm_next
+ni_hm_low:
+CALL @puthex1l
+ni_hm_next:
+LD r1,r0,#W_TY_TMP
+SHL r1,r1,4
+ST r1,r0,#W_TY_TMP
+JMP @ni_hm_l
+ni_hm_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
 ni_printf:
 ST r15,r14,0
 ADD r14,r14,r13
@@ -10058,10 +10128,10 @@ CMP r2,r3
 JMP[EQ] @npf_uint
 MOVI r3,120
 CMP r2,r3
-JMP[EQ] @npf_hex
+JMP[EQ] @npf_hex_low
 MOVI r3,88
 CMP r2,r3
-JMP[EQ] @npf_hex
+JMP[EQ] @npf_hex_up
 MOVI r3,99
 CMP r2,r3
 JMP[EQ] @npf_char
@@ -10070,7 +10140,7 @@ CMP r2,r3
 JMP[EQ] @npf_str
 MOVI r3,112
 CMP r2,r3
-JMP[EQ] @npf_hex
+JMP[EQ] @npf_hex_low
 MOVI r3,37
 CMP r2,r3
 JMP[EQ] @npf_pctc
@@ -10094,13 +10164,20 @@ CALL @ni_arg
 ADD r5,r1,r0
 CALL @putudec
 JMP @npf_adv
+npf_hex_low:
+MOVI r2,0
+ST r2,r0,#W_PF_CASE
+JMP @npf_hex
+npf_hex_up:
+MOVI r2,1
+ST r2,r0,#W_PF_CASE
 npf_hex:
 LD r1,r0,#W_PF_IDX
 ADD r1,r1,r13
 ST r1,r0,#W_PF_IDX
 CALL @ni_arg
-ADD r5,r1,r0
-CALL @puthex8
+LD r2,r0,#W_PF_CASE
+CALL @ni_hexmin
 JMP @npf_adv
 npf_char:
 LD r1,r0,#W_PF_IDX

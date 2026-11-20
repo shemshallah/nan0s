@@ -63,6 +63,7 @@ Not implemented (honest list):
 - user variadic functions; `printf` is a built-in variadic function
 - floating-point printing (`%f`); float arithmetic exists in the IR but is
   not exposed through `printf`
+- `printf` field width, precision and flags (`%5d`, `%-5s`, `%02x`)
 - `cc FILE`: there is no path-based filesystem API in the raw NaN16 runtime,
   so source entry is the terminal editor (a NaNFS block reader could be wired
   later)
@@ -83,6 +84,7 @@ Built-in functions (no headers needed):
 
 ```
 printf(fmt, ...)   %d %i %u %x %X %c %s %p %%
+                   (%x/%X print significant digits, lower/upper case)
 putchar(c)         print_int(v)      puts(s)        print_str(s)
 malloc(n)          calloc(n,size)     realloc(p,n)   free(p)
 strlen(s)          strcmp(a,b)        strncmp(a,b,n)
