@@ -238,7 +238,7 @@ Definition flat_addr (a b : nat) : nat := a * byte_bound + b.
 Lemma flat_addr_in_range : forall a b,
   a < byte_bound -> b < byte_bound -> flat_addr a b < 65536.
 Proof.
-  intros a b Ha Hb. unfold byte_bound, flat_addr in *. lia.
+  intros a b Ha Hb. unfold flat_addr, byte_bound in *. lia.
 Qed.
 
 Lemma flat_addr_injective : forall a b c d,
@@ -247,5 +247,5 @@ Lemma flat_addr_injective : forall a b c d,
   flat_addr a b = flat_addr c d -> a = c /\ b = d.
 Proof.
   intros a b c d Ha Hb Hc Hd Heq.
-  unfold byte_bound, flat_addr in *. split; lia.
+  unfold flat_addr, byte_bound in *. split; lia.
 Qed.
