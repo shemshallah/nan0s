@@ -1779,7 +1779,7 @@ CALL @lx_peek
 MOVI r2,45
 CMP r1,r2
 JMP[NE] @q2n_plus
-MOVI r2,-1
+LA r2,0xFFFFFFFF
 ST r2,r0,#W_Q2SIGN
 CALL @lx_get
 JMP @q2n_go
@@ -1831,7 +1831,7 @@ JMP @q2n_l
 q2n_done:
 LD r1,r0,#W_Q2HASH
 LD r2,r0,#W_Q2SIGN
-CMP r2,r0
+CMPS r2,r0
 JMP[GE] @q2n_store
 SUB r1,r0,r1
 q2n_store:
@@ -3554,7 +3554,9 @@ CALL @hexval
 MOVI r2,255
 CMP r1,r2
 JMP[EQ] @le_hx_d
+ST r1,r0,#L_TMP1
 CALL @lx_get
+LD r1,r0,#L_TMP1
 SHL r4,r4,4
 ADD r4,r4,r1
 ADD r5,r5,r13
@@ -8039,6 +8041,51 @@ RET
 ; p_struct_init: r1=global flag, r2=base address/offset, r3=type id.
 ; Current token is '{'. Initialises members in declaration order; unions
 ; initialise the first member only.
+; p_str_init: r1=global flag, r2=base address/offset, r3=char array type,
+; current token is a string literal. Zero-fill then copy string bytes.
+p_str_init:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_SKIND
+ST r2,r0,#W_SSIZE
+ST r3,r0,#W_STRUCTID
+LD r1,r0,#W_STRUCTID
+CALL @ty_base
+ST r1,r0,#W_STYPE
+LD r1,r0,#W_STRUCTID
+CALL @ty_size
+ST r1,r0,#W_MSIZE
+LD r1,r0,#W_SKIND
+LD r2,r0,#W_SSIZE
+LD r3,r0,#W_MSIZE
+CALL @p_zero_range
+LD r1,r0,#W_SKIND
+LD r2,r0,#W_SSIZE
+LD r3,r0,#W_STYPE
+CALL @p_decl_store_addr
+LD r1,r0,#W_TKA+3
+ST r1,r0,#W_SOFF
+CALL @str_add_cur
+ADD r2,r1,r0
+LA r1,#I_PUSH
+CALL @ir_emit
+LD r3,r0,#W_SOFF
+ADD r3,r3,r13
+LD r4,r0,#W_MSIZE
+CMP r3,r4
+JMP[LE] @psti_n
+ADD r3,r4,r0
+psti_n:
+LA r1,#I_PUSH
+ADD r2,r3,r0
+CALL @ir_emit
+LA r1,#I_MEMCPY
+CALL @ir_op
+CALL @p_adv
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
 p_struct_init:
 ST r15,r14,0
 ADD r14,r14,r13
@@ -8221,6 +8268,28 @@ CMP r1,r0
 JMP[EQ] @pd_noinit
 LD r1,r0,#W_TY_ID
 CALL @ty_kind
+MOVI r2,#TY_ARRAY
+CMP r1,r2
+JMP[NE] @pd_not_str
+LD r1,r0,#W_TY_ID
+CALL @ty_base
+CALL @ty_size
+MOVI r2,1
+CMP r1,r2
+JMP[NE] @pd_not_str
+LD r1,r0,#W_TKA
+MOVI r2,#K_STRING
+CMP r1,r2
+JMP[NE] @pd_not_str
+ADDI r3,r14,-1
+LD r1,r3,0
+CALL @sym_entry
+LD r2,r1,#SY_AUX
+LD r3,r1,#SY_TYPE
+MOVI r1,0
+CALL @p_str_init
+JMP @pd_afterinit
+pd_not_str:
 MOVI r2,#TY_STRUCT
 CMP r1,r2
 JMP[EQ] @pd_struct_init
@@ -9326,6 +9395,28 @@ CMP r1,r0
 JMP[EQ] @pde_zero
 LD r1,r0,#W_TY_ID
 CALL @ty_kind
+MOVI r2,#TY_ARRAY
+CMP r1,r2
+JMP[NE] @pde_not_str
+LD r1,r0,#W_TY_ID
+CALL @ty_base
+CALL @ty_size
+MOVI r2,1
+CMP r1,r2
+JMP[NE] @pde_not_str
+LD r1,r0,#W_TKA
+MOVI r2,#K_STRING
+CMP r1,r2
+JMP[NE] @pde_not_str
+ADDI r3,r14,-1
+LD r1,r3,0
+CALL @sym_entry
+LD r2,r1,#SY_AUX
+LD r3,r1,#SY_TYPE
+MOVI r1,1
+CALL @p_str_init
+JMP @pde_after
+pde_not_str:
 MOVI r2,#TY_STRUCT
 CMP r1,r2
 JMP[EQ] @pde_struct_init

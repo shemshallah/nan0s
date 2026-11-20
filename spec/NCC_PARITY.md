@@ -40,7 +40,8 @@ Implemented:
 - functions, prototypes, parameters, recursion, `return`
 - global and local arrays, multidimensions, pointer arithmetic/indexing
 - `char`/`short`/`int`/`long`, signed and unsigned, `sizeof` in bytes
-- string and character literals, escapes
+- string and character literals with escapes (`\n`, `\t`, `\xNN`, octal)
+- sized `char` arrays with string-literal initializers
 - `struct`/`union` with `.` and `->`, arrays of structs, alignment/padding
 - struct/union assignment as a byte copy of the object
 - aggregate brace initializers for structs and unions (flat member lists;
@@ -56,8 +57,8 @@ Not implemented (honest list):
 - function-like macros, `#`/`##`, recursive macro expansion
 - `#include "file"` (directive lines are skipped; libc is built in)
 - struct/union pass-by-value, return-by-value, comparison
-- nested aggregate initializers and brace initializers for array members
-  inside a struct or union
+- nested aggregate initializers, brace initializers for array members inside
+  a struct or union, and unsized `char s[] = "..."` (declare a size)
 - bit-fields, `const`/`volatile` semantics, `register` semantics
 - user variadic functions; `printf` is a built-in variadic function
 - floating-point printing (`%f`); float arithmetic exists in the IR but is
