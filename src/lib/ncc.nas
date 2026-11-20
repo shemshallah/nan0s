@@ -14,6 +14,8 @@
 ;   CALL @ncc_run            ; executes global initialisers then main()
 ;   HALT
 
+.include "mpp.nas"
+
 ; ------------------------------------------------------------------ memory map
 .equ NCC_IRB    1200000      ; IR: 2 words per instruction
 .equ NCC_IRMAX  400000
@@ -1252,6 +1254,7 @@ ST r14,r0,#W_PSAVE
 LA r14,#NCC_PS
 ST r15,r14,0
 ADD r14,r14,r13
+CALL @mp_preprocess
 ST r1,r0,#L_WP
 ST r0,r0,#L_BI
 MOVI r1,1
