@@ -2,7 +2,9 @@
 ; Programs: Terminal (virtual console), Sierpinski (stateless rule-90 pixel window),
 ; Monitor (double-endian timer lamps), Hex (live guest memory viewer).
 ; Keys (kbd.nas, 1024x768): TAB focus | F2 MOVE mode (arrows move, ENTER leaves) | F3 enlarge/restore | ESC close.
-; Terminal commands (first letter): h c v w l m x t s(settings) n(nannet) u(utils) q. F5 Settings, F6 NaNNet, F7 System utilities (single-instance).
+; Terminal commands (first letter): h c v w l m x t s(settings) n(nannet) u(utils) f(files) e(run C demo) q.
+; e compiles and runs a C program with the raw-NaN16 ncc front end (src/lib/ncc.nas) inside this terminal.
+; F5 Settings, F6 NaNNet, F7 System utilities (single-instance).
 ; Window manager: src/lib/wm.nas. Framebuffer: fb.nas. Text: NaNGlyph 8x13 cells (fbtext.nas+font7.nas). Keys: kbd.nas. No native GUI code.
 .equ SLOT 8192
 .equ PERIOD 100
@@ -14,6 +16,7 @@ JMP @cart_entry
 .include "../lib/font7.nas"
 .include "../lib/kbd.nas"
 .include "../lib/wm.nas"
+.include "../lib/ncc.nas"
 cart_entry:
 ST r15,r0,@g_ret
 MOVI r13,1
@@ -937,6 +940,9 @@ JMP[EQ] @tm_nsh
 MOVI r5,98
 CMP r4,r5
 JMP[EQ] @tm_br
+MOVI r5,101
+CMP r4,r5
+JMP[EQ] @tm_exec
 MOVI r2,@s_unk
 CALL @vc_puts
 JMP @tm_done
@@ -1013,6 +1019,81 @@ MOVI r2,10
 ST r2,r1,0
 MOVI r1,1
 ST r1,r0,@g_quit
+JMP @tm_done
+; e: compile and run the embedded C demo inside THIS terminal window.
+; The ncc front end is raw NaN16 (src/lib/ncc.nas); ncc_out routes every
+; character it prints back into the focused terminal's virtual console.
+tm_exec:
+LD r1,r0,@tm_id
+ST r1,r0,@gco_id
+LA r1,@gui_c_out
+ST r1,r0,@ncc_out
+LA r1,@ncc_demo_src
+CALL @ncc_compile
+CALL @ncc_run
+ST r0,r0,@ncc_out
+JMP @tm_done
+; gui_c_out: terminal character hook. Preserves r2..r12 for the C runtime.
+gui_c_out:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r2,r14,0
+ADD r14,r14,r13
+ST r3,r14,0
+ADD r14,r14,r13
+ST r4,r14,0
+ADD r14,r14,r13
+ST r5,r14,0
+ADD r14,r14,r13
+ST r6,r14,0
+ADD r14,r14,r13
+ST r7,r14,0
+ADD r14,r14,r13
+ST r8,r14,0
+ADD r14,r14,r13
+ST r9,r14,0
+ADD r14,r14,r13
+ST r10,r14,0
+ADD r14,r14,r13
+ST r11,r14,0
+ADD r14,r14,r13
+ST r12,r14,0
+ADD r14,r14,r13
+ST r1,r0,@gco_ch
+LD r1,r0,@gco_id
+LD r2,r0,@gco_ch
+CALL @vc_putc
+SUB r14,r14,r13
+LD r12,r14,0
+SUB r14,r14,r13
+LD r11,r14,0
+SUB r14,r14,r13
+LD r10,r14,0
+SUB r14,r14,r13
+LD r9,r14,0
+SUB r14,r14,r13
+LD r8,r14,0
+SUB r14,r14,r13
+LD r7,r14,0
+SUB r14,r14,r13
+LD r6,r14,0
+SUB r14,r14,r13
+LD r5,r14,0
+SUB r14,r14,r13
+LD r4,r14,0
+SUB r14,r14,r13
+LD r3,r14,0
+SUB r14,r14,r13
+LD r2,r14,0
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+gco_id:
+.word 0
+gco_ch:
+.word 0
+ncc_demo_src:
+.str "int fib(int n) {\n  if (n < 2) return n;\n  return fib(n - 1) + fib(n - 2);\n}\nint main(void) {\n  int a[6] = {3,1,4,1,5,9};\n  int i = 0, s = 0;\n  while (i < 6) { s += a[i]; i++; }\n  print_str(\"NaN C in the terminal\\n\");\n  print_int(fib(10)); putchar(32);\n  print_int(s); putchar(10);\n  puts(\"hello from NaN16 C\");\n  return 0;\n}\n"
 tm_done:
 SUB r14,r14,r13
 LD r15,r14,0
@@ -1020,7 +1101,7 @@ RET
 tm_id:
 .word 0
 s_help:
-.str "h c v w b l m x t s n u f q\nb browser l lattice m monitor x hex\nt term w count c clear v ver\ns settings n browser u utils\nf files (nsh) q quit gui\n"
+.str "h c v w b l m x t s n u f e q\nb browser l lattice m monitor x hex\nt term w count c clear v ver\ne run C demo\ns settings n browser u utils\nf files (nsh) q quit gui\n"
 s_ver:
 .str "NaN/0S GUI r26\npure NaN16 wm\n"
 s_wins:

@@ -94,6 +94,7 @@ fork it: Settings → Pages → branch <code>main</code> / folder <code>/docs</c
 | **guest source** | ≈ 33,000 lines of NaN16 across 93 `.nas` files |
 | **native base** | one small kernel per architecture: `x86/native/kan16.xa` · an A64 core and an Android app · a RISC-V smoke test |
 | **self-hosting** | assembler `nasm0` and interpreter `n16i` are both NaN16 · fixed point proven (see below) |
+| **C on NaN16** | `ncc` (`src/lib/ncc.nas`): lexer → parser → stack IR → interpreter, all raw NaN16 · arrays, pointers, functions, recursion · press `e` in the GUI terminal to compile and run C there |
 | **outer tools** | POSIX `sh` · `awk` · `xxd` · `qemu-system-i386` — the Python scaffolds are being retired ([census](spec/PYTHON_CENSUS.md)) |
 
 <div align="center"><img src="assets/github/nan0s-rule.svg" alt="" width="100%"/></div>
