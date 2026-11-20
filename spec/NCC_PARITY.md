@@ -47,7 +47,7 @@ Implemented:
 - `float`/`double` (32-bit IEEE storage), float literals, arithmetic,
   comparisons, casts, and built-in `sin`/`cos`
 - `printf` with `%d %i %u %x %X %c %s %p %f %%`, flags `-`/`0`, field
-  width, and precision (including `%.2f` and `%.3s`)
+  width, and precision (including `%.2f`, `%.3s`, and zero-padded `%08.2f`)
 - variadic functions: `va_list`, `va_start`, `va_arg`, `va_end`
 - string and character literals with escapes (`\n`, `\t`, `\xNN`, octal)
 - `char` arrays with string-literal initializers, including unsized
@@ -78,7 +78,7 @@ Not implemented (honest list):
 - `const`/`volatile`/`register` are accepted but not enforced
 - user variadic functions are supported (`va_list`, `va_start`, `va_arg`,
   `va_end`; up to 16 variadic argument words per call)
-- `%e`/`%g` conversions and zero-padding for `%f` fields (`%08.2f`)
+- `%e`/`%g` conversions
 - the path filesystem is RAM-backed (it resets on reboot); no disk
   persistence yet
 - the full C standard library and headers
@@ -105,6 +105,15 @@ printf(fmt, ...)   %d %i %u %x %X %c %s %p %%
 putchar(c)         print_int(v)      puts(s)        print_str(s)
 malloc(n)          calloc(n,size)     realloc(p,n)   free(p)
 sin(x)             cos(x)
+sqrt(x)            fabs(x)           pow(x,y)
+exp(x)             log(x)            log10(x)
+tanh(x)            tan(x)
+floor(x)           ceil(x)           fmod(x,y)
+fmin(x,y)          fmax(x,y)
+strchr(s,c)        strstr(s,t)       strdup(s)
+isdigit(c)         isalpha(c)        isspace(c)
+isupper(c)         islower(c)        toupper(c)       tolower(c)
+rand()             srand(seed)       labs(x)          memmove(d,s,n)
 strlen(s)          strcmp(a,b)        strncmp(a,b,n)
 strcpy(d,s)        strncpy(d,s,n)      strcat(d,s)
 memcpy(d,s,n)      memset(d,c,n)       memcmp(a,b,n)
@@ -170,6 +179,8 @@ tools/ncc_m11.sh    struct/union pass-by-value and return-by-value
 tools/ncc_m12.sh    user variadic functions (int/char/float/struct)
 tools/ncc_m13.sh    nested aggregate initializers and brace elision
 tools/ncc_m14.sh    bit-fields (masked values, signed, anonymous, initializers)
+tools/ncc_m15.sh    math built-ins (sqrt/pow/exp/log/floor/ceil/fmod/...)
+tools/ncc_m16.sh    string/ctype/stdlib built-ins
 tools/ncc_donut.sh  original C donut (one frame) in raw NaN16
 tools/nfs2.sh       path-addressed RAM filesystem API
 tools/ncc_gui.sh    boot image, open terminal, .demo runs C in the vbuf

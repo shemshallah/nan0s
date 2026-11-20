@@ -329,6 +329,33 @@
 .equ B_STRNCMP  22
 .equ B_SIN     23
 .equ B_COS     24
+.equ B_SQRT 25
+.equ B_FABS 26
+.equ B_POW 27
+.equ B_EXP 28
+.equ B_LOG 29
+.equ B_LOG10 30
+.equ B_TANH 31
+.equ B_FLOOR 32
+.equ B_CEIL 33
+.equ B_FMOD 34
+.equ B_FMIN 35
+.equ B_FMAX 36
+.equ B_TAN 37
+.equ B_STRCHR 38
+.equ B_STRSTR 39
+.equ B_STRDUP 40
+.equ B_ISDIGIT 41
+.equ B_ISALPHA 42
+.equ B_ISSPACE 43
+.equ B_ISUPPER 44
+.equ B_ISLOWER 45
+.equ B_TOUPPER 46
+.equ B_TOLOWER 47
+.equ B_RAND 48
+.equ B_SRAND 49
+.equ B_LABS 50
+.equ B_MEMMOVE 51
 
 ; ------------------------------------------------------------------ compiler state
 ; Kept below word 65536 so ST/LD can use the 16-bit immediate form directly.
@@ -455,6 +482,7 @@
 .equ W_INNUM    61429
 .equ W_BITW     61430
 .equ W_SBASE    61434
+.equ W_RAND     61435
 .equ W_TKPTR    60990
 .equ W_CASEBASE 60971
 .equ W_DEFSET   60972
@@ -5656,6 +5684,222 @@ MOVI r4,#B_COS
 MOVI r5,1
 MOVI r6,#T_FLOAT
 CALL @ncc_add_builtin
+; sqrt
+LA r1,0x7DEE3BCF
+LA r2,@ncc_s_sqrt
+MOVI r3,4
+MOVI r4,#B_SQRT
+MOVI r5,1
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+; fabs
+LA r1,0x176942B7
+LA r2,@ncc_s_fabs
+MOVI r3,4
+MOVI r4,#B_FABS
+MOVI r5,1
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+; pow
+LA r1,0x58336AD5
+LA r2,@ncc_s_pow
+MOVI r3,3
+MOVI r4,#B_POW
+MOVI r5,2
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+; exp
+LA r1,0x72A68728
+LA r2,@ncc_s_exp
+MOVI r3,3
+MOVI r4,#B_EXP
+MOVI r5,1
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+; log
+LA r1,0x3F515151
+LA r2,@ncc_s_log
+MOVI r3,3
+MOVI r4,#B_LOG
+MOVI r5,1
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+; log10
+LA r1,0x8BE20730
+LA r2,@ncc_s_log10
+MOVI r3,5
+MOVI r4,#B_LOG10
+MOVI r5,1
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+; tanh
+LA r1,0x092855D0
+LA r2,@ncc_s_tanh
+MOVI r3,4
+MOVI r4,#B_TANH
+MOVI r5,1
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+; floor
+LA r1,0xB8E70C1D
+LA r2,@ncc_s_floor
+MOVI r3,5
+MOVI r4,#B_FLOOR
+MOVI r5,1
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+; ceil
+LA r1,0x62E4E208
+LA r2,@ncc_s_ceil
+MOVI r3,4
+MOVI r4,#B_CEIL
+MOVI r5,1
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+; fmod
+LA r1,0x508F8797
+LA r2,@ncc_s_fmod
+MOVI r3,4
+MOVI r4,#B_FMOD
+MOVI r5,2
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+; fmin
+LA r1,0x4A93FB53
+LA r2,@ncc_s_fmin
+MOVI r3,4
+MOVI r4,#B_FMIN
+MOVI r5,2
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+; fmax
+LA r1,0x60A7A5AD
+LA r2,@ncc_s_fmax
+MOVI r3,4
+MOVI r4,#B_FMAX
+MOVI r5,2
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+; tan
+LA r1,0x9CF73498
+LA r2,@ncc_s_tan
+MOVI r3,3
+MOVI r4,#B_TAN
+MOVI r5,1
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+; strchr
+LA r1,0x892F9553
+LA r2,@ncc_s_strchr
+MOVI r3,6
+MOVI r4,#B_STRCHR
+MOVI r5,2
+LD r6,r0,#W_PTRC
+CALL @ncc_add_builtin
+; strstr
+LA r1,0xC17CDDBF
+LA r2,@ncc_s_strstr
+MOVI r3,6
+MOVI r4,#B_STRSTR
+MOVI r5,2
+LD r6,r0,#W_PTRC
+CALL @ncc_add_builtin
+; strdup
+LA r1,0x07FAD6E1
+LA r2,@ncc_s_strdup
+MOVI r3,6
+MOVI r4,#B_STRDUP
+MOVI r5,1
+LD r6,r0,#W_PTRC
+CALL @ncc_add_builtin
+; isdigit
+LA r1,0xF75E7926
+LA r2,@ncc_s_isdigit
+MOVI r3,7
+MOVI r4,#B_ISDIGIT
+MOVI r5,1
+LD r6,r0,#T_INT
+CALL @ncc_add_builtin
+; isalpha
+LA r1,0x64F4097B
+LA r2,@ncc_s_isalpha
+MOVI r3,7
+MOVI r4,#B_ISALPHA
+MOVI r5,1
+LD r6,r0,#T_INT
+CALL @ncc_add_builtin
+; isspace
+LA r1,0xAE5C87B5
+LA r2,@ncc_s_isspace
+MOVI r3,7
+MOVI r4,#B_ISSPACE
+MOVI r5,1
+LD r6,r0,#T_INT
+CALL @ncc_add_builtin
+; isupper
+LA r1,0x1CCFD077
+LA r2,@ncc_s_isupper
+MOVI r3,7
+MOVI r4,#B_ISUPPER
+MOVI r5,1
+LD r6,r0,#T_INT
+CALL @ncc_add_builtin
+; islower
+LA r1,0x70E42DEA
+LA r2,@ncc_s_islower
+MOVI r3,7
+MOVI r4,#B_ISLOWER
+MOVI r5,1
+LD r6,r0,#T_INT
+CALL @ncc_add_builtin
+; toupper
+LA r1,0xDC0F32D8
+LA r2,@ncc_s_toupper
+MOVI r3,7
+MOVI r4,#B_TOUPPER
+MOVI r5,1
+LD r6,r0,#T_INT
+CALL @ncc_add_builtin
+; tolower
+LA r1,0x3E2397F1
+LA r2,@ncc_s_tolower
+MOVI r3,7
+MOVI r4,#B_TOLOWER
+MOVI r5,1
+LD r6,r0,#T_INT
+CALL @ncc_add_builtin
+; rand
+LA r1,0xA19B8CD6
+LA r2,@ncc_s_rand
+MOVI r3,4
+MOVI r4,#B_RAND
+MOVI r5,0
+LD r6,r0,#T_INT
+CALL @ncc_add_builtin
+; srand
+LA r1,0x1BBF4029
+LA r2,@ncc_s_srand
+MOVI r3,5
+MOVI r4,#B_SRAND
+MOVI r5,1
+LD r6,r0,#T_INT
+CALL @ncc_add_builtin
+; labs
+LA r1,0x6506AA85
+LA r2,@ncc_s_labs
+MOVI r3,4
+MOVI r4,#B_LABS
+MOVI r5,1
+LD r6,r0,#T_INT
+CALL @ncc_add_builtin
+; memmove
+LA r1,0x01081B8B
+LA r2,@ncc_s_memmove
+MOVI r3,7
+MOVI r4,#B_MEMMOVE
+MOVI r5,3
+LD r6,r0,#W_PTRV
+CALL @ncc_add_builtin
 ; exit
 LA r1,0xCDED1A85
 LA r2,@ncc_s_exit
@@ -5788,6 +6032,60 @@ ncc_s_sin:
 .str "sin"
 ncc_s_cos:
 .str "cos"
+ncc_s_sqrt:
+.str "sqrt"
+ncc_s_fabs:
+.str "fabs"
+ncc_s_pow:
+.str "pow"
+ncc_s_exp:
+.str "exp"
+ncc_s_log:
+.str "log"
+ncc_s_log10:
+.str "log10"
+ncc_s_tanh:
+.str "tanh"
+ncc_s_floor:
+.str "floor"
+ncc_s_ceil:
+.str "ceil"
+ncc_s_fmod:
+.str "fmod"
+ncc_s_fmin:
+.str "fmin"
+ncc_s_fmax:
+.str "fmax"
+ncc_s_tan:
+.str "tan"
+ncc_s_strchr:
+.str "strchr"
+ncc_s_strstr:
+.str "strstr"
+ncc_s_strdup:
+.str "strdup"
+ncc_s_isdigit:
+.str "isdigit"
+ncc_s_isalpha:
+.str "isalpha"
+ncc_s_isspace:
+.str "isspace"
+ncc_s_isupper:
+.str "isupper"
+ncc_s_islower:
+.str "islower"
+ncc_s_toupper:
+.str "toupper"
+ncc_s_tolower:
+.str "tolower"
+ncc_s_rand:
+.str "rand"
+ncc_s_srand:
+.str "srand"
+ncc_s_labs:
+.str "labs"
+ncc_s_memmove:
+.str "memmove"
 
 ; ================================================================== STRING POOL
 ; str_add_cur: current K_STRING token -> r1 = byte address of a NUL-terminated
@@ -11858,6 +12156,35 @@ CALL @ni_arg
 LD r2,r0,#W_PF_PREC
 CALL @ni_fcalc
 ST r3,r0,#W_PF_LEN
+; zero padding takes precedence when the '-' flag is not set
+LD r2,r0,#W_PF_FLAGS
+MOVI r3,2
+BOOL.8 r2,r2,r3
+CMP r2,r0
+JMP[EQ] @npf_f_spacepad
+LD r2,r0,#W_PF_FLAGS
+MOVI r3,1
+BOOL.8 r2,r2,r3
+CMP r2,r0
+JMP[NE] @npf_f_spacepad
+LD r1,r0,#W_PF_LEN
+LD r2,r0,#W_PF_W
+CMP r2,r1
+JMP[LE] @npf_f_emit
+LD r4,r0,#W_F2NEG
+CMP r4,r0
+JMP[EQ] @npf_f_zero
+MOVI r1,45
+CALL @ncc_putc
+ST r0,r0,#W_F2NEG
+npf_f_zero:
+LD r1,r0,#W_PF_W
+LD r2,r0,#W_PF_LEN
+SUB r1,r1,r2
+MOVI r2,48
+CALL @ni_pad
+JMP @npf_f_emit
+npf_f_spacepad:
 LD r2,r0,#W_PF_FLAGS
 MOVI r3,1
 BOOL.8 r2,r2,r3
@@ -12524,6 +12851,87 @@ JMP[EQ] @nbi_sin
 MOVI r2,#B_COS
 CMP r1,r2
 JMP[EQ] @nbi_cos
+MOVI r2,#B_SQRT
+CMP r1,r2
+JMP[EQ] @nbi_sqrt
+MOVI r2,#B_FABS
+CMP r1,r2
+JMP[EQ] @nbi_fabs
+MOVI r2,#B_POW
+CMP r1,r2
+JMP[EQ] @nbi_pow
+MOVI r2,#B_EXP
+CMP r1,r2
+JMP[EQ] @nbi_exp
+MOVI r2,#B_LOG
+CMP r1,r2
+JMP[EQ] @nbi_log
+MOVI r2,#B_LOG10
+CMP r1,r2
+JMP[EQ] @nbi_log10
+MOVI r2,#B_TANH
+CMP r1,r2
+JMP[EQ] @nbi_tanh
+MOVI r2,#B_FLOOR
+CMP r1,r2
+JMP[EQ] @nbi_floor
+MOVI r2,#B_CEIL
+CMP r1,r2
+JMP[EQ] @nbi_ceil
+MOVI r2,#B_FMOD
+CMP r1,r2
+JMP[EQ] @nbi_fmod
+MOVI r2,#B_FMIN
+CMP r1,r2
+JMP[EQ] @nbi_fmin
+MOVI r2,#B_FMAX
+CMP r1,r2
+JMP[EQ] @nbi_fmax
+MOVI r2,#B_TAN
+CMP r1,r2
+JMP[EQ] @nbi_tan
+MOVI r2,#B_STRCHR
+CMP r1,r2
+JMP[EQ] @nbi_strchr
+MOVI r2,#B_STRSTR
+CMP r1,r2
+JMP[EQ] @nbi_strstr
+MOVI r2,#B_STRDUP
+CMP r1,r2
+JMP[EQ] @nbi_strdup
+MOVI r2,#B_ISDIGIT
+CMP r1,r2
+JMP[EQ] @nbi_isdigit
+MOVI r2,#B_ISALPHA
+CMP r1,r2
+JMP[EQ] @nbi_isalpha
+MOVI r2,#B_ISSPACE
+CMP r1,r2
+JMP[EQ] @nbi_isspace
+MOVI r2,#B_ISUPPER
+CMP r1,r2
+JMP[EQ] @nbi_isupper
+MOVI r2,#B_ISLOWER
+CMP r1,r2
+JMP[EQ] @nbi_islower
+MOVI r2,#B_TOUPPER
+CMP r1,r2
+JMP[EQ] @nbi_toupper
+MOVI r2,#B_TOLOWER
+CMP r1,r2
+JMP[EQ] @nbi_tolower
+MOVI r2,#B_RAND
+CMP r1,r2
+JMP[EQ] @nbi_rand
+MOVI r2,#B_SRAND
+CMP r1,r2
+JMP[EQ] @nbi_srand
+MOVI r2,#B_LABS
+CMP r1,r2
+JMP[EQ] @nbi_labs
+MOVI r2,#B_MEMMOVE
+CMP r1,r2
+JMP[EQ] @nbi_memmove
 MOVI r2,#B_EXIT
 CMP r1,r2
 JMP[EQ] @nbi_exit
@@ -12696,6 +13104,373 @@ JMP @nbi_d
 nbi_cos:
 CALL @ni_pop
 CALL @ni_cos
+CALL @ni_push
+JMP @nbi_d
+
+nbi_sqrt:
+CALL @ni_pop
+FSQRT r1,r1
+CALL @ni_push
+JMP @nbi_d
+nbi_fabs:
+CALL @ni_pop
+LA r2,0x80000000
+BOOL.6 r1,r1,r2
+CALL @ni_push
+JMP @nbi_d
+nbi_exp:
+CALL @ni_pop
+FEXP r1,r1
+CALL @ni_push
+JMP @nbi_d
+nbi_log:
+CALL @ni_pop
+FLOG r1,r1
+CALL @ni_push
+JMP @nbi_d
+nbi_log10:
+CALL @ni_pop
+FLOG r1,r1
+LA r2,0x40135D8E
+FDIV r1,r1,r2
+CALL @ni_push
+JMP @nbi_d
+nbi_tanh:
+CALL @ni_pop
+FTANH r1,r1
+CALL @ni_push
+JMP @nbi_d
+nbi_floor:
+CALL @ni_pop
+CVTFI r2,r1
+CVTIF r3,r2
+FCMP r1,r3
+JMP[GE] @nbi_floor_d
+SUB r2,r2,r13
+nbi_floor_d:
+CVTIF r1,r2
+CALL @ni_push
+JMP @nbi_d
+nbi_ceil:
+CALL @ni_pop
+CVTFI r2,r1
+CVTIF r3,r2
+FCMP r1,r3
+JMP[LE] @nbi_ceil_d
+ADD r2,r2,r13
+nbi_ceil_d:
+CVTIF r1,r2
+CALL @ni_push
+JMP @nbi_d
+nbi_fmod:
+CALL @ni_pop
+ST r1,r0,#W_F2P
+CALL @ni_pop
+ST r1,r0,#W_F2V
+LD r2,r0,#W_F2P
+FDIV r3,r1,r2
+CVTFI r3,r3
+CVTIF r3,r3
+FMUL r3,r3,r2
+FSUB r1,r1,r3
+CALL @ni_push
+JMP @nbi_d
+nbi_fmin:
+CALL @ni_pop
+ST r1,r0,#W_F2P
+CALL @ni_pop
+LD r2,r0,#W_F2P
+FCMP r1,r2
+JMP[LT] @nbi_fmin_d
+ADD r1,r2,r0
+nbi_fmin_d:
+CALL @ni_push
+JMP @nbi_d
+nbi_fmax:
+CALL @ni_pop
+ST r1,r0,#W_F2P
+CALL @ni_pop
+LD r2,r0,#W_F2P
+FCMP r1,r2
+JMP[GT] @nbi_fmax_d
+ADD r1,r2,r0
+nbi_fmax_d:
+CALL @ni_push
+JMP @nbi_d
+nbi_pow:
+CALL @ni_pop
+ST r1,r0,#W_F2P
+CALL @ni_pop
+FLOG r1,r1
+LD r2,r0,#W_F2P
+FMUL r1,r1,r2
+FEXP r1,r1
+CALL @ni_push
+JMP @nbi_d
+nbi_tan:
+CALL @ni_pop
+ST r1,r0,#W_F2V
+CALL @ni_sin
+ST r1,r0,#W_F2S
+LD r1,r0,#W_F2V
+CALL @ni_cos
+LD r2,r0,#W_F2S
+FDIV r1,r2,r1
+CALL @ni_push
+JMP @nbi_d
+
+nbi_strchr:
+CALL @ni_pop
+ST r1,r0,#W_F2P
+CALL @ni_pop
+LD r2,r0,#W_F2P
+nbi_sc_l:
+LDB r3,r1,0
+CMP r3,r2
+JMP[EQ] @nbi_sc_y
+CMP r3,r0
+JMP[EQ] @nbi_sc_n
+ADD r1,r1,r13
+JMP @nbi_sc_l
+nbi_sc_y:
+CALL @ni_push
+JMP @nbi_d
+nbi_sc_n:
+MOVI r1,0
+CALL @ni_push
+JMP @nbi_d
+
+nbi_strstr:
+CALL @ni_pop
+ST r1,r0,#W_F2P
+CALL @ni_pop
+ST r1,r0,#W_F2V
+LD r2,r0,#W_F2P
+LDB r3,r2,0
+CMP r3,r0
+JMP[NE] @nbi_ss_go
+LD r1,r0,#W_F2V
+CALL @ni_push
+JMP @nbi_d
+nbi_ss_go:
+LD r1,r0,#W_F2V
+nbi_ss_o:
+LDB r3,r1,0
+CMP r3,r0
+JMP[EQ] @nbi_ss_n
+ADD r2,r1,r0
+LD r5,r0,#W_F2P
+nbi_ss_i:
+LDB r3,r5,0
+CMP r3,r0
+JMP[EQ] @nbi_ss_y
+LDB r4,r2,0
+CMP r3,r4
+JMP[NE] @nbi_ss_nx
+ADD r2,r2,r13
+ADD r5,r5,r13
+JMP @nbi_ss_i
+nbi_ss_nx:
+ADD r1,r1,r13
+JMP @nbi_ss_o
+nbi_ss_y:
+CALL @ni_push
+JMP @nbi_d
+nbi_ss_n:
+MOVI r1,0
+CALL @ni_push
+JMP @nbi_d
+
+nbi_strdup:
+CALL @ni_pop
+ST r1,r0,#W_F2V
+CALL @ni_strlen
+ADD r1,r1,r13
+ST r1,r0,#W_F2P
+CALL @ni_malloc
+ST r1,r0,#W_F2S
+LD r2,r0,#W_F2V
+LD r3,r0,#W_F2P
+nbi_sd_l:
+CMP r3,r0
+JMP[EQ] @nbi_sd_d
+LDB r4,r2,0
+STB r4,r1,0
+ADD r1,r1,r13
+ADD r2,r2,r13
+SUB r3,r3,r13
+JMP @nbi_sd_l
+nbi_sd_d:
+LD r1,r0,#W_F2S
+CALL @ni_push
+JMP @nbi_d
+
+nbi_isdigit:
+CALL @ni_pop
+MOVI r2,60
+SUB r2,r1,r2
+JMP @nbi_isdigit_go
+nbi_isdigit_go:
+JMP @nbi_ctype_digit
+nbi_isalpha:
+CALL @ni_pop
+JMP @nbi_ctype_alpha
+nbi_isspace:
+CALL @ni_pop
+MOVI r2,32
+CMP r1,r2
+JMP[EQ] @nbi_ctype_y
+MOVI r2,9
+CMP r1,r2
+JMP[LT] @nbi_ctype_n
+MOVI r2,13
+CMP r1,r2
+JMP[LE] @nbi_ctype_y
+JMP @nbi_ctype_n
+nbi_isupper:
+CALL @ni_pop
+MOVI r2,65
+CMP r1,r2
+JMP[LT] @nbi_ctype_n
+MOVI r2,90
+CMP r1,r2
+JMP[LE] @nbi_ctype_y
+JMP @nbi_ctype_n
+nbi_islower:
+CALL @ni_pop
+MOVI r2,97
+CMP r1,r2
+JMP[LT] @nbi_ctype_n
+MOVI r2,122
+CMP r1,r2
+JMP[LE] @nbi_ctype_y
+JMP @nbi_ctype_n
+nbi_ctype_digit:
+MOVI r2,48
+CMP r1,r2
+JMP[LT] @nbi_ctype_n
+MOVI r2,57
+CMP r1,r2
+JMP[LE] @nbi_ctype_y
+JMP @nbi_ctype_n
+nbi_ctype_alpha:
+MOVI r2,65
+CMP r1,r2
+JMP[LT] @nbi_ctype_lo
+MOVI r2,90
+CMP r1,r2
+JMP[LE] @nbi_ctype_y
+nbi_ctype_lo:
+MOVI r2,97
+CMP r1,r2
+JMP[LT] @nbi_ctype_n
+MOVI r2,122
+CMP r1,r2
+JMP[LE] @nbi_ctype_y
+JMP @nbi_ctype_n
+nbi_ctype_y:
+MOVI r1,1
+CALL @ni_push
+JMP @nbi_d
+nbi_ctype_n:
+MOVI r1,0
+CALL @ni_push
+JMP @nbi_d
+
+nbi_toupper:
+CALL @ni_pop
+MOVI r2,97
+CMP r1,r2
+JMP[LT] @nbi_ct_done
+MOVI r2,122
+CMP r1,r2
+JMP[GT] @nbi_ct_done
+MOVI r2,32
+SUB r1,r1,r2
+nbi_ct_done:
+CALL @ni_push
+JMP @nbi_d
+nbi_tolower:
+CALL @ni_pop
+MOVI r2,65
+CMP r1,r2
+JMP[LT] @nbi_cl_done
+MOVI r2,90
+CMP r1,r2
+JMP[GT] @nbi_cl_done
+MOVI r2,32
+ADD r1,r1,r2
+nbi_cl_done:
+CALL @ni_push
+JMP @nbi_d
+
+nbi_rand:
+LD r1,r0,#W_RAND
+LA r2,1103515245
+MUL r1,r1,r2
+ADDI r1,r1,12345
+ST r1,r0,#W_RAND
+SHR r1,r1,16
+MOVI r2,0x7FFF
+BOOL.8 r1,r1,r2
+CALL @ni_push
+JMP @nbi_d
+nbi_srand:
+CALL @ni_pop
+ST r1,r0,#W_RAND
+MOVI r1,0
+CALL @ni_push
+JMP @nbi_d
+nbi_labs:
+CALL @ni_pop
+CMPS r1,r0
+JMP[GE] @nbi_labs_p
+SUB r1,r0,r1
+nbi_labs_p:
+CALL @ni_push
+JMP @nbi_d
+
+nbi_memmove:
+CALL @ni_pop
+ST r1,r0,#W_F2P
+CALL @ni_pop
+ST r1,r0,#W_F2V
+CALL @ni_pop
+ST r1,r0,#W_F2S
+LD r3,r0,#W_F2P
+CMP r3,r0
+JMP[EQ] @nbi_mm_d
+LD r2,r0,#W_F2V
+LD r1,r0,#W_F2S
+CMP r1,r2
+JMP[LT] @nbi_mm_fwd
+ADD r4,r2,r3
+CMP r1,r4
+JMP[GE] @nbi_mm_fwd
+; backward copy
+ADD r5,r1,r0
+ADD r1,r1,r3
+ADD r2,r2,r3
+nbi_mm_b_l:
+CMP r1,r5
+JMP[EQ] @nbi_mm_d
+SUB r1,r1,r13
+SUB r2,r2,r13
+LDB r4,r2,0
+STB r4,r1,0
+JMP @nbi_mm_b_l
+nbi_mm_fwd:
+ADD r4,r1,r3
+nbi_mm_f_l:
+CMP r1,r4
+JMP[EQ] @nbi_mm_d
+LDB r5,r2,0
+STB r5,r1,0
+ADD r1,r1,r13
+ADD r2,r2,r13
+JMP @nbi_mm_f_l
+nbi_mm_d:
+LD r1,r0,#W_F2S
 CALL @ni_push
 JMP @nbi_d
 nbi_exit:
