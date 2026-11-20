@@ -125,10 +125,11 @@ Proof.
   induction n as [|n IH]; intros [a b] Hin; simpl in Hin.
   - contradiction.
   - apply in_app_or in Hin. destruct Hin as [Hold | Hnew].
-    + specialize (IH (a, b) Hold). simpl in IH. lia.
+    + destruct (IH (a, b) Hold) as [Hlt Hbound].
+      simpl in *. split; lia.
     + apply in_map_iff in Hnew.
       destruct Hnew as [i [Heq Hi]]. inversion Heq; subst.
-      apply in_seq in Hi. simpl. lia.
+      apply in_seq in Hi. simpl. split; lia.
 Qed.
 
 Lemma upper_pairs_complete : forall n a b,
