@@ -19,12 +19,14 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install Coq
         run: |
-          sudo apt-get update
           sudo apt-get install -y coq
           coqc --version
       - name: Check formal proofs with the Coq kernel
         run: |
           cd formal/nan16
           coqc -q NaN16Mirror.v
+          coqc -q NaN16Bits.v
       - name: Run exhaustive arithmetic regression
-        run: python3 formal/nan16/check_counts.py
+        run: |
+          python3 formal/nan16/check_counts.py
+          python3 formal/nan16/check_bit_reverse.py
