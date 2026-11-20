@@ -706,7 +706,7 @@ disk_body:
 mem_title:
 .str " NaN/0S  MEMORY UTILITY"
 mem_body:
-.str " Guest image: 65,536 words (512 KB).\n Runtime G window: 8 MB at 0x200000.\n nalloc heap and MEMQ/E820 discovery are planned.\n Current exhibits use fixed buffers below the store.\n Store: 3,072..14,516 words."
+.str " Guest image: sized by the store header (up to 4M words).\n Runtime G window: 8 MB at 0x200000.\n nalloc heap and MEMQ/E820 discovery are planned.\n Current exhibits use fixed buffers below the store.\n Store: 3,072..14,516 words."
 cpu_title:
 .str " NaN/0S  CPU / ARCHITECTURE"
 cpu_body:

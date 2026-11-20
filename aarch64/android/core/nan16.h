@@ -39,7 +39,7 @@ nan_vm *nan_create(void);
 void    nan_destroy(nan_vm *v);
 void    nan_reset(nan_vm *v);                       /* clear memory/state */
 
-/* Floppy image (nan0s.img): guest words are at byte 0x2200, 65,536 words. */
+/* nan0s.img: guest words at byte 0x2200; count is LE32 at byte 504 (or derived from length). */
 int  nan_load_image(nan_vm *v, const uint8_t *img, size_t len);
 /* Raw 8-byte words copied to guest word 0 (what tools/mkimg.awk packs). */
 int  nan_load_words(nan_vm *v, const uint8_t *words, size_t len);

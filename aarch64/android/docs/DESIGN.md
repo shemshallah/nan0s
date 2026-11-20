@@ -20,9 +20,9 @@ jni/nan_jni.c       JNI bridge                                        app/      
 
 ## API additions on top of the existing nan16.h
 - `NAN_TIME_WAIT = 4` return from nan_run: the guest polled TICK >=256 times with an unchanged value (a delay loop) - host should sleep ~1 ms (battery).
-- `int nan_load_auto(nan_vm*, const uint8_t*, size_t, const char **kind)` : detects 1,474,560-byte floppy image (guest at 0x2200), `.nan` text
+- `int nan_load_auto(nan_vm*, const uint8_t*, size_t, const char **kind)` : detects a boot image (55 AA signature, guest at 0x2200, word count at 504), `.nan` text
   (lines like FFF8_0A000200_F8FF, `;` comments), raw 8-byte words (word 0 heads valid), saved state ("NAN1" magic). Returns 0/-1, kind = "floppy"|"nan-text"|"words"|"state".
-  Floppy images smaller than 0x2200+8 bytes are rejected; larger-than-65,536-word programs are only accepted as raw words/.nan (up to 4M words).
+  Boot images smaller than 0x2200+8 bytes are rejected. The guest word count comes from the LE32 header at byte 504 (legacy images without it derive the count from the file length), up to the 4M-word VM memory.
 - `nan_load_text(vm, text, len)` : words packed from index 0 (honour optional `.org N` lines if present); error line number via `nan_load_error()`.
 - `size_t nan_state_size(vm) / nan_save_state(vm, buf, cap) / nan_restore_state(vm, buf, len)` : sparse snapshot (4 KB pages that are not all zero) of
   regs, pc, k, memory, VRAM, text cells, DAC, keyboard ring, PIT, ATA regs. Used for pause/resume on Android and for golden tests.

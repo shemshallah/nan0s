@@ -104,10 +104,16 @@ BEGIN {
   }
   if (LMAX < TITLEB + 16*k + 16) LMAX = TITLEB + 16*k + 16
   if (LMAX < 4096) LMAX = 4096
-  if (8*LMAX > 524288) die("guest region " 8*LMAX " bytes exceeds 524288")
+  # arbitrary guest sizes, bounded only by the VM's word space
+  if (LMAX > 4000000) die("guest image " LMAX " words exceeds the VM memory")
   # ---- boot + kernel binary (8704 bytes: 512 boot, kernel zero-padded to 8192) ----
   s = ""
-  for (i = 0; i < 512; i++) s = s sprintf("%c", GBY[i])
+  for (i = 0; i < 512; i++){
+    b = i < NGB ? GBY[i] : 0
+    # guest word count at 504..507 (LE32), signature stays at 510..511
+    if (i >= 504 && i < 508) b = int(LMAX / (2^(8*(i-504)))) % 256
+    s = s sprintf("%c", b)
+  }
   for (i = 512; i < 8704; i++) s = s sprintf("%c", i < NGB ? GBY[i] : 0)
   printf "%s", s > OUTB
   # ---- guest region binary (8*LMAX bytes) ----
@@ -134,7 +140,7 @@ function storecart(cf, st,   CN2,pay,i,h,h2,cc,n_,p_){
   CN2 = loadguest(cf, 1)
   if (CN2 <= 8192) die(cf " has no payload (needs words 8192+)")
   pay = CN2 - 8192
-  if (st + pay > 65536) die("cartridge too big for store (image carries 65536 guest words): " cf)
+  if (st + pay > 4000000) die("cartridge too big for store (image carries 4,000,000 guest words): " cf)
   for (i = 0; i < pay; i++){ W0[st+i] = PW0[8192+i]; W1[st+i] = PW1[8192+i]; WSET[st+i] = 1 }
   h = 0x811C9DC5; h2 = 0x811C9DC5; cc = 0
   for (i = 0; i < pay; i++){

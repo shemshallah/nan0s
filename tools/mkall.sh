@@ -15,5 +15,8 @@ gawk -f tools/mkimg.awk \
      -v CARTS=tools/carts.txt \
      -v OUTB="$T/n0sb.bin" -v OUTG="$T/n0sg.bin"
 cat "$T/n0sb.bin" "$T/n0sg.bin" > build/nan0s.img
-truncate -s 1474560 build/nan0s.img 2>/dev/null || dd if=/dev/zero bs=1 count=$((1474560 - $(wc -c < build/nan0s.img))) >> build/nan0s.img
+sz=$(wc -c < build/nan0s.img)
+if [ "$sz" -lt 1474560 ]; then
+  truncate -s 1474560 build/nan0s.img 2>/dev/null || dd if=/dev/zero bs=1 count=$((1474560 - sz)) >> build/nan0s.img
+fi
 ls build/*.img | wc -l | sed 's/^/images in build\/: /'

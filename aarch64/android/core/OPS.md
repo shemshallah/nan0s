@@ -3,7 +3,7 @@ Authority: kan16.xa (AT&T order: `MOV src,dst`). Every line below was re-read ag
 this round. Items marked [FIX] correct the first draft of this file.
 
 ## Image / memory
-- build/nan0s.img = 1,474,560 B. Boot sector 0-511, kernel 512-8703, guest words from byte 0x2200 (8704), 65,536 words
+- build/nan0s.img: boot sector 0-511, kernel 512-8703, guest words from byte 0x2200 (8704). The guest word count is a little-endian u32 at byte 504; images may be smaller or larger than 1,474,560 bytes (up to the 4M-word VM memory).
   (524,288 B). The kernel copies them to guest word 0 after zero-filling 4M words (MASK 0x3FFFFF, 32 MB).
 - Word = 8 raw bytes: b0-1 FAR head (big-endian u16), b2-5 payload (LE u32), b6-7 NEAR head (LE u16).
   Heads: 0x7FF1,0xFFF1,0x7FF8,0xFFF8 = class 0..3. Valid iff (h&0x7FF0)==0x7FF0 and (h&15) is 1 or 8.

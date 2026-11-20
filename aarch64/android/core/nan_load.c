@@ -11,9 +11,19 @@ int nan_load_words(nan_vm *v, const uint8_t *w, size_t len) {
   for (size_t i = 0; i < n; i++) v->mem[i] = rd64le(w + i * 8);
   return 0;
 }
+static uint32_t rd32le(const uint8_t *p) {
+  return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
+}
 int nan_load_image(nan_vm *v, const uint8_t *img, size_t len) {
   if (len < 0x2200 + 8) return -1;
-  size_t n = (len - 0x2200) / 8; if (n > 65536) n = 65536;
+  /* mkimg writes the guest word count at 504 (LE32), before the 55 AA
+     signature. Older images have zero there; fall back to the file size. */
+  size_t n = 0;
+  if (len >= 512 && img[510] == 0x55 && img[511] == 0xAA) {
+    uint32_t hdr = rd32le(img + 504);
+    if (hdr && hdr <= NAN_WORDS && 0x2200 + (size_t)hdr * 8 <= len) n = hdr;
+  }
+  if (!n) { n = (len - 0x2200) / 8; if (n > NAN_WORDS) n = NAN_WORDS; }
   return nan_load_words(v, img + 0x2200, n * 8);
 }
 static int hexn(const char *s, int n, uint32_t *out) {
@@ -42,6 +52,7 @@ int nan_load_auto(nan_vm *v, const uint8_t *d, size_t len, const char **kind) {
   const char *k = "";
   int rc = -1;
   if (len >= 16 && !memcmp(d, "NAN1", 4)) { k = "state"; rc = nan_restore_state(v, d, len); }
+  else if (len >= 0x2200 + 8 && d[510] == 0x55 && d[511] == 0xAA) { k = "floppy"; rc = nan_load_image(v, d, len); }
   else if (len == 1474560) { k = "floppy"; rc = nan_load_image(v, d, len); }
   else {
     int texty = len > 0; for (size_t i = 0; i < len && i < 4096; i++) if (d[i] >= 0x80 || (d[i] < 32 && !isspace(d[i]))) { texty = 0; break; }

@@ -45,7 +45,11 @@ cmp -s "$T/key.gold" "$T/keytest.ref" || { echo "s1 a64 gate: FAIL (key test ref
 img=aarch64/android/app/src/main/assets/nan0s.img
 aarch64/android/nan_cli --img "$img" --steps 3000000 --serial > "$T/img.ref" 2>/dev/null
 grep -q "READY" "$T/img.ref" || { echo "s1 a64 gate: FAIL (work image reference)"; exit 1; }
-dd if="$img" of="$T/s1_guest.bin" bs=8 skip=1088 count=65536 2>/dev/null
+bc=$(od -An -tu1 -j504 -N4 "$img" | tr -s ' ' '\n' | sed '/^$/d')
+set -- $bc
+gn=$(( ${1:-0} + (${2:-0}<<8) + (${3:-0}<<16) + (${4:-0}<<24) ))
+[ "$gn" -ge 1 ] || gn=65536
+dd if="$img" of="$T/s1_guest.bin" bs=8 skip=1088 count=$gn 2>/dev/null
 : > "$T/s1_keys.inc"
 as -I "$T" --defsym S1_MAXSTEPS=3000000 -o "$T/img.o" aarch64/scaffold/s1_a64.s
 ld -Ttext=0x40000000 -e _start -o "$T/img.elf" "$T/img.o"

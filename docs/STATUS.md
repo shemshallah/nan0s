@@ -135,9 +135,11 @@ sh x86/tools/mkall.sh
 The image rule: `build/` holds at most two images: `nan0s.img` (the system)
 and `base.img` (scaffold input for nasm0 proofs). Test images go to `$TMPDIR`.
 
-The guest image is 524,288 bytes / 65,536 words. The boot loader reads 1040
-sectors (16 kernel + 1024 guest) and the kernel copies 512 KB. One cart <= 57,344 words (r26b).
-still small. The two-stage allocation image plan is in
+The Android/NaN0S image size is driven by its contents: the LE32 guest-word
+count lives at byte 504 and `nan_load_image` accepts any size up to the 4M-word
+VM memory. The x86 BIOS port still loads from a 1.44 MB floppy and is limited by
+that medium. The two-stage allocation image plan is in
+`spec/IMAGE_SCALE_PLAN.md`. The two-stage allocation image plan is in
 `spec/IMAGE_SCALE_PLAN.md`: ship a small loader plus `work.img`; create a sparse
 `store.nan` on first boot, write the work image into it, boot it. Never upload a
 multi-GB image. Prototype (retired r26j scaffold): an apparent
