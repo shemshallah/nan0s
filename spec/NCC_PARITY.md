@@ -74,28 +74,23 @@ Implemented:
 
 Not implemented (honest list):
 
-- function-like macros, `#`/`##`, recursive macro expansion
-- `#include <...>` system headers (they are skipped; the libc is built in)
+- `long long` is parsed but currently uses the 32-bit ILP32 slot; there is no
+  64-bit arithmetic or `%lld` conversion yet
 - the explicit function-returning-function-pointer declarator syntax
   (`int (*f(void))(int,int)`); use a typedef'd function-pointer return type
-- function-like macros: argument substitution, nesting, `#` stringification,
-  `##` pasting, zero-argument macros, multi-line bodies, `#undef`/redefine,
-  C99 variadic macros (`...`, `__VA_ARGS__`, `, ##__VA_ARGS__`)
-- `const`/`volatile`/`register`/`inline`/`restrict` are accepted but not enforced
-- `_Bool`/`bool`/`true`/`false`, with `_Bool` values normalized to 0/1
-- `long long` is parsed but uses the 32-bit ILP32 slot (no 64-bit arithmetic yet)
-- user variadic functions are supported (`va_list`, `va_start`, `va_arg`,
-  `va_end`; up to 16 variadic argument words per call)
+- packed bit-field ABI: fields are laid out one per declared storage unit
+  (valid implementation-defined C, but not ABI-compatible with GCC/Clang)
+- `const`/`volatile`/`register` are accepted but not enforced
+- `#include <...>` system headers are skipped; the libc and standard types are
+  built in
+- the standard library is a practical subset: notable missing pieces include
+  `qsort`/`bsearch` callbacks, `setjmp`/`longjmp`, wide-character APIs,
+  `strftime`, `tmpfile`/`tmpnam`, and full locale data
+- signal handlers are recorded but not delivered asynchronously
 - the path filesystem is RAM-backed (it resets on reboot); no disk
   persistence yet
-- `scanf`/`fscanf`/`sscanf`: `%d %i %u %o %x %X %f %e %g %s %c %%`,
-  whitespace/literals, `*` suppression and field widths
-- `FILE` streams work over the path filesystem: `fopen`/`fclose`, `fgetc`/
-  `fputc`, `fgets`/`fputs`, `fread`/`fwrite`, `fprintf`, `fseek`/`ftell`/
-  `rewind`, `feof`/`ferror`/`fflush`, `remove`/`rename`
-- `struct tm`/`struct lconv`, `time`/`clock`/`gmtime`/`localtime`/`mktime`/
-  `asctime`/`ctime`/`difftime`, `setlocale`/`localeconv`, `signal`/`raise`
-  (handlers are recorded; delivery is a no-op), and `atof`/`strtod` work
+- x86 BIOS boot images remain capped at 1.44 MB (Android/NaN0S images are
+  arbitrary size)
 
 ## Preprocessor subset
 
