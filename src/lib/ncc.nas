@@ -453,6 +453,8 @@
 .equ W_IELEM    61427
 .equ W_IESZ     61428
 .equ W_INNUM    61429
+.equ W_BITW     61430
+.equ W_SBASE    61434
 .equ W_TKPTR    60990
 .equ W_CASEBASE 60971
 .equ W_DEFSET   60972
@@ -2791,6 +2793,60 @@ SUB r14,r14,r13
 LD r15,r14,0
 RET
 
+; ty_bitfield: r1=base integer type, r2=width -> bitfield type id
+; The field occupies the base type's full storage; reads/writes are masked.
+ty_bitfield:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_TY_TMP
+ST r2,r0,#W_BITW
+LD r1,r0,#W_TY_TMP
+CALL @ty_addr
+LD r3,r1,#TY_KIND
+ST r3,r0,#W_TY_KIND
+LD r3,r1,#TY_SIZE
+ST r3,r0,#W_TY_SIZE
+LD r3,r1,#TY_ALIGN
+ST r3,r0,#W_TY_ALIGN
+LD r3,r0,#W_TY_TMP
+ST r3,r0,#W_TY_BASE
+LD r3,r0,#W_BITW
+ST r3,r0,#W_TY_COUNT
+ST r0,r0,#W_TY_MEM
+ST r0,r0,#W_TY_NMEM
+LD r1,r0,#W_TY_TMP
+CALL @ty_addr
+LD r3,r1,#TY_SIGN
+ST r3,r0,#W_TY_SIGN
+CALL @ty_new
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; ty_bitwidth: r1=type -> r2=bit width (0 if not a bit-field type)
+ty_bitwidth:
+SHL r1,r1,3
+LA r3,#NCC_TYPEB
+ADD r1,r1,r3
+LD r2,r1,#TY_KIND
+MOVI r3,#TY_INT
+CMP r2,r3
+JMP[EQ] @tbw_int
+MOVI r3,#TY_ENUM
+CMP r2,r3
+JMP[NE] @tbw_none
+tbw_int:
+LD r2,r1,#TY_COUNT
+CMP r2,r0
+JMP[EQ] @tbw_none
+MOVI r3,32
+CMP r2,r3
+JMP[GE] @tbw_none
+RET
+tbw_none:
+MOVI r2,0
+RET
+
 ; ty_common: r1=a r2=b -> C usual arithmetic type
 ty_common:
 ST r15,r14,0
@@ -4863,7 +4919,10 @@ CMP r1,r0
 JMP[NE] @pss_final
 CALL @p_typespec
 ST r1,r0,#W_STYPE
+ST r1,r0,#W_SBASE
 pss_mem_one:
+LD r1,r0,#W_SBASE
+ST r1,r0,#W_STYPE
 LD r1,r0,#W_STYPE
 CALL @p_ptr_suffix
 ST r1,r0,#W_STYPE
@@ -4871,6 +4930,44 @@ LD r1,r0,#W_TKA
 MOVI r2,#K_IDENT
 CMP r1,r2
 JMP[EQ] @pss_mem_name
+; anonymous bit-field: type ':' width
+LD r1,r0,#W_TKA
+MOVI r2,#K_PUNCT
+CMP r1,r2
+JMP[NE] @pss_bad_name
+LD r1,r0,#W_TKA+1
+MOVI r2,#P_COLON
+CMP r1,r2
+JMP[NE] @pss_bad_name
+CALL @p_adv
+CALL @p_cexpr
+ST r1,r0,#W_BITW
+CMP r1,r0
+JMP[EQ] @pss_anon_done
+; reserve a full base slot (non-packed layout)
+LD r1,r0,#W_STYPE
+CALL @ty_size
+ST r1,r0,#W_STMP
+LD r1,r0,#W_STYPE
+CALL @ty_align
+ST r1,r0,#W_SOFF
+LD r1,r0,#W_SSIZE
+LD r2,r0,#W_SOFF
+CALL @px_align_up
+ST r1,r0,#W_SSIZE
+LD r2,r0,#W_STMP
+ADD r2,r1,r2
+ST r2,r0,#W_SSIZE
+pss_anon_done:
+MOVI r1,#P_COMMA
+CALL @p_take_p
+CMP r1,r0
+JMP[NE] @pss_mem_one
+MOVI r1,#P_SEMI
+MOVI r2,24
+CALL @p_expect_p
+JMP @pss_mem_l
+pss_bad_name:
 MOVI r1,23
 CALL @p_err
 pss_mem_name:
@@ -4879,9 +4976,28 @@ CALL @sym_get_cur
 ST r1,r14,0
 ADD r14,r14,r13
 CALL @p_adv
+; bit-field width?
+LD r1,r0,#W_TKA
+MOVI r2,#K_PUNCT
+CMP r1,r2
+JMP[NE] @pss_mem_nobit
+LD r1,r0,#W_TKA+1
+MOVI r2,#P_COLON
+CMP r1,r2
+JMP[NE] @pss_mem_nobit
+CALL @p_adv
+CALL @p_cexpr
+ST r1,r0,#W_BITW
+LD r1,r0,#W_STYPE
+LD r2,r0,#W_BITW
+CALL @ty_bitfield
+ST r1,r0,#W_STYPE
+JMP @pss_mem_sized
+pss_mem_nobit:
 LD r1,r0,#W_STYPE
 CALL @p_array_suffix
 ST r1,r0,#W_STYPE
+pss_mem_sized:
 LD r1,r0,#W_STYPE
 CALL @ty_size
 ST r1,r0,#W_STMP
@@ -5956,10 +6072,49 @@ RET
 px_emit_load:
 ST r15,r14,0
 ADD r14,r14,r13
+ST r1,r0,#W_TY_ID
 CALL @ty_store_code
 ADD r2,r1,r0
 LA r1,#I_LOAD
 CALL @ir_emit
+LD r1,r0,#W_TY_ID
+CALL @ty_bitwidth
+CMP r2,r0
+JMP[EQ] @pxl_d
+ST r2,r0,#W_BITW
+MOVI r1,1
+CALL @ni_shl
+ADDI r1,r1,-1
+ST r1,r0,#W_TY_TMP
+LA r1,#I_PUSH
+LD r2,r0,#W_TY_TMP
+CALL @ir_emit
+LA r1,#I_AND
+CALL @ir_op
+LD r1,r0,#W_TY_ID
+CALL @ty_sign
+CMP r1,r0
+JMP[EQ] @pxl_d
+LD r2,r0,#W_BITW
+MOVI r3,32
+SUB r3,r3,r2
+CMP r3,r0
+JMP[EQ] @pxl_d
+LA r1,#I_PUSH
+LD r2,r0,#W_BITW
+MOVI r3,32
+SUB r2,r3,r2
+CALL @ir_emit
+LA r1,#I_SHL
+CALL @ir_op
+LA r1,#I_PUSH
+LD r2,r0,#W_BITW
+MOVI r3,32
+SUB r2,r3,r2
+CALL @ir_emit
+LA r1,#I_SHR
+CALL @ir_op
+pxl_d:
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -5969,6 +6124,21 @@ ST r15,r14,0
 ADD r14,r14,r13
 ST r1,r0,#W_TY_ID
 ST r2,r0,#W_TY_COUNT
+LD r1,r0,#W_TY_ID
+CALL @ty_bitwidth
+CMP r2,r0
+JMP[EQ] @pxs_nomask
+MOVI r1,1
+CALL @ni_shl
+ADDI r1,r1,-1
+ST r1,r0,#W_TY_TMP
+LA r1,#I_PUSH
+LD r2,r0,#W_TY_TMP
+CALL @ir_emit
+LA r1,#I_AND
+CALL @ir_op
+pxs_nomask:
+LD r1,r0,#W_TY_ID
 CALL @ty_kind
 MOVI r2,#TY_STRUCT
 CMP r1,r2

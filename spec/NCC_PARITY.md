@@ -59,6 +59,10 @@ Implemented:
 - aggregate brace initializers for structs, unions, and arrays, including
   nested struct/array members and partial brace elision (unions initialise
   the first member)
+- bit-fields (named, anonymous, signed/unsigned, comma declarators,
+  initializers); the layout is implementation-defined and non-packed: each
+  named field occupies its declared type's storage, and values are masked /
+  sign-extended on access
 - `enum` constants in expressions and `case` labels
 - `typedef`
 - `switch`/`case`/`default` with fallthrough, `goto`/labels
@@ -71,7 +75,7 @@ Not implemented (honest list):
 - `#include <...>` system headers (they are skipped; the libc is built in)
 - the explicit function-returning-function-pointer declarator syntax
   (`int (*f(void))(int,int)`); use a typedef'd function-pointer return type
-- bit-fields; `const`/`volatile`/`register` are accepted but not enforced
+- `const`/`volatile`/`register` are accepted but not enforced
 - user variadic functions are supported (`va_list`, `va_start`, `va_arg`,
   `va_end`; up to 16 variadic argument words per call)
 - `%e`/`%g` conversions and zero-padding for `%f` fields (`%08.2f`)
@@ -165,6 +169,7 @@ tools/ncc_m10.sh    printf %f, precision, float width/flags
 tools/ncc_m11.sh    struct/union pass-by-value and return-by-value
 tools/ncc_m12.sh    user variadic functions (int/char/float/struct)
 tools/ncc_m13.sh    nested aggregate initializers and brace elision
+tools/ncc_m14.sh    bit-fields (masked values, signed, anonymous, initializers)
 tools/ncc_donut.sh  original C donut (one frame) in raw NaN16
 tools/nfs2.sh       path-addressed RAM filesystem API
 tools/ncc_gui.sh    boot image, open terminal, .demo runs C in the vbuf
