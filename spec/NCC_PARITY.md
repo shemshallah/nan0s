@@ -46,6 +46,8 @@ Implemented:
 - `char`/`short`/`int`/`long`, signed and unsigned, `sizeof` in bytes
 - `float`/`double` (32-bit IEEE storage), float literals, arithmetic,
   comparisons, casts, and built-in `sin`/`cos`
+- `printf` with `%d %i %u %x %X %c %s %p %f %%`, flags `-`/`0`, field
+  width, and precision (including `%.2f` and `%.3s`)
 - string and character literals with escapes (`\n`, `\t`, `\xNN`, octal)
 - `char` arrays with string-literal initializers, including unsized
   `char s[] = "..."`
@@ -70,7 +72,7 @@ Not implemented (honest list):
   inside a struct or union
 - bit-fields; `const`/`volatile`/`register` are accepted but not enforced
 - user variadic functions; `printf` is a built-in variadic function
-- floating-point printing (`%f`) and `printf` precision (`%.3s`, `%.2d`)
+- `%e`/`%g` conversions and zero-padding for `%f` fields (`%08.2f`)
 - the path filesystem is RAM-backed (it resets on reboot); no disk
   persistence yet
 - the full C standard library and headers
@@ -157,6 +159,7 @@ tools/ncc_m6.sh     libc + loop/operator extras, 10 lines
 tools/ncc_m7.sh     block scope, aggregate initializers, struct assignment
 tools/ncc_m8.sh     float literals/arithmetic/casts and sin/cos
 tools/ncc_m9.sh     function pointers: globals/locals/assignment/indirect calls
+tools/ncc_m10.sh    printf %f, precision, float width/flags
 tools/ncc_donut.sh  original C donut (one frame) in raw NaN16
 tools/nfs2.sh       path-addressed RAM filesystem API
 tools/ncc_gui.sh    boot image, open terminal, .demo runs C in the vbuf
