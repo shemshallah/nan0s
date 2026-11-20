@@ -138,7 +138,8 @@ built in.
 
 The classic C donut is shipped as `/donut.c` (original sampling) and
 `/donut_fast.c` (coarser sampling); `cc /donut_fast.c` renders a torus in the
-terminal.
+terminal. Captures: `docs/donut_parity.png` (clang reference beside ncc on
+NaN16) and `docs/donut_nan0s.png` (the torus in the GUI terminal).
 
 ## Gates
 

@@ -858,6 +858,8 @@ LD r5,r0,@ce_mode
 CMP r5,r0
 JMP[EQ] @tk_line_mode
 CALL @ce_enter
+LD r1,r0,@tk_id
+CALL @term_draw
 JMP @tk_ret
 tk_line_mode:
 CALL @fs_readline
@@ -873,6 +875,8 @@ CALL @vc_puts
 LD r1,r0,@tk_id
 CALL @wm_wbase
 ST r0,r1,#W_A4
+LD r1,r0,@tk_id
+CALL @term_draw
 JMP @tk_ret
 tk_enter_normal:
 CALL @wm_wbase

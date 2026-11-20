@@ -94,7 +94,7 @@ fork it: Settings → Pages → branch <code>main</code> / folder <code>/docs</c
 | **guest source** | ≈ 33,000 lines of NaN16 across 93 `.nas` files |
 | **native base** | one small kernel per architecture: `x86/native/kan16.xa` · an A64 core and an Android app · a RISC-V smoke test |
 | **self-hosting** | assembler `nasm0` and interpreter `n16i` are both NaN16 · fixed point proven (see below) |
-| **C on NaN16** | `ncc` (`src/lib/ncc.nas`): lexer → parser → stack IR → interpreter, all raw NaN16 · byte-addressed ILP32, arrays/pointers/recursion, structs/unions/enums/typedef, switch/goto, floats + `sin`/`cos`, a preprocessor subset, path filesystem (`cc FILE`, `#include`), and built-in libc · press `e` to edit/run C, or `cc /donut_fast.c` for the donut; status in [`spec/NCC_PARITY.md`](spec/NCC_PARITY.md) |
+| **C on NaN16** | `ncc` (`src/lib/ncc.nas`): lexer → parser → stack IR → interpreter, all raw NaN16 · byte-addressed ILP32, arrays/pointers/recursion, structs/unions/enums/typedef, switch/goto, floats + `sin`/`cos`, a preprocessor subset, path filesystem (`cc FILE`, `#include`), and built-in libc · press `e` to edit/run C, or `cc /donut_fast.c` for the donut; parity in [`spec/NCC_PARITY.md`](spec/NCC_PARITY.md) · [donut parity](docs/donut_parity.png) · [in the terminal](docs/donut_nan0s.png) |
 | **outer tools** | POSIX `sh` · `awk` · `xxd` · `qemu-system-i386` — the Python scaffolds are being retired ([census](spec/PYTHON_CENSUS.md)) |
 
 <div align="center"><img src="assets/github/nan0s-rule.svg" alt="" width="100%"/></div>
