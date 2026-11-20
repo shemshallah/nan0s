@@ -7,7 +7,7 @@ IMG=build/nan0s.img
 [ -f "$IMG" ] || { echo "ncc_gui: SKIP (no $IMG; run tools/build.sh)"; exit 77; }
 T="${TMPDIR:-/tmp}/nccgui.$$"; mkdir -p "$T"; trap 'rm -rf "$T"' EXIT
 CLI=aarch64/android/nan_cli; [ -x $CLI ] || (cd aarch64/android && make -s nan_cli)
-"$CLI" --img "$IMG" --steps 300000000 --keys "@5000000,e,@5000000,ENTER" --peek 0x40000:900 > "$T/o" 2> "$T/e" || true
+"$CLI" --img "$IMG" --steps 900000000 --keys "@5000000,e,ENTER,@2000000,.,d,e,m,o,ENTER" --peek 0x40000:1400 > "$T/o" 2> "$T/e" || true
 grep -E '^[0-9A-F]{8}$' "$T/o" | awk '{v=strtonum("0x"$1); c=v%256; if(c>=32&&c<127)printf "%c",c; else printf " "}' > "$T/txt"
 ok=1
 grep -q "NaN C in the terminal" "$T/txt" || ok=0

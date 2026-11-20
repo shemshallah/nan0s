@@ -9,6 +9,8 @@
 .equ SLOT 8192
 .equ PERIOD 100
 .equ VCW 128
+.equ CEB 8800000
+.equ CE_BUF 2200000
 .org 8192
 JMP @cart_entry
 .include "../lib/fb.nas"
@@ -830,6 +832,12 @@ LD r1,r0,@tk_id
 CALL @term_cursor
 JMP @tk_ret
 tk_enter:
+LD r5,r0,@ce_mode
+CMP r5,r0
+JMP[EQ] @tk_enter_normal
+CALL @ce_enter
+JMP @tk_ret
+tk_enter_normal:
 CALL @wm_wbase
 LD r5,r1,#W_A3
 MOVI r6,#VCW
@@ -1024,7 +1032,39 @@ JMP @tm_done
 ; The ncc front end is raw NaN16 (src/lib/ncc.nas); ncc_out routes every
 ; character it prints back into the focused terminal's virtual console.
 tm_exec:
+MOVI r1,1
+ST r1,r0,@ce_mode
+ST r0,r0,@ce_len
 LD r1,r0,@tm_id
+MOVI r2,@s_ce_help
+CALL @vc_puts
+JMP @tm_done
+
+; ---- C source editor ------------------------------------------------
+; Type C lines in the terminal. Lines are accumulated at CE_BUF (packed
+; 4 bytes/word). Dot commands: .run .demo .clear .quit.
+ce_begin_run:
+LD r1,r0,@ce_old
+ST r1,r0,@ce_len
+LA r2,#CEB
+ADD r2,r2,r1
+STB r0,r2,0
+CMP r1,r0
+JMP[EQ] @ce_prompt
+ST r0,r0,@ce_mode
+LD r1,r0,@tk_id
+ST r1,r0,@gco_id
+LA r1,@gui_c_out
+ST r1,r0,@ncc_out
+LA r1,#CE_BUF
+CALL @ncc_compile
+CALL @ncc_run
+ST r0,r0,@ncc_out
+JMP @ce_prompt
+
+ce_begin_demo:
+ST r0,r0,@ce_mode
+LD r1,r0,@tk_id
 ST r1,r0,@gco_id
 LA r1,@gui_c_out
 ST r1,r0,@ncc_out
@@ -1032,7 +1072,186 @@ LA r1,@ncc_demo_src
 CALL @ncc_compile
 CALL @ncc_run
 ST r0,r0,@ncc_out
-JMP @tm_done
+JMP @ce_prompt
+
+ce_prompt:
+LD r1,r0,@tk_id
+MOVI r2,10
+CALL @vc_putc
+LD r1,r0,@tk_id
+MOVI r2,@s_ce_prompt
+CALL @vc_puts
+LD r1,r0,@tk_id
+CALL @wm_wbase
+ST r0,r1,#W_A4
+JMP @ce_done
+
+; ce_streq: r1=byte ptr, r2=word addr of .str -> 1/0
+ce_streq:
+SHL r2,r2,2
+ce_st_l:
+LDB r3,r1,0
+LDB r4,r2,0
+CMP r3,r4
+JMP[NE] @ce_st_n
+CMP r4,r0
+JMP[EQ] @ce_st_y
+ADD r1,r1,r13
+ADD r2,r2,r13
+JMP @ce_st_l
+ce_st_y:
+MOVI r1,1
+RET
+ce_st_n:
+MOVI r1,0
+RET
+
+ce_enter:
+ST r15,r14,0
+ADD r14,r14,r13
+; line geometry: text starts at column 2 of the cursor row
+LD r1,r0,@tk_id
+CALL @wm_wbase
+LD r5,r1,#W_A3
+ST r5,r0,@ce_row
+LD r6,r1,#W_A2
+ST r6,r0,@ce_col
+LD r1,r0,@tk_id
+CALL @wm_vbuf
+ST r1,r0,@ce_base
+LD r5,r0,@ce_row
+MOVI r6,#VCW
+MUL r5,r5,r6
+ADDI r5,r5,2
+ST r5,r0,@ce_start
+LD r6,r0,@ce_col
+MOVI r7,2
+SUB r6,r6,r7
+CMP r6,r0
+JMP[GE] @ce_n_ok
+MOVI r6,0
+ce_n_ok:
+ST r6,r0,@ce_n
+; destination = CEB + ce_len
+LD r7,r0,@ce_len
+LA r8,#CEB
+ADD r8,r8,r7
+ST r7,r0,@ce_old
+; source = base + start
+LD r3,r0,@ce_base
+LD r5,r0,@ce_start
+ADD r3,r3,r5
+LD r6,r0,@ce_n
+ce_cp_l:
+CMP r6,r0
+JMP[EQ] @ce_cp_d
+LD r4,r3,0
+STB r4,r8,0
+ADD r3,r3,r13
+ADD r8,r8,r13
+SUB r6,r6,r13
+JMP @ce_cp_l
+ce_cp_d:
+STB r0,r8,0
+LD r7,r0,@ce_old
+LD r6,r0,@ce_n
+ADD r7,r7,r6
+ST r7,r0,@ce_len
+LA r8,#CEB
+ADD r8,r8,r7
+MOVI r4,10
+STB r4,r8,0
+ADD r7,r7,r13
+ST r7,r0,@ce_len
+ADD r8,r8,r13
+STB r0,r8,0
+; dot command?  (single-letter dispatch after '.')
+LA r1,#CEB
+LD r2,r0,@ce_old
+ADD r1,r1,r2
+LDB r3,r1,0
+MOVI r4,46
+CMP r3,r4
+JMP[NE] @ce_text
+LDB r3,r1,1
+MOVI r4,114
+CMP r3,r4
+JMP[EQ] @ce_begin_run
+MOVI r4,100
+CMP r3,r4
+JMP[EQ] @ce_begin_demo
+MOVI r4,99
+CMP r3,r4
+JMP[EQ] @ce_clear
+MOVI r4,113
+CMP r3,r4
+JMP[EQ] @ce_quit
+JMP @ce_text
+ce_clear:
+ST r0,r0,@ce_len
+LD r1,r0,@tk_id
+MOVI r2,10
+CALL @vc_putc
+LD r1,r0,@tk_id
+MOVI r2,@s_ce_cleared
+CALL @vc_puts
+JMP @ce_prompt
+ce_quit:
+ST r0,r0,@ce_mode
+LD r1,r0,@tk_id
+MOVI r2,10
+CALL @vc_putc
+LD r1,r0,@tk_id
+MOVI r2,@s_ce_bye
+CALL @vc_puts
+JMP @ce_prompt
+ce_text:
+LD r1,r0,@tk_id
+MOVI r2,10
+CALL @vc_putc
+LD r1,r0,@tk_id
+MOVI r2,@s_ce_prompt
+CALL @vc_puts
+LD r1,r0,@tk_id
+CALL @wm_wbase
+ST r0,r1,#W_A4
+ce_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+ce_mode:
+.word 0
+ce_len:
+.word 0
+ce_col:
+.word 0
+ce_row:
+.word 0
+ce_start:
+.word 0
+ce_base:
+.word 0
+ce_n:
+.word 0
+ce_old:
+.word 0
+s_ce_run:
+.str ".run"
+s_ce_demo:
+.str ".demo"
+s_ce_clear:
+.str ".clear"
+s_ce_quit:
+.str ".quit"
+s_ce_prompt:
+.str "> "
+s_ce_cleared:
+.str "source cleared\n> "
+s_ce_bye:
+.str "editor closed\n> "
+s_ce_help:
+.str "C editor: type C lines; .run compiles+runs, .demo demo, .clear, .quit\n> "
 ; gui_c_out: terminal character hook. Preserves r2..r12 for the C runtime.
 gui_c_out:
 ST r15,r14,0
@@ -1101,7 +1320,7 @@ RET
 tm_id:
 .word 0
 s_help:
-.str "h c v w b l m x t s n u f e q\nb browser l lattice m monitor x hex\nt term w count c clear v ver\ne run C demo\ns settings n browser u utils\nf files (nsh) q quit gui\n"
+.str "h c v w b l m x t s n u f e q\nb browser l lattice m monitor x hex\nt term w count c clear v ver\ne C editor (.run/.demo)\ns settings n browser u utils\nf files (nsh) q quit gui\n"
 s_ver:
 .str "NaN/0S GUI r26\npure NaN16 wm\n"
 s_wins:

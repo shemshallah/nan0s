@@ -20,20 +20,34 @@
 .equ NCC_IREND  1600000
 .equ NCC_NAME   1600000      ; identifier spelling pool (4 chars/word)
 .equ NCC_NAMEMAX 50000
-.equ NCC_STRB   1650000      ; string literal pool (4 chars/word, NUL terminated)
-.equ NCC_STRMAX 100000
-.equ NCC_SYMB   1750000      ; 4096 entries x 8 words
-.equ NCC_SYMMAX 32768
-.equ NCC_GLOB   1800000      ; global variables, one word each
-.equ NCC_GLOBMAX 100000
-.equ NCC_ESB    2000000      ; expression stack
+.equ NCC_STRB   1650000      ; scratch / preprocessor text
+.equ NCC_STRMAX 50000
+.equ NCC_SYMB   1750000      ; 4096 entries x 16 words
+.equ NCC_SYMMAX 65536
+.equ NCC_SYMENTRIES 4096
+.equ NCC_TYPEB  1820000      ; 4096 type entries x 8 words
+.equ NCC_TYPEMAX 32768
+.equ NCC_PARM   1860000      ; function parameter descriptor tables
+.equ NCC_PARMMAX 32768
+.equ NCC_MEMB   1900000      ; struct/union member tables
+.equ NCC_MEMBMAX 32768
+.equ NCC_CASEB  1940000      ; switch case table: 2048 x (value,target)
+.equ NCC_CASEMAX 4096
+.equ NCC_GOTOB  1950000      ; pending goto patches: 2048 x (label-sym,jmp-index)
+.equ NCC_GOTOMAX 4096
+.equ NCC_ESB    2000000      ; expression stack (words)
 .equ NCC_ESMAX  200000
 .equ NCC_ESEND  2200000
-.equ NCC_FSB    2500000      ; call frames
-.equ NCC_FSMAX  200000
-.equ NCC_FSEND  2700000
-.equ NCC_WORK   3000000      ; lexer tokens and compiler scratch
-.equ NCC_PS     3000000      ; compiler/interpreter call stack (grows up)
+.equ NCC_PS     2900000      ; compiler/interpreter call stack (words)
+; C program memory is byte-addressed: 4 payload bytes per NaN word.
+.equ C_RODATA   12000000     ; string literals and const data
+.equ C_ROEND    12500000
+.equ C_GLOB     12500000     ; globals and static locals
+.equ C_GLOBEND  13000000
+.equ C_HEAP     13000000     ; malloc arena
+.equ C_HEAP_END 15000000
+.equ C_STACK    15000000     ; C call stack (bytes, grows up)
+.equ C_STACK_END 16000000
 
 ; ------------------------------------------------------------------ token kinds
 .equ K_EOF      1
@@ -135,6 +149,7 @@
 .equ P_LBRACE   43
 .equ P_RBRACE   44
 .equ P_HASH     45
+.equ P_DOT      46
 
 ; IR opcodes (2 words: opcode, operand)
 .equ I_HALT     0
@@ -142,10 +157,11 @@
 .equ I_POP      2
 .equ I_DUP      3
 .equ I_SWAP     4
-.equ I_LG       5
-.equ I_SG       6
-.equ I_LL       7
-.equ I_SL       8
+.equ I_GADDR    5
+.equ I_LADDR    7
+.equ I_LOAD     8
+.equ I_STORE    9
+.equ I_STORE_K  6
 .equ I_ADD      10
 .equ I_SUB      11
 .equ I_MUL      12
@@ -170,17 +186,32 @@
 .equ I_JNZ      32
 .equ I_CALL     33
 .equ I_RET      34
-.equ I_GADDR    35
-.equ I_LADDR    36
-.equ I_SGK      37
-.equ I_SLK      38
-.equ I_LOAD_IND 39
-.equ I_STORE_IND 40
 .equ I_LZERO    41
 .equ I_GZERO    42
-.equ I_STORE_IND_KEEP 43
+.equ I_DIVU     44
+.equ I_MODU     45
+.equ I_SHRU     46
+.equ I_LTU      47
+.equ I_GTU      48
+.equ I_LEU      49
+.equ I_GEU      50
+.equ I_CAST     51
+.equ I_MEMCPY   52
+.equ I_MEMSET   53
+.equ I_EXIT     54
+.equ I_FADD     55
+.equ I_FSUB     56
+.equ I_FMUL     57
+.equ I_FDIV     58
+.equ I_FNEG     59
+.equ I_FLT      60
+.equ I_FGT      61
+.equ I_FLE      62
+.equ I_FGE      63
+.equ I_FEQ      64
+.equ I_FNE      65
 
-; symbol entry: 8 words
+; symbol entry: 16 words
 .equ SY_HASH    0
 .equ SY_KIND    1
 .equ SY_AUX     2
@@ -189,12 +220,82 @@
 .equ SY_ENTRY   5
 .equ SY_NAME    6
 .equ SY_LEN     7
-.equ SYSZ       8
+.equ SY_TYPE    8
+.equ SY_ARG     9
+.equ SY_OFF     10
+.equ SY_SIZE    11
+.equ SY_CLS     12
+.equ SY_USED    13
+.equ SYSZ       16
 
 .equ SK_GLOBAL  1
 .equ SK_LOCAL   2
 .equ SK_FUNC    3
 .equ SK_BUILTIN 4
+.equ SK_ENUM    5
+.equ SK_LABEL   6
+.equ SK_TYPE    7
+.equ SK_MEMBER  8
+
+; ------------------------------------------------------------------ type kinds
+.equ TY_VOID    0
+.equ TY_INT     1
+.equ TY_FLOAT   2
+.equ TY_PTR     3
+.equ TY_ARRAY   4
+.equ TY_STRUCT  5
+.equ TY_UNION   6
+.equ TY_FUNC    7
+.equ TY_ENUM    8
+
+; type entry fields (8 words)
+.equ TY_KIND    0
+.equ TY_SIZE    1
+.equ TY_ALIGN   2
+.equ TY_BASE    3
+.equ TY_COUNT   4
+.equ TY_MEM     5
+.equ TY_NMEM    6
+.equ TY_SIGN    7
+.equ TYSZ       8
+
+; built-in type ids
+.equ T_VOID     1
+.equ T_CHAR     2
+.equ T_UCHAR    3
+.equ T_SHORT    4
+.equ T_USHORT   5
+.equ T_INT      6
+.equ T_UINT     7
+.equ T_LONG     8
+.equ T_ULONG    9
+.equ T_FLOAT    10
+.equ T_DOUBLE   11
+
+; load/store size codes
+.equ SZ_8S      0
+.equ SZ_8U      1
+.equ SZ_16S     2
+.equ SZ_16U     3
+.equ SZ_32      4
+
+; binary operator kinds
+.equ BIN_ADD    1
+.equ BIN_SUB    2
+.equ BIN_MUL    3
+.equ BIN_DIV    4
+.equ BIN_MOD    5
+.equ BIN_SHL    6
+.equ BIN_SHR    7
+.equ BIN_AND    8
+.equ BIN_OR     9
+.equ BIN_XOR    10
+.equ BIN_LT     11
+.equ BIN_GT     12
+.equ BIN_LE     13
+.equ BIN_GE     14
+.equ BIN_EQ     15
+.equ BIN_NE     16
 
 ; builtin ids
 .equ B_PUTCHAR  1
@@ -202,6 +303,23 @@
 .equ B_PUTS     3
 .equ B_HEX      4
 .equ B_PUTSTR   5
+.equ B_PRINTF   6
+.equ B_MALLOC   7
+.equ B_FREE     8
+.equ B_CALLOC   9
+.equ B_REALLOC  10
+.equ B_STRLEN   11
+.equ B_STRCMP   12
+.equ B_STRNCPY  13
+.equ B_STRCPY   14
+.equ B_STRCAT   15
+.equ B_MEMCMP   16
+.equ B_MEMCPY   17
+.equ B_MEMSET   18
+.equ B_ATOI     19
+.equ B_ABS      20
+.equ B_EXIT     21
+.equ B_STRNCMP  22
 
 ; ------------------------------------------------------------------ compiler state
 ; Kept below word 65536 so ST/LD can use the 16-bit immediate form directly.
@@ -220,6 +338,26 @@
 .equ W_ERRCODE  60012
 .equ W_BRK_N    60013
 .equ W_CNT_N    60014
+.equ W_ETYPE    60015
+.equ W_LTYPE    60016
+.equ W_SCLASS   60017
+.equ W_TYPEN    60018
+.equ W_GLOBP    60019
+.equ W_LOCALB   60020
+.equ W_FRAMEB   60021
+.equ W_FUNCRET  60022
+.equ W_PARAMP   60023
+.equ W_MEMBP    60024
+.equ W_STRUCTID 60025
+.equ W_FUNCNP   60026
+.equ W_FUNCARG  60027
+.equ W_SW_N     60028
+.equ W_SW_TAB   60032      ; 16 entries x 2 words (value, jmp-index)
+.equ W_CASE_N   60029
+.equ W_GOTO_N   60030
+.equ W_DECLNAME 60040      ; saved declarator token: hash, len, text[8]
+.equ W_TY_TMP   60052
+.equ W_PP_N     60053
 .equ W_BRK_TAB  60064      ; 64 entries
 .equ W_CNT_TAB  60128      ; 64 entries
 .equ W_LOOPN    60600
@@ -234,6 +372,60 @@
 .equ W_PSAVE2   60907
 .equ W_FSKIP    60908
 .equ W_FENTRY   60909
+.equ W_TY_KIND  60920
+.equ W_TY_SIZE  60921
+.equ W_TY_ALIGN 60922
+.equ W_TY_BASE  60923
+.equ W_TY_COUNT 60924
+.equ W_TY_MEM   60925
+.equ W_TY_NMEM  60926
+.equ W_TY_SIGN  60927
+.equ W_TY_RET   60928
+.equ W_TY_ID    60929
+.equ W_TSIGN    60930
+.equ W_TSHORT   60931
+.equ W_TLONG    60932
+.equ W_TCHAR    60933
+.equ W_TVOID    60934
+.equ W_TFLOAT   60935
+.equ W_TAGSYM   60936
+.equ W_ARRDIM   60937      ; 8 dimensions
+.equ W_ARRND    60945
+.equ W_SW_PATCH  60946
+.equ W_GOTO_PATCH 60947
+.equ W_GOTO_NAME 60948
+.equ W_PP_ACTIVE 60949
+.equ W_ENUMVAL  60950
+.equ W_SSIZE    60960
+.equ W_SALIGN   60961
+.equ W_SMEM     60962
+.equ W_SNMEM    60963
+.equ W_STAG     60964
+.equ W_SOFF     60965
+.equ W_STYPE    60966
+.equ W_STMP     60967
+.equ W_STRUCTKIND    60968
+.equ W_MSIZE    60969
+.equ W_TSEEN    60970
+.equ W_BRET     60981
+.equ W_HEAP     60982
+.equ W_TAILHALT 60983
+.equ W_PTRV     60984
+.equ W_PTRC     60985
+.equ W_PF_FMT   60986
+.equ W_PF_IDX   60987
+.equ W_PF_ARGC  60988
+.equ W_TKPTR    60990
+.equ W_CASEBASE 60971
+.equ W_DEFSET   60972
+.equ W_DEFTGT   60973
+.equ W_SWDISP   60974
+.equ W_SWFALL   60975
+.equ W_SWTMP    60976
+.equ W_SWNO     60977
+.equ W_SWEND    60978
+.equ W_SWI      60979
+.equ W_TMP3     60980
 .equ W_TKA      60200
 .equ W_TKB      60272
 .equ W_TMP      60400
@@ -270,6 +462,1764 @@
 .equ R_T1       60506
 .equ R_T2       60507
 
+; ================================================================== PREPROCESSOR
+; Minimal C89 line preprocessor: object-like #define/#undef, #ifdef/#ifndef,
+; #if 0|1|defined(X), #else/#elif, #endif; #include and #pragma are skipped.
+; Output is 4 bytes/word at byte address QPOUT; returns its word address.
+.equ QPOUTB    7840000
+.equ QPOUTMAX  100000
+.equ QPNAMEB   7940000
+.equ QPNAMEMAX 16000
+.equ QPLINEB   7956000
+.equ QPLINEMAX 512
+.equ QPIDB     7956512
+.equ QPMACW    1990000
+.equ QPMACMAX  128
+.equ QPCONDW   1991100
+.equ WQ_WP     61200
+.equ WQ_BI     61201
+.equ WQ_OUT    61202
+.equ WQ_ACT    61203
+.equ WQ_DEPTH  61204
+.equ WQ_NAMEP  61205
+.equ WQ_MACN   61206
+.equ WQ_HASH   61207
+.equ WQ_ILEN   61208
+.equ WQ_LEN    61209
+.equ WQ_T0     61210
+.equ WQ_T1     61211
+.equ WQ_T2     61212
+.equ WQ_T3     61213
+.equ WQ_Q      61214
+.equ WQ_ESC    61215
+.equ WQ_CMT    61216
+.equ WQ_P0     61217
+
+qpp_getc:
+LD r2,r0,#WQ_WP
+LD r1,r2,0
+LD r3,r0,#WQ_BI
+qgc_l:
+CMP r3,r0
+JMP[EQ] @qgc_d
+SHR r1,r1,8
+SUB r3,r3,r13
+JMP @qgc_l
+qgc_d:
+MOVI r2,255
+BOOL.8 r1,r1,r2
+LD r2,r0,#WQ_BI
+ADD r2,r2,r13
+MOVI r3,4
+CMP r2,r3
+JMP[LT] @qgc_s
+MOVI r2,0
+LD r3,r0,#WQ_WP
+ADD r3,r3,r13
+ST r3,r0,#WQ_WP
+qgc_s:
+ST r2,r0,#WQ_BI
+RET
+
+qpp_peek:
+LD r2,r0,#WQ_WP
+LD r1,r2,0
+LD r3,r0,#WQ_BI
+qpk_l:
+CMP r3,r0
+JMP[EQ] @qpk_d
+SHR r1,r1,8
+SUB r3,r3,r13
+JMP @qpk_l
+qpk_d:
+MOVI r2,255
+BOOL.8 r1,r1,r2
+RET
+
+qpp_putc:
+LD r2,r0,#WQ_OUT
+LA r3,#QPOUTMAX
+CMP r2,r3
+JMP[LT] @qpw_room
+MOVI r1,80
+JMP @ncc_err
+qpw_room:
+LA r3,#QPOUTB
+ADD r3,r3,r2
+STB r1,r3,0
+ADD r2,r2,r13
+ST r2,r0,#WQ_OUT
+RET
+
+qpp_readline:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r0,r0,#WQ_LEN
+qrl_l:
+CALL @qpp_getc
+CMP r1,r0
+JMP[EQ] @qrl_d
+MOVI r4,10
+CMP r1,r4
+JMP[EQ] @qrl_d
+MOVI r4,13
+CMP r1,r4
+JMP[EQ] @qrl_l
+LD r3,r0,#WQ_LEN
+MOVI r4,510
+CMP r3,r4
+JMP[GE] @qrl_l
+LA r4,#QPLINEB
+ADD r4,r4,r3
+STB r1,r4,0
+ADD r3,r3,r13
+ST r3,r0,#WQ_LEN
+JMP @qrl_l
+qrl_d:
+LD r3,r0,#WQ_LEN
+CMP r3,r0
+JMP[NE] @qrl_have
+; no bytes before the terminator: EOF unless it was an empty line
+CMP r1,r0
+JMP[EQ] @qrl_eof
+qrl_have:
+LA r4,#QPLINEB
+ADD r4,r4,r3
+STB r0,r4,0
+ADDI r1,r3,1
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+qrl_eof:
+MOVI r1,0
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; qpp_streq: r1,r2 byte ptr -> 1/0
+qpp_streq:
+qsq_l:
+LDB r3,r1,0
+LDB r4,r2,0
+CMP r3,r4
+JMP[NE] @qsq_n
+CMP r3,r0
+JMP[EQ] @qsq_y
+ADD r1,r1,r13
+ADD r2,r2,r13
+JMP @qsq_l
+qsq_y:
+MOVI r1,1
+RET
+qsq_n:
+MOVI r1,0
+RET
+
+; qpp_isid0: r3=char -> r1
+qpp_isid0:
+MOVI r4,95
+CMP r3,r4
+JMP[EQ] @qi0_y
+MOVI r4,65
+CMP r3,r4
+JMP[LT] @qi0_l
+MOVI r4,91
+CMP r3,r4
+JMP[LT] @qi0_y
+qi0_l:
+MOVI r4,97
+CMP r3,r4
+JMP[LT] @qi0_n
+MOVI r4,123
+CMP r3,r4
+JMP[LT] @qi0_y
+qi0_n:
+MOVI r1,0
+RET
+qi0_y:
+MOVI r1,1
+RET
+
+; qpp_isidc: r3=char -> r1
+qpp_isidc:
+ST r3,r0,#WQ_T3
+CALL @qpp_isid0
+CMP r1,r0
+JMP[NE] @qic_y
+LD r3,r0,#WQ_T3
+MOVI r4,48
+CMP r3,r4
+JMP[LT] @qic_n
+MOVI r4,58
+CMP r3,r4
+JMP[LT] @qic_y
+qic_n:
+MOVI r1,0
+RET
+qic_y:
+MOVI r1,1
+RET
+
+; qpp_scanid: r2=byte ptr -> r1=len (0 none), r2 advanced, QPID/hash filled
+qpp_scanid:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r2,r0,#WQ_T0
+ST r0,r0,#WQ_ILEN
+ST r0,r0,#WQ_HASH
+qsid_l:
+LD r2,r0,#WQ_T0
+LDB r3,r2,0
+LD r4,r0,#WQ_ILEN
+CMP r4,r0
+JMP[NE] @qsid_c
+CALL @qpp_isid0
+JMP @qsid_t
+qsid_c:
+CALL @qpp_isidc
+qsid_t:
+CMP r1,r0
+JMP[EQ] @qsid_d
+LD r4,r0,#WQ_ILEN
+MOVI r5,250
+CMP r4,r5
+JMP[GE] @qsid_d
+LA r5,#QPIDB
+ADD r5,r5,r4
+STB r3,r5,0
+; FNV-1a
+LD r6,r0,#WQ_HASH
+CMP r6,r0
+JMP[NE] @qsid_hashed
+LA r6,0x811C9DC5
+qsid_hashed:
+LA r7,0x01000193
+BOOL.6 r8,r6,r3
+MUL r8,r8,r7
+ADD r6,r8,r0
+ST r6,r0,#WQ_HASH
+ADD r4,r4,r13
+ST r4,r0,#WQ_ILEN
+LD r2,r0,#WQ_T0
+ADD r2,r2,r13
+ST r2,r0,#WQ_T0
+JMP @qsid_l
+qsid_d:
+LD r4,r0,#WQ_ILEN
+LA r5,#QPIDB
+ADD r5,r5,r4
+STB r0,r5,0
+LD r2,r0,#WQ_T0
+LD r1,r0,#WQ_ILEN
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; qpp_name_store: QPID -> name pool; r1=offset
+qpp_name_store:
+LD r2,r0,#WQ_NAMEP
+ST r2,r0,#WQ_T0
+LA r3,#QPNAMEB
+ADD r3,r3,r2
+LA r4,#QPIDB
+qns_l:
+LDB r5,r4,0
+STB r5,r3,0
+CMP r5,r0
+JMP[EQ] @qns_d
+ADD r4,r4,r13
+ADD r3,r3,r13
+ADD r2,r2,r13
+JMP @qns_l
+qns_d:
+ADD r2,r2,r13
+LA r5,#QPNAMEMAX
+CMP r2,r5
+JMP[LT] @qns_ok
+MOVI r1,84
+CALL @ncc_err
+qns_ok:
+ST r2,r0,#WQ_NAMEP
+LD r1,r0,#WQ_T0
+RET
+
+; qpp_rest_store: r2=src -> r1=(len<<16)|offset, stores into name pool
+qpp_rest_store:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r2,r0,#WQ_T0
+LD r3,r0,#WQ_NAMEP
+ST r3,r0,#WQ_T1
+LA r4,#QPNAMEB
+ADD r4,r4,r3
+MOVI r5,0
+qrs_l:
+LD r2,r0,#WQ_T0
+LDB r6,r2,0
+CMP r6,r0
+JMP[EQ] @qrs_d
+CMP r5,r0
+JMP[NE] @qrs_ok
+; skip leading spaces on the replacement
+MOVI r7,32
+CMP r6,r7
+JMP[EQ] @qrs_next
+MOVI r7,9
+CMP r6,r7
+JMP[EQ] @qrs_next
+qrs_ok:
+STB r6,r4,0
+ADD r4,r4,r13
+ADD r3,r3,r13
+ADD r5,r5,r13
+qrs_next:
+LD r2,r0,#WQ_T0
+ADD r2,r2,r13
+ST r2,r0,#WQ_T0
+JMP @qrs_l
+qrs_d:
+STB r0,r4,0
+ADD r3,r3,r13
+ST r3,r0,#WQ_NAMEP
+LD r1,r0,#WQ_T1
+SHL r5,r5,16
+BOOL.14 r1,r1,r5
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; qpp_find: QPID/hash/len -> r1=entry or 0
+qpp_find:
+ST r15,r14,0
+ADD r14,r14,r13
+MOVI r2,0
+qpf_l:
+LD r3,r0,#WQ_MACN
+CMP r2,r3
+JMP[GE] @qpf_n
+SHL r3,r2,3
+LA r4,#QPMACW
+ADD r4,r4,r3
+LD r5,r4,5
+CMP r5,r0
+JMP[EQ] @qpf_next
+LD r5,r4,0
+LD r6,r0,#WQ_HASH
+CMP r5,r6
+JMP[NE] @qpf_next
+LD r5,r4,1
+LD r6,r0,#WQ_ILEN
+CMP r5,r6
+JMP[NE] @qpf_next
+LA r5,#QPIDB
+LD r6,r4,2
+LA r7,#QPNAMEB
+ADD r6,r6,r7
+qpf_c:
+LDB r7,r5,0
+LDB r8,r6,0
+CMP r7,r8
+JMP[NE] @qpf_next
+CMP r7,r0
+JMP[EQ] @qpf_hit
+ADD r5,r5,r13
+ADD r6,r6,r13
+JMP @qpf_c
+qpf_hit:
+ADD r1,r4,r0
+JMP @qpf_d
+qpf_next:
+ADD r2,r2,r13
+JMP @qpf_l
+qpf_n:
+MOVI r1,0
+qpf_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; conditional stack helpers
+qpp_cond_push: ; r1=cond
+ST r15,r14,0
+ADD r14,r14,r13
+LD r2,r0,#WQ_DEPTH
+MOVI r3,32
+CMP r2,r3
+JMP[LT] @qcp_room
+MOVI r1,82
+CALL @ncc_err
+qcp_room:
+SHL r2,r2,1
+ADD r2,r2,r2
+LA r3,#QPCONDW
+ADD r3,r3,r2
+LD r4,r0,#WQ_ACT
+ST r4,r3,0
+ST r1,r3,1
+ST r1,r3,2
+BOOL.8 r4,r4,r1
+ST r4,r0,#WQ_ACT
+LD r2,r0,#WQ_DEPTH
+ADD r2,r2,r13
+ST r2,r0,#WQ_DEPTH
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+qpp_cond_else:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r2,r0,#WQ_DEPTH
+CMP r2,r0
+JMP[EQ] @qce_d
+SUB r2,r2,r13
+SHL r2,r2,1
+ADD r2,r2,r2
+LA r3,#QPCONDW
+ADD r3,r3,r2
+LD r4,r3,0
+LD r5,r3,2
+CMP r5,r0
+JMP[NE] @qce_off
+MOVI r6,1
+BOOL.8 r4,r4,r6
+ST r4,r0,#WQ_ACT
+MOVI r4,1
+ST r4,r3,2
+JMP @qce_d
+qce_off:
+ST r0,r0,#WQ_ACT
+qce_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+qpp_cond_pop:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r2,r0,#WQ_DEPTH
+CMP r2,r0
+JMP[EQ] @qpop_d
+SUB r2,r2,r13
+ST r2,r0,#WQ_DEPTH
+SHL r2,r2,1
+ADD r2,r2,r2
+LA r3,#QPCONDW
+ADD r3,r3,r2
+LD r1,r3,0
+ST r1,r0,#WQ_ACT
+qpop_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; qpp_cond_eval: r1=byte ptr to expression -> r1=0/1 (0/1/defined)
+qpp_cond_eval:
+ST r15,r14,0
+ADD r14,r14,r13
+qcev_ws:
+LDB r3,r1,0
+MOVI r4,32
+CMP r3,r4
+JMP[NE] @qcev_t
+ADD r1,r1,r13
+JMP @qcev_ws
+qcev_t:
+MOVI r4,49
+CMP r3,r4
+JMP[EQ] @qcev_one
+MOVI r4,48
+CMP r3,r4
+JMP[EQ] @qcev_zero
+MOVI r4,100
+CMP r3,r4
+JMP[NE] @qcev_zero
+; defined(...)
+ADD r1,r1,r13
+ADD r1,r1,r13
+ADD r1,r1,r13
+ADD r1,r1,r13
+ADD r1,r1,r13
+ADD r1,r1,r13
+ADD r1,r1,r13
+qcev_dws:
+LDB r3,r1,0
+MOVI r4,32
+CMP r3,r4
+JMP[NE] @qcev_dp
+ADD r1,r1,r13
+JMP @qcev_dws
+qcev_dp:
+MOVI r4,40
+CMP r3,r4
+JMP[NE] @qcev_dn
+ADD r1,r1,r13
+qcev_dn:
+ST r1,r0,#WQ_T0
+MOVI r1,#SK_TYPE
+MOVI r2,0
+; use a generic scan on text with qpp_scanid
+LD r2,r0,#WQ_T0
+CALL @qpp_scanid
+CMP r1,r0
+JMP[EQ] @qcev_zero
+CALL @qpp_find
+CMP r1,r0
+JMP[EQ] @qcev_zero
+MOVI r1,1
+JMP @qcev_d
+qcev_one:
+MOVI r1,1
+JMP @qcev_d
+qcev_zero:
+MOVI r1,0
+qcev_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; qpp_define: parse rest after directive name (WQ_T1)
+qpp_define:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r2,r0,#WQ_T1
+qdf_ws:
+LDB r3,r2,0
+MOVI r4,32
+CMP r3,r4
+JMP[NE] @qdf_n
+ADD r2,r2,r13
+JMP @qdf_ws
+qdf_n:
+CALL @qpp_scanid
+CMP r1,r0
+JMP[EQ] @qdf_d
+LD r2,r0,#WQ_T1
+LD r3,r0,#WQ_ILEN
+ADD r2,r2,r3
+; function-like macro: skip it
+LDB r3,r2,0
+MOVI r4,40
+CMP r3,r4
+JMP[EQ] @qdf_d
+CALL @qpp_name_store
+ST r1,r0,#WQ_T2
+LD r2,r0,#WQ_T1
+LD r3,r0,#WQ_ILEN
+ADD r2,r2,r3
+CALL @qpp_rest_store
+ST r1,r0,#WQ_T3
+LD r2,r0,#WQ_MACN
+MOVI r3,#QPMACMAX
+CMP r2,r3
+JMP[LT] @qdf_room
+MOVI r1,81
+CALL @ncc_err
+qdf_room:
+SHL r2,r2,3
+LA r3,#QPMACW
+ADD r3,r3,r2
+LD r4,r0,#WQ_HASH
+ST r4,r3,0
+LD r4,r0,#WQ_ILEN
+ST r4,r3,1
+LD r4,r0,#WQ_T2
+ST r4,r3,2
+LD r4,r0,#WQ_T3
+SHR r5,r4,16
+ST r5,r3,3
+MOVI r5,0xFFFF
+BOOL.8 r4,r4,r5
+ST r4,r3,4
+MOVI r5,1
+ST r5,r3,5
+ST r0,r3,6
+ST r0,r3,7
+LD r2,r0,#WQ_MACN
+ADD r2,r2,r13
+ST r2,r0,#WQ_MACN
+qdf_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+qpp_undef:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r2,r0,#WQ_T1
+CALL @qpp_scanid
+CMP r1,r0
+JMP[EQ] @qud_d
+CALL @qpp_find
+CMP r1,r0
+JMP[EQ] @qud_d
+ST r0,r1,5
+qud_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; qpp_putid: output QPID
+qpp_putid:
+ST r15,r14,0
+ADD r14,r14,r13
+LA r2,#QPIDB
+qpi_l:
+LDB r3,r2,0
+CMP r3,r0
+JMP[EQ] @qpi_d
+ADD r1,r3,r0
+CALL @qpp_putc
+ADD r2,r2,r13
+JMP @qpi_l
+qpi_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; qpp_emit_rep: entry r1 -> output replacement
+qpp_emit_rep:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r2,r1,3
+LD r3,r1,4
+LA r4,#QPNAMEB
+ADD r4,r4,r3
+qer_l:
+CMP r2,r0
+JMP[EQ] @qer_d
+LDB r1,r4,0
+ST r2,r0,#WQ_T2
+ST r4,r0,#WQ_T0
+CALL @qpp_putc
+LD r2,r0,#WQ_T2
+LD r4,r0,#WQ_T0
+ADD r4,r4,r13
+SUB r2,r2,r13
+JMP @qer_l
+qer_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; qpp_expand: expand QPLINE to output
+qpp_expand:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r0,r0,#WQ_Q
+ST r0,r0,#WQ_ESC
+qex_l:
+LD r2,r0,#WQ_P0
+LA r3,#QPLINEB
+ADD r2,r3,r2
+LDB r3,r2,0
+CMP r3,r0
+JMP[EQ] @qex_d
+; block comment state
+LD r4,r0,#WQ_CMT
+CMP r4,r0
+JMP[EQ] @qex_nc
+; inside block comment: look for */
+MOVI r5,42
+CMP r3,r5
+JMP[NE] @qex_cout
+LA r4,#QPLINEB
+LD r5,r0,#WQ_P0
+ADD r4,r4,r5
+ADDI r4,r4,1
+LDB r6,r4,0
+MOVI r7,47
+CMP r6,r7
+JMP[NE] @qex_cout
+; consumed */
+ADD r5,r5,r13
+ADD r5,r5,r13
+ST r5,r0,#WQ_P0
+ST r0,r0,#WQ_CMT
+JMP @qex_l
+qex_cout:
+ADD r1,r3,r0
+CALL @qpp_putc
+LD r2,r0,#WQ_P0
+ADD r2,r2,r13
+ST r2,r0,#WQ_P0
+JMP @qex_l
+qex_nc:
+; quoted?
+LD r4,r0,#WQ_Q
+CMP r4,r0
+JMP[EQ] @qex_unq
+LD r5,r0,#WQ_ESC
+CMP r5,r0
+JMP[EQ] @qex_qesc
+ST r0,r0,#WQ_ESC
+JMP @qex_qout
+qex_qesc:
+MOVI r5,92
+CMP r3,r5
+JMP[NE] @qex_qclose
+MOVI r5,1
+ST r5,r0,#WQ_ESC
+JMP @qex_qout
+qex_qclose:
+CMP r3,r4
+JMP[NE] @qex_qout
+ST r0,r0,#WQ_Q
+qex_qout:
+ADD r1,r3,r0
+CALL @qpp_putc
+LD r2,r0,#WQ_P0
+ADD r2,r2,r13
+ST r2,r0,#WQ_P0
+JMP @qex_l
+qex_unq:
+MOVI r4,34
+CMP r3,r4
+JMP[EQ] @qex_qset
+MOVI r4,39
+CMP r3,r4
+JMP[EQ] @qex_qset
+MOVI r4,47
+CMP r3,r4
+JMP[NE] @qex_id
+; comment start?
+LA r4,#QPLINEB
+LD r5,r0,#WQ_P0
+ADD r4,r4,r5
+ADDI r4,r4,1
+LDB r6,r4,0
+MOVI r7,47
+CMP r6,r7
+JMP[EQ] @qex_linecmt
+MOVI r7,42
+CMP r6,r7
+JMP[EQ] @qex_blkcmt
+JMP @qex_id
+qex_linecmt:
+; copy the rest verbatim
+LD r2,r0,#WQ_P0
+LA r4,#QPLINEB
+ADD r2,r4,r2
+qex_lc:
+LDB r3,r2,0
+CMP r3,r0
+JMP[EQ] @qex_d
+ADD r1,r3,r0
+CALL @qpp_putc
+ADD r2,r2,r13
+JMP @qex_lc
+qex_blkcmt:
+MOVI r1,1
+ST r1,r0,#WQ_CMT
+JMP @qex_qout
+qex_qset:
+ST r3,r0,#WQ_Q
+JMP @qex_qout
+qex_id:
+CALL @qpp_isid0
+CMP r1,r0
+JMP[EQ] @qex_ch
+LD r2,r0,#WQ_P0
+LA r4,#QPLINEB
+ADD r2,r4,r2
+CALL @qpp_scanid
+CMP r1,r0
+JMP[EQ] @qex_d
+LD r2,r0,#WQ_ILEN
+LD r3,r0,#WQ_P0
+ADD r3,r3,r2
+ST r3,r0,#WQ_P0
+CALL @qpp_find
+CMP r1,r0
+JMP[EQ] @qex_keep
+CALL @qpp_emit_rep
+JMP @qex_l
+qex_keep:
+CALL @qpp_putid
+JMP @qex_l
+qex_ch:
+LD r2,r0,#WQ_P0
+LA r4,#QPLINEB
+ADD r2,r4,r2
+LDB r3,r2,0
+ADD r1,r3,r0
+CALL @qpp_putc
+LD r2,r0,#WQ_P0
+ADD r2,r2,r13
+ST r2,r0,#WQ_P0
+JMP @qex_l
+qex_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; qpp_directive: line at QPLINE, after leading '#'
+qpp_directive:
+ST r15,r14,0
+ADD r14,r14,r13
+LA r2,#QPLINEB
+LD r3,r0,#WQ_P0
+ADD r2,r2,r3
+qdv_ws:
+LDB r3,r2,0
+MOVI r4,32
+CMP r3,r4
+JMP[EQ] @qdv_ws2
+MOVI r4,9
+CMP r3,r4
+JMP[NE] @qdv_name
+qdv_ws2:
+ADD r2,r2,r13
+JMP @qdv_ws
+qdv_name:
+ST r2,r0,#WQ_T1
+CALL @qpp_scanid
+CMP r1,r0
+JMP[EQ] @qdv_d
+ST r2,r0,#WQ_T1
+CALL @qpp_name_store
+ST r1,r0,#WQ_T2
+LA r1,#QPNAMEB
+LD r2,r0,#WQ_T2
+ADD r1,r1,r2
+LA r2,@qds_define
+CALL @qpp_streq
+CMP r1,r0
+JMP[NE] @qdv_define
+LA r1,#QPNAMEB
+LD r2,r0,#WQ_T2
+ADD r1,r1,r2
+LA r2,@qds_undef
+CALL @qpp_streq
+CMP r1,r0
+JMP[NE] @qdv_undef
+LA r1,#QPNAMEB
+LD r2,r0,#WQ_T2
+ADD r1,r1,r2
+LA r2,@qds_ifdef
+CALL @qpp_streq
+CMP r1,r0
+JMP[NE] @qdv_ifdef
+LA r1,#QPNAMEB
+LD r2,r0,#WQ_T2
+ADD r1,r1,r2
+LA r2,@qds_ifndef
+CALL @qpp_streq
+CMP r1,r0
+JMP[NE] @qdv_ifndef
+LA r1,#QPNAMEB
+LD r2,r0,#WQ_T2
+ADD r1,r1,r2
+LA r2,@qds_if
+CALL @qpp_streq
+CMP r1,r0
+JMP[NE] @qdv_if
+LA r1,#QPNAMEB
+LD r2,r0,#WQ_T2
+ADD r1,r1,r2
+LA r2,@qds_else
+CALL @qpp_streq
+CMP r1,r0
+JMP[NE] @qdv_else
+LA r1,#QPNAMEB
+LD r2,r0,#WQ_T2
+ADD r1,r1,r2
+LA r2,@qds_elif
+CALL @qpp_streq
+CMP r1,r0
+JMP[NE] @qdv_elif
+LA r1,#QPNAMEB
+LD r2,r0,#WQ_T2
+ADD r1,r1,r2
+LA r2,@qds_endif
+CALL @qpp_streq
+CMP r1,r0
+JMP[NE] @qdv_endif
+JMP @qdv_d
+qdv_define:
+LD r1,r0,#WQ_ACT
+CMP r1,r0
+JMP[EQ] @qdv_d
+CALL @qpp_define
+JMP @qdv_d
+qdv_undef:
+LD r1,r0,#WQ_ACT
+CMP r1,r0
+JMP[EQ] @qdv_d
+CALL @qpp_undef
+JMP @qdv_d
+qdv_ifdef:
+LD r2,r0,#WQ_T1
+CALL @qpp_cond_name
+JMP @qdv_d
+qdv_ifndef:
+LD r2,r0,#WQ_T1
+MOVI r3,1
+CALL @qpp_cond_name_inv
+JMP @qdv_d
+qdv_if:
+LD r1,r0,#WQ_ACT
+CMP r1,r0
+JMP[EQ] @qdv_ifoff
+LD r1,r0,#WQ_T1
+CALL @qpp_cond_eval
+CALL @qpp_cond_push
+JMP @qdv_d
+qdv_ifoff:
+MOVI r1,0
+CALL @qpp_cond_push
+JMP @qdv_d
+qdv_else:
+CALL @qpp_cond_else
+JMP @qdv_d
+qdv_elif:
+LD r1,r0,#WQ_T1
+CALL @qpp_cond_eval
+CALL @qpp_cond_elif
+JMP @qdv_d
+qdv_endif:
+CALL @qpp_cond_pop
+qdv_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+qpp_cond_name:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r2,r0,#WQ_T0
+ST r0,r0,#WQ_T1
+qcn_l:
+LD r2,r0,#WQ_T0
+LDB r3,r2,0
+MOVI r4,32
+CMP r3,r4
+JMP[EQ] @qcn_skip
+MOVI r4,9
+CMP r3,r4
+JMP[NE] @qcn_s
+qcn_skip:
+ADD r2,r2,r13
+ST r2,r0,#WQ_T0
+JMP @qcn_l
+qcn_s:
+CALL @qpp_scanid
+CMP r1,r0
+JMP[EQ] @qcn_zero
+CALL @qpp_find
+CMP r1,r0
+JMP[EQ] @qcn_zero
+MOVI r1,1
+JMP @qcn_go
+qcn_zero:
+MOVI r1,0
+qcn_go:
+CALL @qpp_cond_push
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+qpp_cond_name_inv:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r2,r0,#WQ_T0
+qci_l:
+LD r2,r0,#WQ_T0
+LDB r3,r2,0
+MOVI r4,32
+CMP r3,r4
+JMP[EQ] @qci_skip
+MOVI r4,9
+CMP r3,r4
+JMP[NE] @qci_s
+qci_skip:
+ADD r2,r2,r13
+ST r2,r0,#WQ_T0
+JMP @qci_l
+qci_s:
+CALL @qpp_scanid
+CMP r1,r0
+JMP[EQ] @qci_zero
+CALL @qpp_find
+CMP r1,r0
+JMP[EQ] @qci_zero
+MOVI r1,1
+JMP @qci_go
+qci_zero:
+MOVI r1,0
+qci_go:
+MOVI r2,1
+SUB r1,r2,r1
+CALL @qpp_cond_push
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; qpp_cond_elif: r1=cond (only if not taken)
+qpp_cond_elif:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#WQ_T2
+LD r2,r0,#WQ_DEPTH
+CMP r2,r0
+JMP[EQ] @qel_d
+SUB r2,r2,r13
+SHL r2,r2,1
+ADD r2,r2,r2
+LA r3,#QPCONDW
+ADD r3,r3,r2
+LD r4,r3,2
+CMP r4,r0
+JMP[NE] @qel_off
+LD r5,r3,0
+LD r1,r0,#WQ_T2
+BOOL.8 r5,r5,r1
+ST r5,r0,#WQ_ACT
+ST r1,r3,2
+JMP @qel_d
+qel_off:
+ST r0,r0,#WQ_ACT
+qel_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; qpp_run: r1=source word ptr -> r1=output word ptr
+qpp_run:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#WQ_WP
+ST r0,r0,#WQ_BI
+ST r0,r0,#WQ_OUT
+ST r0,r0,#WQ_DEPTH
+ST r0,r0,#WQ_NAMEP
+ST r0,r0,#WQ_MACN
+ST r0,r0,#WQ_CMT
+MOVI r1,1
+ST r1,r0,#WQ_ACT
+qpr_l:
+CALL @qpp_readline
+CMP r1,r0
+JMP[EQ] @qpr_done
+; find first non-space
+ST r0,r0,#WQ_P0
+qpr_ws:
+LA r2,#QPLINEB
+LD r3,r0,#WQ_P0
+ADD r2,r2,r3
+LDB r4,r2,0
+MOVI r5,32
+CMP r4,r5
+JMP[EQ] @qpr_wsn
+MOVI r5,9
+CMP r4,r5
+JMP[NE] @qpr_chk
+qpr_wsn:
+ADD r3,r3,r13
+ST r3,r0,#WQ_P0
+JMP @qpr_ws
+qpr_chk:
+MOVI r5,35
+CMP r4,r5
+JMP[NE] @qpr_text
+ADD r3,r3,r13
+ST r3,r0,#WQ_P0
+CALL @qpp_directive
+JMP @qpr_l
+qpr_text:
+LD r1,r0,#WQ_ACT
+CMP r1,r0
+JMP[EQ] @qpr_nl
+CALL @qpp_expand
+qpr_nl:
+MOVI r1,10
+CALL @qpp_putc
+JMP @qpr_l
+qpr_done:
+MOVI r1,0
+CALL @qpp_putc
+LA r1,#QPOUTB
+SHR r1,r1,2
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+qds_define:
+.str "define"
+qds_undef:
+.str "undef"
+qds_ifdef:
+.str "ifdef"
+qds_ifndef:
+.str "ifndef"
+qds_if:
+.str "if"
+qds_else:
+.str "else"
+qds_elif:
+.str "elif"
+qds_endif:
+.str "endif"
+
+; ================================================================== MINI PREPROCESSOR
+; Lexer-integrated C89 preprocessor subset:
+;   #define NAME number   (object-like, numeric replacement)
+;   #undef NAME
+;   #ifdef / #ifndef / #if 0|1|defined(NAME) / #else / #elif / #endif
+;   #include is skipped (the runtime library is built in)
+; Macro values are delivered as integer tokens by scan_ident.
+.equ Q2MAC      2000000
+.equ Q2MACMAX   256
+.equ Q2COND     2001024
+.equ Q2BUF      8020000
+.equ W_Q2N      61300
+.equ W_Q2SKIP   61301
+.equ W_Q2DEPTH  61302
+.equ W_Q2HASH   61303
+.equ W_Q2LEN    61304
+.equ W_Q2VAL    61305
+.equ W_Q2T0     61306
+.equ W_Q2SIGN   61307
+.equ W_Q2PTR    61308
+
+; q2_skipsp: consume spaces and tabs
+q2_skipsp:
+ST r15,r14,0
+ADD r14,r14,r13
+q2ss_l:
+CALL @lx_peek
+MOVI r2,32
+CMP r1,r2
+JMP[EQ] @q2ss_c
+MOVI r2,9
+CMP r1,r2
+JMP[NE] @q2ss_d
+q2ss_c:
+CALL @lx_get
+JMP @q2ss_l
+q2ss_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; q2_eat: consume the rest of the line (including the newline)
+q2_eat:
+ST r15,r14,0
+ADD r14,r14,r13
+q2eat_l:
+CALL @lx_peek
+CMP r1,r0
+JMP[EQ] @q2eat_d
+MOVI r2,10
+CMP r1,r2
+JMP[EQ] @q2eat_nl
+CALL @lx_get
+JMP @q2eat_l
+q2eat_nl:
+CALL @lx_get
+q2eat_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; q2_word: scan identifier into Q2BUF; W_Q2HASH/W_Q2LEN set; r1=len
+q2_word:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r0,r0,#W_Q2LEN
+ST r0,r0,#W_Q2HASH
+LA r2,#Q2BUF
+ST r2,r0,#W_Q2T0
+q2w_l:
+CALL @lx_peek
+CMP r1,r0
+JMP[EQ] @q2w_d
+MOVI r2,32
+CMP r1,r2
+JMP[EQ] @q2w_d
+MOVI r2,9
+CMP r1,r2
+JMP[EQ] @q2w_d
+MOVI r2,10
+CMP r1,r2
+JMP[EQ] @q2w_d
+LD r3,r0,#W_Q2LEN
+CMP r3,r0
+JMP[NE] @q2w_c
+CALL @ident0
+JMP @q2w_t
+q2w_c:
+CALL @identc
+q2w_t:
+CMP r1,r0
+JMP[EQ] @q2w_d
+CALL @lx_get
+ST r1,r0,#L_CH
+LD r3,r0,#W_Q2LEN
+MOVI r4,120
+CMP r3,r4
+JMP[GE] @q2w_next
+LD r5,r0,#W_Q2T0
+ADD r5,r5,r3
+STB r1,r5,0
+q2w_next:
+LD r5,r0,#W_Q2HASH
+CMP r5,r0
+JMP[NE] @q2w_hashed
+LA r5,0x811C9DC5
+q2w_hashed:
+LA r6,0x01000193
+ST r1,r0,#L_CH
+BOOL.6 r7,r5,r1
+MUL r7,r7,r6
+ADD r5,r7,r0
+ST r5,r0,#W_Q2HASH
+ADD r3,r3,r13
+ST r3,r0,#W_Q2LEN
+JMP @q2w_l
+q2w_d:
+LD r3,r0,#W_Q2LEN
+LD r5,r0,#W_Q2T0
+ADD r5,r5,r3
+STB r0,r5,0
+ADD r1,r3,r0
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; q2_find: hash/len in W_Q2* -> r1=entry addr or 0
+q2_find:
+ST r15,r14,0
+ADD r14,r14,r13
+MOVI r2,0
+q2f_l:
+LD r3,r0,#W_Q2N
+CMP r2,r3
+JMP[GE] @q2f_n
+SHL r3,r2,2
+LA r4,#Q2MAC
+ADD r4,r4,r3
+LD r5,r4,0
+LD r6,r0,#W_Q2HASH
+CMP r5,r6
+JMP[NE] @q2f_next
+LD r5,r4,1
+LD r6,r0,#W_Q2LEN
+CMP r5,r6
+JMP[NE] @q2f_next
+ADD r1,r4,r0
+JMP @q2f_d
+q2f_next:
+ADD r2,r2,r13
+JMP @q2f_l
+q2f_n:
+MOVI r1,0
+q2f_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; q2_macro: r1=hash r2=len -> r1=value, r2=1 if an active macro
+q2_macro:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_Q2HASH
+ST r2,r0,#W_Q2LEN
+CALL @q2_find
+CMP r1,r0
+JMP[EQ] @q2m_n
+LD r2,r1,3
+CMP r2,r0
+JMP[EQ] @q2m_n
+LD r1,r1,2
+MOVI r2,1
+JMP @q2m_d
+q2m_n:
+MOVI r1,0
+MOVI r2,0
+q2m_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; q2_bufeq: r1=C string -> 1 if Q2BUF equals it
+q2_bufeq:
+SHL r1,r1,2
+LA r2,#Q2BUF
+q2be_l:
+LDB r3,r1,0
+LDB r4,r2,0
+CMP r3,r4
+JMP[NE] @q2be_n
+CMP r3,r0
+JMP[EQ] @q2be_y
+ADD r1,r1,r13
+ADD r2,r2,r13
+JMP @q2be_l
+q2be_y:
+MOVI r1,1
+RET
+q2be_n:
+MOVI r1,0
+RET
+
+; q2_num: parse an integer constant from the source -> W_Q2VAL
+q2_num:
+ST r15,r14,0
+ADD r14,r14,r13
+MOVI r1,1
+ST r1,r0,#W_Q2SIGN
+CALL @q2_skipsp
+CALL @lx_peek
+MOVI r2,45
+CMP r1,r2
+JMP[NE] @q2n_plus
+MOVI r2,-1
+ST r2,r0,#W_Q2SIGN
+CALL @lx_get
+JMP @q2n_go
+q2n_plus:
+MOVI r2,43
+CMP r1,r2
+JMP[NE] @q2n_go
+CALL @lx_get
+q2n_go:
+CALL @q2_skipsp
+MOVI r2,10
+ST r2,r0,#W_Q2T0
+CALL @lx_peek
+MOVI r2,48
+CMP r1,r2
+JMP[NE] @q2n_loop
+MOVI r10,1
+CALL @peekn
+MOVI r2,120
+CMP r1,r2
+JMP[EQ] @q2n_hex
+MOVI r2,88
+CMP r1,r2
+JMP[NE] @q2n_loop
+q2n_hex:
+MOVI r2,16
+ST r2,r0,#W_Q2T0
+CALL @lx_get
+CALL @lx_get
+q2n_loop:
+MOVI r1,0
+ST r1,r0,#W_Q2HASH
+q2n_l:
+CALL @lx_peek
+LD r2,r0,#W_Q2T0
+CALL @digitv
+MOVI r2,255
+CMP r1,r2
+JMP[EQ] @q2n_done
+ST r1,r0,#W_Q2LEN
+CALL @lx_get
+LD r2,r0,#W_Q2HASH
+LD r3,r0,#W_Q2T0
+MUL r2,r2,r3
+LD r3,r0,#W_Q2LEN
+ADD r2,r2,r3
+ST r2,r0,#W_Q2HASH
+JMP @q2n_l
+q2n_done:
+LD r1,r0,#W_Q2HASH
+LD r2,r0,#W_Q2SIGN
+CMP r2,r0
+JMP[GE] @q2n_store
+SUB r1,r0,r1
+q2n_store:
+ST r1,r0,#W_Q2VAL
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; q2_defined: after optional spaces and "defined"; sets r1=0/1
+q2_defined:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @q2_skipsp
+CALL @lx_peek
+MOVI r2,40
+CMP r1,r2
+JMP[NE] @q2df_word
+CALL @lx_get
+q2df_word:
+CALL @q2_word
+CALL @q2_find
+CMP r1,r0
+JMP[EQ] @q2df_n
+LD r2,r1,3
+CMP r2,r0
+JMP[EQ] @q2df_n
+MOVI r1,1
+JMP @q2df_d
+q2df_n:
+MOVI r1,0
+q2df_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; q2_cond_push: r1=condition
+q2_cond_push:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_Q2T0
+LD r2,r0,#W_Q2DEPTH
+MOVI r3,16
+CMP r2,r3
+JMP[LT] @q2cp_room
+MOVI r1,82
+CALL @ncc_err
+q2cp_room:
+SHL r2,r2,1
+ADD r2,r2,r2
+LA r3,#Q2COND
+ADD r3,r3,r2
+LD r4,r0,#W_Q2SKIP
+ST r4,r3,0
+ADD r7,r4,r0
+LD r4,r0,#W_Q2T0
+ST r4,r3,1
+ST r4,r3,2
+MOVI r5,1
+SUB r5,r5,r4
+; skip = parent | !cond
+BOOL.14 r6,r7,r5
+ST r6,r0,#W_Q2SKIP
+LD r2,r0,#W_Q2DEPTH
+ADD r2,r2,r13
+ST r2,r0,#W_Q2DEPTH
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+q2_cond_else:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r2,r0,#W_Q2DEPTH
+CMP r2,r0
+JMP[EQ] @q2ce_d
+SUB r2,r2,r13
+SHL r2,r2,1
+ADD r2,r2,r2
+LA r3,#Q2COND
+ADD r3,r3,r2
+LD r4,r3,2
+CMP r4,r0
+JMP[NE] @q2ce_off
+LD r5,r3,0
+ST r5,r0,#W_Q2SKIP
+MOVI r4,1
+ST r4,r3,2
+JMP @q2ce_d
+q2ce_off:
+MOVI r5,1
+ST r5,r0,#W_Q2SKIP
+q2ce_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; q2_cond_elif: r1=condition
+q2_cond_elif:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_Q2T0
+LD r2,r0,#W_Q2DEPTH
+CMP r2,r0
+JMP[EQ] @q2ci_d
+SUB r2,r2,r13
+SHL r2,r2,1
+ADD r2,r2,r2
+LA r3,#Q2COND
+ADD r3,r3,r2
+LD r4,r3,2
+CMP r4,r0
+JMP[NE] @q2ci_off
+LD r5,r3,0
+LD r1,r0,#W_Q2T0
+MOVI r6,1
+SUB r6,r6,r1
+BOOL.14 r5,r5,r6
+ST r5,r0,#W_Q2SKIP
+ST r1,r3,2
+JMP @q2ci_d
+q2ci_off:
+MOVI r5,1
+ST r5,r0,#W_Q2SKIP
+q2ci_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+q2_cond_pop:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r2,r0,#W_Q2DEPTH
+CMP r2,r0
+JMP[EQ] @q2cx_d
+SUB r2,r2,r13
+ST r2,r0,#W_Q2DEPTH
+SHL r2,r2,1
+ADD r2,r2,r2
+LA r3,#Q2COND
+ADD r3,r3,r2
+LD r1,r3,0
+ST r1,r0,#W_Q2SKIP
+q2cx_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; q2_directive: called after '#'; processes one directive line
+q2_directive:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @q2_skipsp
+CALL @q2_word
+CMP r1,r0
+JMP[EQ] @q2dir_eat
+LA r1,@q2s_define
+CALL @q2_bufeq
+CMP r1,r0
+JMP[NE] @q2dir_define
+LA r1,@q2s_undef
+CALL @q2_bufeq
+CMP r1,r0
+JMP[NE] @q2dir_undef
+LA r1,@q2s_ifdef
+CALL @q2_bufeq
+CMP r1,r0
+JMP[NE] @q2dir_ifdef
+LA r1,@q2s_ifndef
+CALL @q2_bufeq
+CMP r1,r0
+JMP[NE] @q2dir_ifndef
+LA r1,@q2s_if
+CALL @q2_bufeq
+CMP r1,r0
+JMP[NE] @q2dir_if
+LA r1,@q2s_elif
+CALL @q2_bufeq
+CMP r1,r0
+JMP[NE] @q2dir_elif
+LA r1,@q2s_else
+CALL @q2_bufeq
+CMP r1,r0
+JMP[NE] @q2dir_else
+LA r1,@q2s_endif
+CALL @q2_bufeq
+CMP r1,r0
+JMP[NE] @q2dir_endif
+JMP @q2dir_eat
+q2dir_define:
+LD r1,r0,#W_Q2SKIP
+CMP r1,r0
+JMP[NE] @q2dir_eat
+CALL @q2_skipsp
+CALL @q2_word
+CMP r1,r0
+JMP[EQ] @q2dir_eat
+LD r1,r0,#W_Q2HASH
+ST r1,r0,#W_Q2HASH
+LD r2,r0,#W_Q2LEN
+ST r2,r0,#W_Q2T0
+CALL @q2_find
+CMP r1,r0
+JMP[NE] @q2dd_have
+LD r1,r0,#W_Q2N
+MOVI r2,#Q2MACMAX
+CMP r1,r2
+JMP[LT] @q2dd_room
+MOVI r1,85
+CALL @ncc_err
+q2dd_room:
+SHL r2,r1,2
+LA r3,#Q2MAC
+ADD r3,r3,r2
+LD r2,r0,#W_Q2HASH
+ST r2,r3,0
+LD r2,r0,#W_Q2T0
+ST r2,r3,1
+ADD r1,r1,r13
+ST r1,r0,#W_Q2N
+ST r3,r0,#W_Q2PTR
+JMP @q2dd_val
+q2dd_have:
+ST r1,r0,#W_Q2PTR
+q2dd_val:
+CALL @q2_num
+LD r1,r0,#W_Q2VAL
+LD r2,r0,#W_Q2PTR
+ST r1,r2,2
+MOVI r1,1
+ST r1,r2,3
+JMP @q2dir_eat
+q2dir_undef:
+LD r1,r0,#W_Q2SKIP
+CMP r1,r0
+JMP[NE] @q2dir_eat
+CALL @q2_skipsp
+CALL @q2_word
+CALL @q2_find
+CMP r1,r0
+JMP[EQ] @q2dir_eat
+ST r0,r1,3
+JMP @q2dir_eat
+q2dir_ifdef:
+CALL @q2_skipsp
+CALL @q2_word
+CALL @q2_find
+CMP r1,r0
+JMP[EQ] @q2di_zero
+LD r2,r1,3
+CMP r2,r0
+JMP[EQ] @q2di_zero
+MOVI r1,1
+JMP @q2di_push
+q2di_zero:
+MOVI r1,0
+q2di_push:
+CALL @q2_cond_push
+JMP @q2dir_eat
+q2dir_ifndef:
+CALL @q2_skipsp
+CALL @q2_word
+CALL @q2_find
+CMP r1,r0
+JMP[EQ] @q2dn_zero
+LD r2,r1,3
+CMP r2,r0
+JMP[EQ] @q2dn_zero
+MOVI r1,1
+JMP @q2dn_inv
+q2dn_zero:
+MOVI r1,0
+q2dn_inv:
+MOVI r2,1
+SUB r1,r2,r1
+CALL @q2_cond_push
+JMP @q2dir_eat
+q2dir_if:
+LD r1,r0,#W_Q2SKIP
+CMP r1,r0
+JMP[EQ] @q2dif_eval
+; still track nesting
+MOVI r1,0
+CALL @q2_cond_push
+JMP @q2dir_eat
+q2dif_eval:
+CALL @q2_skipsp
+CALL @lx_peek
+MOVI r2,100
+CMP r1,r2
+JMP[NE] @q2dif_num
+; skip "defined"
+CALL @lx_get
+CALL @lx_get
+CALL @lx_get
+CALL @lx_get
+CALL @lx_get
+CALL @lx_get
+CALL @lx_get
+CALL @q2_defined
+JMP @q2dif_push
+q2dif_num:
+MOVI r2,48
+CMP r1,r2
+JMP[EQ] @q2dif_zero
+MOVI r2,49
+CMP r1,r2
+JMP[EQ] @q2dif_one
+; #if NAME -> defined(NAME)
+CALL @q2_word
+CALL @q2_find
+CMP r1,r0
+JMP[EQ] @q2dif_zero
+LD r2,r1,3
+CMP r2,r0
+JMP[EQ] @q2dif_zero
+MOVI r1,1
+JMP @q2dif_push
+q2dif_zero:
+MOVI r1,0
+JMP @q2dif_push
+q2dif_one:
+MOVI r1,1
+q2dif_push:
+CALL @q2_cond_push
+JMP @q2dir_eat
+q2dir_elif:
+CALL @q2_skipsp
+CALL @lx_peek
+MOVI r2,100
+CMP r1,r2
+JMP[NE] @q2del_num
+CALL @lx_get
+CALL @lx_get
+CALL @lx_get
+CALL @lx_get
+CALL @lx_get
+CALL @lx_get
+CALL @lx_get
+CALL @q2_defined
+JMP @q2del_go
+q2del_num:
+MOVI r2,48
+CMP r1,r2
+JMP[EQ] @q2del_zero
+MOVI r2,49
+CMP r1,r2
+JMP[EQ] @q2del_one
+CALL @q2_word
+CALL @q2_find
+CMP r1,r0
+JMP[EQ] @q2del_zero
+LD r2,r1,3
+CMP r2,r0
+JMP[EQ] @q2del_zero
+MOVI r1,1
+JMP @q2del_go
+q2del_zero:
+MOVI r1,0
+JMP @q2del_go
+q2del_one:
+MOVI r1,1
+q2del_go:
+CALL @q2_cond_elif
+JMP @q2dir_eat
+q2dir_else:
+CALL @q2_cond_else
+JMP @q2dir_eat
+q2dir_endif:
+CALL @q2_cond_pop
+q2dir_eat:
+CALL @q2_eat
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+q2s_define:
+.str "define"
+q2s_undef:
+.str "undef"
+q2s_ifdef:
+.str "ifdef"
+q2s_ifndef:
+.str "ifndef"
+q2s_if:
+.str "if"
+q2s_elif:
+.str "elif"
+q2s_else:
+.str "else"
+q2s_endif:
+.str "endif"
+
+
 ; ------------------------------------------------------------------ entry points
 ncc_compile:
 ST r14,r0,#W_PSAVE
@@ -280,15 +2230,36 @@ ST r1,r0,#L_WP
 ST r0,r0,#L_BI
 MOVI r1,1
 ST r1,r0,#L_LINE
+ST r0,r0,#W_Q2N
+ST r0,r0,#W_Q2SKIP
+ST r0,r0,#W_Q2DEPTH
+ST r0,r0,#W_FUNCSYM
+ST r0,r0,#W_LOOPN
 LA r1,#NCC_IRB
 ST r1,r0,#W_IRPC
 ST r0,r0,#W_SYMUSED
-ST r0,r0,#W_GLOBUSED
 ST r0,r0,#W_NAMEP
-ST r0,r0,#W_STRP
 ST r0,r0,#W_HAVE
 ST r0,r0,#W_BRK_N
 ST r0,r0,#W_CNT_N
+ST r0,r0,#W_SW_N
+ST r0,r0,#W_CASE_N
+ST r0,r0,#W_GOTO_N
+ST r0,r0,#W_PP_N
+LA r1,#C_GLOB
+ST r1,r0,#W_GLOBP
+LA r1,#C_RODATA
+ST r1,r0,#W_STRP
+LA r1,#C_HEAP
+ST r1,r0,#W_HEAP
+LA r1,#NCC_PARM
+ST r1,r0,#W_PARAMP
+LA r1,#NCC_MEMB
+ST r1,r0,#W_MEMBP
+MOVI r1,16
+ST r1,r0,#W_LOCALB
+ST r1,r0,#W_FRAMEB
+CALL @ncc_types_init
 CALL @ncc_builtins
 CALL @np_init
 CALL @p_tu
@@ -296,6 +2267,8 @@ CALL @sym_find_main
 ADD r2,r1,r0
 LA r1,#I_CALL
 CALL @ir_emit
+LD r2,r0,#W_IRPC
+ST r2,r0,#W_TAILHALT
 LA r1,#I_HALT
 MOVI r2,0
 CALL @ir_emit
@@ -311,10 +2284,16 @@ ST r15,r14,0
 ADD r14,r14,r13
 LA r1,#NCC_ESB
 ST r1,r0,#R_SP
-LA r1,#NCC_FSB
+LA r1,#C_STACK
 ST r1,r0,#R_FP
 LA r1,#NCC_IRB
 ST r1,r0,#R_IP
+LA r2,#C_STACK
+SHR r2,r2,2
+ADDI r2,r2,3
+ST r0,r2,0
+ADDI r2,r2,-3
+ST r0,r2,0
 CALL @ncc_ir_loop
 SUB r14,r14,r13
 LD r15,r14,0
@@ -362,6 +2341,10 @@ CALL @puthex8
 MOVI r1,58
 CALL @ncc_putc
 LD r5,r0,#W_TKA+1
+CALL @puthex8
+MOVI r1,58
+CALL @ncc_putc
+LD r5,r0,#W_TKA+2
 CALL @puthex8
 MOVI r1,93
 CALL @ncc_putc
@@ -446,6 +2429,387 @@ CALL @ncc_putc
 CMP r6,r0
 JMP[NE] @pd_r
 pd_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; ================================================================== TYPES
+ncc_types_init:
+ST r15,r14,0
+ADD r14,r14,r13
+MOVI r1,16
+ST r1,r0,#W_TYPEN
+; 1 void
+MOVI r1,1
+MOVI r2,#TY_VOID
+MOVI r3,0
+MOVI r4,1
+MOVI r5,0
+MOVI r6,0
+CALL @ty_set
+; 2 char, 3 uchar
+MOVI r1,2
+MOVI r2,#TY_INT
+MOVI r3,1
+MOVI r4,1
+MOVI r5,1
+MOVI r6,0
+CALL @ty_set
+MOVI r1,3
+MOVI r2,#TY_INT
+MOVI r3,1
+MOVI r4,1
+MOVI r5,0
+MOVI r6,0
+CALL @ty_set
+; 4 short, 5 ushort
+MOVI r1,4
+MOVI r2,#TY_INT
+MOVI r3,2
+MOVI r4,2
+MOVI r5,1
+MOVI r6,0
+CALL @ty_set
+MOVI r1,5
+MOVI r2,#TY_INT
+MOVI r3,2
+MOVI r4,2
+MOVI r5,0
+MOVI r6,0
+CALL @ty_set
+; 6 int, 7 uint
+MOVI r1,6
+MOVI r2,#TY_INT
+MOVI r3,4
+MOVI r4,4
+MOVI r5,1
+MOVI r6,0
+CALL @ty_set
+MOVI r1,7
+MOVI r2,#TY_INT
+MOVI r3,4
+MOVI r4,4
+MOVI r5,0
+MOVI r6,0
+CALL @ty_set
+; 8 long, 9 ulong
+MOVI r1,8
+MOVI r2,#TY_INT
+MOVI r3,4
+MOVI r4,4
+MOVI r5,1
+MOVI r6,0
+CALL @ty_set
+MOVI r1,9
+MOVI r2,#TY_INT
+MOVI r3,4
+MOVI r4,4
+MOVI r5,0
+MOVI r6,0
+CALL @ty_set
+; 10 float, 11 double (32-bit payload representation)
+MOVI r1,10
+MOVI r2,#TY_FLOAT
+MOVI r3,4
+MOVI r4,4
+MOVI r5,1
+MOVI r6,0
+CALL @ty_set
+MOVI r1,11
+MOVI r2,#TY_FLOAT
+MOVI r3,4
+MOVI r4,4
+MOVI r5,1
+MOVI r6,0
+CALL @ty_set
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+; ty_set: r1=id r2=kind r3=size r4=align r5=sign r6=base
+ty_set:
+SHL r1,r1,3
+LA r7,#NCC_TYPEB
+ADD r1,r1,r7
+ST r2,r1,#TY_KIND
+ST r3,r1,#TY_SIZE
+ST r4,r1,#TY_ALIGN
+ST r6,r1,#TY_BASE
+ST r0,r1,#TY_COUNT
+ST r0,r1,#TY_MEM
+ST r0,r1,#TY_NMEM
+ST r5,r1,#TY_SIGN
+RET
+
+ty_addr:
+SHL r1,r1,3
+LA r2,#NCC_TYPEB
+ADD r1,r1,r2
+RET
+ty_size:
+SHL r1,r1,3
+LA r2,#NCC_TYPEB
+ADD r1,r1,r2
+LD r1,r1,#TY_SIZE
+RET
+ty_align:
+SHL r1,r1,3
+LA r2,#NCC_TYPEB
+ADD r1,r1,r2
+LD r1,r1,#TY_ALIGN
+RET
+ty_kind:
+SHL r1,r1,3
+LA r2,#NCC_TYPEB
+ADD r1,r1,r2
+LD r1,r1,#TY_KIND
+RET
+ty_base:
+SHL r1,r1,3
+LA r2,#NCC_TYPEB
+ADD r1,r1,r2
+LD r1,r1,#TY_BASE
+RET
+ty_count:
+SHL r1,r1,3
+LA r2,#NCC_TYPEB
+ADD r1,r1,r2
+LD r1,r1,#TY_COUNT
+RET
+ty_sign:
+SHL r1,r1,3
+LA r2,#NCC_TYPEB
+ADD r1,r1,r2
+LD r1,r1,#TY_SIGN
+RET
+
+; ty_new: allocate from W_TY_* fields, returns id
+ty_new:
+LD r1,r0,#W_TYPEN
+LA r2,#NCC_TYPEMAX
+CMP r1,r2
+JMP[LT] @tyn_room
+MOVI r1,60
+JMP @ncc_err
+tyn_room:
+SHL r2,r1,3
+LA r3,#NCC_TYPEB
+ADD r3,r3,r2
+LD r4,r0,#W_TY_KIND
+ST r4,r3,#TY_KIND
+LD r4,r0,#W_TY_SIZE
+ST r4,r3,#TY_SIZE
+LD r4,r0,#W_TY_ALIGN
+ST r4,r3,#TY_ALIGN
+LD r4,r0,#W_TY_BASE
+ST r4,r3,#TY_BASE
+LD r4,r0,#W_TY_COUNT
+ST r4,r3,#TY_COUNT
+LD r4,r0,#W_TY_MEM
+ST r4,r3,#TY_MEM
+LD r4,r0,#W_TY_NMEM
+ST r4,r3,#TY_NMEM
+LD r4,r0,#W_TY_SIGN
+ST r4,r3,#TY_SIGN
+ADD r1,r1,r13
+ST r1,r0,#W_TYPEN
+SUB r1,r1,r13
+RET
+
+; ty_ptr: r1=base -> pointer type id
+ty_ptr:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_TY_TMP
+MOVI r2,16
+pty_l:
+LD r3,r0,#W_TYPEN
+CMP r2,r3
+JMP[GE] @pty_new
+SHL r3,r2,3
+LA r4,#NCC_TYPEB
+ADD r3,r3,r4
+LD r4,r3,#TY_KIND
+MOVI r5,#TY_PTR
+CMP r4,r5
+JMP[NE] @pty_next
+LD r4,r3,#TY_BASE
+LD r5,r0,#W_TY_TMP
+CMP r4,r5
+JMP[NE] @pty_next
+ADD r1,r2,r0
+JMP @pty_d
+pty_next:
+ADD r2,r2,r13
+JMP @pty_l
+pty_new:
+MOVI r1,#TY_PTR
+ST r1,r0,#W_TY_KIND
+MOVI r1,4
+ST r1,r0,#W_TY_SIZE
+ST r1,r0,#W_TY_ALIGN
+LD r1,r0,#W_TY_TMP
+ST r1,r0,#W_TY_BASE
+ST r0,r0,#W_TY_COUNT
+ST r0,r0,#W_TY_MEM
+ST r0,r0,#W_TY_NMEM
+ST r0,r0,#W_TY_SIGN
+CALL @ty_new
+pty_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; ty_array: r1=base, r2=count -> array type id
+ty_array:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_TY_TMP
+ST r2,r0,#W_TY_COUNT
+MOVI r1,#TY_ARRAY
+ST r1,r0,#W_TY_KIND
+LD r1,r0,#W_TY_TMP
+CALL @ty_size
+LD r2,r0,#W_TY_COUNT
+MUL r1,r1,r2
+ST r1,r0,#W_TY_SIZE
+LD r1,r0,#W_TY_TMP
+CALL @ty_align
+ST r1,r0,#W_TY_ALIGN
+LD r1,r0,#W_TY_TMP
+ST r1,r0,#W_TY_BASE
+ST r0,r0,#W_TY_MEM
+ST r0,r0,#W_TY_NMEM
+ST r0,r0,#W_TY_SIGN
+CALL @ty_new
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; ty_func: r1=return type, r2=nparams -> function type id
+ty_func:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r2,r0,#W_TY_COUNT
+MOVI r3,#TY_FUNC
+ST r3,r0,#W_TY_KIND
+ST r0,r0,#W_TY_SIZE
+MOVI r3,1
+ST r3,r0,#W_TY_ALIGN
+ST r1,r0,#W_TY_BASE
+ST r0,r0,#W_TY_MEM
+ST r0,r0,#W_TY_NMEM
+ST r0,r0,#W_TY_SIGN
+CALL @ty_new
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; ty_struct: r1=5 struct / 6 union -> new type id
+ty_struct:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_TY_KIND
+ST r0,r0,#W_TY_SIZE
+MOVI r2,1
+ST r2,r0,#W_TY_ALIGN
+ST r0,r0,#W_TY_BASE
+ST r0,r0,#W_TY_COUNT
+LD r2,r0,#W_MEMBP
+ST r2,r0,#W_TY_MEM
+ST r0,r0,#W_TY_NMEM
+ST r0,r0,#W_TY_SIGN
+CALL @ty_new
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; ty_common: r1=a r2=b -> C usual arithmetic type
+ty_common:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_TY_TMP
+ST r2,r0,#W_TY_ID
+CALL @ty_kind
+MOVI r3,#TY_FLOAT
+CMP r1,r3
+JMP[EQ] @tyc_float
+LD r1,r0,#W_TY_ID
+CALL @ty_kind
+MOVI r3,#TY_FLOAT
+CMP r1,r3
+JMP[EQ] @tyc_float
+LD r1,r0,#W_TY_TMP
+CALL @ty_size
+LD r2,r0,#W_TY_ID
+ST r1,r0,#W_TY_SIZE
+ADD r1,r2,r0
+CALL @ty_size
+LD r2,r0,#W_TY_SIZE
+CMP r2,r1
+JMP[GE] @tyc_have
+ADD r2,r1,r0
+tyc_have:
+MOVI r1,4
+CMP r2,r1
+JMP[LT] @tyc_int
+LD r1,r0,#W_TY_TMP
+CALL @ty_sign
+ST r1,r0,#W_TY_SIGN
+LD r1,r0,#W_TY_ID
+CALL @ty_sign
+LD r2,r0,#W_TY_SIGN
+BOOL.8 r1,r1,r2
+CMP r1,r0
+JMP[EQ] @tyc_uint
+MOVI r1,#T_INT
+JMP @tyc_d
+tyc_uint:
+MOVI r1,#T_UINT
+JMP @tyc_d
+tyc_int:
+MOVI r1,#T_INT
+JMP @tyc_d
+tyc_float:
+MOVI r1,#T_FLOAT
+tyc_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; ty_store_code: r1=type -> load/store size code
+ty_store_code:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_TY_TMP
+CALL @ty_size
+MOVI r2,1
+CMP r1,r2
+JMP[EQ] @tsc_8
+MOVI r2,2
+CMP r1,r2
+JMP[EQ] @tsc_16
+MOVI r1,#SZ_32
+JMP @tsc_d
+tsc_8:
+LD r1,r0,#W_TY_TMP
+CALL @ty_sign
+CMP r1,r0
+JMP[NE] @tsc_8s
+MOVI r1,#SZ_8U
+JMP @tsc_d
+tsc_8s:
+MOVI r1,#SZ_8S
+JMP @tsc_d
+tsc_16:
+LD r1,r0,#W_TY_TMP
+CALL @ty_sign
+CMP r1,r0
+JMP[NE] @tsc_16s
+MOVI r1,#SZ_16U
+JMP @tsc_d
+tsc_16s:
+MOVI r1,#SZ_16S
+tsc_d:
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -750,6 +3114,9 @@ skip_ws:
 ST r15,r14,0
 ADD r14,r14,r13
 sw_l:
+LD r1,r0,#W_Q2SKIP
+CMP r1,r0
+JMP[NE] @sw_skip
 CALL @lx_peek
 CMP r1,r0
 JMP[EQ] @sw_d
@@ -770,6 +3137,9 @@ sw_c:
 CALL @lx_get
 JMP @sw_l
 sw_cm:
+MOVI r2,35
+CMP r1,r2
+JMP[EQ] @sw_dir
 MOVI r2,47
 CMP r1,r2
 JMP[NE] @sw_d
@@ -781,7 +3151,44 @@ JMP[EQ] @sw_lc
 MOVI r2,42
 CMP r1,r2
 JMP[EQ] @sw_bc
+MOVI r2,35
+CMP r1,r2
+JMP[EQ] @sw_dir
 JMP @sw_d
+sw_dir:
+CALL @lx_get
+CALL @q2_directive
+JMP @sw_l
+sw_skip:
+CALL @lx_peek
+CMP r1,r0
+JMP[EQ] @sw_d
+MOVI r2,10
+CMP r1,r2
+JMP[EQ] @sw_skip_nl
+CALL @lx_get
+JMP @sw_skip
+sw_skip_nl:
+CALL @lx_get
+sw_skip_ws:
+CALL @lx_peek
+MOVI r2,32
+CMP r1,r2
+JMP[EQ] @sw_skip_adv
+MOVI r2,9
+CMP r1,r2
+JMP[EQ] @sw_skip_adv
+MOVI r2,35
+CMP r1,r2
+JMP[EQ] @sw_skip_dir
+JMP @sw_skip
+sw_skip_adv:
+CALL @lx_get
+JMP @sw_skip_ws
+sw_skip_dir:
+CALL @lx_get
+CALL @q2_directive
+JMP @sw_l
 sw_lc:
 CALL @lx_get
 CALL @lx_get
@@ -913,6 +3320,16 @@ CALL @txt_putc
 JMP @si_l
 si_fin:
 CALL @txt_finish
+LD r1,r0,#L_HASH
+LD r2,r0,#L_LEN
+CALL @q2_macro
+CMP r2,r0
+JMP[EQ] @si_kw
+ST r1,r0,#L_VAL
+MOVI r1,2
+ST r1,r0,#L_KIND
+JMP @si_d
+si_kw:
 LD r1,r0,#L_HASH
 CALL @kw_lookup
 CMP r1,r0
@@ -1521,6 +3938,9 @@ JMP[EQ] @sp_rc
 MOVI r2,35
 CMP r1,r2
 JMP[EQ] @sp_hash
+MOVI r2,46
+CMP r1,r2
+JMP[EQ] @sp_dot
 MOVI r1,1
 MOVI r2,1
 CALL @p_set
@@ -1562,6 +3982,9 @@ MOVI r1,44
 JMP @sp_one
 sp_hash:
 MOVI r1,45
+JMP @sp_one
+sp_dot:
+MOVI r1,46
 sp_one:
 MOVI r2,1
 CALL @p_set
@@ -1793,60 +4216,40 @@ SUB r14,r14,r13
 LD r15,r14,0
 RET
 
-; p_is_type: current token is a type/qualifier keyword
 p_is_type:
-LD r2,r0,#W_TKA
-MOVI r3,8
+LA r1,#W_TKA
+JMP @p_tok_is_type
+
+p_tok_is_type:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_TKPTR
+LD r2,r1,#TK_KIND
+MOVI r3,#K_KEYWORD
 CMP r2,r3
-JMP[NE] @pit_n
-LD r1,r0,#W_TKA+1
-MOVI r2,4
+JMP[NE] @ptit_ident
+LD r1,r1,#TK_VAL
+CALL @kw_is_type
+JMP @ptit_d
+ptit_ident:
+MOVI r3,#K_IDENT
+CMP r2,r3
+JMP[NE] @ptit_n
+MOVI r1,#SK_TYPE
+LD r2,r0,#W_TKPTR
+CALL @sym_find_tok
+MOVI r2,0xFFFF
+SHL r2,r2,16
+ADDI r2,r2,-1
 CMP r1,r2
-JMP[EQ] @pit_y
-MOVI r2,9
-CMP r1,r2
-JMP[EQ] @pit_y
-MOVI r2,13
-CMP r1,r2
-JMP[EQ] @pit_y
-MOVI r2,17
-CMP r1,r2
-JMP[EQ] @pit_y
-MOVI r2,18
-CMP r1,r2
-JMP[EQ] @pit_y
-MOVI r2,21
-CMP r1,r2
-JMP[EQ] @pit_y
-MOVI r2,22
-CMP r1,r2
-JMP[EQ] @pit_y
-MOVI r2,29
-CMP r1,r2
-JMP[EQ] @pit_y
-MOVI r2,30
-CMP r1,r2
-JMP[EQ] @pit_y
-MOVI r2,5
-CMP r1,r2
-JMP[EQ] @pit_y
-MOVI r2,12
-CMP r1,r2
-JMP[EQ] @pit_y
-MOVI r2,19
-CMP r1,r2
-JMP[EQ] @pit_y
-MOVI r2,24
-CMP r1,r2
-JMP[EQ] @pit_y
-MOVI r2,31
-CMP r1,r2
-JMP[EQ] @pit_y
-pit_n:
-MOVI r1,0
-RET
-pit_y:
+JMP[EQ] @ptit_n
 MOVI r1,1
+JMP @ptit_d
+ptit_n:
+MOVI r1,0
+ptit_d:
+SUB r14,r14,r13
+LD r15,r14,0
 RET
 
 ; kw_is_type: r1=keyword id -> 1 for type/qualifier words
@@ -1893,28 +4296,621 @@ JMP[EQ] @kit_y
 MOVI r2,31
 CMP r1,r2
 JMP[EQ] @kit_y
+MOVI r2,1
+CMP r1,r2
+JMP[EQ] @kit_y
+MOVI r2,11
+CMP r1,r2
+JMP[EQ] @kit_y
+MOVI r2,25
+CMP r1,r2
+JMP[EQ] @kit_y
+MOVI r2,27
+CMP r1,r2
+JMP[EQ] @kit_y
+MOVI r2,28
+CMP r1,r2
+JMP[EQ] @kit_y
 MOVI r1,0
 RET
 kit_y:
 MOVI r1,1
 RET
 
-; p_skip_types: consume type/qualifier keywords and pointer stars
-p_skip_types:
+; p_typespec: parse declaration specifiers -> r1 = type id, W_SCLASS set
+p_typespec:
 ST r15,r14,0
 ADD r14,r14,r13
-pst_l:
-CALL @p_is_type
+ST r0,r0,#W_SCLASS
+ST r0,r0,#W_TSIGN
+ST r0,r0,#W_TSHORT
+ST r0,r0,#W_TLONG
+ST r0,r0,#W_TCHAR
+ST r0,r0,#W_TVOID
+ST r0,r0,#W_TFLOAT
+ST r0,r0,#W_TSEEN
+pts_l:
+LD r1,r0,#W_TKA
+MOVI r2,#K_KEYWORD
+CMP r1,r2
+JMP[NE] @pts_ident
+LD r1,r0,#W_TKA+1
+MOVI r2,#KW_AUTO
+CMP r1,r2
+JMP[EQ] @pts_auto
+MOVI r2,#KW_REGISTER
+CMP r1,r2
+JMP[EQ] @pts_auto
+MOVI r2,#KW_STATIC
+CMP r1,r2
+JMP[EQ] @pts_static
+MOVI r2,#KW_EXTERN
+CMP r1,r2
+JMP[EQ] @pts_extern
+MOVI r2,#KW_TYPEDEF
+CMP r1,r2
+JMP[EQ] @pts_typedef
+MOVI r2,#KW_CONST
+CMP r1,r2
+JMP[EQ] @pts_qual
+MOVI r2,#KW_VOLATILE
+CMP r1,r2
+JMP[EQ] @pts_qual
+MOVI r2,#KW_SIGNED
+CMP r1,r2
+JMP[EQ] @pts_signed
+MOVI r2,#KW_UNSIGNED
+CMP r1,r2
+JMP[EQ] @pts_unsigned
+MOVI r2,#KW_CHAR
+CMP r1,r2
+JMP[EQ] @pts_char
+MOVI r2,#KW_SHORT
+CMP r1,r2
+JMP[EQ] @pts_short
+MOVI r2,#KW_LONG
+CMP r1,r2
+JMP[EQ] @pts_long
+MOVI r2,#KW_INT
+CMP r1,r2
+JMP[EQ] @pts_int
+MOVI r2,#KW_FLOAT
+CMP r1,r2
+JMP[EQ] @pts_float
+MOVI r2,#KW_DOUBLE
+CMP r1,r2
+JMP[EQ] @pts_double
+MOVI r2,#KW_VOID
+CMP r1,r2
+JMP[EQ] @pts_void
+MOVI r2,#KW_ENUM
+CMP r1,r2
+JMP[EQ] @pts_enum
+MOVI r2,#KW_STRUCT
+CMP r1,r2
+JMP[EQ] @pts_struct
+MOVI r2,#KW_UNION
+CMP r1,r2
+JMP[EQ] @pts_union
+JMP @pts_choose
+pts_auto:
+MOVI r1,4
+ST r1,r0,#W_SCLASS
+JMP @pts_skip
+pts_static:
+MOVI r1,1
+ST r1,r0,#W_SCLASS
+JMP @pts_skip
+pts_extern:
+MOVI r1,2
+ST r1,r0,#W_SCLASS
+JMP @pts_skip
+pts_typedef:
+MOVI r1,3
+ST r1,r0,#W_SCLASS
+JMP @pts_skip
+pts_qual:
+JMP @pts_skip
+pts_signed:
+MOVI r1,1
+ST r1,r0,#W_TSIGN
+MOVI r1,1
+ST r1,r0,#W_TSEEN
+JMP @pts_skip
+pts_unsigned:
+MOVI r1,2
+ST r1,r0,#W_TSIGN
+MOVI r1,1
+ST r1,r0,#W_TSEEN
+JMP @pts_skip
+pts_int:
+MOVI r1,1
+ST r1,r0,#W_TSEEN
+JMP @pts_skip
+pts_char:
+MOVI r1,1
+ST r1,r0,#W_TCHAR
+MOVI r1,1
+ST r1,r0,#W_TSEEN
+JMP @pts_skip
+pts_short:
+MOVI r1,1
+ST r1,r0,#W_TSHORT
+MOVI r1,1
+ST r1,r0,#W_TSEEN
+JMP @pts_skip
+pts_long:
+MOVI r1,1
+ST r1,r0,#W_TLONG
+MOVI r1,1
+ST r1,r0,#W_TSEEN
+JMP @pts_skip
+pts_float:
+MOVI r1,1
+ST r1,r0,#W_TFLOAT
+MOVI r1,1
+ST r1,r0,#W_TSEEN
+JMP @pts_skip
+pts_double:
+MOVI r1,2
+ST r1,r0,#W_TFLOAT
+MOVI r1,1
+ST r1,r0,#W_TSEEN
+JMP @pts_skip
+pts_void:
+MOVI r1,1
+ST r1,r0,#W_TVOID
+MOVI r1,1
+ST r1,r0,#W_TSEEN
+JMP @pts_skip
+pts_enum:
+CALL @p_enum_spec
+JMP @pts_ret
+pts_struct:
+MOVI r1,#TY_STRUCT
+CALL @p_struct_spec
+JMP @pts_ret
+pts_union:
+MOVI r1,#TY_UNION
+CALL @p_struct_spec
+JMP @pts_ret
+pts_skip:
+CALL @p_adv
+JMP @pts_l
+pts_ident:
+LD r1,r0,#W_TSEEN
 CMP r1,r0
-JMP[NE] @pst_go
+JMP[NE] @pts_choose
+LD r1,r0,#W_TKA
+MOVI r2,#K_IDENT
+CMP r1,r2
+JMP[NE] @pts_choose
+MOVI r1,#SK_TYPE
+CALL @sym_find_cur
+MOVI r2,0xFFFF
+SHL r2,r2,16
+ADDI r2,r2,-1
+CMP r1,r2
+JMP[EQ] @pts_choose
+CALL @sym_entry
+LD r1,r1,#SY_TYPE
+ST r1,r0,#W_TY_ID
+CALL @p_adv
+LD r1,r0,#W_TY_ID
+JMP @pts_ret
+pts_choose:
+LD r1,r0,#W_TVOID
+CMP r1,r0
+JMP[EQ] @pts_notvoid
+MOVI r1,#T_VOID
+JMP @pts_ret
+pts_notvoid:
+LD r1,r0,#W_TFLOAT
+MOVI r2,1
+CMP r1,r2
+JMP[NE] @pts_notf1
+MOVI r1,#T_FLOAT
+JMP @pts_ret
+pts_notf1:
+MOVI r2,2
+CMP r1,r2
+JMP[NE] @pts_notf2
+MOVI r1,#T_DOUBLE
+JMP @pts_ret
+pts_notf2:
+LD r1,r0,#W_TCHAR
+CMP r1,r0
+JMP[EQ] @pts_notchar
+LD r1,r0,#W_TSIGN
+MOVI r2,2
+CMP r1,r2
+JMP[EQ] @pts_uchar
+MOVI r1,#T_CHAR
+JMP @pts_ret
+pts_uchar:
+MOVI r1,#T_UCHAR
+JMP @pts_ret
+pts_notchar:
+LD r1,r0,#W_TSHORT
+CMP r1,r0
+JMP[EQ] @pts_notshort
+LD r1,r0,#W_TSIGN
+MOVI r2,2
+CMP r1,r2
+JMP[EQ] @pts_ushort
+MOVI r1,#T_SHORT
+JMP @pts_ret
+pts_ushort:
+MOVI r1,#T_USHORT
+JMP @pts_ret
+pts_notshort:
+LD r1,r0,#W_TLONG
+CMP r1,r0
+JMP[EQ] @pts_notlong
+LD r1,r0,#W_TSIGN
+MOVI r2,2
+CMP r1,r2
+JMP[EQ] @pts_ulong
+MOVI r1,#T_LONG
+JMP @pts_ret
+pts_ulong:
+MOVI r1,#T_ULONG
+JMP @pts_ret
+pts_notlong:
+LD r1,r0,#W_TSIGN
+MOVI r2,2
+CMP r1,r2
+JMP[EQ] @pts_uint
+MOVI r1,#T_INT
+JMP @pts_ret
+pts_uint:
+MOVI r1,#T_UINT
+pts_ret:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; p_ptr_suffix: r1=base -> type with all leading '*' applied
+p_ptr_suffix:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#R_T0
+pps_l:
 MOVI r1,#P_STAR
 CALL @p_at_p
 CMP r1,r0
-JMP[EQ] @pst_types_done
-pst_go:
+JMP[EQ] @pps_d
 CALL @p_adv
-JMP @pst_l
-pst_types_done:
+pps_q:
+MOVI r1,#KW_CONST
+CALL @p_at_k
+CMP r1,r0
+JMP[NE] @pps_qadv
+MOVI r1,#KW_VOLATILE
+CALL @p_at_k
+CMP r1,r0
+JMP[EQ] @pps_go
+pps_qadv:
+CALL @p_adv
+JMP @pps_q
+pps_go:
+LD r1,r0,#R_T0
+CALL @ty_ptr
+ST r1,r0,#R_T0
+JMP @pps_l
+pps_d:
+LD r1,r0,#R_T0
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; p_enum_spec
+p_enum_spec:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @p_adv
+LD r1,r0,#W_TKA
+MOVI r2,#K_IDENT
+CMP r1,r2
+JMP[NE] @pes_body
+CALL @p_adv
+pes_body:
+MOVI r1,#P_LBRACE
+CALL @p_at_p
+CMP r1,r0
+JMP[EQ] @pes_done
+CALL @p_adv
+ST r0,r0,#W_ENUMVAL
+pes_l:
+LD r1,r0,#W_TKA
+MOVI r2,#K_IDENT
+CMP r1,r2
+JMP[EQ] @pes_name
+MOVI r1,63
+CALL @p_err
+pes_name:
+MOVI r1,#SK_ENUM
+CALL @sym_get_cur
+ST r1,r14,0
+ADD r14,r14,r13
+CALL @p_adv
+LD r1,r0,#W_ENUMVAL
+ST r1,r0,#W_TY_ID
+MOVI r1,#P_ASSIGN
+CALL @p_take_p
+CMP r1,r0
+JMP[EQ] @pes_noval
+CALL @p_cexpr
+ST r1,r0,#W_TY_ID
+JMP @pes_set
+pes_noval:
+LD r1,r0,#W_TY_ID
+ADD r1,r1,r13
+ST r1,r0,#W_TY_ID
+pes_set:
+LD r1,r0,#W_TY_ID
+ST r1,r0,#W_ENUMVAL
+SUB r14,r14,r13
+LD r1,r14,0
+CALL @sym_entry
+LD r2,r0,#W_TY_ID
+ST r2,r1,#SY_AUX
+MOVI r2,#T_INT
+ST r2,r1,#SY_TYPE
+MOVI r2,4
+ST r2,r1,#SY_SIZE
+MOVI r1,#P_COMMA
+CALL @p_take_p
+CMP r1,r0
+JMP[NE] @pes_l
+MOVI r1,#P_RBRACE
+MOVI r2,64
+CALL @p_expect_p
+pes_done:
+MOVI r1,#T_INT
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; p_struct_spec: r1=TY_STRUCT/TY_UNION -> type id (full parser below)
+; p_struct_spec: r1=TY_STRUCT/TY_UNION -> type id
+; p_struct_spec: r1=TY_STRUCT/TY_UNION -> type id
+p_struct_spec:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_STRUCTKIND
+ST r0,r0,#W_STRUCTID
+ST r0,r0,#W_STAG
+CALL @p_adv
+LD r1,r0,#W_TKA
+MOVI r2,#K_IDENT
+CMP r1,r2
+JMP[NE] @pss_tag_done
+MOVI r1,#SK_TYPE
+CALL @sym_get_cur
+ST r1,r0,#W_STAG
+CALL @sym_entry
+LD r1,r1,#SY_TYPE
+ST r1,r0,#W_STRUCTID
+CALL @p_adv
+pss_tag_done:
+MOVI r1,#P_LBRACE
+CALL @p_at_p
+CMP r1,r0
+JMP[EQ] @pss_no_body
+; create the type if the tag did not already have one
+LD r1,r0,#W_STRUCTID
+CMP r1,r0
+JMP[NE] @pss_have_type
+LD r1,r0,#W_STRUCTKIND
+CALL @ty_struct
+ST r1,r0,#W_STRUCTID
+LD r2,r0,#W_STAG
+CMP r2,r0
+JMP[EQ] @pss_have_type
+ADD r1,r2,r0
+CALL @sym_entry
+LD r2,r0,#W_STRUCTID
+ST r2,r1,#SY_TYPE
+pss_have_type:
+LD r1,r0,#W_STRUCTID
+CALL @ty_addr
+ST r0,r1,#TY_SIZE
+MOVI r2,1
+ST r2,r1,#TY_ALIGN
+LD r2,r0,#W_MEMBP
+ST r2,r1,#TY_MEM
+ST r0,r1,#TY_NMEM
+ST r0,r0,#W_SSIZE
+MOVI r2,1
+ST r2,r0,#W_SALIGN
+LD r1,r0,#W_MEMBP
+ST r1,r0,#W_SMEM
+ST r0,r0,#W_SNMEM
+CALL @p_adv
+pss_mem_l:
+MOVI r1,#P_RBRACE
+CALL @p_at_p
+CMP r1,r0
+JMP[NE] @pss_final
+CALL @p_typespec
+ST r1,r0,#W_STYPE
+pss_mem_one:
+LD r1,r0,#W_STYPE
+CALL @p_ptr_suffix
+ST r1,r0,#W_STYPE
+LD r1,r0,#W_TKA
+MOVI r2,#K_IDENT
+CMP r1,r2
+JMP[EQ] @pss_mem_name
+MOVI r1,23
+CALL @p_err
+pss_mem_name:
+MOVI r1,#SK_MEMBER
+CALL @sym_get_cur
+ST r1,r14,0
+ADD r14,r14,r13
+CALL @p_adv
+LD r1,r0,#W_STYPE
+CALL @p_array_suffix
+ST r1,r0,#W_STYPE
+LD r1,r0,#W_STYPE
+CALL @ty_size
+ST r1,r0,#W_STMP
+LD r1,r0,#W_STYPE
+CALL @ty_align
+ST r1,r0,#W_SOFF
+LD r1,r0,#W_STRUCTKIND
+MOVI r2,#TY_UNION
+CMP r1,r2
+JMP[EQ] @pss_union_mem
+; struct: offset = align_up(size, align)
+LD r1,r0,#W_SSIZE
+LD r2,r0,#W_SOFF
+CALL @px_align_up
+ST r1,r0,#W_STMP
+LD r1,r0,#W_STYPE
+CALL @ty_size
+ST r1,r0,#W_MSIZE
+LD r1,r0,#W_STMP
+LD r2,r0,#W_MSIZE
+ADD r2,r1,r2
+ST r2,r0,#W_SSIZE
+; member offset is STMP
+JMP @pss_mem_off
+pss_union_mem:
+MOVI r1,0
+ST r1,r0,#W_STMP
+LD r1,r0,#W_STYPE
+CALL @ty_size
+ST r1,r0,#W_MSIZE
+LD r2,r0,#W_SSIZE
+CMP r1,r2
+JMP[LE] @pss_mem_off
+ST r1,r0,#W_SSIZE
+pss_mem_off:
+; max alignment
+LD r1,r0,#W_SOFF
+LD r2,r0,#W_SALIGN
+CMP r1,r2
+JMP[LE] @pss_align_ok
+ST r1,r0,#W_SALIGN
+pss_align_ok:
+; table entry [symidx, offset, type, 0]
+LD r2,r0,#W_MEMBP
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r2,0
+LD r1,r0,#W_STMP
+ST r1,r2,1
+LD r1,r0,#W_STYPE
+ST r1,r2,2
+ST r0,r2,3
+ADDI r2,r2,4
+ST r2,r0,#W_MEMBP
+LD r1,r0,#W_SNMEM
+ADD r1,r1,r13
+ST r1,r0,#W_SNMEM
+MOVI r1,#P_COMMA
+CALL @p_take_p
+CMP r1,r0
+JMP[NE] @pss_mem_one
+MOVI r1,#P_SEMI
+MOVI r2,24
+CALL @p_expect_p
+JMP @pss_mem_l
+pss_final:
+CALL @p_adv
+LD r1,r0,#W_SSIZE
+LD r2,r0,#W_SALIGN
+CALL @px_align_up
+ST r1,r0,#W_SSIZE
+LD r1,r0,#W_STRUCTID
+CALL @ty_addr
+LD r2,r0,#W_SSIZE
+ST r2,r1,#TY_SIZE
+LD r2,r0,#W_SALIGN
+ST r2,r1,#TY_ALIGN
+LD r2,r0,#W_SNMEM
+ST r2,r1,#TY_NMEM
+LD r1,r0,#W_STRUCTID
+JMP @pss_d
+pss_no_body:
+LD r1,r0,#W_STRUCTID
+CMP r1,r0
+JMP[NE] @pss_d
+LD r1,r0,#W_STRUCTKIND
+CALL @ty_struct
+ST r1,r0,#W_STRUCTID
+LD r2,r0,#W_STAG
+CMP r2,r0
+JMP[EQ] @pss_d
+ADD r1,r2,r0
+CALL @sym_entry
+LD r2,r0,#W_STRUCTID
+ST r2,r1,#SY_TYPE
+LD r1,r0,#W_STRUCTID
+pss_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+p_member_lookup:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_TY_ID
+CALL @ty_addr
+LD r3,r1,#TY_MEM
+ST r3,r0,#W_TY_MEM
+LD r4,r1,#TY_NMEM
+ST r4,r0,#W_TY_COUNT
+ST r0,r0,#W_TY_BASE
+pml_l:
+LD r1,r0,#W_TY_BASE
+LD r2,r0,#W_TY_COUNT
+CMP r1,r2
+JMP[GE] @pml_nf
+LD r3,r0,#W_TY_MEM
+SHL r4,r1,2
+ADD r3,r3,r4
+LD r4,r3,0
+ST r4,r0,#W_TY_TMP
+LD r5,r3,1
+ST r5,r0,#W_TY_RET
+LD r5,r3,2
+ST r5,r0,#W_TY_KIND
+LD r1,r0,#W_TY_TMP
+CALL @sym_entry
+LD r2,r1,#SY_HASH
+LD r3,r0,#W_TKA+2
+CMP r2,r3
+JMP[NE] @pml_next
+LD r2,r1,#SY_LEN
+LD r3,r0,#W_TKA+3
+CMP r2,r3
+JMP[NE] @pml_next
+LA r2,#W_TKA+#TK_TEXT
+LD r3,r0,#W_TKA+3
+CALL @sym_name_eq
+CMP r1,r0
+JMP[EQ] @pml_next
+LD r1,r0,#W_TY_RET
+LD r2,r0,#W_TY_KIND
+ST r1,r0,#W_TY_TMP
+ST r2,r0,#W_TY_RET
+CALL @p_adv
+LD r1,r0,#W_TY_TMP
+LD r2,r0,#W_TY_RET
+JMP @pml_d
+pml_next:
+LD r1,r0,#W_TY_BASE
+ADD r1,r1,r13
+ST r1,r0,#W_TY_BASE
+JMP @pml_l
+pml_nf:
+MOVI r1,72
+CALL @p_err
+pml_d:
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -1956,59 +4952,66 @@ SUB r14,r14,r13
 LD r15,r14,0
 RET
 
-; sym_find_cur: r1=kind (1 global, 2 local, 3 func, 4 builtin)
-; uses the CURRENT token's hash/len/text. locals also match W_FUNCSYM.
-sym_find_cur:
+sym_find_tok:
 ST r15,r14,0
 ADD r14,r14,r13
 ST r1,r0,#W_SKIND
+ST r2,r0,#W_TKPTR
 ST r0,r0,#W_SIDX
-sf_l:
+sft_l:
 LD r2,r0,#W_SIDX
 LD r3,r0,#W_SYMUSED
 CMP r2,r3
-JMP[GE] @sf_n
-SHL r3,r2,3
+JMP[GE] @sft_n
+SHL r3,r2,4
 LA r4,#NCC_SYMB
 ADD r3,r3,r4
 LD r4,r3,#SY_KIND
 LD r5,r0,#W_SKIND
 CMP r4,r5
-JMP[NE] @sf_next
-; local entries must belong to the current function
+JMP[NE] @sft_next
 MOVI r5,2
 CMP r4,r5
-JMP[NE] @sf_hash
+JMP[EQ] @sft_owner
+MOVI r5,6
+CMP r4,r5
+JMP[NE] @sft_hash
+sft_owner:
 LD r4,r3,#SY_NP
 LD r5,r0,#W_FUNCSYM
 CMP r4,r5
-JMP[NE] @sf_next
-sf_hash:
+JMP[NE] @sft_next
+sft_hash:
+LD r5,r0,#W_TKPTR
 LD r4,r3,#SY_HASH
-LD r5,r0,#W_TKA+2
-CMP r4,r5
-JMP[NE] @sf_next
+LD r6,r5,#TK_HASH
+CMP r4,r6
+JMP[NE] @sft_next
 ADD r1,r3,r0
-LA r2,#W_TKA+#TK_TEXT
-LD r3,r0,#W_TKA+3
+ADDI r2,r5,#TK_TEXT
+LD r3,r5,#TK_LEN
 CALL @sym_name_eq
 CMP r1,r0
-JMP[EQ] @sf_next
+JMP[EQ] @sft_next
 LD r1,r0,#W_SIDX
-JMP @sf_d
-sf_next:
+JMP @sft_d
+sft_next:
 LD r2,r0,#W_SIDX
 ADD r2,r2,r13
 ST r2,r0,#W_SIDX
-JMP @sf_l
-sf_n:
+JMP @sft_l
+sft_n:
 MOVI r1,0xFFFF
 SHL r1,r1,16
 ADDI r1,r1,-1
-sf_d:
+sft_d:
 SUB r14,r14,r13
 LD r15,r14,0
 RET
+
+sym_find_cur:
+LA r2,#W_TKA
+JMP @sym_find_tok
 
 ; sym_get_cur: r1=kind -> r1=index, creating the entry if missing.
 sym_get_cur:
@@ -2024,13 +5027,13 @@ JMP[NE] @sgc_d
 ; create
 LD r1,r0,#W_SYMUSED
 ST r1,r0,#R_T1
-LA r2,#NCC_SYMMAX
+LA r2,#NCC_SYMENTRIES
 CMP r1,r2
 JMP[LT] @sgc_room
 MOVI r1,2
 JMP @ncc_err
 sgc_room:
-SHL r2,r1,3
+SHL r2,r1,4
 LA r3,#NCC_SYMB
 ADD r3,r3,r2
 LD r4,r0,#W_TKA+2
@@ -2041,6 +5044,23 @@ ST r0,r3,#SY_AUX
 ST r0,r3,#SY_NP
 ST r0,r3,#SY_NL
 ST r0,r3,#SY_ENTRY
+ST r0,r3,#SY_TYPE
+ST r0,r3,#SY_ARG
+ST r0,r3,#SY_OFF
+ST r0,r3,#SY_SIZE
+ST r0,r3,#SY_CLS
+ST r0,r3,#SY_USED
+LD r4,r0,#R_T0
+MOVI r5,2
+CMP r4,r5
+JMP[EQ] @sgc_own
+MOVI r5,6
+CMP r4,r5
+JMP[NE] @sgc_noown
+sgc_own:
+LD r5,r0,#W_FUNCSYM
+ST r5,r3,#SY_NP
+sgc_noown:
 ; copy spelling into the name pool
 LD r4,r0,#W_NAMEP
 ST r4,r3,#SY_NAME
@@ -2101,7 +5121,7 @@ RET
 
 ; sym_entry: r1=index -> r1=entry address
 sym_entry:
-SHL r1,r1,3
+SHL r1,r1,4
 LA r2,#NCC_SYMB
 ADD r1,r1,r2
 RET
@@ -2117,7 +5137,7 @@ LD r2,r0,#W_MIDX
 LD r3,r0,#W_SYMUSED
 CMP r2,r3
 JMP[GE] @sfm_n
-SHL r3,r2,3
+SHL r3,r2,4
 LA r4,#NCC_SYMB
 ADD r3,r3,r4
 LD r4,r3,#SY_KIND
@@ -2163,40 +5183,187 @@ ncc_s_main:
 ncc_builtins:
 ST r15,r14,0
 ADD r14,r14,r13
-; putchar(c) -> c
+MOVI r1,#T_VOID
+CALL @ty_ptr
+ST r1,r0,#W_PTRV
+MOVI r1,#T_CHAR
+CALL @ty_ptr
+ST r1,r0,#W_PTRC
+; putchar
 LA r1,0x15026602
 LA r2,@ncc_s_putchar
 MOVI r3,7
 MOVI r4,#B_PUTCHAR
 MOVI r5,1
+MOVI r6,#T_INT
 CALL @ncc_add_builtin
-; print_int(v) -> 0
+; print_int
 LA r1,0xE4983C0E
 LA r2,@ncc_s_printint
 MOVI r3,9
 MOVI r4,#B_PRINTINT
 MOVI r5,1
+MOVI r6,#T_INT
 CALL @ncc_add_builtin
-; puts(s) -> 0 (adds newline)
+; puts
 LA r1,0x9C67D227
 LA r2,@ncc_s_puts
 MOVI r3,4
 MOVI r4,#B_PUTS
 MOVI r5,1
+MOVI r6,#T_INT
 CALL @ncc_add_builtin
-; print_hex(v) -> 0
+; print_hex
 LA r1,0x4CC3F73A
 LA r2,@ncc_s_printhex
 MOVI r3,9
 MOVI r4,#B_HEX
 MOVI r5,1
+MOVI r6,#T_INT
 CALL @ncc_add_builtin
-; print_str(s) -> 0 (no newline)
+; print_str
 LA r1,0x70BB0C00
 LA r2,@ncc_s_printstr
 MOVI r3,9
 MOVI r4,#B_PUTSTR
 MOVI r5,1
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+; printf
+LA r1,0xE76FB4AA
+LA r2,@ncc_s_printf
+MOVI r3,6
+MOVI r4,#B_PRINTF
+MOVI r5,0xFFFF
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+; malloc
+LA r1,0x558C274D
+LA r2,@ncc_s_malloc
+MOVI r3,6
+MOVI r4,#B_MALLOC
+MOVI r5,1
+LD r6,r0,#W_PTRV
+CALL @ncc_add_builtin
+; free
+LA r1,0x99B3EEDB
+LA r2,@ncc_s_free
+MOVI r3,4
+MOVI r4,#B_FREE
+MOVI r5,1
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+; calloc
+LA r1,0x73E20203
+LA r2,@ncc_s_calloc
+MOVI r3,6
+MOVI r4,#B_CALLOC
+MOVI r5,2
+LD r6,r0,#W_PTRV
+CALL @ncc_add_builtin
+; realloc
+LA r1,0xBF26B345
+LA r2,@ncc_s_realloc
+MOVI r3,7
+MOVI r4,#B_REALLOC
+MOVI r5,2
+LD r6,r0,#W_PTRV
+CALL @ncc_add_builtin
+; strlen
+LA r1,0x58BA3D97
+LA r2,@ncc_s_strlen
+MOVI r3,6
+MOVI r4,#B_STRLEN
+MOVI r5,1
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+; strcmp
+LA r1,0x9D367094
+LA r2,@ncc_s_strcmp
+MOVI r3,6
+MOVI r4,#B_STRCMP
+MOVI r5,2
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+; strncmp
+LA r1,0x9DE3C256
+LA r2,@ncc_s_strncmp
+MOVI r3,7
+MOVI r4,#B_STRNCMP
+MOVI r5,3
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+; strcpy
+LA r1,0x926A3AA6
+LA r2,@ncc_s_strcpy
+MOVI r3,6
+MOVI r4,#B_STRCPY
+MOVI r5,2
+LD r6,r0,#W_PTRC
+CALL @ncc_add_builtin
+; strncpy
+LA r1,0xA2C986B8
+LA r2,@ncc_s_strncpy
+MOVI r3,7
+MOVI r4,#B_STRNCPY
+MOVI r5,3
+LD r6,r0,#W_PTRC
+CALL @ncc_add_builtin
+; strcat
+LA r1,0x9940F7A4
+LA r2,@ncc_s_strcat
+MOVI r3,6
+MOVI r4,#B_STRCAT
+MOVI r5,2
+LD r6,r0,#W_PTRC
+CALL @ncc_add_builtin
+; memcpy
+LA r1,0xA45CEC64
+LA r2,@ncc_s_memcpy
+MOVI r3,6
+MOVI r4,#B_MEMCPY
+MOVI r5,3
+LD r6,r0,#W_PTRV
+CALL @ncc_add_builtin
+; memset
+LA r1,0xCB80CC06
+LA r2,@ncc_s_memset
+MOVI r3,6
+MOVI r4,#B_MEMSET
+MOVI r5,3
+LD r6,r0,#W_PTRV
+CALL @ncc_add_builtin
+; memcmp
+LA r1,0xAF3CAA0A
+LA r2,@ncc_s_memcmp
+MOVI r3,6
+MOVI r4,#B_MEMCMP
+MOVI r5,3
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+; atoi
+LA r1,0x07744F24
+LA r2,@ncc_s_atoi
+MOVI r3,4
+MOVI r4,#B_ATOI
+MOVI r5,1
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+; abs
+LA r1,0x2A48023B
+LA r2,@ncc_s_abs
+MOVI r3,3
+MOVI r4,#B_ABS
+MOVI r5,1
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+; exit
+LA r1,0xCDED1A85
+LA r2,@ncc_s_exit
+MOVI r3,4
+MOVI r4,#B_EXIT
+MOVI r5,1
+MOVI r6,#T_INT
 CALL @ncc_add_builtin
 SUB r14,r14,r13
 LD r15,r14,0
@@ -2208,6 +5375,7 @@ ST r15,r14,0
 ADD r14,r14,r13
 ST r4,r0,#W_BID
 ST r5,r0,#W_BNP
+ST r6,r0,#W_BRET
 ST r1,r0,#W_TKA+2
 ST r3,r0,#W_TKA+3
 ST r0,r0,#W_TKA
@@ -2225,6 +5393,10 @@ LD r4,r0,#W_BID
 ST r4,r1,#SY_AUX
 LD r5,r0,#W_BNP
 ST r5,r1,#SY_NP
+LD r5,r0,#W_BRET
+ST r5,r1,#SY_TYPE
+ST r0,r1,#SY_ARG
+ST r0,r1,#SY_SIZE
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -2239,27 +5411,58 @@ ncc_s_printhex:
 .str "print_hex"
 ncc_s_printstr:
 .str "print_str"
+ncc_s_printf:
+.str "printf"
+ncc_s_malloc:
+.str "malloc"
+ncc_s_free:
+.str "free"
+ncc_s_calloc:
+.str "calloc"
+ncc_s_realloc:
+.str "realloc"
+ncc_s_strlen:
+.str "strlen"
+ncc_s_strcmp:
+.str "strcmp"
+ncc_s_strncmp:
+.str "strncmp"
+ncc_s_strcpy:
+.str "strcpy"
+ncc_s_strncpy:
+.str "strncpy"
+ncc_s_strcat:
+.str "strcat"
+ncc_s_memcpy:
+.str "memcpy"
+ncc_s_memset:
+.str "memset"
+ncc_s_memcmp:
+.str "memcmp"
+ncc_s_atoi:
+.str "atoi"
+ncc_s_abs:
+.str "abs"
+ncc_s_exit:
+.str "exit"
 
 ; ================================================================== STRING POOL
-; str_add_cur: current K_STRING token -> r1 = packed string word address
-; One character per word: char pointers are plain word pointers, so s[i], &s[i]
-; and pointer arithmetic all use the same addressing as int arrays.
+; str_add_cur: current K_STRING token -> r1 = byte address of a NUL-terminated
+; C string in the read-only byte region (4 chars per NaN word).
 str_add_cur:
 ST r15,r14,0
 ADD r14,r14,r13
 LD r2,r0,#W_STRP
+ST r2,r0,#R_T0
 LD r3,r0,#W_TKA+3
 ADD r3,r3,r13
-ADD r3,r3,r2
-LA r4,#NCC_STRMAX
-CMP r3,r4
+ADD r4,r2,r3
+LA r5,#C_ROEND
+CMP r4,r5
 JMP[LT] @sac_room
 MOVI r1,4
 JMP @ncc_err
 sac_room:
-LA r4,#NCC_STRB
-ADD r4,r4,r2
-ST r4,r0,#R_T0
 LA r5,#W_TKA+#TK_TEXT
 SHL r5,r5,2
 LD r6,r0,#W_TKA+3
@@ -2268,14 +5471,13 @@ sac_l:
 CMP r7,r6
 JMP[GE] @sac_end
 LDB r1,r5,0
-ST r1,r4,0
+STB r1,r2,0
 ADD r5,r5,r13
-ADD r4,r4,r13
+ADD r2,r2,r13
 ADD r7,r7,r13
 JMP @sac_l
 sac_end:
-ST r0,r4,0
-ADD r2,r2,r6
+STB r0,r2,0
 ADD r2,r2,r13
 ST r2,r0,#W_STRP
 LD r1,r0,#R_T0
@@ -2425,6 +5627,23 @@ JMP[EQ] @pcu_val
 MOVI r2,#K_CHAR
 CMP r1,r2
 JMP[EQ] @pcu_val
+MOVI r2,#K_IDENT
+CMP r1,r2
+JMP[NE] @pcu_bad
+MOVI r1,#SK_ENUM
+CALL @sym_find_cur
+MOVI r2,0xFFFF
+SHL r2,r2,16
+ADDI r2,r2,-1
+CMP r1,r2
+JMP[EQ] @pcu_bad
+CALL @sym_entry
+LD r2,r1,#SY_AUX
+ST r2,r0,#W_TMP
+CALL @p_adv
+LD r1,r0,#W_TMP
+JMP @pcu_d
+pcu_bad:
 MOVI r1,31
 CALL @p_err
 pcu_val:
@@ -2456,174 +5675,284 @@ LD r15,r14,0
 RET
 
 ; ================================================================== EXPRESSIONS
-; p_emit_rv: materialise a pending lvalue
+; Lvalue convention: W_LVAL=1 means a byte address is on the eval stack and
+; W_LTYPE is the object type. p_emit_rv loads it (or decays an array).
 p_emit_rv:
 ST r15,r14,0
 ADD r14,r14,r13
 LD r1,r0,#W_LVAL
 CMP r1,r0
-JMP[EQ] @per_d
-LD r1,r0,#W_LKIND
-MOVI r3,4
-CMP r1,r3
-JMP[EQ] @per_arr_g
-MOVI r3,5
-CMP r1,r3
-JMP[EQ] @per_arr_l
-LD r2,r0,#W_LADDR
-CALL @emit_load_lv
-JMP @per_clear
-per_arr_g:
-LD r2,r0,#W_LADDR
-MOVI r1,1
-CALL @emit_addr_lv
-JMP @per_clear
-per_arr_l:
-LD r2,r0,#W_LADDR
-MOVI r1,2
-CALL @emit_addr_lv
-per_clear:
+JMP[EQ] @per_done
+LD r1,r0,#W_LTYPE
+CALL @ty_kind
+ST r1,r0,#W_TY_TMP
+MOVI r2,#TY_ARRAY
+CMP r1,r2
+JMP[EQ] @per_array
+MOVI r2,#TY_FUNC
+CMP r1,r2
+JMP[EQ] @per_func
+MOVI r2,#TY_STRUCT
+CMP r1,r2
+JMP[EQ] @per_struct
+MOVI r2,#TY_UNION
+CMP r1,r2
+JMP[EQ] @per_struct
+LD r1,r0,#W_LTYPE
+CALL @px_emit_load
+LD r1,r0,#W_LTYPE
+CALL @px_promote
+ST r1,r0,#W_ETYPE
 ST r0,r0,#W_LVAL
-per_d:
+JMP @per_done
+per_array:
+LD r1,r0,#W_LTYPE
+CALL @ty_base
+CALL @ty_ptr
+ST r1,r0,#W_ETYPE
+ST r0,r0,#W_LVAL
+JMP @per_done
+per_func:
+LD r1,r0,#W_LTYPE
+ST r1,r0,#W_ETYPE
+ST r0,r0,#W_LVAL
+JMP @per_done
+per_struct:
+MOVI r1,65
+CALL @p_err
+per_done:
 SUB r14,r14,r13
 LD r15,r14,0
 RET
 
-; emit_load_lv: r1=kind(1 global,2 local) r2=address/offset
-emit_load_lv:
+; px_emit_load: r1=type -> emit I_LOAD
+px_emit_load:
 ST r15,r14,0
 ADD r14,r14,r13
-MOVI r3,3
-CMP r1,r3
-JMP[EQ] @ell_ind
-MOVI r3,1
-CMP r1,r3
-JMP[NE] @ell_local
-LA r1,#I_LG
-JMP @ell_go
-ell_local:
-LA r1,#I_LL
-JMP @ell_go
-ell_ind:
-LA r1,#I_LOAD_IND
-ell_go:
+CALL @ty_store_code
+ADD r2,r1,r0
+LA r1,#I_LOAD
 CALL @ir_emit
 SUB r14,r14,r13
 LD r15,r14,0
 RET
-; emit_store_lv: pops the value (indirect also pops the address)
-emit_store_lv:
+; px_emit_store: r1=type r2=keep -> emit I_STORE/I_STORE_K
+px_emit_store:
 ST r15,r14,0
 ADD r14,r14,r13
-MOVI r3,3
-CMP r1,r3
-JMP[EQ] @esl_ind
-MOVI r3,1
-CMP r1,r3
-JMP[NE] @esl_local
-LA r1,#I_SG
-JMP @esl_go
-esl_local:
-LA r1,#I_SL
-JMP @esl_go
-esl_ind:
-LA r1,#I_STORE_IND
-esl_go:
+ST r2,r0,#W_TY_TMP
+CALL @ty_store_code
+ADD r2,r1,r0
+LD r3,r0,#W_TY_TMP
+CMP r3,r0
+JMP[EQ] @pxs_plain
+LA r1,#I_STORE_K
+JMP @pxs_go
+pxs_plain:
+LA r1,#I_STORE
+pxs_go:
 CALL @ir_emit
 SUB r14,r14,r13
 LD r15,r14,0
 RET
-; emit_store_keep_lv: stores the top value but leaves it on the stack
-emit_store_keep_lv:
-ST r15,r14,0
-ADD r14,r14,r13
-MOVI r3,3
-CMP r1,r3
-JMP[NE] @esk_direct
-; [addr,val] -> store, leave val
-LA r1,#I_STORE_IND_KEEP
-MOVI r2,0
-CALL @ir_emit
-JMP @esk_d
-esk_direct:
-MOVI r3,1
-CMP r1,r3
-JMP[NE] @esk_local
-LA r1,#I_SGK
-JMP @esk_go
-esk_local:
-LA r1,#I_SLK
-esk_go:
-CALL @ir_emit
-esk_d:
-SUB r14,r14,r13
-LD r15,r14,0
-RET
-; emit_addr_lv: r1=kind r2=addr -> push the address
-emit_addr_lv:
-ST r15,r14,0
-ADD r14,r14,r13
-MOVI r3,1
-CMP r1,r3
-JMP[NE] @eal_l
+; px_addr_g: r1=absolute byte address
+px_addr_g:
+ADD r2,r1,r0
 LA r1,#I_GADDR
-JMP @eal_go
-eal_l:
+JMP @ir_emit
+; px_addr_l: r1=byte offset from fp
+px_addr_l:
+ADD r2,r1,r0
 LA r1,#I_LADDR
-eal_go:
-CALL @ir_emit
+JMP @ir_emit
+
+; px_promote: r1=type -> r1 promoted integer type
+px_promote:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_TY_TMP
+CALL @ty_size
+MOVI r2,4
+CMP r1,r2
+JMP[GE] @pxp_same
+LD r1,r0,#W_TY_TMP
+CALL @ty_sign
+CMP r1,r0
+JMP[EQ] @pxp_uint
+MOVI r1,#T_INT
+JMP @pxp_d
+pxp_uint:
+MOVI r1,#T_UINT
+JMP @pxp_d
+pxp_same:
+LD r1,r0,#W_TY_TMP
+pxp_d:
 SUB r14,r14,r13
 LD r15,r14,0
 RET
 
-; p_primary: literals, identifiers, calls, parenthesised expressions
+; px_cast_code: r1=type -> r1=cast/load code
+px_cast_code:
+JMP @ty_store_code
+
+; px_cast_stack: r1=target type, value on eval stack, W_ETYPE=source
+px_cast_stack:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_TY_ID
+LD r2,r0,#W_ETYPE
+CMP r1,r2
+JMP[EQ] @pxc_done
+LD r1,r0,#W_ETYPE
+CALL @ty_kind
+ST r1,r0,#W_TY_KIND
+LD r1,r0,#W_TY_ID
+CALL @ty_kind
+ST r1,r0,#W_TY_BASE
+MOVI r2,#TY_FLOAT
+LD r1,r0,#W_TY_KIND
+CMP r1,r2
+JMP[NE] @pxc_notfromf
+LD r1,r0,#W_TY_BASE
+CMP r1,r2
+JMP[EQ] @pxc_codes
+MOVI r2,6
+JMP @pxc_emit
+pxc_notfromf:
+LD r1,r0,#W_TY_BASE
+CMP r1,r2
+JMP[NE] @pxc_codes
+MOVI r2,5
+JMP @pxc_emit
+pxc_codes:
+LD r1,r0,#W_ETYPE
+CALL @ty_store_code
+ST r1,r0,#W_TY_KIND
+LD r1,r0,#W_TY_ID
+CALL @ty_store_code
+LD r2,r0,#W_TY_KIND
+CMP r1,r2
+JMP[EQ] @pxc_done
+ADD r2,r1,r0
+pxc_emit:
+LA r1,#I_CAST
+CALL @ir_emit
+pxc_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; px_step_size: r1=type -> increment size (pointer target size, else object size)
+px_step_size:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_TY_TMP
+CALL @ty_kind
+MOVI r2,#TY_PTR
+CMP r1,r2
+JMP[NE] @pxs_obj
+LD r1,r0,#W_TY_TMP
+CALL @ty_base
+CALL @ty_size
+JMP @pxs_d
+pxs_obj:
+LD r1,r0,#W_TY_TMP
+CALL @ty_size
+pxs_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+; px_inc_step: r1=type -> 1 for arithmetic, element size for pointers
+px_inc_step:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_TY_TMP
+CALL @ty_kind
+MOVI r2,#TY_PTR
+CMP r1,r2
+JMP[NE] @pxis_one
+LD r1,r0,#W_TY_TMP
+CALL @ty_base
+CALL @ty_size
+JMP @pxis_d
+pxis_one:
+MOVI r1,1
+pxis_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; ------------------------------------------------------------------ primary
 p_primary:
 ST r15,r14,0
 ADD r14,r14,r13
 LD r1,r0,#W_TKA
-MOVI r2,2
+MOVI r2,#K_INT
 CMP r1,r2
-JMP[EQ] @pp_int
-MOVI r2,5
+JMP[EQ] @pp_lit
+MOVI r2,#K_CHAR
 CMP r1,r2
-JMP[EQ] @pp_int
-MOVI r2,4
+JMP[EQ] @pp_lit
+MOVI r2,#K_STRING
 CMP r1,r2
-JMP[EQ] @pp_str
-MOVI r2,3
+JMP[EQ] @pp_string
+MOVI r2,#K_IDENT
 CMP r1,r2
 JMP[EQ] @pp_ident
-MOVI r2,6
+MOVI r2,#K_PUNCT
 CMP r1,r2
 JMP[EQ] @pp_punct
 MOVI r1,5
 CALL @p_err
-pp_int:
+pp_lit:
 LD r2,r0,#W_TKA+1
 LA r1,#I_PUSH
 CALL @ir_emit
+MOVI r1,#T_INT
+ST r1,r0,#W_ETYPE
 ST r0,r0,#W_LVAL
 CALL @p_adv
-JMP @pp_d
-pp_str:
+JMP @pp_done
+pp_string:
 CALL @str_add_cur
 ADD r2,r1,r0
 LA r1,#I_PUSH
 CALL @ir_emit
+MOVI r1,#T_CHAR
+CALL @ty_ptr
+ST r1,r0,#W_ETYPE
 ST r0,r0,#W_LVAL
 CALL @p_adv
-JMP @pp_d
+JMP @pp_done
 pp_ident:
 CALL @p_peek
 LD r1,r0,#W_TKB
-MOVI r2,6
+MOVI r2,#K_PUNCT
 CMP r1,r2
-JMP[NE] @pp_var
+JMP[NE] @pp_ident_var
 LD r1,r0,#W_TKB+1
 MOVI r2,#P_LPAREN
 CMP r1,r2
 JMP[EQ] @pp_call
-pp_var:
+pp_ident_var:
+MOVI r1,#SK_ENUM
+CALL @sym_find_cur
+MOVI r2,0xFFFF
+SHL r2,r2,16
+ADDI r2,r2,-1
+CMP r1,r2
+JMP[EQ] @pp_try_var
+CALL @sym_entry
+LD r2,r1,#SY_AUX
+ADD r2,r2,r0
+LA r1,#I_PUSH
+CALL @ir_emit
+MOVI r1,#T_INT
+ST r1,r0,#W_ETYPE
+ST r0,r0,#W_LVAL
+CALL @p_adv
+JMP @pp_done
+pp_try_var:
 CALL @sym_lookup_var
 MOVI r2,0xFFFF
 SHL r2,r2,16
@@ -2636,42 +5965,38 @@ pp_var_ok:
 CALL @sym_entry
 LD r2,r1,#SY_KIND
 LD r3,r1,#SY_AUX
-ST r3,r0,#W_LADDR
-LD r4,r1,#SY_NL
-CMP r4,r0
-JMP[EQ] @pp_var_scalar
-; array name: its value is the base address
-MOVI r3,1
-CMP r2,r3
-JMP[NE] @pp_var_arr_l
-MOVI r3,4
-ST r3,r0,#W_LKIND
-JMP @pp_var_arr_done
-pp_var_arr_l:
-MOVI r3,5
-ST r3,r0,#W_LKIND
-pp_var_arr_done:
-MOVI r3,1
-ST r3,r0,#W_LVAL
+LD r4,r1,#SY_TYPE
+LD r5,r1,#SY_CLS
+ST r4,r0,#W_LTYPE
+ST r4,r0,#W_ETYPE
+MOVI r6,#SK_GLOBAL
+CMP r2,r6
+JMP[EQ] @pp_var_global
+MOVI r6,1
+CMP r5,r6
+JMP[EQ] @pp_var_global
+ADD r1,r3,r0
+CALL @px_addr_l
+JMP @pp_var_set
+pp_var_global:
+ADD r1,r3,r0
+CALL @px_addr_g
+pp_var_set:
+MOVI r1,1
+ST r1,r0,#W_LVAL
 CALL @p_adv
-JMP @pp_d
-pp_var_scalar:
-MOVI r3,1
-CMP r2,r3
-JMP[EQ] @pp_var_g
-MOVI r3,2
-ST r3,r0,#W_LKIND
-JMP @pp_var_s
-pp_var_g:
-MOVI r3,1
-ST r3,r0,#W_LKIND
-pp_var_s:
-MOVI r3,1
-ST r3,r0,#W_LVAL
-CALL @p_adv
-JMP @pp_d
+JMP @pp_done
 pp_call:
-CALL @sym_lookup_func
+MOVI r1,#SK_FUNC
+CALL @sym_find_cur
+MOVI r2,0xFFFF
+SHL r2,r2,16
+ADDI r2,r2,-1
+CMP r1,r2
+JMP[NE] @pp_call_found
+MOVI r1,#SK_BUILTIN
+CALL @sym_find_cur
+pp_call_found:
 MOVI r2,0xFFFF
 SHL r2,r2,16
 ADDI r2,r2,-1
@@ -2682,12 +6007,12 @@ CALL @p_err
 pp_call_ok:
 ST r1,r14,0
 ADD r14,r14,r13
-ST r0,r14,0
-ADD r14,r14,r13
 CALL @p_adv
 MOVI r1,#P_LPAREN
 MOVI r2,9
 CALL @p_expect_p
+ST r0,r14,0
+ADD r14,r14,r13
 MOVI r1,#P_RPAREN
 CALL @p_at_p
 CMP r1,r0
@@ -2715,9 +6040,14 @@ LD r3,r3,0
 BOOL.14 r2,r2,r3
 LA r1,#I_CALL
 CALL @ir_emit
+ADDI r3,r14,-2
+LD r1,r3,0
+CALL @sym_entry
+LD r1,r1,#SY_TYPE
+ST r1,r0,#W_ETYPE
 ADDI r14,r14,-2
 ST r0,r0,#W_LVAL
-JMP @pp_d
+JMP @pp_done
 pp_punct:
 LD r1,r0,#W_TKA+1
 MOVI r2,#P_LPAREN
@@ -2727,181 +6057,224 @@ MOVI r1,7
 CALL @p_err
 pp_paren:
 CALL @p_peek
-LD r1,r0,#W_TKB
-MOVI r2,#K_KEYWORD
-CMP r1,r2
-JMP[NE] @pp_paren_expr
-LD r1,r0,#W_TKB+1
-CALL @kw_is_type
+LA r1,#W_TKB
+CALL @p_tok_is_type
 CMP r1,r0
 JMP[EQ] @pp_paren_expr
-; cast: ( type ) unary
 CALL @p_adv
-CALL @p_skip_types
+CALL @p_typespec
+CALL @p_ptr_suffix
+ST r1,r0,#W_TY_ID
 MOVI r1,#P_RPAREN
 MOVI r2,10
 CALL @p_expect_p
 CALL @p_unary
 CALL @p_emit_rv
+LD r1,r0,#W_TY_ID
+CALL @px_cast_stack
+LD r1,r0,#W_TY_ID
+ST r1,r0,#W_ETYPE
 ST r0,r0,#W_LVAL
-JMP @pp_d
+JMP @pp_done
 pp_paren_expr:
 CALL @p_adv
 CALL @p_expr
 MOVI r1,#P_RPAREN
 MOVI r2,10
 CALL @p_expect_p
-JMP @pp_d
-pp_d:
+JMP @pp_done
+pp_done:
 SUB r14,r14,r13
 LD r15,r14,0
 RET
 
-; p_postfix: identifier++ / identifier--
+; ------------------------------------------------------------------ postfix
 p_postfix:
 ST r15,r14,0
 ADD r14,r14,r13
 CALL @p_primary
-ppf_idx:
+pxf_loop:
 MOVI r1,#P_LBRACK
 CALL @p_at_p
 CMP r1,r0
-JMP[EQ] @ppf_inc
+JMP[EQ] @pxf_member
 CALL @p_emit_rv
+LD r1,r0,#W_ETYPE
+CALL @ty_kind
+MOVI r2,#TY_PTR
+CMP r1,r2
+JMP[EQ] @pxf_idx_ok
+MOVI r1,67
+CALL @p_err
+pxf_idx_ok:
+LD r1,r0,#W_ETYPE
+CALL @ty_base
+ST r1,r0,#W_TY_ID
 CALL @p_adv
 CALL @p_expr
 CALL @p_emit_rv
 MOVI r1,#P_RBRACK
 MOVI r2,33
 CALL @p_expect_p
+LD r1,r0,#W_TY_ID
+CALL @ty_size
+ADD r2,r1,r0
+LA r1,#I_PUSH
+CALL @ir_emit
+LA r1,#I_MUL
+CALL @ir_op
 LA r1,#I_ADD
 CALL @ir_op
-MOVI r1,3
-ST r1,r0,#W_LKIND
+LD r1,r0,#W_TY_ID
+ST r1,r0,#W_LTYPE
+ST r1,r0,#W_ETYPE
 MOVI r1,1
 ST r1,r0,#W_LVAL
-JMP @ppf_idx
-ppf_inc:
+JMP @pxf_loop
+pxf_member:
+MOVI r1,#P_DOT
+CALL @p_at_p
+CMP r1,r0
+JMP[NE] @pxf_dot
+MOVI r1,#P_ARROW
+CALL @p_at_p
+CMP r1,r0
+JMP[NE] @pxf_arrow
+JMP @pxf_inc
+pxf_dot:
 LD r1,r0,#W_LVAL
 CMP r1,r0
-JMP[EQ] @ppf_d
-LD r1,r0,#W_TKA
-MOVI r2,6
+JMP[NE] @pxf_dot_ok
+MOVI r1,34
+CALL @p_err
+pxf_dot_ok:
+CALL @p_adv
+LD r1,r0,#W_LTYPE
+CALL @p_member_lookup
+ST r2,r0,#W_TY_ID
+ADD r2,r1,r0
+LA r1,#I_PUSH
+CALL @ir_emit
+LA r1,#I_ADD
+CALL @ir_op
+LD r1,r0,#W_TY_ID
+ST r1,r0,#W_LTYPE
+ST r1,r0,#W_ETYPE
+MOVI r1,1
+ST r1,r0,#W_LVAL
+JMP @pxf_loop
+pxf_arrow:
+CALL @p_emit_rv
+LD r1,r0,#W_ETYPE
+CALL @ty_kind
+MOVI r2,#TY_PTR
 CMP r1,r2
-JMP[NE] @ppf_d
+JMP[EQ] @pxf_arrow_ok
+MOVI r1,68
+CALL @p_err
+pxf_arrow_ok:
+LD r1,r0,#W_ETYPE
+CALL @ty_base
+ST r1,r0,#W_TY_TMP
+CALL @p_adv
+LD r1,r0,#W_TY_TMP
+CALL @p_member_lookup
+ST r2,r0,#W_TY_ID
+ADD r2,r1,r0
+LA r1,#I_PUSH
+CALL @ir_emit
+LA r1,#I_ADD
+CALL @ir_op
+LD r1,r0,#W_TY_ID
+ST r1,r0,#W_LTYPE
+ST r1,r0,#W_ETYPE
+MOVI r1,1
+ST r1,r0,#W_LVAL
+JMP @pxf_loop
+pxf_inc:
+LD r1,r0,#W_LVAL
+CMP r1,r0
+JMP[EQ] @pxf_done
+LD r1,r0,#W_TKA
+MOVI r2,#K_PUNCT
+CMP r1,r2
+JMP[NE] @pxf_done
 LD r1,r0,#W_TKA+1
 MOVI r2,#P_INC
 CMP r1,r2
-JMP[EQ] @ppf_go
+JMP[EQ] @pxf_go
 MOVI r2,#P_DEC
 CMP r1,r2
-JMP[NE] @ppf_d
-ppf_go:
-LD r3,r0,#W_LKIND
-ST r3,r14,0
-ADD r14,r14,r13
-LD r3,r0,#W_LADDR
-ST r3,r14,0
-ADD r14,r14,r13
-LD r3,r0,#W_TKA+1
-ST r3,r14,0
-ADD r14,r14,r13
-CALL @p_adv
-ADDI r3,r14,-3
-LD r1,r3,0
-MOVI r2,3
-CMP r1,r2
-JMP[EQ] @ppf_ind
-; direct lvalue
-ADDI r3,r14,-3
-LD r1,r3,0
-LD r2,r3,1
-CALL @emit_load_lv
+JMP[NE] @pxf_done
+pxf_go:
+LD r1,r0,#W_TKA+1
+ST r1,r0,#W_TY_RET
+LD r1,r0,#W_LTYPE
+ST r1,r0,#W_TY_ID
+CALL @px_inc_step
+ST r1,r0,#W_TY_COUNT
+ADD r2,r1,r0
 LA r1,#I_DUP
 CALL @ir_op
+LD r1,r0,#W_TY_ID
+CALL @px_emit_load
 LA r1,#I_PUSH
-MOVI r2,1
+LD r2,r0,#W_TY_COUNT
 CALL @ir_emit
-ADDI r3,r14,-1
-LD r1,r3,0
+LD r1,r0,#W_TY_RET
 MOVI r2,#P_INC
 CMP r1,r2
-JMP[EQ] @ppf_dinc
+JMP[EQ] @pxf_add
 LA r1,#I_SUB
-JMP @ppf_dop
-ppf_dinc:
+JMP @pxf_op
+pxf_add:
 LA r1,#I_ADD
-ppf_dop:
+pxf_op:
 CALL @ir_op
-ADDI r3,r14,-3
-LD r1,r3,0
-LD r2,r3,1
-CALL @emit_store_keep_lv
-LA r1,#I_POP
-CALL @ir_op
-JMP @ppf_fin
-ppf_ind:
-LA r1,#I_DUP
-CALL @ir_op
-MOVI r1,3
-MOVI r2,0
-CALL @emit_load_lv
-LA r1,#I_PUSH
+LD r1,r0,#W_TY_ID
 MOVI r2,1
+CALL @px_emit_store
+; recover the old value from new
+LA r1,#I_PUSH
+LD r2,r0,#W_TY_COUNT
 CALL @ir_emit
-ADDI r3,r14,-1
-LD r1,r3,0
+LD r1,r0,#W_TY_RET
 MOVI r2,#P_INC
 CMP r1,r2
-JMP[EQ] @ppf_iinc
-LA r1,#I_SUB
-JMP @ppf_iop
-ppf_iinc:
+JMP[EQ] @pxf_old
 LA r1,#I_ADD
-ppf_iop:
 CALL @ir_op
-LA r1,#I_STORE_IND_KEEP
-MOVI r2,0
-CALL @ir_emit
-; recover the old value: new-1 for ++, new+1 for --
-LA r1,#I_PUSH
-MOVI r2,1
-CALL @ir_emit
-ADDI r3,r14,-1
-LD r1,r3,0
-MOVI r2,#P_INC
-CMP r1,r2
-JMP[EQ] @ppf_oldinc
-LA r1,#I_ADD
-JMP @ppf_oldop
-ppf_oldinc:
+JMP @pxf_old_done
+pxf_old:
 LA r1,#I_SUB
-ppf_oldop:
 CALL @ir_op
-ppf_fin:
-ADDI r14,r14,-3
+pxf_old_done:
+LD r1,r0,#W_TY_ID
+ST r1,r0,#W_ETYPE
 ST r0,r0,#W_LVAL
-ppf_d:
+CALL @p_adv
+JMP @pxf_loop
+pxf_done:
 SUB r14,r14,r13
 LD r15,r14,0
 RET
 
-; p_unary
+; ------------------------------------------------------------------ unary
 p_unary:
 ST r15,r14,0
 ADD r14,r14,r13
 LD r1,r0,#W_TKA
 MOVI r2,#K_KEYWORD
 CMP r1,r2
-JMP[NE] @pu_punct
+JMP[NE] @pu_ptr
 LD r1,r0,#W_TKA+1
 MOVI r2,#KW_SIZEOF
 CMP r1,r2
 JMP[EQ] @pu_sizeof
 JMP @pu_post
-pu_punct:
+pu_ptr:
 LD r1,r0,#W_TKA
-MOVI r2,6
+MOVI r2,#K_PUNCT
 CMP r1,r2
 JMP[NE] @pu_post
 LD r1,r0,#W_TKA+1
@@ -2934,31 +6307,48 @@ pu_plus:
 CALL @p_adv
 CALL @p_unary
 CALL @p_emit_rv
-JMP @pu_d
+LD r1,r0,#W_ETYPE
+CALL @px_promote
+ST r1,r0,#W_ETYPE
+JMP @pu_done
 pu_minus:
 CALL @p_adv
 CALL @p_unary
 CALL @p_emit_rv
+LD r1,r0,#W_ETYPE
+CALL @ty_kind
+MOVI r2,#TY_FLOAT
+CMP r1,r2
+JMP[NE] @pu_minus_int
+LA r1,#I_FNEG
+CALL @ir_op
+JMP @pu_done
+pu_minus_int:
+LD r1,r0,#W_ETYPE
+CALL @px_promote
+ST r1,r0,#W_ETYPE
 LA r1,#I_NEG
 CALL @ir_op
-ST r0,r0,#W_LVAL
-JMP @pu_d
+JMP @pu_done
 pu_lnot:
 CALL @p_adv
 CALL @p_unary
 CALL @p_emit_rv
 LA r1,#I_LNOT
 CALL @ir_op
-ST r0,r0,#W_LVAL
-JMP @pu_d
+MOVI r1,#T_INT
+ST r1,r0,#W_ETYPE
+JMP @pu_done
 pu_not:
 CALL @p_adv
 CALL @p_unary
 CALL @p_emit_rv
+LD r1,r0,#W_ETYPE
+CALL @px_promote
+ST r1,r0,#W_ETYPE
 LA r1,#I_NOT
 CALL @ir_op
-ST r0,r0,#W_LVAL
-JMP @pu_d
+JMP @pu_done
 pu_addr:
 CALL @p_adv
 CALL @p_unary
@@ -2968,69 +6358,59 @@ JMP[NE] @pu_addr_ok
 MOVI r1,34
 CALL @p_err
 pu_addr_ok:
-LD r1,r0,#W_LKIND
-MOVI r2,3
-CMP r1,r2
-JMP[EQ] @pu_addr_ind
-MOVI r2,4
-CMP r1,r2
-JMP[EQ] @pu_addr_arr
-MOVI r2,5
-CMP r1,r2
-JMP[EQ] @pu_addr_arr
-; direct variable: emit its address
-LD r2,r0,#W_LADDR
-CALL @emit_addr_lv
-JMP @pu_addr_done
-pu_addr_arr:
-CALL @p_emit_rv
-JMP @pu_addr_done
-pu_addr_ind:
-; the address is already on the eval stack
-pu_addr_done:
+LD r1,r0,#W_LTYPE
+CALL @ty_ptr
+ST r1,r0,#W_ETYPE
 ST r0,r0,#W_LVAL
-JMP @pu_d
+JMP @pu_done
 pu_deref:
 CALL @p_adv
 CALL @p_unary
 CALL @p_emit_rv
-MOVI r1,3
-ST r1,r0,#W_LKIND
+LD r1,r0,#W_ETYPE
+CALL @ty_kind
+MOVI r2,#TY_PTR
+CMP r1,r2
+JMP[EQ] @pu_deref_ok
+MOVI r1,68
+CALL @p_err
+pu_deref_ok:
+LD r1,r0,#W_ETYPE
+CALL @ty_base
+ST r1,r0,#W_LTYPE
+ST r1,r0,#W_ETYPE
 MOVI r1,1
 ST r1,r0,#W_LVAL
-JMP @pu_d
+JMP @pu_done
 pu_sizeof:
 CALL @p_adv
 LD r1,r0,#W_TKA
 MOVI r2,#K_PUNCT
 CMP r1,r2
-JMP[NE] @pu_szsimple
+JMP[NE] @pu_sz_simple
 LD r1,r0,#W_TKA+1
 MOVI r2,#P_LPAREN
 CMP r1,r2
-JMP[NE] @pu_szsimple
+JMP[NE] @pu_sz_simple
 CALL @p_peek
-; sizeof(type)
-LD r1,r0,#W_TKB
-MOVI r2,#K_KEYWORD
-CMP r1,r2
-JMP[NE] @pu_sz_paren_name
-LD r1,r0,#W_TKB+1
-CALL @kw_is_type
+LA r1,#W_TKB
+CALL @p_tok_is_type
 CMP r1,r0
-JMP[EQ] @pu_szexpr
+JMP[EQ] @pu_sz_paren_name
 CALL @p_adv
-CALL @p_skip_types
+CALL @p_typespec
+CALL @p_ptr_suffix
+CALL @ty_size
+ST r1,r0,#W_TY_ID
 MOVI r1,#P_RPAREN
 MOVI r2,10
 CALL @p_expect_p
-JMP @pu_sz_push1
-; sizeof(identifier...) - simple name if the next token is ')'
+JMP @pu_sz_push
 pu_sz_paren_name:
 LD r1,r0,#W_TKB
 MOVI r2,#K_IDENT
 CMP r1,r2
-JMP[NE] @pu_szexpr
+JMP[NE] @pu_sz_expr
 CALL @p_adv
 CALL @p_peek
 LD r1,r0,#W_TKB
@@ -3041,206 +6421,580 @@ LD r1,r0,#W_TKB+1
 MOVI r2,#P_RPAREN
 CMP r1,r2
 JMP[NE] @pu_sz_paren_expr
-CALL @pu_size_ident
-ST r1,r0,#W_TMP
+CALL @p_sizeof_name
+ST r1,r0,#W_TY_ID
 MOVI r1,#P_RPAREN
 MOVI r2,10
 CALL @p_expect_p
-LD r2,r0,#W_TMP
-JMP @pu_sz_emit
+JMP @pu_sz_push
 pu_sz_paren_expr:
 CALL @p_unary
 CALL @p_emit_rv
-LA r1,#I_POP
-CALL @ir_op
+LD r1,r0,#W_ETYPE
+CALL @ty_size
+ST r1,r0,#W_TY_ID
 MOVI r1,#P_RPAREN
 MOVI r2,10
 CALL @p_expect_p
-JMP @pu_sz_push1
-pu_szsimple:
+LA r1,#I_POP
+CALL @ir_op
+JMP @pu_sz_push
+pu_sz_simple:
 CALL @p_is_type
 CMP r1,r0
-JMP[EQ] @pu_szident
-CALL @p_skip_types
-JMP @pu_sz_push1
-pu_szident:
+JMP[EQ] @pu_sz_ident
+CALL @p_typespec
+CALL @p_ptr_suffix
+CALL @ty_size
+ST r1,r0,#W_TY_ID
+JMP @pu_sz_push
+pu_sz_ident:
 LD r1,r0,#W_TKA
 MOVI r2,#K_IDENT
 CMP r1,r2
-JMP[NE] @pu_szexpr
-CALL @p_peek
-LD r1,r0,#W_TKB
-MOVI r2,#K_PUNCT
-CMP r1,r2
-JMP[NE] @pu_szident_go
-LD r1,r0,#W_TKB+1
-MOVI r2,#P_LBRACK
-CMP r1,r2
-JMP[EQ] @pu_szexpr
-pu_szident_go:
-CALL @pu_size_ident
-ADD r2,r1,r0
-JMP @pu_sz_emit
-pu_szexpr:
+JMP[NE] @pu_sz_expr
+CALL @p_sizeof_name
+ST r1,r0,#W_TY_ID
+JMP @pu_sz_push
+pu_sz_expr:
 CALL @p_unary
 CALL @p_emit_rv
+LD r1,r0,#W_ETYPE
+CALL @ty_size
+ST r1,r0,#W_TY_ID
 LA r1,#I_POP
 CALL @ir_op
-pu_sz_push1:
-MOVI r2,1
-pu_sz_emit:
+pu_sz_push:
+LD r2,r0,#W_TY_ID
 LA r1,#I_PUSH
 CALL @ir_emit
+MOVI r1,#T_UINT
+ST r1,r0,#W_ETYPE
 ST r0,r0,#W_LVAL
-JMP @pu_d
+JMP @pu_done
 
-; pu_size_ident: current identifier -> r1 = array length or 1; consumes it.
-pu_size_ident:
+; p_sizeof_name: current identifier -> r1 = object type size; consumes it
+p_sizeof_name:
 ST r15,r14,0
 ADD r14,r14,r13
 LD r1,r0,#W_TKA
 MOVI r2,#K_IDENT
 CMP r1,r2
-JMP[NE] @pusi_one
+JMP[NE] @psn_one
 CALL @sym_lookup_var
 MOVI r2,0xFFFF
 SHL r2,r2,16
 ADDI r2,r2,-1
 CMP r1,r2
-JMP[EQ] @pusi_one
+JMP[EQ] @psn_one
 CALL @sym_entry
-LD r1,r1,#SY_NL
-CMP r1,r0
-JMP[EQ] @pusi_one
-ST r1,r0,#W_TMP
+LD r1,r1,#SY_TYPE
+CALL @ty_size
+ST r1,r0,#W_TY_ID
 CALL @p_adv
-LD r1,r0,#W_TMP
-JMP @pusi_d
-pusi_one:
+LD r1,r0,#W_TY_ID
+JMP @psn_d
+psn_one:
 MOVI r1,1
-pusi_d:
-SUB r14,r14,r13
-LD r15,r14,0
-RET
-pu_incdec:
-LD r1,r0,#W_TKA+1
-ST r1,r14,0
-ADD r14,r14,r13
-CALL @p_adv
-CALL @p_unary
-LD r1,r0,#W_LVAL
-CMP r1,r0
-JMP[NE] @pu_id_ok
-MOVI r1,11
-CALL @p_err
-pu_id_ok:
-LD r1,r0,#W_LKIND
-MOVI r2,4
-CMP r1,r2
-JMP[GE] @pu_id_bad
-ST r1,r14,0
-ADD r14,r14,r13
-LD r1,r0,#W_LADDR
-ST r1,r14,0
-ADD r14,r14,r13
-; indirect: keep a copy of the address under the value
-ADDI r3,r14,-2
-LD r1,r3,0
-MOVI r2,3
-CMP r1,r2
-JMP[NE] @pu_id_load
-LA r1,#I_DUP
-CALL @ir_op
-pu_id_load:
-ADDI r3,r14,-2
-LD r1,r3,0
-LD r2,r3,1
-CALL @emit_load_lv
-LA r1,#I_PUSH
-MOVI r2,1
-CALL @ir_emit
-ADDI r3,r14,-3
-LD r1,r3,0
-MOVI r2,#P_INC
-CMP r1,r2
-JMP[EQ] @pu_inc
-LA r1,#I_SUB
-JMP @pu_iop
-pu_id_bad:
-MOVI r1,34
-CALL @p_err
-pu_inc:
-LA r1,#I_ADD
-pu_iop:
-CALL @ir_op
-ADDI r3,r14,-2
-LD r1,r3,0
-MOVI r4,3
-CMP r1,r4
-JMP[EQ] @pu_i_keep
-LA r1,#I_DUP
-CALL @ir_op
-ADDI r3,r14,-2
-LD r1,r3,0
-LD r2,r3,1
-CALL @emit_store_lv
-JMP @pu_i_done
-pu_i_keep:
-ADDI r3,r14,-2
-LD r2,r3,1
-CALL @emit_store_keep_lv
-pu_i_done:
-ADDI r14,r14,-3
-ST r0,r0,#W_LVAL
-JMP @pu_d
-pu_post:
-CALL @p_postfix
-pu_d:
+psn_d:
 SUB r14,r14,r13
 LD r15,r14,0
 RET
 
-; binary levels -----------------------------------------------------
+pu_incdec:
+CALL @p_adv
+CALL @p_unary
+LD r1,r0,#W_LVAL
+CMP r1,r0
+JMP[NE] @pu_inc_ok
+MOVI r1,11
+CALL @p_err
+pu_inc_ok:
+LD r1,r0,#W_TKA+1
+ST r1,r0,#W_TY_RET
+LD r1,r0,#W_LTYPE
+ST r1,r0,#W_TY_ID
+CALL @px_inc_step
+ADD r2,r1,r0
+LA r1,#I_DUP
+CALL @ir_op
+LD r1,r0,#W_TY_ID
+CALL @px_emit_load
+LA r1,#I_PUSH
+LD r2,r0,#W_TY_COUNT
+CALL @ir_emit
+LD r1,r0,#W_TY_RET
+MOVI r2,#P_INC
+CMP r1,r2
+JMP[EQ] @pu_inc_add
+LA r1,#I_SUB
+JMP @pu_inc_op
+pu_inc_add:
+LA r1,#I_ADD
+pu_inc_op:
+CALL @ir_op
+LD r1,r0,#W_TY_ID
+MOVI r2,1
+CALL @px_emit_store
+LD r1,r0,#W_TY_ID
+ST r1,r0,#W_ETYPE
+ST r0,r0,#W_LVAL
+CALL @p_adv
+JMP @pu_done
+pu_post:
+CALL @p_postfix
+pu_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; ------------------------------------------------------------------ binary
+; p_binop: r1=bin kind, r2=left type, r3=right type; stack [left,right].
+p_binop:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r14,0
+ADD r14,r14,r13
+ST r2,r14,0
+ADD r14,r14,r13
+ST r3,r14,0
+ADD r14,r14,r13
+ADDI r3,r14,-2
+LD r1,r3,0
+CALL @ty_kind
+ST r1,r0,#W_TY_KIND
+ADDI r3,r14,-1
+LD r1,r3,0
+CALL @ty_kind
+ST r1,r0,#W_TY_COUNT
+MOVI r2,#TY_PTR
+LD r1,r0,#W_TY_KIND
+CMP r1,r2
+JMP[EQ] @pb_lptr
+LD r1,r0,#W_TY_COUNT
+CMP r1,r2
+JMP[EQ] @pb_rptr
+JMP @pb_scalar
+pb_lptr:
+ADDI r3,r14,-3
+LD r1,r3,0
+MOVI r2,#BIN_ADD
+CMP r1,r2
+JMP[EQ] @pb_pl_add
+MOVI r2,#BIN_SUB
+CMP r1,r2
+JMP[EQ] @pb_pl_sub
+JMP @pb_cmp_emit
+pb_pl_add:
+ADDI r3,r14,-2
+LD r1,r3,0
+CALL @px_step_size
+ADD r2,r1,r0
+LA r1,#I_PUSH
+CALL @ir_emit
+LA r1,#I_MUL
+CALL @ir_op
+LA r1,#I_ADD
+CALL @ir_op
+ADDI r3,r14,-2
+LD r1,r3,0
+ST r1,r0,#W_ETYPE
+JMP @pb_done
+pb_pl_sub:
+MOVI r2,#TY_PTR
+LD r1,r0,#W_TY_COUNT
+CMP r1,r2
+JMP[EQ] @pb_pp_diff
+ADDI r3,r14,-2
+LD r1,r3,0
+CALL @px_step_size
+ADD r2,r1,r0
+LA r1,#I_PUSH
+CALL @ir_emit
+LA r1,#I_MUL
+CALL @ir_op
+LA r1,#I_SUB
+CALL @ir_op
+ADDI r3,r14,-2
+LD r1,r3,0
+ST r1,r0,#W_ETYPE
+JMP @pb_done
+pb_pp_diff:
+LA r1,#I_SUB
+CALL @ir_op
+ADDI r3,r14,-2
+LD r1,r3,0
+CALL @px_step_size
+ADD r2,r1,r0
+LA r1,#I_PUSH
+CALL @ir_emit
+LA r1,#I_DIV
+CALL @ir_op
+MOVI r1,#T_INT
+ST r1,r0,#W_ETYPE
+JMP @pb_done
+pb_rptr:
+ADDI r3,r14,-3
+LD r1,r3,0
+MOVI r2,#BIN_ADD
+CMP r1,r2
+JMP[EQ] @pb_rp_add
+MOVI r1,69
+CALL @p_err
+pb_rp_add:
+LA r1,#I_SWAP
+CALL @ir_op
+ADDI r3,r14,-1
+LD r1,r3,0
+CALL @px_step_size
+ADD r2,r1,r0
+LA r1,#I_PUSH
+CALL @ir_emit
+LA r1,#I_MUL
+CALL @ir_op
+LA r1,#I_ADD
+CALL @ir_op
+ADDI r3,r14,-1
+LD r1,r3,0
+ST r1,r0,#W_ETYPE
+JMP @pb_done
+pb_scalar:
+MOVI r2,#TY_FLOAT
+LD r1,r0,#W_TY_KIND
+CMP r1,r2
+JMP[EQ] @pb_float
+LD r1,r0,#W_TY_COUNT
+CMP r1,r2
+JMP[EQ] @pb_float
+ADDI r3,r14,-2
+LD r1,r3,0
+ADDI r3,r14,-1
+LD r2,r3,0
+CALL @ty_common
+ST r1,r0,#W_TY_RET
+LA r1,#I_SWAP
+CALL @ir_op
+ADDI r3,r14,-2
+LD r1,r3,0
+ST r1,r0,#W_ETYPE
+LD r1,r0,#W_TY_RET
+CALL @px_cast_stack
+LA r1,#I_SWAP
+CALL @ir_op
+ADDI r3,r14,-1
+LD r1,r3,0
+ST r1,r0,#W_ETYPE
+LD r1,r0,#W_TY_RET
+CALL @px_cast_stack
+ADDI r3,r14,-3
+LD r1,r3,0
+MOVI r2,#BIN_ADD
+CMP r1,r2
+JMP[EQ] @pb_i_add
+MOVI r2,#BIN_SUB
+CMP r1,r2
+JMP[EQ] @pb_i_sub
+MOVI r2,#BIN_MUL
+CMP r1,r2
+JMP[EQ] @pb_i_mul
+MOVI r2,#BIN_DIV
+CMP r1,r2
+JMP[EQ] @pb_i_div
+MOVI r2,#BIN_MOD
+CMP r1,r2
+JMP[EQ] @pb_i_mod
+MOVI r2,#BIN_SHL
+CMP r1,r2
+JMP[EQ] @pb_i_shl
+MOVI r2,#BIN_SHR
+CMP r1,r2
+JMP[EQ] @pb_i_shr
+MOVI r2,#BIN_AND
+CMP r1,r2
+JMP[EQ] @pb_i_and
+MOVI r2,#BIN_OR
+CMP r1,r2
+JMP[EQ] @pb_i_or
+MOVI r2,#BIN_XOR
+CMP r1,r2
+JMP[EQ] @pb_i_xor
+JMP @pb_cmp_emit
+pb_i_add:
+LA r1,#I_ADD
+JMP @pb_i_emit
+pb_i_sub:
+LA r1,#I_SUB
+JMP @pb_i_emit
+pb_i_mul:
+LA r1,#I_MUL
+JMP @pb_i_emit
+pb_i_div:
+LD r1,r0,#W_TY_RET
+CALL @ty_sign
+CMP r1,r0
+JMP[EQ] @pb_i_divu
+LA r1,#I_DIV
+JMP @pb_i_emit
+pb_i_divu:
+LA r1,#I_DIVU
+JMP @pb_i_emit
+pb_i_mod:
+LD r1,r0,#W_TY_RET
+CALL @ty_sign
+CMP r1,r0
+JMP[EQ] @pb_i_modu
+LA r1,#I_MOD
+JMP @pb_i_emit
+pb_i_modu:
+LA r1,#I_MODU
+JMP @pb_i_emit
+pb_i_shl:
+LA r1,#I_SHL
+JMP @pb_i_emit
+pb_i_shr:
+ADDI r3,r14,-2
+LD r1,r3,0
+CALL @px_promote
+CALL @ty_sign
+CMP r1,r0
+JMP[EQ] @pb_i_shru
+LA r1,#I_SHR
+JMP @pb_i_emit
+pb_i_shru:
+LA r1,#I_SHRU
+JMP @pb_i_emit
+pb_i_and:
+LA r1,#I_AND
+JMP @pb_i_emit
+pb_i_or:
+LA r1,#I_OR
+JMP @pb_i_emit
+pb_i_xor:
+LA r1,#I_XOR
+JMP @pb_i_emit
+pb_i_emit:
+CALL @ir_op
+LD r1,r0,#W_TY_RET
+ST r1,r0,#W_ETYPE
+JMP @pb_done
+pb_cmp_emit:
+MOVI r2,#BIN_EQ
+CMP r1,r2
+JMP[EQ] @pb_c_eq
+MOVI r2,#BIN_NE
+CMP r1,r2
+JMP[EQ] @pb_c_ne
+ADDI r3,r14,-2
+LD r1,r3,0
+CALL @ty_kind
+ST r1,r0,#W_TY_KIND
+ADDI r3,r14,-1
+LD r1,r3,0
+CALL @ty_kind
+ST r1,r0,#W_TY_COUNT
+MOVI r3,#TY_PTR
+CMP r1,r3
+JMP[EQ] @pb_c_unsigned
+LD r2,r0,#W_TY_KIND
+CMP r2,r3
+JMP[EQ] @pb_c_unsigned
+ADDI r3,r14,-2
+LD r1,r3,0
+ADDI r3,r14,-1
+LD r2,r3,0
+CALL @ty_common
+CALL @ty_sign
+CMP r1,r0
+JMP[EQ] @pb_c_unsigned
+ADDI r3,r14,-3
+LD r1,r3,0
+MOVI r2,#BIN_LT
+CMP r1,r2
+JMP[EQ] @pb_c_lt
+MOVI r2,#BIN_GT
+CMP r1,r2
+JMP[EQ] @pb_c_gt
+MOVI r2,#BIN_LE
+CMP r1,r2
+JMP[EQ] @pb_c_le
+LA r1,#I_GE
+JMP @pb_c_go
+pb_c_unsigned:
+ADDI r3,r14,-3
+LD r1,r3,0
+MOVI r2,#BIN_LT
+CMP r1,r2
+JMP[EQ] @pb_c_ltu
+MOVI r2,#BIN_GT
+CMP r1,r2
+JMP[EQ] @pb_c_gtu
+MOVI r2,#BIN_LE
+CMP r1,r2
+JMP[EQ] @pb_c_leu
+LA r1,#I_GEU
+JMP @pb_c_go
+pb_c_lt:
+LA r1,#I_LT
+JMP @pb_c_go
+pb_c_gt:
+LA r1,#I_GT
+JMP @pb_c_go
+pb_c_le:
+LA r1,#I_LE
+JMP @pb_c_go
+pb_c_ltu:
+LA r1,#I_LTU
+JMP @pb_c_go
+pb_c_gtu:
+LA r1,#I_GTU
+JMP @pb_c_go
+pb_c_leu:
+LA r1,#I_LEU
+JMP @pb_c_go
+pb_c_eq:
+LA r1,#I_EQ
+JMP @pb_c_go
+pb_c_ne:
+LA r1,#I_NE
+pb_c_go:
+CALL @ir_op
+MOVI r1,#T_INT
+ST r1,r0,#W_ETYPE
+JMP @pb_done
+pb_float:
+LA r1,#I_SWAP
+CALL @ir_op
+ADDI r3,r14,-2
+LD r1,r3,0
+ST r1,r0,#W_ETYPE
+MOVI r1,#T_FLOAT
+CALL @px_cast_stack
+LA r1,#I_SWAP
+CALL @ir_op
+ADDI r3,r14,-1
+LD r1,r3,0
+ST r1,r0,#W_ETYPE
+MOVI r1,#T_FLOAT
+CALL @px_cast_stack
+ADDI r3,r14,-3
+LD r1,r3,0
+MOVI r2,#BIN_ADD
+CMP r1,r2
+JMP[EQ] @pb_f_add
+MOVI r2,#BIN_SUB
+CMP r1,r2
+JMP[EQ] @pb_f_sub
+MOVI r2,#BIN_MUL
+CMP r1,r2
+JMP[EQ] @pb_f_mul
+MOVI r2,#BIN_DIV
+CMP r1,r2
+JMP[EQ] @pb_f_div
+MOVI r2,#BIN_LT
+CMP r1,r2
+JMP[EQ] @pb_f_lt
+MOVI r2,#BIN_GT
+CMP r1,r2
+JMP[EQ] @pb_f_gt
+MOVI r2,#BIN_LE
+CMP r1,r2
+JMP[EQ] @pb_f_le
+MOVI r2,#BIN_GE
+CMP r1,r2
+JMP[EQ] @pb_f_ge
+MOVI r2,#BIN_EQ
+CMP r1,r2
+JMP[EQ] @pb_f_eq
+LA r1,#I_FNE
+JMP @pb_f_go
+pb_f_add:
+LA r1,#I_FADD
+JMP @pb_f_arith
+pb_f_sub:
+LA r1,#I_FSUB
+JMP @pb_f_arith
+pb_f_mul:
+LA r1,#I_FMUL
+JMP @pb_f_arith
+pb_f_div:
+LA r1,#I_FDIV
+pb_f_arith:
+CALL @ir_op
+MOVI r1,#T_FLOAT
+ST r1,r0,#W_ETYPE
+JMP @pb_done
+pb_f_lt:
+LA r1,#I_FLT
+JMP @pb_f_go
+pb_f_gt:
+LA r1,#I_FGT
+JMP @pb_f_go
+pb_f_le:
+LA r1,#I_FLE
+JMP @pb_f_go
+pb_f_ge:
+LA r1,#I_FGE
+JMP @pb_f_go
+pb_f_eq:
+LA r1,#I_FEQ
+pb_f_go:
+CALL @ir_op
+MOVI r1,#T_INT
+ST r1,r0,#W_ETYPE
+pb_done:
+ADDI r14,r14,-3
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; generic left-associative level macros are written out for clarity
 p_mul:
 ST r15,r14,0
 ADD r14,r14,r13
 CALL @p_unary
-pm_l:
+pmul_l:
 LD r1,r0,#W_TKA
-MOVI r2,6
+MOVI r2,#K_PUNCT
 CMP r1,r2
-JMP[NE] @pm_d
+JMP[NE] @pmul_d
 LD r1,r0,#W_TKA+1
 MOVI r2,#P_STAR
 CMP r1,r2
-JMP[EQ] @pm_star
+JMP[EQ] @pml_star
 MOVI r2,#P_SLASH
 CMP r1,r2
-JMP[EQ] @pm_slash
+JMP[EQ] @pml_slash
 MOVI r2,#P_PCT
 CMP r1,r2
-JMP[EQ] @pm_pct
-JMP @pm_d
-pm_star:
-LA r3,#I_MUL
-JMP @pm_go
-pm_slash:
-LA r3,#I_DIV
-JMP @pm_go
-pm_pct:
-LA r3,#I_MOD
-pm_go:
-ST r3,r14,0
+JMP[EQ] @pml_pct
+JMP @pmul_d
+pml_star:
+MOVI r1,#BIN_MUL
+JMP @pml_go
+pml_slash:
+MOVI r1,#BIN_DIV
+JMP @pml_go
+pml_pct:
+MOVI r1,#BIN_MOD
+pml_go:
+ST r1,r14,0
 ADD r14,r14,r13
 CALL @p_emit_rv
+LD r1,r0,#W_ETYPE
+ST r1,r14,0
+ADD r14,r14,r13
 CALL @p_adv
 CALL @p_unary
 CALL @p_emit_rv
-SUB r14,r14,r13
-LD r1,r14,0
-CALL @ir_op
-JMP @pm_l
-pm_d:
+ADDI r3,r14,-1
+LD r2,r3,0
+ADDI r3,r3,-1
+LD r1,r3,0
+LD r3,r0,#W_ETYPE
+CALL @p_binop
+ADDI r14,r14,-2
+JMP @pmul_l
+pmul_d:
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -3249,36 +7003,43 @@ p_add:
 ST r15,r14,0
 ADD r14,r14,r13
 CALL @p_mul
-pa_l:
+pal_l:
 LD r1,r0,#W_TKA
-MOVI r2,6
+MOVI r2,#K_PUNCT
 CMP r1,r2
-JMP[NE] @padd_d
+JMP[NE] @pal_d
 LD r1,r0,#W_TKA+1
 MOVI r2,#P_PLUS
 CMP r1,r2
-JMP[EQ] @padd_plus
+JMP[EQ] @pal_plus
 MOVI r2,#P_MINUS
 CMP r1,r2
-JMP[EQ] @padd_minus
-JMP @padd_d
-padd_plus:
-LA r3,#I_ADD
-JMP @padd_go
-padd_minus:
-LA r3,#I_SUB
-padd_go:
-ST r3,r14,0
+JMP[EQ] @pal_minus
+JMP @pal_d
+pal_plus:
+MOVI r1,#BIN_ADD
+JMP @pal_go
+pal_minus:
+MOVI r1,#BIN_SUB
+pal_go:
+ST r1,r14,0
 ADD r14,r14,r13
 CALL @p_emit_rv
+LD r1,r0,#W_ETYPE
+ST r1,r14,0
+ADD r14,r14,r13
 CALL @p_adv
 CALL @p_mul
 CALL @p_emit_rv
-SUB r14,r14,r13
-LD r1,r14,0
-CALL @ir_op
-JMP @pa_l
-padd_d:
+ADDI r3,r14,-1
+LD r2,r3,0
+ADDI r3,r3,-1
+LD r1,r3,0
+LD r3,r0,#W_ETYPE
+CALL @p_binop
+ADDI r14,r14,-2
+JMP @pal_l
+pal_d:
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -3287,36 +7048,43 @@ p_shift:
 ST r15,r14,0
 ADD r14,r14,r13
 CALL @p_add
-ps_l:
+psl_l:
 LD r1,r0,#W_TKA
-MOVI r2,6
+MOVI r2,#K_PUNCT
 CMP r1,r2
-JMP[NE] @ncc_ps_done
+JMP[NE] @psl_d
 LD r1,r0,#W_TKA+1
 MOVI r2,#P_SHL
 CMP r1,r2
-JMP[EQ] @ps_shl
+JMP[EQ] @psl_shl
 MOVI r2,#P_SHR
 CMP r1,r2
-JMP[EQ] @ps_shr
-JMP @ncc_ps_done
-ps_shl:
-LA r3,#I_SHL
-JMP @ps_go
-ps_shr:
-LA r3,#I_SHR
-ps_go:
-ST r3,r14,0
+JMP[EQ] @psl_shr
+JMP @psl_d
+psl_shl:
+MOVI r1,#BIN_SHL
+JMP @psl_go
+psl_shr:
+MOVI r1,#BIN_SHR
+psl_go:
+ST r1,r14,0
 ADD r14,r14,r13
 CALL @p_emit_rv
+LD r1,r0,#W_ETYPE
+ST r1,r14,0
+ADD r14,r14,r13
 CALL @p_adv
 CALL @p_add
 CALL @p_emit_rv
-SUB r14,r14,r13
-LD r1,r14,0
-CALL @ir_op
-JMP @ps_l
-ncc_ps_done:
+ADDI r3,r14,-1
+LD r2,r3,0
+ADDI r3,r3,-1
+LD r1,r3,0
+LD r3,r0,#W_ETYPE
+CALL @p_binop
+ADDI r14,r14,-2
+JMP @psl_l
+psl_d:
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -3325,48 +7093,55 @@ p_rel:
 ST r15,r14,0
 ADD r14,r14,r13
 CALL @p_shift
-pr_l:
+prl_l:
 LD r1,r0,#W_TKA
-MOVI r2,6
+MOVI r2,#K_PUNCT
 CMP r1,r2
-JMP[NE] @pr_d
+JMP[NE] @prl_d
 LD r1,r0,#W_TKA+1
 MOVI r2,#P_LT
 CMP r1,r2
-JMP[EQ] @pr_lt
+JMP[EQ] @prl_lt
 MOVI r2,#P_GT
 CMP r1,r2
-JMP[EQ] @pr_gt
+JMP[EQ] @prl_gt
 MOVI r2,#P_LE
 CMP r1,r2
-JMP[EQ] @pr_le
+JMP[EQ] @prl_le
 MOVI r2,#P_GE
 CMP r1,r2
-JMP[EQ] @pr_ge
-JMP @pr_d
-pr_lt:
-LA r3,#I_LT
-JMP @pr_go
-pr_gt:
-LA r3,#I_GT
-JMP @pr_go
-pr_le:
-LA r3,#I_LE
-JMP @pr_go
-pr_ge:
-LA r3,#I_GE
-pr_go:
-ST r3,r14,0
+JMP[EQ] @prl_ge
+JMP @prl_d
+prl_lt:
+MOVI r1,#BIN_LT
+JMP @prl_go
+prl_gt:
+MOVI r1,#BIN_GT
+JMP @prl_go
+prl_le:
+MOVI r1,#BIN_LE
+JMP @prl_go
+prl_ge:
+MOVI r1,#BIN_GE
+prl_go:
+ST r1,r14,0
 ADD r14,r14,r13
 CALL @p_emit_rv
+LD r1,r0,#W_ETYPE
+ST r1,r14,0
+ADD r14,r14,r13
 CALL @p_adv
 CALL @p_shift
 CALL @p_emit_rv
-SUB r14,r14,r13
-LD r1,r14,0
-CALL @ir_op
-JMP @pr_l
-pr_d:
+ADDI r3,r14,-1
+LD r2,r3,0
+ADDI r3,r3,-1
+LD r1,r3,0
+LD r3,r0,#W_ETYPE
+CALL @p_binop
+ADDI r14,r14,-2
+JMP @prl_l
+prl_d:
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -3375,36 +7150,43 @@ p_eq:
 ST r15,r14,0
 ADD r14,r14,r13
 CALL @p_rel
-pe_l:
+pel_l:
 LD r1,r0,#W_TKA
-MOVI r2,6
+MOVI r2,#K_PUNCT
 CMP r1,r2
-JMP[NE] @pe_d
+JMP[NE] @pel_d
 LD r1,r0,#W_TKA+1
 MOVI r2,#P_EQ
 CMP r1,r2
-JMP[EQ] @pe_eq
+JMP[EQ] @pel_eq
 MOVI r2,#P_NE
 CMP r1,r2
-JMP[EQ] @pe_ne
-JMP @pe_d
-pe_eq:
-LA r3,#I_EQ
-JMP @pe_go
-pe_ne:
-LA r3,#I_NE
-pe_go:
-ST r3,r14,0
+JMP[EQ] @pel_ne
+JMP @pel_d
+pel_eq:
+MOVI r1,#BIN_EQ
+JMP @pel_go
+pel_ne:
+MOVI r1,#BIN_NE
+pel_go:
+ST r1,r14,0
 ADD r14,r14,r13
 CALL @p_emit_rv
+LD r1,r0,#W_ETYPE
+ST r1,r14,0
+ADD r14,r14,r13
 CALL @p_adv
 CALL @p_rel
 CALL @p_emit_rv
-SUB r14,r14,r13
-LD r1,r14,0
-CALL @ir_op
-JMP @pe_l
-pe_d:
+ADDI r3,r14,-1
+LD r2,r3,0
+ADDI r3,r3,-1
+LD r1,r3,0
+LD r3,r0,#W_ETYPE
+CALL @p_binop
+ADDI r14,r14,-2
+JMP @pel_l
+pel_d:
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -3413,19 +7195,30 @@ p_band:
 ST r15,r14,0
 ADD r14,r14,r13
 CALL @p_eq
-pba_l:
+pbal_l:
 MOVI r1,#P_AMP
 CALL @p_at_p
 CMP r1,r0
-JMP[EQ] @pba_d
+JMP[EQ] @pbal_d
 CALL @p_emit_rv
+LD r1,r0,#W_ETYPE
+ST r1,r14,0
+ADD r14,r14,r13
+MOVI r1,#BIN_AND
+ST r1,r14,0
+ADD r14,r14,r13
 CALL @p_adv
 CALL @p_eq
 CALL @p_emit_rv
-LA r1,#I_AND
-CALL @ir_op
-JMP @pba_l
-pba_d:
+ADDI r3,r14,-1
+LD r2,r3,0
+ADDI r3,r3,-1
+LD r1,r3,0
+LD r3,r0,#W_ETYPE
+CALL @p_binop
+ADDI r14,r14,-2
+JMP @pbal_l
+pbal_d:
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -3434,19 +7227,30 @@ p_bxor:
 ST r15,r14,0
 ADD r14,r14,r13
 CALL @p_band
-pbx_l:
+pbxl_l:
 MOVI r1,#P_CARET
 CALL @p_at_p
 CMP r1,r0
-JMP[EQ] @pbx_d
+JMP[EQ] @pbxl_d
 CALL @p_emit_rv
+LD r1,r0,#W_ETYPE
+ST r1,r14,0
+ADD r14,r14,r13
+MOVI r1,#BIN_XOR
+ST r1,r14,0
+ADD r14,r14,r13
 CALL @p_adv
 CALL @p_band
 CALL @p_emit_rv
-LA r1,#I_XOR
-CALL @ir_op
-JMP @pbx_l
-pbx_d:
+ADDI r3,r14,-1
+LD r2,r3,0
+ADDI r3,r3,-1
+LD r1,r3,0
+LD r3,r0,#W_ETYPE
+CALL @p_binop
+ADDI r14,r14,-2
+JMP @pbxl_l
+pbxl_d:
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -3455,19 +7259,30 @@ p_bor:
 ST r15,r14,0
 ADD r14,r14,r13
 CALL @p_bxor
-pbo_l:
+pbol_l:
 MOVI r1,#P_BAR
 CALL @p_at_p
 CMP r1,r0
-JMP[EQ] @pbo_d
+JMP[EQ] @pbol_d
 CALL @p_emit_rv
+LD r1,r0,#W_ETYPE
+ST r1,r14,0
+ADD r14,r14,r13
+MOVI r1,#BIN_OR
+ST r1,r14,0
+ADD r14,r14,r13
 CALL @p_adv
 CALL @p_bxor
 CALL @p_emit_rv
-LA r1,#I_OR
-CALL @ir_op
-JMP @pbo_l
-pbo_d:
+ADDI r3,r14,-1
+LD r2,r3,0
+ADDI r3,r3,-1
+LD r1,r3,0
+LD r3,r0,#W_ETYPE
+CALL @p_binop
+ADDI r14,r14,-2
+JMP @pbol_l
+pbol_d:
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -3476,11 +7291,11 @@ p_land:
 ST r15,r14,0
 ADD r14,r14,r13
 CALL @p_bor
-pl_l:
+pll_l:
 MOVI r1,#P_LAND
 CALL @p_at_p
 CMP r1,r0
-JMP[EQ] @pl_d
+JMP[EQ] @pll_d
 CALL @p_emit_rv
 CALL @p_adv
 LA r1,#I_JZ
@@ -3506,7 +7321,6 @@ LD r2,r0,#W_IRPC
 ADDI r2,r2,-2
 ST r2,r14,0
 ADD r14,r14,r13
-; save the end-jump index, then patch both false jumps to here
 SUB r14,r14,r13
 LD r1,r14,0
 ST r1,r0,#R_T0
@@ -3530,8 +7344,11 @@ ST r1,r0,#R_T1
 LD r1,r0,#R_T0
 LD r2,r0,#R_T1
 CALL @ir_patch
-JMP @pl_l
-pl_d:
+MOVI r1,#T_INT
+ST r1,r0,#W_ETYPE
+ST r0,r0,#W_LVAL
+JMP @pll_l
+pll_d:
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -3540,11 +7357,11 @@ p_lor:
 ST r15,r14,0
 ADD r14,r14,r13
 CALL @p_land
-plo_l:
+plol_l:
 MOVI r1,#P_LOR
 CALL @p_at_p
 CMP r1,r0
-JMP[EQ] @plo_d
+JMP[EQ] @plol_d
 CALL @p_emit_rv
 CALL @p_adv
 LA r1,#I_JNZ
@@ -3593,8 +7410,11 @@ ST r1,r0,#R_T1
 LD r1,r0,#R_T0
 LD r2,r0,#R_T1
 CALL @ir_patch
-JMP @plo_l
-plo_d:
+MOVI r1,#T_INT
+ST r1,r0,#W_ETYPE
+ST r0,r0,#W_LVAL
+JMP @plol_l
+plol_d:
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -3617,6 +7437,9 @@ ST r2,r14,0
 ADD r14,r14,r13
 CALL @p_expr
 CALL @p_emit_rv
+LD r1,r0,#W_ETYPE
+ST r1,r14,0
+ADD r14,r14,r13
 MOVI r1,#P_COLON
 MOVI r2,12
 CALL @p_expect_p
@@ -3628,19 +7451,41 @@ ST r2,r14,0
 ADD r14,r14,r13
 CALL @ir_here
 ADD r4,r1,r0
-ADDI r3,r14,-2
+ADDI r3,r14,-3
 LD r1,r3,0
 ADD r2,r4,r0
 CALL @ir_patch
 CALL @p_cond
 CALL @p_emit_rv
+LD r1,r0,#W_ETYPE
+ST r1,r0,#W_TY_ID
+CALL @ty_kind
+MOVI r2,#TY_PTR
+CMP r1,r2
+JMP[EQ] @pc_ptr
+ADDI r3,r14,-2
+LD r1,r3,0
+CALL @ty_kind
+MOVI r2,#TY_PTR
+CMP r1,r2
+JMP[EQ] @pc_ptr_from_mid
+MOVI r1,#T_INT
+JMP @pc_set_type
+pc_ptr_from_mid:
+ADDI r3,r14,-2
+LD r1,r3,0
+JMP @pc_set_type
+pc_ptr:
+LD r1,r0,#W_TY_ID
+pc_set_type:
+ST r1,r0,#W_ETYPE
 CALL @ir_here
 ADD r4,r1,r0
 ADDI r3,r14,-1
 LD r1,r3,0
 ADD r2,r4,r0
 CALL @ir_patch
-ADDI r14,r14,-2
+ADDI r14,r14,-3
 ST r0,r0,#W_LVAL
 JMP @pc_d
 pc_d:
@@ -3648,7 +7493,7 @@ SUB r14,r14,r13
 LD r15,r14,0
 RET
 
-; p_compop: r1=assignment punct -> r1=binary IR op
+; p_compop: assignment punct -> BIN kind
 p_compop:
 MOVI r2,#P_PLUSEQ
 CMP r1,r2
@@ -3677,40 +7522,44 @@ JMP[EQ] @pco_and
 MOVI r2,#P_BAREQ
 CMP r1,r2
 JMP[EQ] @pco_or
-MOVI r1,#I_XOR
+MOVI r1,#BIN_XOR
 RET
 pco_add:
-MOVI r1,#I_ADD
+MOVI r1,#BIN_ADD
 RET
 pco_sub:
-MOVI r1,#I_SUB
+MOVI r1,#BIN_SUB
 RET
 pco_mul:
-MOVI r1,#I_MUL
+MOVI r1,#BIN_MUL
 RET
 pco_div:
-MOVI r1,#I_DIV
+MOVI r1,#BIN_DIV
 RET
 pco_mod:
-MOVI r1,#I_MOD
+MOVI r1,#BIN_MOD
 RET
 pco_shl:
-MOVI r1,#I_SHL
+MOVI r1,#BIN_SHL
 RET
 pco_shr:
-MOVI r1,#I_SHR
+MOVI r1,#BIN_SHR
 RET
 pco_and:
-MOVI r1,#I_AND
+MOVI r1,#BIN_AND
 RET
 pco_or:
-MOVI r1,#I_OR
+MOVI r1,#BIN_OR
 RET
 
+; assignment: the lvalue's byte address is on the eval stack
 p_assign:
 ST r15,r14,0
 ADD r14,r14,r13
 CALL @p_cond
+LD r1,r0,#W_LVAL
+LD r1,r0,#W_TKA
+ST r1,r0,#W_NPAR
 LD r1,r0,#W_LVAL
 CMP r1,r0
 JMP[EQ] @pas_d
@@ -3722,21 +7571,11 @@ LD r1,r0,#W_TKA+1
 CALL @p_is_assign
 CMP r1,r0
 JMP[EQ] @pas_d
-LD r1,r0,#W_LKIND
-MOVI r2,4
-CMP r1,r2
-JMP[LT] @pas_lv_ok
-MOVI r1,32
-CALL @p_err
-pas_lv_ok:
-LD r3,r0,#W_LKIND
-ST r3,r14,0
+LD r1,r0,#W_LTYPE
+ST r1,r14,0
 ADD r14,r14,r13
-LD r3,r0,#W_LADDR
-ST r3,r14,0
-ADD r14,r14,r13
-LD r3,r0,#W_TKA+1
-ST r3,r14,0
+LD r1,r0,#W_TKA+1
+ST r1,r14,0
 ADD r14,r14,r13
 CALL @p_adv
 ADDI r3,r14,-1
@@ -3744,69 +7583,48 @@ LD r1,r3,0
 MOVI r2,#P_ASSIGN
 CMP r1,r2
 JMP[EQ] @pas_simple
-; compound assignment
-ADDI r3,r14,-3
-LD r1,r3,0
-MOVI r2,3
-CMP r1,r2
-JMP[NE] @pas_c_load
+; compound: duplicate address, load old, RHS, binop, cast, store-keep
 LA r1,#I_DUP
 CALL @ir_op
-pas_c_load:
-ADDI r3,r14,-3
-LD r1,r3,0
 ADDI r3,r14,-2
-LD r2,r3,0
-CALL @emit_load_lv
+LD r1,r3,0
+CALL @px_emit_load
 CALL @p_assign
 CALL @p_emit_rv
 ADDI r3,r14,-1
 LD r1,r3,0
 CALL @p_compop
-CALL @ir_op
-ADDI r3,r14,-3
-LD r1,r3,0
-MOVI r4,3
-CMP r1,r4
-JMP[EQ] @pas_c_keep
-LA r1,#I_DUP
-CALL @ir_op
-ADDI r3,r14,-3
-LD r1,r3,0
 ADDI r3,r14,-2
 LD r2,r3,0
-CALL @emit_store_lv
-JMP @pas_c_stored
-pas_c_keep:
+LD r3,r0,#W_ETYPE
+CALL @p_binop
 ADDI r3,r14,-2
-LD r2,r3,0
-CALL @emit_store_keep_lv
-pas_c_stored:
-ADDI r14,r14,-3
+LD r1,r3,0
+CALL @px_cast_stack
+ADDI r3,r14,-2
+LD r1,r3,0
+MOVI r2,1
+CALL @px_emit_store
+ADDI r14,r14,-2
+ADDI r3,r14,-1
+LD r1,r3,0
+ST r1,r0,#W_ETYPE
 ST r0,r0,#W_LVAL
 JMP @pas_d
 pas_simple:
 CALL @p_assign
 CALL @p_emit_rv
-ADDI r3,r14,-3
-LD r1,r3,0
-MOVI r4,3
-CMP r1,r4
-JMP[EQ] @pas_s_keep
-LA r1,#I_DUP
-CALL @ir_op
-ADDI r3,r14,-3
-LD r1,r3,0
 ADDI r3,r14,-2
-LD r2,r3,0
-CALL @emit_store_lv
-JMP @pas_s_stored
-pas_s_keep:
+LD r1,r3,0
+CALL @px_cast_stack
 ADDI r3,r14,-2
-LD r2,r3,0
-CALL @emit_store_keep_lv
-pas_s_stored:
-ADDI r14,r14,-3
+LD r1,r3,0
+MOVI r2,1
+CALL @px_emit_store
+ADDI r14,r14,-2
+ADDI r3,r14,-1
+LD r1,r3,0
+ST r1,r0,#W_ETYPE
 ST r0,r0,#W_LVAL
 pas_d:
 SUB r14,r14,r13
@@ -3830,7 +7648,6 @@ pia_n:
 MOVI r1,0
 RET
 
-; p_expr: comma expression
 p_expr:
 ST r15,r14,0
 ADD r14,r14,r13
@@ -3850,7 +7667,6 @@ pex_d:
 SUB r14,r14,r13
 LD r15,r14,0
 RET
-
 ; ================================================================== STATEMENTS
 ; p_block: current token is '{'
 p_block:
@@ -3883,6 +7699,23 @@ RET
 p_stmt:
 ST r15,r14,0
 ADD r14,r14,r13
+LD r1,r0,#W_TKA
+MOVI r2,#K_IDENT
+CMP r1,r2
+JMP[NE] @pst_typeck
+CALL @p_peek
+LD r1,r0,#W_TKB
+MOVI r2,#K_PUNCT
+CMP r1,r2
+JMP[NE] @pst_typeck
+LD r1,r0,#W_TKB+1
+MOVI r2,#P_COLON
+CMP r1,r2
+JMP[EQ] @pst_label
+pst_typeck:
+CALL @p_is_type
+CMP r1,r0
+JMP[NE] @pst_decl
 LD r1,r0,#W_TKA
 MOVI r2,#K_PUNCT
 CMP r1,r2
@@ -3927,6 +7760,18 @@ JMP[EQ] @pst_break
 MOVI r2,#KW_CONTINUE
 CMP r1,r2
 JMP[EQ] @pst_cont
+MOVI r2,#KW_SWITCH
+CMP r1,r2
+JMP[EQ] @pst_switch
+MOVI r2,#KW_CASE
+CMP r1,r2
+JMP[EQ] @pst_case
+MOVI r2,#KW_DEFAULT
+CMP r1,r2
+JMP[EQ] @pst_default
+MOVI r2,#KW_GOTO
+CMP r1,r2
+JMP[EQ] @pst_goto
 CALL @p_is_type
 CMP r1,r0
 JMP[NE] @pst_decl
@@ -3952,6 +7797,21 @@ JMP @pst_d
 pst_cont:
 CALL @p_continue
 JMP @pst_d
+pst_switch:
+CALL @p_switch
+JMP @pst_d
+pst_case:
+CALL @p_case
+JMP @pst_d
+pst_default:
+CALL @p_default
+JMP @pst_d
+pst_goto:
+CALL @p_goto
+JMP @pst_d
+pst_label:
+CALL @p_label
+JMP @pst_d
 pst_decl:
 CALL @p_decl
 JMP @pst_d
@@ -3969,11 +7829,143 @@ LD r15,r14,0
 RET
 
 ; p_decl: local declarations (one or more declarators)
+; px_align_up: r1=value r2=align(1|2|4) -> r1 aligned up
+px_align_up:
+MOVI r3,1
+CMP r2,r3
+JMP[EQ] @pxa_d
+MOVI r3,2
+CMP r2,r3
+JMP[EQ] @pxa_2
+ADDI r1,r1,3
+SHR r1,r1,2
+SHL r1,r1,2
+RET
+pxa_2:
+ADDI r1,r1,1
+SHR r1,r1,1
+SHL r1,r1,1
+pxa_d:
+RET
+
+; p_array_suffix: r1=element type -> array type (multi-dimensional aware)
+p_array_suffix:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_TY_TMP
+ST r0,r0,#W_ARRND
+pasu_l:
+MOVI r1,#P_LBRACK
+CALL @p_at_p
+CMP r1,r0
+JMP[EQ] @pasu_wrap
+CALL @p_adv
+MOVI r1,#P_RBRACK
+CALL @p_at_p
+CMP r1,r0
+JMP[NE] @pasu_zero
+CALL @p_cexpr
+JMP @pasu_get
+pasu_zero:
+MOVI r1,0
+pasu_get:
+LD r2,r0,#W_ARRND
+MOVI r3,8
+CMP r2,r3
+JMP[LT] @pasu_room
+MOVI r1,70
+CALL @p_err
+pasu_room:
+LA r3,#W_ARRDIM
+ADD r3,r3,r2
+ST r1,r3,0
+ADD r2,r2,r13
+ST r2,r0,#W_ARRND
+MOVI r1,#P_RBRACK
+MOVI r2,33
+CALL @p_expect_p
+JMP @pasu_l
+pasu_wrap:
+LD r3,r0,#W_ARRND
+SUB r3,r3,r13
+ST r3,r0,#W_ARRND
+pasu_wl:
+LD r3,r0,#W_ARRND
+CMPS r3,r0
+JMP[LT] @pasu_done
+LA r4,#W_ARRDIM
+ADD r4,r4,r3
+LD r2,r4,0
+LD r1,r0,#W_TY_TMP
+CALL @ty_array
+ST r1,r0,#W_TY_TMP
+LD r3,r0,#W_ARRND
+SUB r3,r3,r13
+ST r3,r0,#W_ARRND
+JMP @pasu_wl
+pasu_done:
+LD r1,r0,#W_TY_TMP
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; p_zero_range: r1=global? r2=address/offset r3=size
+p_zero_range:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_TY_TMP
+ST r2,r0,#W_TY_ID
+ST r3,r0,#W_TY_BASE
+LD r1,r0,#W_TY_TMP
+CMP r1,r0
+JMP[EQ] @pzr_local
+LD r1,r0,#W_TY_ID
+CALL @px_addr_g
+JMP @pzr_go
+pzr_local:
+LD r1,r0,#W_TY_ID
+CALL @px_addr_l
+pzr_go:
+LA r1,#I_PUSH
+MOVI r2,0
+CALL @ir_emit
+LA r1,#I_PUSH
+LD r2,r0,#W_TY_BASE
+CALL @ir_emit
+LA r1,#I_MEMSET
+CALL @ir_op
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; emit scalar store for a declaration: r1=global? r2=address/offset r3=type
+p_decl_store_addr:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r3,r0,#W_TY_ID
+CMP r1,r0
+JMP[EQ] @pdsa_local
+ADD r1,r2,r0
+CALL @px_addr_g
+JMP @pdsa_go
+pdsa_local:
+ADD r1,r2,r0
+CALL @px_addr_l
+pdsa_go:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; local declarations
 p_decl:
 ST r15,r14,0
 ADD r14,r14,r13
-CALL @p_skip_types
+CALL @p_typespec
+ST r1,r0,#W_TY_RET
 pd_one:
+LD r1,r0,#W_TY_RET
+CALL @p_ptr_suffix
+ST r1,r0,#W_TY_ID
 LD r1,r0,#W_TKA
 MOVI r2,#K_IDENT
 CMP r1,r2
@@ -3981,87 +7973,116 @@ JMP[EQ] @pd_ident
 MOVI r1,23
 CALL @p_err
 pd_ident:
+LD r1,r0,#W_SCLASS
+MOVI r2,3
+CMP r1,r2
+JMP[EQ] @pd_typedef
 MOVI r1,#SK_LOCAL
 CALL @sym_get_cur
 ST r1,r14,0
 ADD r14,r14,r13
 CALL @p_adv
-; optional array bound
-MOVI r1,#P_LBRACK
-CALL @p_at_p
-CMP r1,r0
-JMP[EQ] @pd_scalar
-CALL @p_adv
-CALL @p_cexpr
-CMP r1,r0
-JMP[GT] @pd_count_ok
-MOVI r1,31
-CALL @p_err
-pd_count_ok:
-ST r1,r14,0
-ADD r14,r14,r13
-MOVI r1,#P_RBRACK
-MOVI r2,33
-CALL @p_expect_p
-JMP @pd_count_done
-pd_scalar:
-ST r0,r14,0
-ADD r14,r14,r13
-pd_count_done:
-; stack: symidx, count; push the local offset
-LD r2,r0,#W_NLOC
-ST r2,r14,0
-ADD r14,r14,r13
-ADDI r3,r14,-3
+LD r1,r0,#W_TY_ID
+CALL @p_array_suffix
+ST r1,r0,#W_TY_ID
+ST r1,r0,#W_TY_BASE
+CALL @ty_size
+ST r1,r0,#W_TY_TMP
+LD r1,r0,#W_TY_ID
+CALL @ty_align
+ST r1,r0,#W_TY_COUNT
+; allocate
+LD r1,r0,#W_SCLASS
+MOVI r2,2
+CMP r1,r2
+JMP[EQ] @pd_extern
+MOVI r2,1
+CMP r1,r2
+JMP[EQ] @pd_static
+; auto local
+LD r1,r0,#W_LOCALB
+LD r2,r0,#W_TY_COUNT
+CALL @px_align_up
+ST r1,r0,#W_TY_BASE
+LD r2,r0,#W_TY_TMP
+ADD r2,r1,r2
+ST r2,r0,#W_LOCALB
+ADDI r3,r14,-1
 LD r1,r3,0
 CALL @sym_entry
-ADDI r3,r14,-1
-LD r2,r3,0
+LD r2,r0,#W_TY_BASE
 ST r2,r1,#SY_AUX
-LD r3,r0,#W_FUNCSYM
-ST r3,r1,#SY_NP
-ADDI r3,r14,-2
-LD r3,r3,0
-ST r3,r1,#SY_NL
+ST r0,r1,#SY_CLS
+JMP @pd_allocd
+pd_static:
+LD r1,r0,#W_GLOBP
+LD r2,r0,#W_TY_COUNT
+CALL @px_align_up
+ST r1,r0,#W_TY_BASE
+LD r2,r0,#W_TY_TMP
+ADD r2,r1,r2
+LA r3,#C_GLOBEND
+CMP r2,r3
+JMP[LT] @pd_sroom
+MOVI r1,71
+CALL @p_err
+pd_sroom:
+ST r2,r0,#W_GLOBP
 ADDI r3,r14,-1
-LD r2,r3,0
-ADDI r3,r14,-2
-LD r3,r3,0
-CMP r3,r0
-JMP[NE] @pd_nloc_arr
-ADD r2,r2,r13
-JMP @pd_nloc_set
-pd_nloc_arr:
-ADD r2,r2,r3
-pd_nloc_set:
-ST r2,r0,#W_NLOC
-; zero an array before any initialiser
-ADDI r3,r14,-2
-LD r3,r3,0
-CMP r3,r0
-JMP[EQ] @pd_init
-ADDI r3,r14,-2
 LD r1,r3,0
-SHL r1,r1,16
+CALL @sym_entry
+LD r2,r0,#W_TY_BASE
+ST r2,r1,#SY_AUX
+MOVI r2,1
+ST r2,r1,#SY_CLS
+JMP @pd_allocd
+pd_extern:
 ADDI r3,r14,-1
-LD r2,r3,0
-BOOL.14 r2,r2,r1
-LA r1,#I_LZERO
-CALL @ir_emit
-pd_init:
+LD r1,r3,0
+CALL @sym_entry
+ST r0,r1,#SY_AUX
+MOVI r2,2
+ST r2,r1,#SY_CLS
+pd_allocd:
+ADDI r3,r14,-1
+LD r1,r3,0
+CALL @sym_entry
+LD r2,r0,#W_TY_ID
+ST r2,r1,#SY_TYPE
+LD r2,r0,#W_TY_TMP
+ST r2,r1,#SY_SIZE
+; initializer
 MOVI r1,#P_ASSIGN
 CALL @p_take_p
 CMP r1,r0
 JMP[EQ] @pd_noinit
-; array initialiser list?
-ADDI r3,r14,-2
-LD r3,r3,0
-CMP r3,r0
-JMP[EQ] @pd_scalar_init
+LD r1,r0,#W_TY_ID
+CALL @ty_kind
+MOVI r2,#TY_ARRAY
+CMP r1,r2
+JMP[NE] @pd_scalar_init
 MOVI r1,#P_LBRACE
 CALL @p_at_p
 CMP r1,r0
-JMP[EQ] @pd_array_scalar
+JMP[EQ] @pd_scalar_init
+; zero the array then fill the brace list
+LD r1,r0,#W_SCLASS
+MOVI r2,1
+CMP r1,r2
+JMP[EQ] @pd_arr_static
+ST r0,r0,#W_TY_SIGN
+JMP @pd_arr_zero
+pd_arr_static:
+MOVI r1,1
+ST r1,r0,#W_TY_SIGN
+pd_arr_zero:
+ADDI r3,r14,-1
+LD r1,r3,0
+CALL @sym_entry
+LD r2,r1,#SY_AUX
+LD r3,r1,#SY_SIZE
+LD r1,r0,#W_TY_SIGN
+CALL @p_zero_range
 CALL @p_adv
 MOVI r1,0
 ST r1,r14,0
@@ -4071,30 +8092,46 @@ MOVI r1,#P_RBRACE
 CALL @p_at_p
 CMP r1,r0
 JMP[NE] @pd_ai_done
-; store only while idx < count
+; element type and size from the array symbol
+ADDI r3,r14,-2
+LD r1,r3,0
+CALL @sym_entry
+LD r1,r1,#SY_TYPE
+CALL @ty_base
+ST r1,r0,#W_TY_RET
+CALL @ty_size
 ADDI r3,r14,-1
 LD r4,r3,0
-ADDI r3,r14,-3
-LD r5,r3,0
-CMP r4,r5
-JMP[GE] @pd_ai_skip
+MUL r4,r4,r1
 ADDI r3,r14,-2
-LD r2,r3,0
+LD r1,r3,0
+CALL @sym_entry
+LD r2,r1,#SY_AUX
 ADD r2,r2,r4
-LA r1,#I_LADDR
-CALL @ir_emit
+LD r1,r0,#W_SCLASS
+MOVI r3,1
+CMP r1,r3
+JMP[EQ] @pd_ai_g
+MOVI r1,0
+CALL @p_decl_store_addr
+JMP @pd_ai_val
+pd_ai_g:
+MOVI r1,1
+CALL @p_decl_store_addr
+pd_ai_val:
 CALL @p_assign
 CALL @p_emit_rv
-LA r1,#I_STORE_IND
+ADDI r3,r14,-2
+LD r1,r3,0
+CALL @sym_entry
+LD r1,r1,#SY_TYPE
+CALL @ty_base
+ST r1,r0,#W_TY_RET
+LD r1,r0,#W_TY_RET
+CALL @px_cast_stack
+LD r1,r0,#W_TY_RET
 MOVI r2,0
-CALL @ir_emit
-JMP @pd_ai_step
-pd_ai_skip:
-CALL @p_assign
-CALL @p_emit_rv
-LA r1,#I_POP
-CALL @ir_op
-pd_ai_step:
+CALL @px_emit_store
 ADDI r3,r14,-1
 LD r4,r3,0
 ADD r4,r4,r13
@@ -4109,36 +8146,36 @@ MOVI r2,35
 CALL @p_expect_p
 ADDI r14,r14,-1
 JMP @pd_afterinit
-pd_array_scalar:
-CALL @p_assign
-CALL @p_emit_rv
-ADDI r3,r14,-1
-LD r2,r3,0
-MOVI r1,2
-CALL @emit_store_lv
-JMP @pd_afterinit
 pd_scalar_init:
+ADDI r3,r14,-1
+LD r1,r3,0
+CALL @sym_entry
+LD r2,r1,#SY_AUX
+LD r3,r1,#SY_TYPE
+ST r3,r0,#W_TY_ID
+LD r1,r0,#W_SCLASS
+MOVI r3,1
+CMP r1,r3
+JMP[EQ] @pd_si_g
+MOVI r1,0
+CALL @p_decl_store_addr
+JMP @pd_si_val
+pd_si_g:
+MOVI r1,1
+CALL @p_decl_store_addr
+pd_si_val:
 CALL @p_assign
 CALL @p_emit_rv
-ADDI r3,r14,-1
-LD r2,r3,0
-MOVI r1,2
-CALL @emit_store_lv
+LD r1,r0,#W_TY_ID
+CALL @px_cast_stack
+LD r1,r0,#W_TY_ID
+MOVI r2,0
+CALL @px_emit_store
 JMP @pd_afterinit
 pd_noinit:
-ADDI r3,r14,-2
-LD r3,r3,0
-CMP r3,r0
-JMP[NE] @pd_afterinit
-LA r1,#I_PUSH
-MOVI r2,0
-CALL @ir_emit
-ADDI r3,r14,-1
-LD r2,r3,0
-MOVI r1,2
-CALL @emit_store_lv
+; C locals are uninitialised; static locals/globals are zeroed by the loader
 pd_afterinit:
-ADDI r14,r14,-3
+ADDI r14,r14,-1
 MOVI r1,#P_COMMA
 CALL @p_take_p
 CMP r1,r0
@@ -4149,6 +8186,26 @@ CALL @p_expect_p
 SUB r14,r14,r13
 LD r15,r14,0
 RET
+pd_typedef:
+MOVI r1,#SK_TYPE
+CALL @sym_get_cur
+ST r1,r14,0
+ADD r14,r14,r13
+CALL @p_adv
+LD r1,r0,#W_TY_ID
+CALL @p_array_suffix
+ST r1,r0,#W_TY_ID
+CALL @ty_size
+ST r1,r0,#W_TY_TMP
+ADDI r3,r14,-1
+LD r1,r3,0
+CALL @sym_entry
+LD r2,r0,#W_TY_ID
+ST r2,r1,#SY_TYPE
+LD r2,r0,#W_TY_TMP
+ST r2,r1,#SY_SIZE
+ST r0,r1,#SY_CLS
+JMP @pd_afterinit
 
 ; ---- break / continue ----------------------------------------------
 p_break:
@@ -4250,6 +8307,338 @@ ADD r1,r1,r13
 ST r1,r0,#R_T0
 JMP @ppb_l
 ppb_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; ---- goto / labels ------------------------------------------------
+p_label:
+ST r15,r14,0
+ADD r14,r14,r13
+MOVI r1,#SK_LABEL
+CALL @sym_get_cur
+ST r1,r0,#W_TMP
+CALL @sym_entry
+LD r2,r1,#SY_ENTRY
+CMP r2,r0
+JMP[EQ] @plb_new
+MOVI r1,74
+CALL @p_err
+plb_new:
+LD r1,r0,#W_TMP
+CALL @sym_entry
+ST r1,r0,#W_TMP2
+LD r2,r0,#W_FUNCSYM
+ST r2,r1,#SY_NP
+MOVI r2,#T_VOID
+ST r2,r1,#SY_TYPE
+CALL @ir_here
+LD r2,r0,#W_TMP2
+ST r1,r2,#SY_ENTRY
+CALL @p_adv
+MOVI r1,#P_COLON
+MOVI r2,12
+CALL @p_expect_p
+CALL @p_stmt
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+p_goto:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @p_adv
+LD r1,r0,#W_TKA
+MOVI r2,#K_IDENT
+CMP r1,r2
+JMP[EQ] @pgo_name
+MOVI r1,23
+CALL @p_err
+pgo_name:
+MOVI r1,#SK_LABEL
+CALL @sym_get_cur
+ST r1,r14,0
+ADD r14,r14,r13
+CALL @sym_entry
+LD r2,r0,#W_FUNCSYM
+ST r2,r1,#SY_NP
+CALL @p_adv
+MOVI r1,#P_SEMI
+MOVI r2,24
+CALL @p_expect_p
+LA r1,#I_JMP
+CALL @ir_op
+LD r2,r0,#W_GOTO_N
+LA r3,#NCC_GOTOMAX
+CMP r2,r3
+JMP[LT] @pgo_room
+MOVI r1,75
+CALL @p_err
+pgo_room:
+SHL r3,r2,1
+LA r4,#NCC_GOTOB
+ADD r4,r4,r3
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r4,0
+LD r1,r0,#W_IRPC
+ADDI r1,r1,-2
+ST r1,r4,1
+LD r1,r0,#W_GOTO_N
+ADD r1,r1,r13
+ST r1,r0,#W_GOTO_N
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; p_goto_resolve: called at the end of a function body
+p_goto_resolve:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r0,r0,#W_TMP
+pgr_l:
+LD r1,r0,#W_TMP
+LD r2,r0,#W_GOTO_N
+CMP r1,r2
+JMP[GE] @pgr_d
+SHL r3,r1,1
+LA r4,#NCC_GOTOB
+ADD r4,r4,r3
+LD r5,r4,0
+LD r6,r4,1
+ST r6,r0,#W_TMP2
+ADD r1,r5,r0
+CALL @sym_entry
+LD r1,r1,#SY_ENTRY
+CMP r1,r0
+JMP[NE] @pgr_have
+MOVI r1,76
+CALL @p_err
+pgr_have:
+ST r1,r0,#W_TMP3
+LD r1,r0,#W_TMP2
+LD r2,r0,#W_TMP3
+CALL @ir_patch
+LD r1,r0,#W_TMP
+ADD r1,r1,r13
+ST r1,r0,#W_TMP
+JMP @pgr_l
+pgr_d:
+ST r0,r0,#W_GOTO_N
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; ---- switch --------------------------------------------------------
+p_switch:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @p_adv
+MOVI r1,#P_LPAREN
+MOVI r2,9
+CALL @p_expect_p
+CALL @p_expr
+CALL @p_emit_rv
+MOVI r1,#P_RPAREN
+MOVI r2,10
+CALL @p_expect_p
+; reserve a 4-byte temporary in the current frame
+LD r1,r0,#W_LOCALB
+MOVI r2,4
+CALL @px_align_up
+ST r1,r0,#W_SWTMP
+ADDI r2,r1,4
+ST r2,r0,#W_LOCALB
+; save the enclosing switch state
+LD r1,r0,#W_CASEBASE
+ST r1,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_DEFSET
+ST r1,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_DEFTGT
+ST r1,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_CASE_N
+ST r1,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_BRK_N
+ST r1,r14,0
+ADD r14,r14,r13
+; evaluate value into the temporary
+LD r1,r0,#W_SWTMP
+CALL @px_addr_l
+LA r1,#I_SWAP
+CALL @ir_op
+LA r1,#I_STORE
+MOVI r2,#SZ_32
+CALL @ir_emit
+; new switch state
+LD r1,r0,#W_CASE_N
+ST r1,r0,#W_CASEBASE
+ST r0,r0,#W_DEFSET
+ST r0,r0,#W_DEFTGT
+; jump over the body to the dispatch table
+LA r1,#I_JMP
+CALL @ir_op
+LD r2,r0,#W_IRPC
+ADDI r2,r2,-2
+ST r2,r0,#W_SWDISP
+CALL @p_stmt
+; fallthrough jumps over the dispatch table
+LA r1,#I_JMP
+CALL @ir_op
+LD r2,r0,#W_IRPC
+ADDI r2,r2,-2
+ST r2,r0,#W_SWFALL
+; dispatch table starts here
+CALL @ir_here
+ST r1,r0,#W_SWNO
+LD r1,r0,#W_SWDISP
+LD r2,r0,#W_SWNO
+CALL @ir_patch
+LD r1,r0,#W_CASEBASE
+ST r1,r0,#W_SWI
+sw_disp_l:
+LD r1,r0,#W_SWI
+LD r2,r0,#W_CASE_N
+CMP r1,r2
+JMP[GE] @sw_disp_done
+SHL r3,r1,1
+LA r4,#NCC_CASEB
+ADD r4,r4,r3
+LD r5,r4,0
+LD r6,r4,1
+ST r5,r0,#W_TMP
+ST r6,r0,#W_TMP2
+LD r1,r0,#W_SWTMP
+CALL @px_addr_l
+LA r1,#I_LOAD
+MOVI r2,#SZ_32
+CALL @ir_emit
+LA r1,#I_PUSH
+LD r2,r0,#W_TMP
+CALL @ir_emit
+LA r1,#I_EQ
+CALL @ir_op
+LA r1,#I_JNZ
+LD r2,r0,#W_TMP2
+CALL @ir_emit
+LD r1,r0,#W_SWI
+ADD r1,r1,r13
+ST r1,r0,#W_SWI
+JMP @sw_disp_l
+sw_disp_done:
+LD r1,r0,#W_DEFSET
+CMP r1,r0
+JMP[EQ] @sw_nodef
+LA r1,#I_JMP
+LD r2,r0,#W_DEFTGT
+CALL @ir_emit
+JMP @sw_here
+sw_nodef:
+LA r1,#I_JMP
+CALL @ir_op
+LD r2,r0,#W_IRPC
+ADDI r2,r2,-2
+ST r2,r0,#W_SWEND
+sw_here:
+CALL @ir_here
+ST r1,r0,#W_SWNO
+LD r1,r0,#W_SWFALL
+LD r2,r0,#W_SWNO
+CALL @ir_patch
+LD r1,r0,#W_DEFSET
+CMP r1,r0
+JMP[NE] @sw_patch_brk
+LD r1,r0,#W_SWEND
+LD r2,r0,#W_SWNO
+CALL @ir_patch
+sw_patch_brk:
+; patch breaks belonging to this switch
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_TMP
+sw_brk_l:
+LD r1,r0,#W_TMP
+LD r2,r0,#W_BRK_N
+CMP r1,r2
+JMP[GE] @sw_brk_done
+LA r3,#W_BRK_TAB
+ADD r3,r3,r1
+LD r4,r3,0
+LD r5,r0,#W_SWNO
+ST r5,r0,#W_TMP2
+ADD r1,r4,r0
+LD r2,r0,#W_TMP2
+CALL @ir_patch
+LD r1,r0,#W_TMP
+ADD r1,r1,r13
+ST r1,r0,#W_TMP
+JMP @sw_brk_l
+sw_brk_done:
+LD r1,r0,#W_TMP
+ST r1,r0,#W_BRK_N
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_CASE_N
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_DEFTGT
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_DEFSET
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_CASEBASE
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+p_case:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @p_adv
+CALL @p_cexpr
+ST r1,r0,#W_TMP
+MOVI r1,#P_COLON
+MOVI r2,12
+CALL @p_expect_p
+CALL @ir_here
+ST r1,r0,#W_TMP2
+LD r1,r0,#W_CASE_N
+LA r2,#NCC_CASEMAX
+CMP r1,r2
+JMP[LT] @pcs_room
+MOVI r1,73
+CALL @p_err
+pcs_room:
+SHL r2,r1,1
+LA r3,#NCC_CASEB
+ADD r3,r3,r2
+LD r2,r0,#W_TMP
+ST r2,r3,0
+LD r2,r0,#W_TMP2
+ST r2,r3,1
+ADD r1,r1,r13
+ST r1,r0,#W_CASE_N
+CALL @p_stmt
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+p_default:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @p_adv
+MOVI r1,#P_COLON
+MOVI r2,12
+CALL @p_expect_p
+CALL @ir_here
+ST r1,r0,#W_DEFTGT
+MOVI r1,1
+ST r1,r0,#W_DEFSET
+CALL @p_stmt
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -4637,6 +9026,19 @@ JMP @pret_go
 pret_val:
 CALL @p_expr
 CALL @p_emit_rv
+LD r1,r0,#W_FUNCRET
+CALL @ty_kind
+CMP r1,r0
+JMP[NE] @pret_cast
+LA r1,#I_POP
+CALL @ir_op
+LA r1,#I_PUSH
+MOVI r2,0
+CALL @ir_emit
+JMP @pret_go
+pret_cast:
+LD r1,r0,#W_FUNCRET
+CALL @px_cast_stack
 pret_go:
 MOVI r1,#P_SEMI
 MOVI r2,24
@@ -4647,74 +9049,387 @@ SUB r14,r14,r13
 LD r15,r14,0
 RET
 
-; ================================================================== TOP LEVEL
+; external declarations and function definitions
+; p_decl_external: r1=base type, current token begins a declarator or name
+p_decl_external:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_TY_RET
+MOVI r1,#P_SEMI
+CALL @p_at_p
+CMP r1,r0
+JMP[NE] @pde_type_only
+LD r1,r0,#W_SCLASS
+MOVI r2,3
+CMP r1,r2
+JMP[EQ] @pde_typedef
+pde_one:
+LD r1,r0,#W_TY_RET
+CALL @p_ptr_suffix
+ST r1,r0,#W_TY_ID
+LD r1,r0,#W_TKA
+MOVI r2,#K_IDENT
+CMP r1,r2
+JMP[EQ] @pde_name
+MOVI r1,23
+CALL @p_err
+pde_name:
+CALL @p_peek
+LD r1,r0,#W_TKB
+MOVI r2,#K_PUNCT
+CMP r1,r2
+JMP[NE] @pde_var
+LD r1,r0,#W_TKB+1
+MOVI r2,#P_LPAREN
+CMP r1,r2
+JMP[EQ] @pde_func
+pde_var:
+MOVI r1,#SK_GLOBAL
+CALL @sym_get_cur
+ST r1,r14,0
+ADD r14,r14,r13
+CALL @p_adv
+LD r1,r0,#W_TY_ID
+CALL @p_array_suffix
+ST r1,r0,#W_TY_ID
+CALL @ty_size
+ST r1,r0,#W_TY_TMP
+LD r1,r0,#W_TY_ID
+CALL @ty_align
+ST r1,r0,#W_TY_COUNT
+LD r1,r0,#W_SCLASS
+MOVI r2,2
+CMP r1,r2
+JMP[EQ] @pde_extern
+; allocate in the byte globals region
+LD r1,r0,#W_GLOBP
+LD r2,r0,#W_TY_COUNT
+CALL @px_align_up
+ST r1,r0,#W_TY_BASE
+LD r2,r0,#W_TY_TMP
+ADD r2,r1,r2
+LA r3,#C_GLOBEND
+CMP r2,r3
+JMP[LT] @pde_room
+MOVI r1,71
+CALL @p_err
+pde_room:
+ST r2,r0,#W_GLOBP
+ADDI r3,r14,-1
+LD r1,r3,0
+CALL @sym_entry
+LD r2,r0,#W_TY_BASE
+ST r2,r1,#SY_AUX
+JMP @pde_settype
+pde_extern:
+ADDI r3,r14,-1
+LD r1,r3,0
+CALL @sym_entry
+LD r2,r1,#SY_AUX
+CMP r2,r0
+JMP[NE] @pde_settype
+ST r0,r1,#SY_AUX
+pde_settype:
+ADDI r3,r14,-1
+LD r1,r3,0
+CALL @sym_entry
+LD r2,r0,#W_TY_ID
+ST r2,r1,#SY_TYPE
+LD r2,r0,#W_TY_TMP
+ST r2,r1,#SY_SIZE
+MOVI r1,#P_ASSIGN
+CALL @p_take_p
+CMP r1,r0
+JMP[EQ] @pde_zero
+LD r1,r0,#W_TY_ID
+CALL @ty_kind
+MOVI r2,#TY_ARRAY
+CMP r1,r2
+JMP[NE] @pde_scalar
+MOVI r1,#P_LBRACE
+CALL @p_at_p
+CMP r1,r0
+JMP[EQ] @pde_scalar
+; zero + brace list
+MOVI r1,1
+ADDI r3,r14,-1
+LD r2,r3,0
+CALL @sym_entry
+LD r2,r1,#SY_AUX
+LD r3,r1,#SY_SIZE
+CALL @p_zero_range
+CALL @p_adv
+MOVI r1,0
+ST r1,r14,0
+ADD r14,r14,r13
+pde_ai_l:
+MOVI r1,#P_RBRACE
+CALL @p_at_p
+CMP r1,r0
+JMP[NE] @pde_ai_done
+ADDI r3,r14,-2
+LD r1,r3,0
+CALL @sym_entry
+LD r1,r1,#SY_TYPE
+CALL @ty_base
+ST r1,r0,#W_TY_COUNT
+CALL @ty_size
+ADDI r3,r14,-1
+LD r4,r3,0
+MUL r4,r4,r1
+ADDI r3,r14,-2
+LD r1,r3,0
+CALL @sym_entry
+LD r2,r1,#SY_AUX
+ADD r2,r2,r4
+MOVI r1,1
+CALL @p_decl_store_addr
+CALL @p_assign
+CALL @p_emit_rv
+ADDI r3,r14,-2
+LD r1,r3,0
+CALL @sym_entry
+LD r1,r1,#SY_TYPE
+CALL @ty_base
+ST r1,r0,#W_TY_COUNT
+LD r1,r0,#W_TY_COUNT
+CALL @px_cast_stack
+LD r1,r0,#W_TY_COUNT
+MOVI r2,0
+CALL @px_emit_store
+ADDI r3,r14,-1
+LD r4,r3,0
+ST r4,r0,#W_NLOC
+ADD r4,r4,r13
+ST r4,r3,0
+MOVI r1,#P_COMMA
+CALL @p_take_p
+CMP r1,r0
+JMP[NE] @pde_ai_l
+pde_ai_done:
+MOVI r1,#P_RBRACE
+MOVI r2,35
+CALL @p_expect_p
+ADDI r14,r14,-1
+JMP @pde_after
+pde_scalar:
+ADDI r3,r14,-1
+LD r1,r3,0
+CALL @sym_entry
+LD r2,r1,#SY_AUX
+LD r3,r1,#SY_TYPE
+ST r3,r0,#W_TY_ID
+MOVI r1,1
+CALL @p_decl_store_addr
+CALL @p_assign
+CALL @p_emit_rv
+ADDI r3,r14,-1
+LD r1,r3,0
+CALL @sym_entry
+LD r1,r1,#SY_TYPE
+ST r1,r0,#W_TY_ID
+LD r1,r0,#W_TY_ID
+CALL @px_cast_stack
+LD r1,r0,#W_TY_ID
+MOVI r2,0
+CALL @px_emit_store
+JMP @pde_after
+pde_zero:
+; C zero-initialises file-scope storage
+ADDI r3,r14,-1
+LD r1,r3,0
+CALL @sym_entry
+LD r2,r1,#SY_SIZE
+CMP r2,r0
+JMP[EQ] @pde_after
+LD r2,r1,#SY_AUX
+LD r3,r1,#SY_SIZE
+MOVI r1,1
+CALL @p_zero_range
+pde_after:
+ADDI r14,r14,-1
+MOVI r1,#P_COMMA
+CALL @p_take_p
+CMP r1,r0
+JMP[NE] @pde_one
+MOVI r1,#P_SEMI
+MOVI r2,24
+CALL @p_expect_p
+JMP @pde_d
+pde_func:
+LD r1,r0,#W_TY_ID
+CALL @p_func
+JMP @pde_d
+pde_typedef:
+LD r1,r0,#W_TY_RET
+CALL @p_ptr_suffix
+ST r1,r0,#W_TY_ID
+LD r1,r0,#W_TKA
+MOVI r2,#K_IDENT
+CMP r1,r2
+JMP[EQ] @pdt_name
+MOVI r1,23
+CALL @p_err
+pdt_name:
+MOVI r1,#SK_TYPE
+CALL @sym_get_cur
+ST r1,r14,0
+ADD r14,r14,r13
+CALL @p_adv
+LD r1,r0,#W_TY_ID
+CALL @p_array_suffix
+ST r1,r0,#W_TY_ID
+CALL @ty_size
+ST r1,r0,#W_TY_TMP
+ADDI r3,r14,-1
+LD r1,r3,0
+CALL @sym_entry
+LD r2,r0,#W_TY_ID
+ST r2,r1,#SY_TYPE
+LD r2,r0,#W_TY_TMP
+ST r2,r1,#SY_SIZE
+ST r0,r1,#SY_CLS
+ADDI r14,r14,-1
+MOVI r1,#P_COMMA
+CALL @p_take_p
+CMP r1,r0
+JMP[NE] @pde_typedef
+MOVI r1,#P_SEMI
+MOVI r2,24
+CALL @p_expect_p
+pde_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+pde_type_only:
+CALL @p_adv
+JMP @pde_d
+
+; function definition/prototype; current token is the name, r1=return type
 p_func:
 ST r15,r14,0
 ADD r14,r14,r13
+ST r1,r0,#W_FUNCRET
 MOVI r1,#SK_FUNC
 CALL @sym_get_cur
+ST r1,r14,0
+ADD r14,r14,r13
 ST r1,r0,#W_FUNCSYM
 CALL @p_adv
 MOVI r1,#P_LPAREN
 MOVI r2,9
 CALL @p_expect_p
-ST r0,r0,#W_NPAR
-ST r0,r0,#W_NLOC
+MOVI r1,16
+ST r1,r0,#W_LOCALB
+ST r0,r0,#W_FUNCNP
+LD r1,r0,#W_PARAMP
+ST r1,r0,#W_FUNCARG
 MOVI r1,#P_RPAREN
 CALL @p_at_p
 CMP r1,r0
-JMP[NE] @pfu_params_done
+JMP[NE] @pfu_done_params
 MOVI r1,#KW_VOID
 CALL @p_at_k
 CMP r1,r0
-JMP[EQ] @pfu_params
+JMP[EQ] @pfu_param_l
 CALL @p_adv
 MOVI r1,#P_RPAREN
 CALL @p_at_p
 CMP r1,r0
-JMP[NE] @pfu_params_done
-pfu_params:
-CALL @p_skip_types
+JMP[NE] @pfu_done_params
+pfu_param_l:
+CALL @p_typespec
+CALL @p_ptr_suffix
+ST r1,r0,#W_TY_ID
+MOVI r2,0
+ST r2,r0,#W_TY_BASE
 LD r1,r0,#W_TKA
 MOVI r2,#K_IDENT
 CMP r1,r2
-JMP[EQ] @pfu_pid
-MOVI r1,23
-CALL @p_err
-pfu_pid:
+JMP[NE] @pfu_no_name
 MOVI r1,#SK_LOCAL
 CALL @sym_get_cur
 ST r1,r14,0
 ADD r14,r14,r13
-CALL @sym_entry
-LD r2,r0,#W_NLOC
-ST r2,r1,#SY_AUX
-LD r3,r0,#W_FUNCSYM
-ST r3,r1,#SY_NP
-LD r2,r0,#W_NLOC
-ADD r2,r2,r13
-ST r2,r0,#W_NLOC
-LD r2,r0,#W_NPAR
-ADD r2,r2,r13
-ST r2,r0,#W_NPAR
-SUB r14,r14,r13
 CALL @p_adv
+LD r1,r0,#W_TY_ID
+CALL @p_array_suffix
+ST r1,r0,#W_TY_ID
+CALL @ty_kind
+MOVI r2,#TY_ARRAY
+CMP r1,r2
+JMP[NE] @pfu_alloc
+LD r1,r0,#W_TY_ID
+CALL @ty_base
+CALL @ty_ptr
+ST r1,r0,#W_TY_ID
+pfu_alloc:
+LD r1,r0,#W_TY_ID
+CALL @ty_size
+ST r1,r0,#W_TY_TMP
+LD r1,r0,#W_TY_ID
+CALL @ty_align
+ST r1,r0,#W_TY_COUNT
+LD r1,r0,#W_LOCALB
+LD r2,r0,#W_TY_COUNT
+CALL @px_align_up
+ST r1,r0,#W_TY_BASE
+LD r2,r0,#W_TY_TMP
+ADD r2,r1,r2
+ST r2,r0,#W_LOCALB
+ADDI r3,r14,-1
+LD r1,r3,0
+CALL @sym_entry
+LD r2,r0,#W_TY_BASE
+ST r2,r1,#SY_AUX
+ST r0,r1,#SY_CLS
+LD r2,r0,#W_TY_ID
+ST r2,r1,#SY_TYPE
+LD r2,r0,#W_TY_TMP
+ST r2,r1,#SY_SIZE
+ADDI r14,r14,-1
+pfu_no_name:
+LD r2,r0,#W_FUNCARG
+LD r3,r0,#W_FUNCNP
+MUL r3,r3,r13
+ADD r3,r3,r3
+ADD r2,r2,r3
+LD r3,r0,#W_TY_BASE
+CMP r3,r0
+JMP[NE] @pfu_have_off
+MOVI r3,0
+pfu_have_off:
+ST r3,r2,0
+LD r3,r0,#W_TY_ID
+ST r3,r2,1
+ADDI r2,r2,2
+ST r2,r0,#W_PARAMP
+LD r3,r0,#W_FUNCNP
+ADD r3,r3,r13
+ST r3,r0,#W_FUNCNP
 MOVI r1,#P_COMMA
 CALL @p_take_p
 CMP r1,r0
-JMP[NE] @pfu_params
-pfu_params_done:
+JMP[NE] @pfu_param_l
+pfu_done_params:
 MOVI r1,#P_RPAREN
 MOVI r2,10
 CALL @p_expect_p
+; record the signature on the function symbol
+ADDI r3,r14,-1
+LD r1,r3,0
+CALL @sym_entry
+LD r2,r0,#W_FUNCRET
+ST r2,r1,#SY_TYPE
+LD r2,r0,#W_FUNCNP
+ST r2,r1,#SY_NP
+LD r2,r0,#W_FUNCARG
+ST r2,r1,#SY_ARG
 MOVI r1,#P_SEMI
 CALL @p_take_p
 CMP r1,r0
 JMP[EQ] @pfu_body
-LD r1,r0,#W_FUNCSYM
-CALL @sym_entry
-LD r2,r0,#W_NPAR
-ST r2,r1,#SY_NP
+ADDI r14,r14,-1
 JMP @pfu_d
 pfu_body:
 LA r1,#I_JMP
@@ -4724,11 +9439,14 @@ ADDI r2,r2,-2
 ST r2,r0,#W_FSKIP
 CALL @ir_here
 ST r1,r0,#W_FENTRY
-LD r1,r0,#W_FUNCSYM
+ADDI r3,r14,-1
+LD r1,r3,0
 CALL @sym_entry
 LD r2,r0,#W_FENTRY
 ST r2,r1,#SY_ENTRY
+ST r0,r0,#W_GOTO_N
 CALL @p_block
+CALL @p_goto_resolve
 LA r1,#I_PUSH
 MOVI r2,0
 CALL @ir_emit
@@ -4739,220 +9457,22 @@ ST r1,r0,#W_FENTRY
 LD r1,r0,#W_FSKIP
 LD r2,r0,#W_FENTRY
 CALL @ir_patch
-LD r1,r0,#W_FUNCSYM
-CALL @sym_entry
-LD r2,r0,#W_NPAR
-ST r2,r1,#SY_NP
-LD r2,r0,#W_NLOC
-ST r2,r1,#SY_NL
-pfu_d:
-SUB r14,r14,r13
-LD r15,r14,0
-RET
-
-; p_global_one: current token is a global variable name
-p_global_one:
-ST r15,r14,0
-ADD r14,r14,r13
-MOVI r1,#SK_GLOBAL
-CALL @sym_get_cur
-ST r1,r14,0
-ADD r14,r14,r13
-CALL @p_adv
-MOVI r1,#P_LBRACK
-CALL @p_at_p
-CMP r1,r0
-JMP[EQ] @pgo_scalar
-CALL @p_adv
-CALL @p_cexpr
-CMP r1,r0
-JMP[GT] @pgo_count_ok
-MOVI r1,31
-CALL @p_err
-pgo_count_ok:
-ST r1,r14,0
-ADD r14,r14,r13
-MOVI r1,#P_RBRACK
-MOVI r2,33
-CALL @p_expect_p
-JMP @pgo_count_done
-pgo_scalar:
-ST r0,r14,0
-ADD r14,r14,r13
-pgo_count_done:
-ADDI r3,r14,-2
+LD r1,r0,#W_LOCALB
+MOVI r2,4
+CALL @px_align_up
+ST r1,r0,#W_FRAMEB
+ADDI r3,r14,-1
 LD r1,r3,0
 CALL @sym_entry
-LD r2,r1,#SY_NP
-CMP r2,r0
-JMP[NE] @pgo_allocd
-LD r2,r0,#W_GLOBUSED
-ADDI r3,r14,-1
-LD r4,r3,0
-CMP r4,r0
-JMP[NE] @pgo_sz_arr
-MOVI r4,1
-pgo_sz_arr:
-ADD r5,r2,r4
-LA r3,#NCC_GLOBMAX
-CMP r5,r3
-JMP[LT] @pgo_room
-MOVI r1,28
-CALL @p_err
-pgo_room:
-ST r2,r1,#SY_AUX
-MOVI r3,1
-ST r3,r1,#SY_NP
-ADDI r3,r14,-1
-LD r3,r3,0
-ST r3,r1,#SY_NL
-ADD r2,r2,r4
-ST r2,r0,#W_GLOBUSED
-pgo_allocd:
-LD r2,r1,#SY_AUX
-ST r2,r14,0
-ADD r14,r14,r13
-; zero an array first
-ADDI r3,r14,-2
-LD r4,r3,0
-CMP r4,r0
-JMP[EQ] @pgo_init
-MOVI r5,0xFFFF
-CMP r4,r5
-JMP[LT] @pgo_zok
-MOVI r1,36
-CALL @p_err
-pgo_zok:
-MOVI r5,0xFFFF
-CMP r4,r5
-JMP[LT] @pgo_zok1
-MOVI r1,36
-CALL @p_err
-pgo_zok1:
-ADDI r3,r14,-1
-LD r3,r3,0
-CMP r3,r5
-JMP[LT] @pgo_zok2
-MOVI r1,36
-CALL @p_err
-pgo_zok2:
-SHL r4,r4,16
-BOOL.14 r3,r3,r4
-LA r1,#I_GZERO
-CALL @ir_emit
-pgo_init:
-MOVI r1,#P_ASSIGN
-CALL @p_take_p
-CMP r1,r0
-JMP[EQ] @pgo_noinit
-ADDI r3,r14,-2
-LD r3,r3,0
-CMP r3,r0
-JMP[EQ] @pgo_scalar_init
-MOVI r1,#P_LBRACE
-CALL @p_at_p
-CMP r1,r0
-JMP[EQ] @pgo_array_scalar
-CALL @p_adv
-MOVI r1,0
-ST r1,r14,0
-ADD r14,r14,r13
-pgo_ai_l:
-MOVI r1,#P_RBRACE
-CALL @p_at_p
-CMP r1,r0
-JMP[NE] @pgo_ai_done
-ADDI r3,r14,-1
-LD r4,r3,0
-ADDI r3,r14,-3
-LD r5,r3,0
-CMP r4,r5
-JMP[GE] @pgo_ai_skip
-ADDI r3,r14,-2
-LD r2,r3,0
-ADD r2,r2,r4
-LA r1,#I_GADDR
-CALL @ir_emit
-CALL @p_assign
-CALL @p_emit_rv
-LA r1,#I_STORE_IND
-MOVI r2,0
-CALL @ir_emit
-JMP @pgo_ai_step
-pgo_ai_skip:
-CALL @p_assign
-CALL @p_emit_rv
-LA r1,#I_POP
-CALL @ir_op
-pgo_ai_step:
-ADDI r3,r14,-1
-LD r4,r3,0
-ADD r4,r4,r13
-ST r4,r3,0
-MOVI r1,#P_COMMA
-CALL @p_take_p
-CMP r1,r0
-JMP[NE] @pgo_ai_l
-pgo_ai_done:
-MOVI r1,#P_RBRACE
-MOVI r2,35
-CALL @p_expect_p
+LD r2,r0,#W_FRAMEB
+ST r2,r1,#SY_NL
 ADDI r14,r14,-1
-JMP @pgo_afterinit
-pgo_array_scalar:
-CALL @p_assign
-CALL @p_emit_rv
-ADDI r3,r14,-1
-LD r2,r3,0
-MOVI r1,1
-CALL @emit_store_lv
-JMP @pgo_afterinit
-pgo_scalar_init:
-CALL @p_assign
-CALL @p_emit_rv
-ADDI r3,r14,-1
-LD r2,r3,0
-MOVI r1,1
-CALL @emit_store_lv
-JMP @pgo_afterinit
-pgo_noinit:
-ADDI r3,r14,-2
-LD r3,r3,0
-CMP r3,r0
-JMP[NE] @pgo_afterinit
-LA r1,#I_PUSH
-MOVI r2,0
-CALL @ir_emit
-ADDI r3,r14,-1
-LD r2,r3,0
-MOVI r1,1
-CALL @emit_store_lv
-pgo_afterinit:
-ADDI r14,r14,-3
-MOVI r1,#P_COMMA
-CALL @p_take_p
-CMP r1,r0
-JMP[NE] @pgo_more
-MOVI r1,#P_SEMI
-MOVI r2,24
-CALL @p_expect_p
-JMP @pgo_d
-pgo_more:
-LD r1,r0,#W_TKA
-MOVI r2,#K_IDENT
-CMP r1,r2
-JMP[EQ] @pgo_more_ok
-MOVI r1,23
-CALL @p_err
-pgo_more_ok:
-CALL @p_global_one
-JMP @pgo_d
-pgo_d:
+pfu_d:
+ST r0,r0,#W_FUNCSYM
 SUB r14,r14,r13
 LD r15,r14,0
 RET
-
-; p_tu
+; translation unit
 p_tu:
 ST r15,r14,0
 ADD r14,r14,r13
@@ -4963,38 +9483,18 @@ CMP r1,r2
 JMP[EQ] @ptu_d
 MOVI r2,#P_SEMI
 CMP r1,r2
-JMP[NE] @ptu_try
+JMP[NE] @ptu_type
 CALL @p_adv
 JMP @ptu_l
-ptu_try:
+ptu_type:
 CALL @p_is_type
 CMP r1,r0
-JMP[NE] @ptu_decl
+JMP[NE] @ptu_go
 MOVI r1,30
 CALL @p_err
-ptu_decl:
-CALL @p_skip_types
-LD r1,r0,#W_TKA
-MOVI r2,#K_IDENT
-CMP r1,r2
-JMP[EQ] @ptu_name
-MOVI r1,23
-CALL @p_err
-ptu_name:
-CALL @p_peek
-LD r1,r0,#W_TKB
-MOVI r2,#K_PUNCT
-CMP r1,r2
-JMP[NE] @ptu_global
-LD r1,r0,#W_TKB+1
-MOVI r2,#P_LPAREN
-CMP r1,r2
-JMP[EQ] @ptu_func
-ptu_global:
-CALL @p_global_one
-JMP @ptu_l
-ptu_func:
-CALL @p_func
+ptu_go:
+CALL @p_typespec
+CALL @p_decl_external
 JMP @ptu_l
 ptu_d:
 SUB r14,r14,r13
@@ -5002,14 +9502,15 @@ LD r15,r14,0
 RET
 
 ; ================================================================== INTERPRETER
+; Memory is byte-addressed; IR values are 32-bit. C frames live at C_STACK.
 ni_push:
 LD r2,r0,#R_SP
 LA r3,#NCC_ESEND
 CMP r2,r3
-JMP[LT] @np_ok
+JMP[LT] @nip_ok
 MOVI r1,43
 JMP @ncc_err
-np_ok:
+nip_ok:
 ST r1,r2,0
 ADD r2,r2,r13
 ST r2,r0,#R_SP
@@ -5019,6 +9520,96 @@ LD r2,r0,#R_SP
 SUB r2,r2,r13
 ST r2,r0,#R_SP
 LD r1,r2,0
+RET
+
+; ni_loadv: r1=byte address r2=code -> r1
+ni_loadv:
+MOVI r3,#SZ_8S
+CMP r2,r3
+JMP[EQ] @nilv_8s
+MOVI r3,#SZ_8U
+CMP r2,r3
+JMP[EQ] @nilv_8u
+MOVI r3,#SZ_16S
+CMP r2,r3
+JMP[EQ] @nilv_16s
+MOVI r3,#SZ_16U
+CMP r2,r3
+JMP[EQ] @nilv_16u
+; 32-bit
+LDB r4,r1,0
+ADDI r1,r1,1
+LDB r5,r1,0
+SHL r5,r5,8
+BOOL.14 r4,r4,r5
+ADDI r1,r1,1
+LDB r5,r1,0
+SHL r5,r5,16
+BOOL.14 r4,r4,r5
+ADDI r1,r1,1
+LDB r5,r1,0
+SHL r5,r5,24
+BOOL.14 r1,r4,r5
+RET
+nilv_8s:
+LDB r1,r1,0
+SHL r1,r1,24
+SAR r1,r1,24
+RET
+nilv_8u:
+LDB r1,r1,0
+RET
+nilv_16s:
+LDB r4,r1,0
+ADDI r1,r1,1
+LDB r5,r1,0
+SHL r5,r5,8
+BOOL.14 r4,r4,r5
+SHL r4,r4,16
+SAR r1,r4,16
+RET
+nilv_16u:
+LDB r4,r1,0
+ADDI r1,r1,1
+LDB r5,r1,0
+SHL r5,r5,8
+BOOL.14 r1,r4,r5
+RET
+
+; ni_storev: r1=byte address r2=value r3=code
+ni_storev:
+MOVI r4,#SZ_8S
+CMP r3,r4
+JMP[EQ] @nisv_8
+MOVI r4,#SZ_8U
+CMP r3,r4
+JMP[EQ] @nisv_8
+MOVI r4,#SZ_16S
+CMP r3,r4
+JMP[EQ] @nisv_16
+MOVI r4,#SZ_16U
+CMP r3,r4
+JMP[EQ] @nisv_16
+; 32-bit
+STB r2,r1,0
+SHR r2,r2,8
+ADDI r1,r1,1
+STB r2,r1,0
+SHR r2,r2,8
+ADDI r1,r1,1
+STB r2,r1,0
+SHR r2,r2,8
+ADDI r1,r1,1
+STB r2,r1,0
+RET
+nisv_16:
+STB r2,r1,0
+SHR r2,r2,8
+ADDI r1,r1,1
+STB r2,r1,0
+RET
+nisv_8:
+STB r2,r1,0
 RET
 
 ni_shl:
@@ -5043,16 +9634,26 @@ SUB r2,r2,r13
 JMP @nsa_l
 nsa_d:
 RET
+ni_shru:
+MOVI r3,31
+BOOL.8 r2,r2,r3
+nsu_l:
+CMP r2,r0
+JMP[EQ] @nsu_d
+SHR r1,r1,1
+SUB r2,r2,r13
+JMP @nsu_l
+nsu_d:
+RET
 
+; ni_puts: r1=NUL-terminated byte string
 ni_puts:
 ST r15,r14,0
 ADD r14,r14,r13
 ni_puts_l:
-LD r2,r1,0
+LDB r2,r1,0
 CMP r2,r0
 JMP[EQ] @ni_puts_d
-MOVI r3,255
-BOOL.8 r2,r2,r3
 ST r1,r14,0
 ADD r14,r14,r13
 ADD r1,r2,r0
@@ -5066,55 +9667,707 @@ SUB r14,r14,r13
 LD r15,r14,0
 RET
 
+; ---- libc runtime -------------------------------------------------
+putudec:
+ST r15,r14,0
+ADD r14,r14,r13
+CMP r5,r0
+JMP[NE] @pud_nz
+MOVI r1,48
+CALL @ncc_putc
+JMP @pud_d
+pud_nz:
+MOVI r6,0
+pud_l:
+MOVI r7,10
+DIVU r8,r5,r7
+MUL r9,r8,r7
+SUB r9,r5,r9
+LA r10,#W_DECBUF
+ADD r10,r10,r6
+ST r9,r10,0
+ADD r6,r6,r13
+ADD r5,r8,r0
+CMP r5,r0
+JMP[NE] @pud_l
+pud_r:
+SUB r6,r6,r13
+LA r10,#W_DECBUF
+ADD r10,r10,r6
+LD r1,r10,0
+ADDI r1,r1,48
+CALL @ncc_putc
+CMP r6,r0
+JMP[NE] @pud_r
+pud_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; ni_arg: r1=i -> r1=argument i (0-based)
+ni_arg:
+LD r2,r0,#R_SP
+LD r3,r0,#W_PF_ARGC
+SUB r2,r2,r3
+ADD r2,r2,r1
+LD r1,r2,0
+RET
+
+ni_printf:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_PF_ARGC
+ST r0,r0,#W_PF_IDX
+; first argument is the format pointer
+MOVI r1,0
+CALL @ni_arg
+ST r1,r0,#W_PF_FMT
+npf_l:
+LD r1,r0,#W_PF_FMT
+LDB r2,r1,0
+CMP r2,r0
+JMP[EQ] @npf_done
+MOVI r3,37
+CMP r2,r3
+JMP[EQ] @npf_pct
+ADD r1,r2,r0
+CALL @ncc_putc
+LD r1,r0,#W_PF_FMT
+ADD r1,r1,r13
+ST r1,r0,#W_PF_FMT
+JMP @npf_l
+npf_pct:
+LD r1,r0,#W_PF_FMT
+ADD r1,r1,r13
+ST r1,r0,#W_PF_FMT
+LDB r2,r1,0
+CMP r2,r0
+JMP[EQ] @npf_done
+MOVI r3,108
+CMP r2,r3
+JMP[NE] @npf_fmt
+; skip 'l' and read the real conversion
+ADD r1,r1,r13
+ST r1,r0,#W_PF_FMT
+LDB r2,r1,0
+npf_fmt:
+MOVI r3,100
+CMP r2,r3
+JMP[EQ] @npf_int
+MOVI r3,105
+CMP r2,r3
+JMP[EQ] @npf_int
+MOVI r3,117
+CMP r2,r3
+JMP[EQ] @npf_uint
+MOVI r3,120
+CMP r2,r3
+JMP[EQ] @npf_hex
+MOVI r3,88
+CMP r2,r3
+JMP[EQ] @npf_hex
+MOVI r3,99
+CMP r2,r3
+JMP[EQ] @npf_char
+MOVI r3,115
+CMP r2,r3
+JMP[EQ] @npf_str
+MOVI r3,112
+CMP r2,r3
+JMP[EQ] @npf_hex
+MOVI r3,37
+CMP r2,r3
+JMP[EQ] @npf_pctc
+; unknown: print it literally after '%'
+ADD r1,r2,r0
+CALL @ncc_putc
+JMP @npf_adv
+npf_int:
+LD r1,r0,#W_PF_IDX
+ADD r1,r1,r13
+ST r1,r0,#W_PF_IDX
+CALL @ni_arg
+ADD r5,r1,r0
+CALL @putdec
+JMP @npf_adv
+npf_uint:
+LD r1,r0,#W_PF_IDX
+ADD r1,r1,r13
+ST r1,r0,#W_PF_IDX
+CALL @ni_arg
+ADD r5,r1,r0
+CALL @putudec
+JMP @npf_adv
+npf_hex:
+LD r1,r0,#W_PF_IDX
+ADD r1,r1,r13
+ST r1,r0,#W_PF_IDX
+CALL @ni_arg
+ADD r5,r1,r0
+CALL @puthex8
+JMP @npf_adv
+npf_char:
+LD r1,r0,#W_PF_IDX
+ADD r1,r1,r13
+ST r1,r0,#W_PF_IDX
+CALL @ni_arg
+MOVI r2,255
+BOOL.8 r1,r1,r2
+CALL @ncc_putc
+JMP @npf_adv
+npf_str:
+LD r1,r0,#W_PF_IDX
+ADD r1,r1,r13
+ST r1,r0,#W_PF_IDX
+CALL @ni_arg
+CALL @ni_puts
+JMP @npf_adv
+npf_pctc:
+MOVI r1,37
+CALL @ncc_putc
+npf_adv:
+LD r1,r0,#W_PF_FMT
+ADD r1,r1,r13
+ST r1,r0,#W_PF_FMT
+JMP @npf_l
+npf_done:
+LD r1,r0,#W_PF_ARGC
+LD r2,r0,#R_SP
+SUB r2,r2,r1
+ST r2,r0,#R_SP
+MOVI r1,0
+CALL @ni_push
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; byte helpers
+ni_memcpy_raw: ; r1=dst r2=src r3=n
+nmm_l:
+CMP r3,r0
+JMP[EQ] @nmm_d
+LDB r4,r2,0
+STB r4,r1,0
+ADD r1,r1,r13
+ADD r2,r2,r13
+SUB r3,r3,r13
+JMP @nmm_l
+nmm_d:
+RET
+ni_memset_raw: ; r1=dst r2=byte r3=n
+nms_l:
+CMP r3,r0
+JMP[EQ] @nms_d
+STB r2,r1,0
+ADD r1,r1,r13
+SUB r3,r3,r13
+JMP @nms_l
+nms_d:
+RET
+
+; malloc: r1=size -> r1=ptr
+ni_malloc:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_TY_TMP
+LD r1,r0,#W_HEAP
+MOVI r2,4
+CALL @px_align_up
+ST r1,r0,#W_TY_BASE
+LD r1,r0,#W_TY_TMP
+MOVI r2,4
+CALL @px_align_up
+ST r1,r0,#W_TY_ID
+LD r2,r0,#W_TY_BASE
+ADDI r3,r1,4
+ADD r3,r3,r2
+LA r4,#C_HEAP_END
+CMP r3,r4
+JMP[LT] @nm_room
+MOVI r1,83
+CALL @ncc_err
+nm_room:
+LD r1,r0,#W_TY_BASE
+SHR r2,r1,2
+LD r3,r0,#W_TY_ID
+ST r3,r2,0
+LD r2,r0,#W_TY_BASE
+ADDI r3,r3,4
+ADD r2,r2,r3
+ST r2,r0,#W_HEAP
+ADDI r1,r1,4
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+ni_calloc:
+; r1=n r2=size
+ST r15,r14,0
+ADD r14,r14,r13
+ST r2,r0,#W_TY_TMP
+MUL r1,r1,r2
+ST r1,r0,#W_TY_COUNT
+CALL @ni_malloc
+ST r1,r0,#W_TY_BASE
+LD r2,r0,#W_TY_COUNT
+MOVI r3,0
+CALL @ni_memset_raw
+LD r1,r0,#W_TY_BASE
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+ni_realloc:
+; r1=oldptr r2=newsize
+ST r15,r14,0
+ADD r14,r14,r13
+CMP r1,r0
+JMP[NE] @nr_old
+ADD r1,r2,r0
+CALL @ni_malloc
+JMP @nr_d
+nr_old:
+ST r1,r0,#W_TY_SIGN
+ST r2,r0,#W_TY_ALIGN
+ADDI r3,r1,-4
+SHR r3,r3,2
+LD r3,r3,0
+ST r3,r0,#W_TY_COUNT
+ADD r1,r2,r0
+CALL @ni_malloc
+ST r1,r0,#W_TY_RET
+LD r1,r0,#W_TY_RET
+LD r2,r0,#W_TY_SIGN
+LD r3,r0,#W_TY_COUNT
+LD r4,r0,#W_TY_ALIGN
+CMP r3,r4
+JMP[LE] @nr_copy
+ADD r3,r4,r0
+nr_copy:
+CALL @ni_memcpy_raw
+LD r1,r0,#W_TY_RET
+nr_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+ni_strlen:
+; r1=ptr -> r1=len
+ST r1,r0,#W_TY_TMP
+MOVI r2,0
+nsl_l:
+LDB r3,r1,0
+CMP r3,r0
+JMP[EQ] @nsl_d
+ADD r1,r1,r13
+ADD r2,r2,r13
+JMP @nsl_l
+nsl_d:
+ADD r1,r2,r0
+RET
+
+ni_strcmp:
+; r1=a r2=b
+nsc_l:
+LDB r3,r1,0
+LDB r4,r2,0
+CMP r3,r4
+JMP[NE] @nsc_ne
+CMP r3,r0
+JMP[EQ] @nsc_eq
+ADD r1,r1,r13
+ADD r2,r2,r13
+JMP @nsc_l
+nsc_eq:
+MOVI r1,0
+RET
+nsc_ne:
+CMP r3,r4
+MOVI r1,1
+MOVI[LT] r1,-1
+RET
+
+ni_strncmp:
+; r1=a r2=b r3=n
+snc_l:
+CMP r3,r0
+JMP[EQ] @snc_eq
+LDB r4,r1,0
+LDB r5,r2,0
+CMP r4,r5
+JMP[NE] @snc_ne
+CMP r4,r0
+JMP[EQ] @snc_eq
+ADD r1,r1,r13
+ADD r2,r2,r13
+SUB r3,r3,r13
+JMP @snc_l
+snc_eq:
+MOVI r1,0
+RET
+snc_ne:
+CMP r4,r5
+MOVI r1,1
+MOVI[LT] r1,-1
+RET
+
+ni_strcpy:
+; r1=dst r2=src -> dst
+ST r1,r0,#W_TY_TMP
+nscp_l:
+LDB r3,r2,0
+STB r3,r1,0
+CMP r3,r0
+JMP[EQ] @nscp_d
+ADD r1,r1,r13
+ADD r2,r2,r13
+JMP @nscp_l
+nscp_d:
+LD r1,r0,#W_TY_TMP
+RET
+
+ni_strncpy:
+; r1=dst r2=src r3=n
+ST r1,r0,#W_TY_TMP
+sncp_l:
+CMP r3,r0
+JMP[EQ] @sncp_d
+LDB r4,r2,0
+STB r4,r1,0
+CMP r4,r0
+JMP[EQ] @sncp_pad
+ADD r1,r1,r13
+ADD r2,r2,r13
+SUB r3,r3,r13
+JMP @sncp_l
+sncp_pad:
+; pad the remainder with zeros
+ADD r1,r1,r13
+SUB r3,r3,r13
+sncp_pl:
+CMP r3,r0
+JMP[EQ] @sncp_d
+STB r0,r1,0
+ADD r1,r1,r13
+SUB r3,r3,r13
+JMP @sncp_pl
+sncp_d:
+LD r1,r0,#W_TY_TMP
+RET
+
+ni_strcat:
+; r1=dst r2=src -> dst
+ST r1,r0,#W_TY_TMP
+scat_l:
+LDB r3,r1,0
+CMP r3,r0
+JMP[EQ] @scat_go
+ADD r1,r1,r13
+JMP @scat_l
+scat_go:
+LDB r3,r2,0
+STB r3,r1,0
+CMP r3,r0
+JMP[EQ] @scat_d
+ADD r1,r1,r13
+ADD r2,r2,r13
+JMP @scat_go
+scat_d:
+LD r1,r0,#W_TY_TMP
+RET
+
+ni_memcmp:
+; r1=a r2=b r3=n
+nmc_l:
+CMP r3,r0
+JMP[EQ] @nmc_eq
+LDB r4,r1,0
+LDB r5,r2,0
+CMP r4,r5
+JMP[NE] @nmc_ne
+ADD r1,r1,r13
+ADD r2,r2,r13
+SUB r3,r3,r13
+JMP @nmc_l
+nmc_eq:
+MOVI r1,0
+RET
+nmc_ne:
+CMP r4,r5
+MOVI r1,1
+MOVI[LT] r1,-1
+RET
+
+ni_atoi:
+; r1=ptr
+MOVI r2,0
+MOVI r3,0
+LDB r4,r1,0
+MOVI r5,45
+CMP r4,r5
+JMP[NE] @nai_l
+MOVI r3,1
+ADD r1,r1,r13
+nai_l:
+LDB r4,r1,0
+MOVI r5,48
+CMP r4,r5
+JMP[LT] @nai_d
+MOVI r5,58
+CMP r4,r5
+JMP[GE] @nai_d
+MOVI r5,10
+MUL r2,r2,r5
+ADDI r4,r4,-48
+ADD r2,r2,r4
+ADD r1,r1,r13
+JMP @nai_l
+nai_d:
+CMP r3,r0
+JMP[EQ] @nai_r
+SUB r2,r0,r2
+nai_r:
+ADD r1,r2,r0
+RET
+
 ni_builtin:
 ST r15,r14,0
 ADD r14,r14,r13
 ST r1,r0,#R_T0
-CALL @ni_pop
-ST r1,r0,#R_T1
-LD r2,r0,#R_T0
-MOVI r3,#B_PUTCHAR
-CMP r2,r3
+ST r2,r0,#R_T1
+LD r1,r0,#R_T0
+MOVI r2,#B_PUTCHAR
+CMP r1,r2
 JMP[EQ] @nbi_putc
-MOVI r3,#B_PRINTINT
-CMP r2,r3
+MOVI r2,#B_PRINTINT
+CMP r1,r2
 JMP[EQ] @nbi_pint
-MOVI r3,#B_PUTS
-CMP r2,r3
+MOVI r2,#B_PUTS
+CMP r1,r2
 JMP[EQ] @nbi_puts
-MOVI r3,#B_HEX
-CMP r2,r3
+MOVI r2,#B_HEX
+CMP r1,r2
 JMP[EQ] @nbi_hex
-MOVI r3,#B_PUTSTR
-CMP r2,r3
+MOVI r2,#B_PUTSTR
+CMP r1,r2
 JMP[EQ] @nbi_pstr
+MOVI r2,#B_PRINTF
+CMP r1,r2
+JMP[EQ] @nbi_printf
+MOVI r2,#B_MALLOC
+CMP r1,r2
+JMP[EQ] @nbi_malloc
+MOVI r2,#B_FREE
+CMP r1,r2
+JMP[EQ] @nbi_free
+MOVI r2,#B_CALLOC
+CMP r1,r2
+JMP[EQ] @nbi_calloc
+MOVI r2,#B_REALLOC
+CMP r1,r2
+JMP[EQ] @nbi_realloc
+MOVI r2,#B_STRLEN
+CMP r1,r2
+JMP[EQ] @nbi_strlen
+MOVI r2,#B_STRCMP
+CMP r1,r2
+JMP[EQ] @nbi_strcmp
+MOVI r2,#B_STRNCMP
+CMP r1,r2
+JMP[EQ] @nbi_strncmp
+MOVI r2,#B_STRCPY
+CMP r1,r2
+JMP[EQ] @nbi_strcpy
+MOVI r2,#B_STRNCPY
+CMP r1,r2
+JMP[EQ] @nbi_strncpy
+MOVI r2,#B_STRCAT
+CMP r1,r2
+JMP[EQ] @nbi_strcat
+MOVI r2,#B_MEMCPY
+CMP r1,r2
+JMP[EQ] @nbi_memcpy
+MOVI r2,#B_MEMSET
+CMP r1,r2
+JMP[EQ] @nbi_memset
+MOVI r2,#B_MEMCMP
+CMP r1,r2
+JMP[EQ] @nbi_memcmp
+MOVI r2,#B_ATOI
+CMP r1,r2
+JMP[EQ] @nbi_atoi
+MOVI r2,#B_ABS
+CMP r1,r2
+JMP[EQ] @nbi_abs
+MOVI r2,#B_EXIT
+CMP r1,r2
+JMP[EQ] @nbi_exit
 JMP @nbi_zero
 nbi_putc:
-LD r1,r0,#R_T1
+CALL @ni_pop
+ST r1,r0,#R_T2
 MOVI r2,255
 BOOL.8 r1,r1,r2
 CALL @ncc_putc
-LD r1,r0,#R_T1
+LD r1,r0,#R_T2
 CALL @ni_push
 JMP @nbi_d
 nbi_pint:
-LD r5,r0,#R_T1
+CALL @ni_pop
+ADD r5,r1,r0
 CALL @putdec
 JMP @nbi_zero
 nbi_puts:
-LD r1,r0,#R_T1
+CALL @ni_pop
 CALL @ni_puts
 MOVI r1,10
 CALL @ncc_putc
 JMP @nbi_zero
 nbi_hex:
-LD r5,r0,#R_T1
+CALL @ni_pop
+ADD r5,r1,r0
 CALL @puthex8
 JMP @nbi_zero
 nbi_pstr:
-LD r1,r0,#R_T1
+CALL @ni_pop
 CALL @ni_puts
 JMP @nbi_zero
+nbi_printf:
+LD r1,r0,#R_T1
+CALL @ni_printf
+JMP @nbi_d
+nbi_malloc:
+CALL @ni_pop
+CALL @ni_malloc
+CALL @ni_push
+JMP @nbi_d
+nbi_free:
+CALL @ni_pop
+JMP @nbi_zero
+nbi_calloc:
+CALL @ni_pop
+ST r1,r0,#R_T2
+CALL @ni_pop
+LD r2,r0,#R_T2
+CALL @ni_calloc
+CALL @ni_push
+JMP @nbi_d
+nbi_realloc:
+CALL @ni_pop
+ST r1,r0,#R_T2
+CALL @ni_pop
+LD r2,r0,#R_T2
+CALL @ni_realloc
+CALL @ni_push
+JMP @nbi_d
+nbi_strlen:
+CALL @ni_pop
+CALL @ni_strlen
+CALL @ni_push
+JMP @nbi_d
+nbi_strcmp:
+CALL @ni_pop
+ST r1,r0,#R_T2
+CALL @ni_pop
+LD r2,r0,#R_T2
+CALL @ni_strcmp
+CALL @ni_push
+JMP @nbi_d
+nbi_strncmp:
+CALL @ni_pop
+ST r1,r0,#R_T2
+CALL @ni_pop
+ST r1,r0,#R_T0
+CALL @ni_pop
+LD r2,r0,#R_T0
+LD r3,r0,#R_T2
+CALL @ni_strncmp
+CALL @ni_push
+JMP @nbi_d
+nbi_strcpy:
+CALL @ni_pop
+ST r1,r0,#R_T2
+CALL @ni_pop
+LD r2,r0,#R_T2
+CALL @ni_strcpy
+CALL @ni_push
+JMP @nbi_d
+nbi_strncpy:
+CALL @ni_pop
+ST r1,r0,#R_T2
+CALL @ni_pop
+ST r1,r0,#R_T0
+CALL @ni_pop
+LD r2,r0,#R_T0
+LD r3,r0,#R_T2
+CALL @ni_strncpy
+CALL @ni_push
+JMP @nbi_d
+nbi_strcat:
+CALL @ni_pop
+ST r1,r0,#R_T2
+CALL @ni_pop
+LD r2,r0,#R_T2
+CALL @ni_strcat
+CALL @ni_push
+JMP @nbi_d
+nbi_memcpy:
+CALL @ni_pop
+ST r1,r0,#R_T2
+CALL @ni_pop
+ST r1,r0,#R_T0
+CALL @ni_pop
+ST r1,r0,#R_T1
+LD r1,r0,#R_T1
+LD r2,r0,#R_T0
+LD r3,r0,#R_T2
+CALL @ni_memcpy_raw
+LD r1,r0,#R_T1
+CALL @ni_push
+JMP @nbi_d
+nbi_memset:
+CALL @ni_pop
+ST r1,r0,#R_T2
+CALL @ni_pop
+ST r1,r0,#R_T0
+CALL @ni_pop
+ST r1,r0,#R_T1
+LD r1,r0,#R_T1
+LD r2,r0,#R_T0
+LD r3,r0,#R_T2
+CALL @ni_memset_raw
+LD r1,r0,#R_T1
+CALL @ni_push
+JMP @nbi_d
+nbi_memcmp:
+CALL @ni_pop
+ST r1,r0,#R_T2
+CALL @ni_pop
+ST r1,r0,#R_T0
+CALL @ni_pop
+LD r2,r0,#R_T0
+LD r3,r0,#R_T2
+CALL @ni_memcmp
+CALL @ni_push
+JMP @nbi_d
+nbi_atoi:
+CALL @ni_pop
+CALL @ni_atoi
+CALL @ni_push
+JMP @nbi_d
+nbi_abs:
+CALL @ni_pop
+CMPS r1,r0
+JMP[GE] @nbi_abs_p
+SUB r1,r0,r1
+nbi_abs_p:
+CALL @ni_push
+JMP @nbi_d
+nbi_exit:
+CALL @ni_pop
+LD r2,r0,#W_TAILHALT
+ST r2,r0,#R_IP
+JMP @nbi_d
 nbi_zero:
 MOVI r1,0
 CALL @ni_push
@@ -5123,7 +10376,7 @@ SUB r14,r14,r13
 LD r15,r14,0
 RET
 
-; ni_call: operand in R_T0 (symid | argc<<16)
+; ni_call: operand in R_T0
 ni_call:
 ST r15,r14,0
 ADD r14,r14,r13
@@ -5138,6 +10391,9 @@ MOVI r4,#SK_BUILTIN
 CMP r3,r4
 JMP[NE] @ncl_func
 LD r5,r1,#SY_NP
+MOVI r4,0xFFFF
+CMP r5,r4
+JMP[EQ] @ncl_bok
 LD r6,r0,#R_T1
 CMP r5,r6
 JMP[EQ] @ncl_bok
@@ -5166,45 +10422,81 @@ MOVI r1,40
 CALL @ncc_err
 ncl_argc_ok:
 LD r5,r1,#SY_NL
+LD r6,r1,#SY_ARG
+ST r4,r0,#W_TY_COUNT
+ST r6,r0,#W_TY_BASE
+ST r5,r0,#W_TY_RET
+; header setup
 LD r7,r0,#R_FP
-LD r8,r7,3
-ADDI r8,r8,4
-ADD r8,r7,r8
-LA r9,#NCC_FSEND
-ADDI r10,r8,4
-ADD r10,r10,r5
-CMP r10,r9
+SHR r8,r7,2
+ADDI r9,r8,3
+LD r10,r9,0
+; old frame size = word at old fp + 12
+ADD r10,r7,r10
+; new fp = old fp + old frame size
+ST r10,r0,#W_TY_ID
+LA r9,#C_STACK_END
+ADD r11,r10,r5
+CMP r11,r9
 JMP[LE] @ncl_room
 MOVI r1,42
 CALL @ncc_err
 ncl_room:
-ST r7,r8,0
-LD r9,r0,#R_IP
-ST r9,r8,1
-LD r9,r0,#R_SP
-LD r10,r0,#R_T1
-SUB r9,r9,r10
-ST r9,r8,2
-ST r5,r8,3
-MOVI r11,0
+SHR r12,r10,2
+ST r7,r12,0
+ADDI r12,r12,1
+LD r1,r0,#R_IP
+ST r1,r12,0
+ADDI r12,r12,1
+LD r1,r0,#R_SP
+LD r2,r0,#R_T1
+SUB r1,r1,r2
+ST r1,r12,0
+ST r1,r14,0
+ADD r14,r14,r13
+ADDI r12,r12,1
+ST r5,r12,0
+; copy args
+ST r0,r0,#W_TY_KIND
 ncl_copy:
-CMP r11,r10
+LD r1,r0,#W_TY_KIND
+LD r2,r0,#R_T1
+CMP r1,r2
 JMP[GE] @ncl_copy_d
-LD r12,r0,#R_SP
-SUB r12,r12,r10
-ADD r12,r12,r11
-LD r12,r12,0
-ADDI r9,r8,4
-ADD r9,r9,r11
-ST r12,r9,0
-ADD r11,r11,r13
+LD r3,r0,#W_TY_BASE
+SHL r4,r1,1
+ADD r4,r3,r4
+LD r5,r4,0
+ADDI r4,r4,1
+LD r6,r4,0
+ST r5,r0,#W_TY_ALIGN
+ST r6,r0,#W_TY_RET
+ADD r1,r6,r0
+CALL @ty_store_code
+ST r1,r0,#W_TY_SIGN
+LD r1,r0,#W_TY_ID
+LD r2,r0,#W_TY_ALIGN
+ADD r1,r1,r2
+LD r2,r0,#R_SP
+LD r3,r0,#R_T1
+SUB r2,r2,r3
+LD r3,r0,#W_TY_KIND
+ADD r2,r2,r3
+LD r2,r2,0
+LD r3,r0,#W_TY_SIGN
+CALL @ni_storev
+LD r1,r0,#W_TY_KIND
+ADD r1,r1,r13
+ST r1,r0,#W_TY_KIND
 JMP @ncl_copy
 ncl_copy_d:
-LD r9,r0,#R_SP
-SUB r9,r9,r10
-ST r9,r0,#R_SP
-ST r8,r0,#R_FP
-ST r4,r0,#R_IP
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#R_SP
+LD r1,r0,#W_TY_ID
+ST r1,r0,#R_FP
+LD r1,r0,#W_TY_COUNT
+ST r1,r0,#R_IP
 JMP @ncl_d
 ncl_bad:
 MOVI r1,44
@@ -5218,6 +10510,7 @@ ni_ret:
 ST r15,r14,0
 ADD r14,r14,r13
 LD r2,r0,#R_FP
+SHR r2,r2,2
 LD r3,r2,2
 LD r4,r0,#R_SP
 CMP r4,r3
@@ -5232,6 +10525,7 @@ ST r3,r0,#R_SP
 ADD r1,r5,r0
 CALL @ni_push
 LD r2,r0,#R_FP
+SHR r2,r2,2
 LD r1,r2,1
 ST r1,r0,#R_IP
 LD r1,r2,0
@@ -5264,18 +10558,21 @@ JMP[EQ] @nil_dup
 MOVI r2,#I_SWAP
 CMP r1,r2
 JMP[EQ] @nil_swap
-MOVI r2,#I_LG
+MOVI r2,#I_GADDR
 CMP r1,r2
-JMP[EQ] @nil_lg
-MOVI r2,#I_SG
+JMP[EQ] @nil_gaddr
+MOVI r2,#I_STORE_K
 CMP r1,r2
-JMP[EQ] @nil_sg
-MOVI r2,#I_LL
+JMP[EQ] @nil_storek
+MOVI r2,#I_LADDR
 CMP r1,r2
-JMP[EQ] @nil_ll
-MOVI r2,#I_SL
+JMP[EQ] @nil_laddr
+MOVI r2,#I_LOAD
 CMP r1,r2
-JMP[EQ] @nil_sl
+JMP[EQ] @nil_load
+MOVI r2,#I_STORE
+CMP r1,r2
+JMP[EQ] @nil_store
 MOVI r2,#I_ADD
 CMP r1,r2
 JMP[EQ] @nil_add
@@ -5348,33 +10645,72 @@ JMP[EQ] @nil_call
 MOVI r2,#I_RET
 CMP r1,r2
 JMP[EQ] @nil_ret
-MOVI r2,#I_SGK
+MOVI r2,#I_MEMSET
 CMP r1,r2
-JMP[EQ] @nil_sgk
-MOVI r2,#I_SLK
+JMP[EQ] @nil_memset
+MOVI r2,#I_MEMCPY
 CMP r1,r2
-JMP[EQ] @nil_slk
-MOVI r2,#I_GADDR
+JMP[EQ] @nil_memcpy
+MOVI r2,#I_CAST
 CMP r1,r2
-JMP[EQ] @nil_gaddr
-MOVI r2,#I_LADDR
+JMP[EQ] @nil_cast
+MOVI r2,#I_DIVU
 CMP r1,r2
-JMP[EQ] @nil_laddr
-MOVI r2,#I_LOAD_IND
+JMP[EQ] @nil_divu
+MOVI r2,#I_MODU
 CMP r1,r2
-JMP[EQ] @nil_ldind
-MOVI r2,#I_STORE_IND
+JMP[EQ] @nil_modu
+MOVI r2,#I_SHRU
 CMP r1,r2
-JMP[EQ] @nil_stind
-MOVI r2,#I_LZERO
+JMP[EQ] @nil_shru
+MOVI r2,#I_LTU
 CMP r1,r2
-JMP[EQ] @nil_lzero
-MOVI r2,#I_GZERO
+JMP[EQ] @nil_ltu
+MOVI r2,#I_GTU
 CMP r1,r2
-JMP[EQ] @nil_gzero
-MOVI r2,#I_STORE_IND_KEEP
+JMP[EQ] @nil_gtu
+MOVI r2,#I_LEU
 CMP r1,r2
-JMP[EQ] @nil_stindk
+JMP[EQ] @nil_leu
+MOVI r2,#I_GEU
+CMP r1,r2
+JMP[EQ] @nil_geu
+MOVI r2,#I_FADD
+CMP r1,r2
+JMP[EQ] @nil_fadd
+MOVI r2,#I_FSUB
+CMP r1,r2
+JMP[EQ] @nil_fsub
+MOVI r2,#I_FMUL
+CMP r1,r2
+JMP[EQ] @nil_fmul
+MOVI r2,#I_FDIV
+CMP r1,r2
+JMP[EQ] @nil_fdiv
+MOVI r2,#I_FNEG
+CMP r1,r2
+JMP[EQ] @nil_fneg
+MOVI r2,#I_FLT
+CMP r1,r2
+JMP[EQ] @nil_flt
+MOVI r2,#I_FGT
+CMP r1,r2
+JMP[EQ] @nil_fgt
+MOVI r2,#I_FLE
+CMP r1,r2
+JMP[EQ] @nil_fle
+MOVI r2,#I_FGE
+CMP r1,r2
+JMP[EQ] @nil_fge
+MOVI r2,#I_FEQ
+CMP r1,r2
+JMP[EQ] @nil_feq
+MOVI r2,#I_FNE
+CMP r1,r2
+JMP[EQ] @nil_fne
+MOVI r2,#I_EXIT
+CMP r1,r2
+JMP[EQ] @nil_halt
 JMP @nil_bad
 
 nil_halt:
@@ -5405,54 +10741,39 @@ CALL @ni_push
 LD r1,r0,#R_T2
 CALL @ni_push
 JMP @nil_again
-nil_lg:
-LA r2,#NCC_GLOB
+nil_gaddr:
 LD r1,r0,#R_T0
-ADD r2,r2,r1
-LD r1,r2,0
 CALL @ni_push
 JMP @nil_again
-nil_sg:
-CALL @ni_pop
-LA r2,#NCC_GLOB
-LD r3,r0,#R_T0
-ADD r2,r2,r3
-ST r1,r2,0
-JMP @nil_again
-nil_ll:
-LD r2,r0,#R_FP
-ADDI r2,r2,4
-LD r1,r0,#R_T0
-ADD r2,r2,r1
-LD r1,r2,0
+nil_laddr:
+LD r1,r0,#R_FP
+LD r2,r0,#R_T0
+ADD r1,r1,r2
 CALL @ni_push
 JMP @nil_again
-nil_sl:
+nil_load:
 CALL @ni_pop
-LD r2,r0,#R_FP
-ADDI r2,r2,4
+LD r2,r0,#R_T0
+CALL @ni_loadv
+CALL @ni_push
+JMP @nil_again
+nil_store:
+CALL @ni_pop
+ST r1,r0,#R_T1
+CALL @ni_pop
+LD r2,r0,#R_T1
 LD r3,r0,#R_T0
-ADD r2,r2,r3
-ST r1,r2,0
+CALL @ni_storev
 JMP @nil_again
-nil_sgk:
-LA r2,#NCC_GLOB
-LD r1,r0,#R_T0
-ADD r2,r2,r1
-LD r1,r0,#R_SP
-SUB r1,r1,r13
-LD r1,r1,0
-ST r1,r2,0
-JMP @nil_again
-nil_slk:
-LD r2,r0,#R_FP
-ADDI r2,r2,4
-LD r1,r0,#R_T0
-ADD r2,r2,r1
-LD r1,r0,#R_SP
-SUB r1,r1,r13
-LD r1,r1,0
-ST r1,r2,0
+nil_storek:
+CALL @ni_pop
+ST r1,r0,#R_T1
+CALL @ni_pop
+LD r2,r0,#R_T1
+LD r3,r0,#R_T0
+CALL @ni_storev
+LD r1,r0,#R_T1
+CALL @ni_push
 JMP @nil_again
 nil_add:
 CALL @ni_pop
@@ -5492,6 +10813,22 @@ ST r1,r0,#R_T1
 CALL @ni_pop
 LD r2,r0,#R_T1
 MOD r1,r1,r2
+CALL @ni_push
+JMP @nil_again
+nil_divu:
+CALL @ni_pop
+ST r1,r0,#R_T1
+CALL @ni_pop
+LD r2,r0,#R_T1
+DIVU r1,r1,r2
+CALL @ni_push
+JMP @nil_again
+nil_modu:
+CALL @ni_pop
+ST r1,r0,#R_T1
+CALL @ni_pop
+LD r2,r0,#R_T1
+MODU r1,r1,r2
 CALL @ni_push
 JMP @nil_again
 nil_neg:
@@ -5543,6 +10880,14 @@ ST r1,r0,#R_T1
 CALL @ni_pop
 LD r2,r0,#R_T1
 CALL @ni_sar
+CALL @ni_push
+JMP @nil_again
+nil_shru:
+CALL @ni_pop
+ST r1,r0,#R_T1
+CALL @ni_pop
+LD r2,r0,#R_T1
+CALL @ni_shru
 CALL @ni_push
 JMP @nil_again
 nil_eq:
@@ -5611,6 +10956,50 @@ MOVI[GE] r3,1
 ADD r1,r3,r0
 CALL @ni_push
 JMP @nil_again
+nil_ltu:
+CALL @ni_pop
+ST r1,r0,#R_T1
+CALL @ni_pop
+LD r2,r0,#R_T1
+CMP r1,r2
+MOVI r3,0
+MOVI[LT] r3,1
+ADD r1,r3,r0
+CALL @ni_push
+JMP @nil_again
+nil_gtu:
+CALL @ni_pop
+ST r1,r0,#R_T1
+CALL @ni_pop
+LD r2,r0,#R_T1
+CMP r1,r2
+MOVI r3,0
+MOVI[GT] r3,1
+ADD r1,r3,r0
+CALL @ni_push
+JMP @nil_again
+nil_leu:
+CALL @ni_pop
+ST r1,r0,#R_T1
+CALL @ni_pop
+LD r2,r0,#R_T1
+CMP r1,r2
+MOVI r3,0
+MOVI[LE] r3,1
+ADD r1,r3,r0
+CALL @ni_push
+JMP @nil_again
+nil_geu:
+CALL @ni_pop
+ST r1,r0,#R_T1
+CALL @ni_pop
+LD r2,r0,#R_T1
+CMP r1,r2
+MOVI r3,0
+MOVI[GE] r3,1
+ADD r1,r3,r0
+CALL @ni_push
+JMP @nil_again
 nil_lnot:
 CALL @ni_pop
 CMP r1,r0
@@ -5643,70 +11032,188 @@ JMP @nil_again
 nil_ret:
 CALL @ni_ret
 JMP @nil_again
-nil_gaddr:
-LA r2,#NCC_GLOB
-LD r1,r0,#R_T0
-ADD r1,r1,r2
-CALL @ni_push
-JMP @nil_again
-nil_laddr:
-LD r1,r0,#R_FP
-ADDI r1,r1,4
-LD r2,r0,#R_T0
-ADD r1,r1,r2
-CALL @ni_push
-JMP @nil_again
-nil_ldind:
+nil_cast:
 CALL @ni_pop
-LD r2,r1,0
-ADD r1,r2,r0
+LD r2,r0,#R_T0
+MOVI r3,#SZ_8S
+CMP r2,r3
+JMP[EQ] @nilc_8s
+MOVI r3,#SZ_8U
+CMP r2,r3
+JMP[EQ] @nilc_8u
+MOVI r3,#SZ_16S
+CMP r2,r3
+JMP[EQ] @nilc_16s
+MOVI r3,#SZ_16U
+CMP r2,r3
+JMP[EQ] @nilc_16u
+MOVI r3,5
+CMP r2,r3
+JMP[EQ] @nilc_itof
+MOVI r3,6
+CMP r2,r3
+JMP[EQ] @nilc_ftoi
+JMP @nilc_push
+nilc_8s:
+SHL r1,r1,24
+SAR r1,r1,24
+JMP @nilc_push
+nilc_8u:
+MOVI r2,255
+BOOL.8 r1,r1,r2
+JMP @nilc_push
+nilc_16s:
+SHL r1,r1,16
+SAR r1,r1,16
+JMP @nilc_push
+nilc_16u:
+MOVI r2,0xFFFF
+BOOL.8 r1,r1,r2
+JMP @nilc_push
+nilc_itof:
+CVTIF r1,r1
+JMP @nilc_push
+nilc_ftoi:
+CVTFI r1,r1
+nilc_push:
 CALL @ni_push
 JMP @nil_again
-nil_stind:
+nil_memset:
 CALL @ni_pop
 ST r1,r0,#R_T1
-CALL @ni_pop
-LD r2,r0,#R_T1
-ST r2,r1,0
-JMP @nil_again
-nil_stindk:
 CALL @ni_pop
 ST r1,r0,#R_T2
 CALL @ni_pop
 LD r2,r0,#R_T2
-ST r2,r1,0
-ADD r1,r2,r0
+LD r3,r0,#R_T1
+nilms_l:
+CMP r3,r0
+JMP[EQ] @nil_again
+STB r2,r1,0
+ADD r1,r1,r13
+SUB r3,r3,r13
+JMP @nilms_l
+nil_memcpy:
+CALL @ni_pop
+ST r1,r0,#R_T1
+CALL @ni_pop
+ST r1,r0,#R_T2
+CALL @ni_pop
+LD r2,r0,#R_T2
+LD r3,r0,#R_T1
+nilmc_l:
+CMP r3,r0
+JMP[EQ] @nil_again
+LDB r4,r2,0
+STB r4,r1,0
+ADD r1,r1,r13
+ADD r2,r2,r13
+SUB r3,r3,r13
+JMP @nilmc_l
+nil_fadd:
+CALL @ni_pop
+ST r1,r0,#R_T1
+CALL @ni_pop
+LD r2,r0,#R_T1
+FADD r1,r1,r2
 CALL @ni_push
 JMP @nil_again
-nil_lzero:
-LD r2,r0,#R_FP
-ADDI r2,r2,4
-LD r1,r0,#R_T0
-MOVI r3,0xFFFF
-BOOL.8 r4,r1,r3
-ADD r2,r2,r4
-SHR r1,r1,16
-lz_l:
-CMP r1,r0
-JMP[EQ] @nil_again
-ST r0,r2,0
-ADD r2,r2,r13
-SUB r1,r1,r13
-JMP @lz_l
-nil_gzero:
-LA r2,#NCC_GLOB
-LD r1,r0,#R_T0
-MOVI r3,0xFFFF
-BOOL.8 r4,r1,r3
-ADD r2,r2,r4
-SHR r1,r1,16
-gz_l:
-CMP r1,r0
-JMP[EQ] @nil_again
-ST r0,r2,0
-ADD r2,r2,r13
-SUB r1,r1,r13
-JMP @gz_l
+nil_fsub:
+CALL @ni_pop
+ST r1,r0,#R_T1
+CALL @ni_pop
+LD r2,r0,#R_T1
+FSUB r1,r1,r2
+CALL @ni_push
+JMP @nil_again
+nil_fmul:
+CALL @ni_pop
+ST r1,r0,#R_T1
+CALL @ni_pop
+LD r2,r0,#R_T1
+FMUL r1,r1,r2
+CALL @ni_push
+JMP @nil_again
+nil_fdiv:
+CALL @ni_pop
+ST r1,r0,#R_T1
+CALL @ni_pop
+LD r2,r0,#R_T1
+FDIV r1,r1,r2
+CALL @ni_push
+JMP @nil_again
+nil_fneg:
+CALL @ni_pop
+LA r2,0x80000000
+BOOL.6 r1,r1,r2
+CALL @ni_push
+JMP @nil_again
+nil_flt:
+CALL @ni_pop
+ST r1,r0,#R_T1
+CALL @ni_pop
+LD r2,r0,#R_T1
+FCMP r1,r2
+MOVI r3,0
+MOVI[LT] r3,1
+ADD r1,r3,r0
+CALL @ni_push
+JMP @nil_again
+nil_fgt:
+CALL @ni_pop
+ST r1,r0,#R_T1
+CALL @ni_pop
+LD r2,r0,#R_T1
+FCMP r1,r2
+MOVI r3,0
+MOVI[GT] r3,1
+ADD r1,r3,r0
+CALL @ni_push
+JMP @nil_again
+nil_fle:
+CALL @ni_pop
+ST r1,r0,#R_T1
+CALL @ni_pop
+LD r2,r0,#R_T1
+FCMP r1,r2
+MOVI r3,0
+MOVI[LE] r3,1
+ADD r1,r3,r0
+CALL @ni_push
+JMP @nil_again
+nil_fge:
+CALL @ni_pop
+ST r1,r0,#R_T1
+CALL @ni_pop
+LD r2,r0,#R_T1
+FCMP r1,r2
+MOVI r3,0
+MOVI[GE] r3,1
+ADD r1,r3,r0
+CALL @ni_push
+JMP @nil_again
+nil_feq:
+CALL @ni_pop
+ST r1,r0,#R_T1
+CALL @ni_pop
+LD r2,r0,#R_T1
+FCMP r1,r2
+MOVI r3,0
+MOVI[EQ] r3,1
+ADD r1,r3,r0
+CALL @ni_push
+JMP @nil_again
+nil_fne:
+CALL @ni_pop
+ST r1,r0,#R_T1
+CALL @ni_pop
+LD r2,r0,#R_T1
+FCMP r1,r2
+MOVI r3,0
+MOVI[NE] r3,1
+ADD r1,r3,r0
+CALL @ni_push
+JMP @nil_again
 nil_bad:
 MOVI r1,46
 JMP @ncc_err
