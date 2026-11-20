@@ -38,6 +38,8 @@ Implemented:
   short-circuit, ternary, casts, `sizeof`
 - `if`/`else`, `while`, `for`, `do`/`while`, `break`, `continue`
 - functions, prototypes, parameters, recursion, `return`
+- function pointers: `RET (*name)(params)` at global or block scope,
+  function-designator values, assignment, indirect calls, comparison
 - global and local arrays, multidimensions, pointer arithmetic/indexing
 - `char`/`short`/`int`/`long`, signed and unsigned, `sizeof` in bytes
 - `float`/`double` (32-bit IEEE storage), float literals, arithmetic,
@@ -58,19 +60,18 @@ Implemented:
 Not implemented (honest list):
 
 - function-like macros, `#`/`##`, recursive macro expansion
-- `#include "file"` (directive lines are skipped; libc is built in)
+- `#include <...>` system headers (they are skipped; the libc is built in)
+- function-pointer parameters, arrays, and returns (plain function-pointer
+  variables, globals, assignment, and indirect calls work)
 - struct/union pass-by-value, return-by-value, comparison
 - nested aggregate initializers and brace initializers for array members
   inside a struct or union
-- bit-fields, `const`/`volatile` semantics, `register` semantics
+- bit-fields; `const`/`volatile`/`register` are accepted but not enforced
 - user variadic functions; `printf` is a built-in variadic function
-- function-like macros, `#`/`##`
-- function pointers, struct/union pass or return by value, bit-fields
-- floating-point printing (`%f`); float arithmetic exists in the IR but is
-  not exposed through `printf`
-- `printf` precision (`%.3s`, `%.2d`)
+- floating-point printing (`%f`) and `printf` precision (`%.3s`, `%.2d`)
 - the path filesystem is RAM-backed (it resets on reboot); no disk
   persistence yet
+- the full C standard library and headers
 
 ## Preprocessor subset
 
@@ -153,6 +154,7 @@ tools/ncc_m5.sh     preprocessor subset, 1 line
 tools/ncc_m6.sh     libc + loop/operator extras, 10 lines
 tools/ncc_m7.sh     block scope, aggregate initializers, struct assignment
 tools/ncc_m8.sh     float literals/arithmetic/casts and sin/cos
+tools/ncc_m9.sh     function pointers: globals/locals/assignment/indirect calls
 tools/ncc_donut.sh  original C donut (one frame) in raw NaN16
 tools/nfs2.sh       path-addressed RAM filesystem API
 tools/ncc_gui.sh    boot image, open terminal, .demo runs C in the vbuf
