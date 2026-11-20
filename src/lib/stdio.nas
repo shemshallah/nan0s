@@ -17,9 +17,9 @@ LA r1,#NFS_BASE
 LD r2,r1,0
 LA r3,0x4E504146
 CMP r2,r3
-JMP[EQ] @nfe_d
+JMP[EQ] @stnfe_d
 CALL @nfs_format
-nfe_d:
+stnfe_d:
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -751,7 +751,7 @@ ST r1,r0,#W_PF_OFF
 LD r1,r0,#R_T1
 CALL @ni_printf
 CALL @ni_pop
-fp_done:
+stfp_done:
 ; restore output redirection before emitting to a terminal handle
 LD r1,r0,#W_SNPOS
 ST r1,r0,#W_TC
@@ -764,20 +764,20 @@ ST r1,r0,#W_SNPOS
 LD r1,r0,#W_TE
 MOVI r2,4
 CMP r1,r2
-JMP[LT] @fp_std2
+JMP[LT] @ststfp_std2
 CALL @st_entry
 CMP r1,r0
-JMP[EQ] @fp_ret
+JMP[EQ] @stfp_ret
 LA r2,#FMTBUF
 LD r3,r0,#W_TC
 CALL @st_write_buf
-JMP @fp_ret
-fp_std2:
+JMP @stfp_ret
+ststfp_std2:
 LA r4,#FMTBUF
 LD r5,r0,#W_TC
-fp_l2:
+ststfp_l2:
 CMP r5,r0
-JMP[EQ] @fp_ret
+JMP[EQ] @stfp_ret
 LDB r1,r4,0
 ST r4,r0,#W_TM2
 ST r5,r0,#W_TM3
@@ -786,8 +786,8 @@ LD r4,r0,#W_TM2
 LD r5,r0,#W_TM3
 ADD r4,r4,r13
 SUB r5,r5,r13
-JMP @fp_l2
-fp_ret:
+JMP @ststfp_l2
+stfp_ret:
 MOVI r1,0
 CALL @ni_push
 JMP @nbi_d

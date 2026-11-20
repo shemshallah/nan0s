@@ -6367,8 +6367,6 @@ ncc_s_remove:
 .str "remove"
 ncc_s_rename:
 .str "rename"
-ncc_s_mysscanf:
-.str "mysscanf"
 ncc_s_va_list:
 .str "va_list"
 ncc_s_bool:
