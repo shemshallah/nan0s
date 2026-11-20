@@ -1,0 +1,30 @@
+name: NaN16 Coq mirror kernel check
+
+on:
+  push:
+    paths:
+      - 'formal/nan16/**'
+      - '.github/workflows/nan16-coq.yml'
+  pull_request:
+    paths:
+      - 'formal/nan16/**'
+      - '.github/workflows/nan16-coq.yml'
+  workflow_dispatch:
+
+jobs:
+  coq:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Coq
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y coq
+          coqc --version
+      - name: Check formal proofs with the Coq kernel
+        run: |
+          cd formal/nan16
+          coqc -q NaN16Mirror.v
+      - name: Run exhaustive arithmetic regression
+        run: python3 formal/nan16/check_counts.py
