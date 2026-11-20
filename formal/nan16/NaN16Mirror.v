@@ -156,7 +156,7 @@ Proof.
     + apply IH.
 Qed.
 
-Lemma nodup_column : forall (l : list nat) k,
+Lemma nodup_column : forall (l : list nat) (k : nat),
   NoDup l -> NoDup (map (fun a => (a, k)) l).
 Proof.
   intros l k Hl. induction Hl as [|a xs Hnotin Hnodup IH]; simpl.
