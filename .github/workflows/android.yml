@@ -68,6 +68,7 @@ jobs:
           sh tools/ncc_m19.sh || exit 1
           sh tools/ncc_m20.sh || exit 1
           sh tools/ncc_m21.sh || exit 1
+          sh tools/ncc_m22.sh || exit 1
           sh tools/imgstore.sh || exit 1
           sh tools/ncc_donut.sh || exit 1
           sh tools/nfs2.sh || exit 1

@@ -88,7 +88,11 @@ Not implemented (honest list):
   `va_end`; up to 16 variadic argument words per call)
 - the path filesystem is RAM-backed (it resets on reboot); no disk
   persistence yet
-- the full C standard library and headers
+- stdio streams (`fopen`/`fgets`/`scanf`) are not implemented yet; `printf`
+  and `sprintf`/`snprintf` are
+- `struct tm`/`struct lconv`, `time`/`clock`/`gmtime`/`localtime`/`mktime`/
+  `asctime`/`ctime`/`difftime`, `setlocale`/`localeconv`, `signal`/`raise`
+  (handlers are recorded; delivery is a no-op), and `atof`/`strtod` work
 
 ## Preprocessor subset
 
@@ -193,6 +197,7 @@ tools/ncc_m18.sh    printf %e/%E
 tools/ncc_m19.sh    _Bool/bool, inline/restrict
 tools/ncc_m20.sh    function-like + variadic macros, #/##, nesting, #undef
 tools/ncc_m21.sh    printf %g/%G, # flag, float exponent literals
+tools/ncc_m22.sh    time/locale/signal, struct tm/lconv, atof/strtod, limits
 tools/ncc_donut.sh  original C donut (one frame) in raw NaN16
 tools/nfs2.sh       path-addressed RAM filesystem API
 tools/ncc_gui.sh    boot image, open terminal, .demo runs C in the vbuf

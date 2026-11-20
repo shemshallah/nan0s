@@ -365,6 +365,20 @@
 .equ B_MEMMOVE 51
 .equ B_SPRINTF 52
 .equ B_SNPRINTF 53
+.equ B_TIME     54
+.equ B_CLOCK    55
+.equ B_DIFFTIME 56
+.equ B_MKTIME   57
+.equ B_LOCALTIME 58
+.equ B_GMTIME   59
+.equ B_ASCTIME  60
+.equ B_CTIME    61
+.equ B_SETLOCALE 62
+.equ B_LOCALECONV 63
+.equ B_SIGNAL   64
+.equ B_RAISE    65
+.equ B_ATOF     66
+.equ B_STRTOD   67
 
 ; ------------------------------------------------------------------ compiler state
 ; Kept below word 65536 so ST/LD can use the 16-bit immediate form directly.
@@ -505,6 +519,29 @@
 .equ W_F2EXP    61445
 .equ W_F2SIGN2  61446
 .equ W_F2TMP    61447
+.equ W_AGVAL    61524
+.equ W_AGSYM    61525
+.equ W_AMTYP    61526
+.equ W_AMOFF    61527
+.equ W_AMHASH   61528
+.equ W_AMNAME   61529
+.equ W_AMLEN    61530
+.equ W_TMTYPE   61531
+.equ W_TM0      61532
+.equ W_TM1      61533
+.equ W_TM2      61534
+.equ W_TM3      61535
+.equ W_TM4      61536
+.equ W_TM5      61537
+.equ W_TM6      61538
+.equ W_TM7      61539
+.equ W_TM8      61540
+.equ W_TA       61541
+.equ W_TB       61542
+.equ W_TC       61543
+.equ W_TD       61544
+.equ W_TE       61545
+.equ W_TF       61546
 .equ W_TKPTR    60990
 .equ W_CASEBASE 60971
 .equ W_DEFSET   60972
@@ -609,6 +646,7 @@
 .equ W_FPRET    61354
 .equ W_FPNP     61355
 .equ W_SCOPEPAR 2001200
+.include "timeb.nas"
 
 ; q2_skipsp: consume spaces and tabs
 q2_skipsp:
@@ -5048,6 +5086,753 @@ LA r2,@ncc_s_false
 MOVI r3,5
 MOVI r4,0
 CALL @ncc_add_enum_const
+; standard typedefs
+LA r1,0x7C6A8FB7
+LA r2,@ncc_s_size_t
+MOVI r3,6
+MOVI r4,#T_UINT
+CALL @ncc_add_typedef
+LA r1,0xA90DDA0D
+LA r2,@ncc_s_ptrdiff_t
+MOVI r3,9
+MOVI r4,#T_INT
+CALL @ncc_add_typedef
+LA r1,0xDF8EE2E3
+LA r2,@ncc_s_intptr_t
+MOVI r3,8
+MOVI r4,#T_INT
+CALL @ncc_add_typedef
+LA r1,0xC4AA654E
+LA r2,@ncc_s_uintptr_t
+MOVI r3,9
+MOVI r4,#T_UINT
+CALL @ncc_add_typedef
+LA r1,0xCD88860F
+LA r2,@ncc_s_time_t
+MOVI r3,6
+MOVI r4,#T_LONG
+CALL @ncc_add_typedef
+LA r1,0xA5756116
+LA r2,@ncc_s_clock_t
+MOVI r3,7
+MOVI r4,#T_LONG
+CALL @ncc_add_typedef
+LA r1,0xA83DBA83
+LA r2,@ncc_s_FILE
+MOVI r3,4
+MOVI r4,#T_VOID
+CALL @ncc_add_typedef
+LA r1,0x5BEBDD29
+LA r2,@ncc_s_sig_atomic_t
+MOVI r3,12
+MOVI r4,#T_INT
+CALL @ncc_add_typedef
+LA r1,0xC523B9F1
+LA r2,@ncc_s_wchar_t
+MOVI r3,7
+MOVI r4,#T_INT
+CALL @ncc_add_typedef
+CALL @ncc_add_tm
+CALL @ncc_add_lconv
+; stdio handles as FILE* globals
+LA r1,0xA4DB129D
+LA r2,@ncc_s_stdin
+MOVI r3,5
+LD r4,r0,#W_PTRV
+MOVI r5,1
+CALL @ncc_add_global
+LA r1,0x3B7F5CA6
+LA r2,@ncc_s_stdout
+MOVI r3,6
+LD r4,r0,#W_PTRV
+MOVI r5,2
+CALL @ncc_add_global
+LA r1,0xB1DA39F5
+LA r2,@ncc_s_stderr
+MOVI r3,6
+LD r4,r0,#W_PTRV
+MOVI r5,3
+CALL @ncc_add_global
+LA r1,0x396FDE24
+LA r2,@ncc_s_c_NULL
+MOVI r3,4
+LA r4,0x0
+CALL @ncc_add_enum_const
+LA r1,0xCF460301
+LA r2,@ncc_s_c_EOF
+MOVI r3,3
+LA r4,0xFFFFFFFF
+CALL @ncc_add_enum_const
+LA r1,0x112FDC09
+LA r2,@ncc_s_c_EXIT_SUCCESS
+MOVI r3,12
+LA r4,0x0
+CALL @ncc_add_enum_const
+LA r1,0xED53D244
+LA r2,@ncc_s_c_EXIT_FAILURE
+MOVI r3,12
+LA r4,0x1
+CALL @ncc_add_enum_const
+LA r1,0x0DBDF58A
+LA r2,@ncc_s_c_SEEK_SET
+MOVI r3,8
+LA r4,0x0
+CALL @ncc_add_enum_const
+LA r1,0x797A5DF8
+LA r2,@ncc_s_c_SEEK_CUR
+MOVI r3,8
+LA r4,0x1
+CALL @ncc_add_enum_const
+LA r1,0xB95DA1F7
+LA r2,@ncc_s_c_SEEK_END
+MOVI r3,8
+LA r4,0x2
+CALL @ncc_add_enum_const
+LA r1,0x405F4E14
+LA r2,@ncc_s_c_CLOCKS_PER_SEC
+MOVI r3,14
+LA r4,0x3E8
+CALL @ncc_add_enum_const
+LA r1,0xF0C120A3
+LA r2,@ncc_s_c_RAND_MAX
+MOVI r3,8
+LA r4,0x7FFF
+CALL @ncc_add_enum_const
+LA r1,0xF139BD5B
+LA r2,@ncc_s_c_INT_MAX
+MOVI r3,7
+LA r4,0x7FFFFFFF
+CALL @ncc_add_enum_const
+LA r1,0x27268AA5
+LA r2,@ncc_s_c_INT_MIN
+MOVI r3,7
+LA r4,0x80000000
+CALL @ncc_add_enum_const
+LA r1,0xE1DE5BCC
+LA r2,@ncc_s_c_UINT_MAX
+MOVI r3,8
+LA r4,0xFFFFFFFF
+CALL @ncc_add_enum_const
+LA r1,0xFEEF7AD2
+LA r2,@ncc_s_c_LONG_MAX
+MOVI r3,8
+LA r4,0x7FFFFFFF
+CALL @ncc_add_enum_const
+LA r1,0xE8DBD078
+LA r2,@ncc_s_c_LONG_MIN
+MOVI r3,8
+LA r4,0x80000000
+CALL @ncc_add_enum_const
+LA r1,0xA006B5AB
+LA r2,@ncc_s_c_ULONG_MAX
+MOVI r3,9
+LA r4,0xFFFFFFFF
+CALL @ncc_add_enum_const
+LA r1,0x3F380271
+LA r2,@ncc_s_c_CHAR_BIT
+MOVI r3,8
+LA r4,0x8
+CALL @ncc_add_enum_const
+LA r1,0xA0D164BD
+LA r2,@ncc_s_c_SCHAR_MIN
+MOVI r3,9
+LA r4,0xFFFFFF80
+CALL @ncc_add_enum_const
+LA r1,0x6ABD8803
+LA r2,@ncc_s_c_SCHAR_MAX
+MOVI r3,9
+LA r4,0x7F
+CALL @ncc_add_enum_const
+LA r1,0x252DE85D
+LA r2,@ncc_s_c_UCHAR_MAX
+MOVI r3,9
+LA r4,0xFF
+CALL @ncc_add_enum_const
+LA r1,0x61B330EF
+LA r2,@ncc_s_c_SHRT_MIN
+MOVI r3,8
+LA r4,0xFFFF8000
+CALL @ncc_add_enum_const
+LA r1,0x4F9F8CE1
+LA r2,@ncc_s_c_SHRT_MAX
+MOVI r3,8
+LA r4,0x7FFF
+CALL @ncc_add_enum_const
+LA r1,0x869F80E0
+LA r2,@ncc_s_c_USHRT_MAX
+MOVI r3,9
+LA r4,0xFFFF
+CALL @ncc_add_enum_const
+LA r1,0x21922AED
+LA r2,@ncc_s_c_SIZE_MAX
+MOVI r3,8
+LA r4,0xFFFFFFFF
+CALL @ncc_add_enum_const
+LA r1,0xA7BAD29B
+LA r2,@ncc_s_c_SIGINT
+MOVI r3,6
+LA r4,0x2
+CALL @ncc_add_enum_const
+LA r1,0xD3B507B1
+LA r2,@ncc_s_c_SIGILL
+MOVI r3,6
+LA r4,0x4
+CALL @ncc_add_enum_const
+LA r1,0x755EE927
+LA r2,@ncc_s_c_SIGABRT
+MOVI r3,7
+LA r4,0x6
+CALL @ncc_add_enum_const
+LA r1,0xAC6FFF43
+LA r2,@ncc_s_c_SIGFPE
+MOVI r3,6
+LA r4,0x8
+CALL @ncc_add_enum_const
+LA r1,0xC72376FB
+LA r2,@ncc_s_c_SIGSEGV
+MOVI r3,7
+LA r4,0xB
+CALL @ncc_add_enum_const
+LA r1,0x945C6008
+LA r2,@ncc_s_c_SIGTERM
+MOVI r3,7
+LA r4,0xF
+CALL @ncc_add_enum_const
+LA r1,0xB9952BD3
+LA r2,@ncc_s_c_SIG_DFL
+MOVI r3,7
+LA r4,0x0
+CALL @ncc_add_enum_const
+LA r1,0x883988DB
+LA r2,@ncc_s_c_SIG_IGN
+MOVI r3,7
+LA r4,0x1
+CALL @ncc_add_enum_const
+LA r1,0xD3EF3BB2
+LA r2,@ncc_s_f_M_PI
+MOVI r3,4
+MOVI r4,#T_DOUBLE
+LA r5,0x40490FDB
+CALL @ncc_add_global
+LA r1,0x032C4B80
+LA r2,@ncc_s_f_M_E
+MOVI r3,3
+MOVI r4,#T_DOUBLE
+LA r5,0x402DF854
+CALL @ncc_add_global
+LA r1,0x525E4F07
+LA r2,@ncc_s_f_M_SQRT2
+MOVI r3,6
+MOVI r4,#T_DOUBLE
+LA r5,0x3FB504F3
+CALL @ncc_add_global
+LA r1,0xA0D1B237
+LA r2,@ncc_s_f_M_LN2
+MOVI r3,5
+MOVI r4,#T_DOUBLE
+LA r5,0x3F317218
+CALL @ncc_add_global
+LA r1,0xB71E528E
+LA r2,@ncc_s_f_M_LN10
+MOVI r3,6
+MOVI r4,#T_DOUBLE
+LA r5,0x40135D8E
+CALL @ncc_add_global
+LA r1,0xE23BF8B4
+LA r2,@ncc_s_f_M_LOG2E
+MOVI r3,7
+MOVI r4,#T_DOUBLE
+LA r5,0x3FB8AA3B
+CALL @ncc_add_global
+LA r1,0x8E85C04F
+LA r2,@ncc_s_f_M_LOG10E
+MOVI r3,8
+MOVI r4,#T_DOUBLE
+LA r5,0x3EDE5BD9
+CALL @ncc_add_global
+LA r1,0xA3889C3F
+LA r2,@ncc_s_f_M_PI_2
+MOVI r3,6
+MOVI r4,#T_DOUBLE
+LA r5,0x3FC90FDB
+CALL @ncc_add_global
+LA r1,0xA1889919
+LA r2,@ncc_s_f_M_PI_4
+MOVI r3,6
+MOVI r4,#T_DOUBLE
+LA r5,0x3F490FDB
+CALL @ncc_add_global
+LA r1,0xFB309866
+LA r2,@ncc_s_f_M_1_PI
+MOVI r3,6
+MOVI r4,#T_DOUBLE
+LA r5,0x3EA2F983
+CALL @ncc_add_global
+LA r1,0xEC36B5D9
+LA r2,@ncc_s_f_M_2_PI
+MOVI r3,6
+MOVI r4,#T_DOUBLE
+LA r5,0x3F22F983
+CALL @ncc_add_global
+LA r1,0xEDED4517
+LA r2,@ncc_s_f_M_2_SQRTPI
+MOVI r3,10
+MOVI r4,#T_DOUBLE
+LA r5,0x3F906EBB
+CALL @ncc_add_global
+LA r1,0x11B718D7
+LA r2,@ncc_s_f_M_SQRT1_2
+MOVI r3,9
+MOVI r4,#T_DOUBLE
+LA r5,0x3F3504F3
+CALL @ncc_add_global
+LA r1,0xF8A0BF5E
+LA r2,@ncc_s_f_HUGE_VAL
+MOVI r3,8
+MOVI r4,#T_DOUBLE
+LA r5,0x7F800000
+CALL @ncc_add_global
+LA r1,0x870B68B9
+LA r2,@ncc_s_f_INFINITY
+MOVI r3,8
+MOVI r4,#T_DOUBLE
+LA r5,0x7F800000
+CALL @ncc_add_global
+LA r1,0xB1CBBEDA
+LA r2,@ncc_s_f_NAN
+MOVI r3,3
+MOVI r4,#T_DOUBLE
+LA r5,0x7FC00000
+CALL @ncc_add_global
+; time.h
+LA r1,0x5D3C9BE4
+LA r2,@ncc_s_time
+MOVI r3,4
+MOVI r4,#B_TIME
+MOVI r5,1
+MOVI r6,#T_LONG
+CALL @ncc_add_builtin
+LA r1,0x15A40F5D
+LA r2,@ncc_s_clock
+MOVI r3,5
+MOVI r4,#B_CLOCK
+MOVI r5,0
+MOVI r6,#T_LONG
+CALL @ncc_add_builtin
+LA r1,0xEDBEA49B
+LA r2,@ncc_s_difftime
+MOVI r3,8
+MOVI r4,#B_DIFFTIME
+MOVI r5,2
+MOVI r6,#T_DOUBLE
+CALL @ncc_add_builtin
+LA r1,0x3A665C80
+LA r2,@ncc_s_mktime
+MOVI r3,6
+MOVI r4,#B_MKTIME
+MOVI r5,1
+MOVI r6,#T_LONG
+CALL @ncc_add_builtin
+LA r1,0xE14DCFC1
+LA r2,@ncc_s_localtime
+MOVI r3,9
+MOVI r4,#B_LOCALTIME
+MOVI r5,1
+LD r6,r0,#W_PTRV
+CALL @ncc_add_builtin
+LA r1,0x4426E788
+LA r2,@ncc_s_gmtime
+MOVI r3,6
+MOVI r4,#B_GMTIME
+MOVI r5,1
+LD r6,r0,#W_PTRV
+CALL @ncc_add_builtin
+LA r1,0x69DC410B
+LA r2,@ncc_s_asctime
+MOVI r3,7
+MOVI r4,#B_ASCTIME
+MOVI r5,1
+LD r6,r0,#W_PTRC
+CALL @ncc_add_builtin
+LA r1,0x13A6EC13
+LA r2,@ncc_s_ctime
+MOVI r3,5
+MOVI r4,#B_CTIME
+MOVI r5,1
+LD r6,r0,#W_PTRC
+CALL @ncc_add_builtin
+; locale.h
+LA r1,0xD6B7F315
+LA r2,@ncc_s_setlocale
+MOVI r3,9
+MOVI r4,#B_SETLOCALE
+MOVI r5,2
+LD r6,r0,#W_PTRC
+CALL @ncc_add_builtin
+LA r1,0xA28515A9
+LA r2,@ncc_s_localeconv
+MOVI r3,10
+MOVI r4,#B_LOCALECONV
+MOVI r5,0
+LD r6,r0,#W_PTRV
+CALL @ncc_add_builtin
+; signal.h
+LA r1,0xBD7BBA09
+LA r2,@ncc_s_signal
+MOVI r3,6
+MOVI r4,#B_SIGNAL
+MOVI r5,2
+LD r6,r0,#W_PTRV
+CALL @ncc_add_builtin
+LA r1,0x5EF9ED23
+LA r2,@ncc_s_raise
+MOVI r3,5
+MOVI r4,#B_RAISE
+MOVI r5,1
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+; stdlib conversions
+LA r1,0xFE7440F9
+LA r2,@ncc_s_atof
+MOVI r3,4
+MOVI r4,#B_ATOF
+MOVI r5,1
+MOVI r6,#T_DOUBLE
+CALL @ncc_add_builtin
+LA r1,0x47CCED67
+LA r2,@ncc_s_strtod
+MOVI r3,6
+MOVI r4,#B_STRTOD
+MOVI r5,2
+MOVI r6,#T_DOUBLE
+CALL @ncc_add_builtin
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; ncc_add_global: r1=hash r2=name r3=len r4=type r5=value
+ncc_add_global:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r4,r0,#W_BRET
+ST r5,r0,#W_AGVAL
+ST r1,r0,#W_TKA+2
+ST r3,r0,#W_TKA+3
+ST r0,r0,#W_TKA
+ST r0,r0,#W_TKA+1
+LA r6,#W_TKA+#TK_TEXT
+MOVI r7,3
+ADD r7,r7,r3
+SHR r7,r7,2
+BCOPY r6,r2,r7
+MOVI r1,#SK_GLOBAL
+CALL @sym_get_cur
+CALL @sym_entry
+ST r1,r0,#W_AGSYM
+LD r1,r0,#W_BRET
+CALL @ty_size
+ST r1,r0,#W_TMTYPE
+LD r1,r0,#W_BRET
+CALL @ty_align
+ST r1,r0,#W_AMOFF
+LD r1,r0,#W_GLOBP
+LD r2,r0,#W_AMOFF
+CALL @px_align_up
+ST r1,r0,#W_GLOBP
+LD r3,r0,#W_AGSYM
+ST r1,r3,#SY_AUX
+LD r2,r0,#W_BRET
+ST r2,r3,#SY_TYPE
+LD r2,r0,#W_TMTYPE
+ST r2,r3,#SY_SIZE
+MOVI r2,1
+ST r2,r3,#SY_CLS
+LD r2,r0,#W_TMTYPE
+ADD r2,r2,r1
+ST r2,r0,#W_GLOBP
+LD r2,r0,#W_AGVAL
+MOVI r3,4
+CALL @ni_storev
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; ncc_add_member: r1=struct type r2=offset r3=hash r4=name r5=len
+ncc_add_member:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_AMTYP
+ST r2,r0,#W_AMOFF
+ST r3,r0,#W_TKA+2
+ST r5,r0,#W_TKA+3
+ST r0,r0,#W_TKA
+ST r0,r0,#W_TKA+1
+LA r6,#W_TKA+#TK_TEXT
+MOVI r7,3
+ADD r7,r7,r5
+SHR r7,r7,2
+BCOPY r6,r4,r7
+MOVI r1,#SK_MEMBER
+CALL @sym_get_cur
+ST r1,r0,#W_AGSYM
+LD r2,r0,#W_MEMBP
+ST r1,r2,0
+LD r1,r0,#W_AMOFF
+ST r1,r2,1
+LD r1,r0,#W_AMTYP
+ST r1,r2,2
+ST r0,r2,3
+ADDI r2,r2,4
+ST r2,r0,#W_MEMBP
+LD r1,r0,#W_TMTYPE
+CALL @ty_addr
+LD r2,r1,#TY_NMEM
+ADD r2,r2,r13
+ST r2,r1,#TY_NMEM
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; ncc_add_tm: built-in struct tm with nine int members
+ncc_add_tm:
+ST r15,r14,0
+ADD r14,r14,r13
+MOVI r1,#TY_STRUCT
+CALL @ty_struct
+ST r1,r0,#W_TMTYPE
+CALL @ty_addr
+LD r2,r0,#W_MEMBP
+ST r2,r1,#TY_MEM
+ST r0,r1,#TY_NMEM
+MOVI r2,0
+LA r3,0x8132EEA0
+LA r4,@ncc_s_tm_sec
+MOVI r5,6
+CALL @ncc_add_mem9
+MOVI r2,4
+LA r3,0x9E42A269
+LA r4,@ncc_s_tm_min
+MOVI r5,6
+CALL @ncc_add_mem9
+MOVI r2,8
+LA r3,0x56BE5619
+LA r4,@ncc_s_tm_hour
+MOVI r5,7
+CALL @ncc_add_mem9
+MOVI r2,12
+LA r3,0xB525F854
+LA r4,@ncc_s_tm_mday
+MOVI r5,7
+CALL @ncc_add_mem9
+MOVI r2,16
+LA r3,0x7E34F87F
+LA r4,@ncc_s_tm_mon
+MOVI r5,6
+CALL @ncc_add_mem9
+MOVI r2,20
+LA r3,0x1BD6031A
+LA r4,@ncc_s_tm_year
+MOVI r5,7
+CALL @ncc_add_mem9
+MOVI r2,24
+LA r3,0xE49FAC52
+LA r4,@ncc_s_tm_wday
+MOVI r5,7
+CALL @ncc_add_mem9
+MOVI r2,28
+LA r3,0x9E92CD90
+LA r4,@ncc_s_tm_yday
+MOVI r5,7
+CALL @ncc_add_mem9
+MOVI r2,32
+LA r3,0x8EAE9CF2
+LA r4,@ncc_s_tm_isdst
+MOVI r5,8
+CALL @ncc_add_mem9
+LD r1,r0,#W_TMTYPE
+CALL @ty_addr
+MOVI r2,36
+ST r2,r1,#TY_SIZE
+MOVI r2,4
+ST r2,r1,#TY_ALIGN
+LA r1,0x44454B4A
+LA r2,@ncc_s_tm
+MOVI r3,2
+LD r4,r0,#W_TMTYPE
+CALL @ncc_add_typedef
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+ncc_add_mem9:
+MOVI r1,#T_INT
+JMP @ncc_add_member
+
+; ncc_add_lconv: built-in struct lconv (glibc field order)
+ncc_add_lconv:
+ST r15,r14,0
+ADD r14,r14,r13
+MOVI r1,#TY_STRUCT
+CALL @ty_struct
+ST r1,r0,#W_TMTYPE
+CALL @ty_addr
+LD r2,r0,#W_MEMBP
+ST r2,r1,#TY_MEM
+ST r0,r1,#TY_NMEM
+MOVI r2,0
+LD r1,r0,#W_PTRC
+LA r3,0x19841EA5
+LA r4,@ncc_s_lc_decimal_point
+MOVI r5,13
+CALL @ncc_add_member
+MOVI r2,4
+LD r1,r0,#W_PTRC
+LA r3,0x1B9379BF
+LA r4,@ncc_s_lc_thousands_sep
+MOVI r5,13
+CALL @ncc_add_member
+MOVI r2,8
+LD r1,r0,#W_PTRC
+LA r3,0x3F83622C
+LA r4,@ncc_s_lc_grouping
+MOVI r5,8
+CALL @ncc_add_member
+MOVI r2,12
+LD r1,r0,#W_PTRC
+LA r3,0x73D02314
+LA r4,@ncc_s_lc_int_curr_symbol
+MOVI r5,16
+CALL @ncc_add_member
+MOVI r2,16
+LD r1,r0,#W_PTRC
+LA r3,0xAF93D07B
+LA r4,@ncc_s_lc_currency_symbol
+MOVI r5,15
+CALL @ncc_add_member
+MOVI r2,20
+LD r1,r0,#W_PTRC
+LA r3,0x959100DC
+LA r4,@ncc_s_lc_mon_decimal_point
+MOVI r5,17
+CALL @ncc_add_member
+MOVI r2,24
+LD r1,r0,#W_PTRC
+LA r3,0x11EE1F0A
+LA r4,@ncc_s_lc_mon_thousands_sep
+MOVI r5,18
+CALL @ncc_add_member
+MOVI r2,28
+LD r1,r0,#W_PTRC
+LA r3,0xD6149C73
+LA r4,@ncc_s_lc_mon_grouping
+MOVI r5,12
+CALL @ncc_add_member
+MOVI r2,32
+LD r1,r0,#W_PTRC
+LA r3,0x5C182B3A
+LA r4,@ncc_s_lc_positive_sign
+MOVI r5,13
+CALL @ncc_add_member
+MOVI r2,36
+LD r1,r0,#W_PTRC
+LA r3,0x9D4226FA
+LA r4,@ncc_s_lc_negative_sign
+MOVI r5,13
+CALL @ncc_add_member
+MOVI r2,40
+MOVI r1,#T_CHAR
+LA r3,0x53EB030E
+LA r4,@ncc_s_lc_int_frac_digits
+MOVI r5,15
+CALL @ncc_add_member
+MOVI r2,41
+MOVI r1,#T_CHAR
+LA r3,0xD50A76D4
+LA r4,@ncc_s_lc_frac_digits
+MOVI r5,11
+CALL @ncc_add_member
+MOVI r2,42
+MOVI r1,#T_CHAR
+LA r3,0x3756EE40
+LA r4,@ncc_s_lc_p_cs_precedes
+MOVI r5,13
+CALL @ncc_add_member
+MOVI r2,43
+MOVI r1,#T_CHAR
+LA r3,0xC8010025
+LA r4,@ncc_s_lc_p_sep_by_space
+MOVI r5,15
+CALL @ncc_add_member
+MOVI r2,44
+MOVI r1,#T_CHAR
+LA r3,0xC22385E6
+LA r4,@ncc_s_lc_n_cs_precedes
+MOVI r5,13
+CALL @ncc_add_member
+MOVI r2,45
+MOVI r1,#T_CHAR
+LA r3,0x2AAA6ECF
+LA r4,@ncc_s_lc_n_sep_by_space
+MOVI r5,15
+CALL @ncc_add_member
+MOVI r2,46
+MOVI r1,#T_CHAR
+LA r3,0x660ECA3A
+LA r4,@ncc_s_lc_p_sign_posn
+MOVI r5,11
+CALL @ncc_add_member
+MOVI r2,47
+MOVI r1,#T_CHAR
+LA r3,0xDEE62094
+LA r4,@ncc_s_lc_n_sign_posn
+MOVI r5,11
+CALL @ncc_add_member
+MOVI r2,48
+MOVI r1,#T_CHAR
+LA r3,0x2638486E
+LA r4,@ncc_s_lc_int_p_cs_precedes
+MOVI r5,17
+CALL @ncc_add_member
+MOVI r2,49
+MOVI r1,#T_CHAR
+LA r3,0x5596DDE7
+LA r4,@ncc_s_lc_int_p_sep_by_space
+MOVI r5,19
+CALL @ncc_add_member
+MOVI r2,50
+MOVI r1,#T_CHAR
+LA r3,0xFC2BA1F8
+LA r4,@ncc_s_lc_int_n_cs_precedes
+MOVI r5,17
+CALL @ncc_add_member
+MOVI r2,51
+MOVI r1,#T_CHAR
+LA r3,0x8FDD14CD
+LA r4,@ncc_s_lc_int_n_sep_by_space
+MOVI r5,19
+CALL @ncc_add_member
+MOVI r2,52
+MOVI r1,#T_CHAR
+LA r3,0x5B04609C
+LA r4,@ncc_s_lc_int_p_sign_posn
+MOVI r5,15
+CALL @ncc_add_member
+MOVI r2,53
+MOVI r1,#T_CHAR
+LA r3,0x6A100872
+LA r4,@ncc_s_lc_int_n_sign_posn
+MOVI r5,15
+CALL @ncc_add_member
+LD r1,r0,#W_TMTYPE
+CALL @ty_addr
+MOVI r2,56
+ST r2,r1,#TY_SIZE
+MOVI r2,4
+ST r2,r1,#TY_ALIGN
+LA r1,0x2EE946D5
+LA r2,@ncc_s_lconv
+MOVI r3,5
+LD r4,r0,#W_TMTYPE
+CALL @ncc_add_typedef
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -5191,6 +5976,222 @@ ncc_s_va_arg:
 .str "va_arg"
 ncc_s_va_end:
 .str "va_end"
+ncc_s_size_t:
+.str "size_t"
+ncc_s_ptrdiff_t:
+.str "ptrdiff_t"
+ncc_s_intptr_t:
+.str "intptr_t"
+ncc_s_uintptr_t:
+.str "uintptr_t"
+ncc_s_time_t:
+.str "time_t"
+ncc_s_clock_t:
+.str "clock_t"
+ncc_s_FILE:
+.str "FILE"
+ncc_s_sig_atomic_t:
+.str "sig_atomic_t"
+ncc_s_wchar_t:
+.str "wchar_t"
+ncc_s_stdin:
+.str "stdin"
+ncc_s_stdout:
+.str "stdout"
+ncc_s_stderr:
+.str "stderr"
+ncc_s_tm:
+.str "tm"
+ncc_s_tm_sec:
+.str "tm_sec"
+ncc_s_tm_min:
+.str "tm_min"
+ncc_s_tm_hour:
+.str "tm_hour"
+ncc_s_tm_mday:
+.str "tm_mday"
+ncc_s_tm_mon:
+.str "tm_mon"
+ncc_s_tm_year:
+.str "tm_year"
+ncc_s_tm_wday:
+.str "tm_wday"
+ncc_s_tm_yday:
+.str "tm_yday"
+ncc_s_tm_isdst:
+.str "tm_isdst"
+ncc_s_c_NULL:
+.str "NULL"
+ncc_s_c_EOF:
+.str "EOF"
+ncc_s_c_EXIT_SUCCESS:
+.str "EXIT_SUCCESS"
+ncc_s_c_EXIT_FAILURE:
+.str "EXIT_FAILURE"
+ncc_s_c_SEEK_SET:
+.str "SEEK_SET"
+ncc_s_c_SEEK_CUR:
+.str "SEEK_CUR"
+ncc_s_c_SEEK_END:
+.str "SEEK_END"
+ncc_s_c_CLOCKS_PER_SEC:
+.str "CLOCKS_PER_SEC"
+ncc_s_c_RAND_MAX:
+.str "RAND_MAX"
+ncc_s_c_INT_MAX:
+.str "INT_MAX"
+ncc_s_c_INT_MIN:
+.str "INT_MIN"
+ncc_s_c_UINT_MAX:
+.str "UINT_MAX"
+ncc_s_c_LONG_MAX:
+.str "LONG_MAX"
+ncc_s_c_LONG_MIN:
+.str "LONG_MIN"
+ncc_s_c_ULONG_MAX:
+.str "ULONG_MAX"
+ncc_s_c_CHAR_BIT:
+.str "CHAR_BIT"
+ncc_s_c_SCHAR_MIN:
+.str "SCHAR_MIN"
+ncc_s_c_SCHAR_MAX:
+.str "SCHAR_MAX"
+ncc_s_c_UCHAR_MAX:
+.str "UCHAR_MAX"
+ncc_s_c_SHRT_MIN:
+.str "SHRT_MIN"
+ncc_s_c_SHRT_MAX:
+.str "SHRT_MAX"
+ncc_s_c_USHRT_MAX:
+.str "USHRT_MAX"
+ncc_s_c_SIZE_MAX:
+.str "SIZE_MAX"
+ncc_s_c_SIGINT:
+.str "SIGINT"
+ncc_s_c_SIGILL:
+.str "SIGILL"
+ncc_s_c_SIGABRT:
+.str "SIGABRT"
+ncc_s_c_SIGFPE:
+.str "SIGFPE"
+ncc_s_c_SIGSEGV:
+.str "SIGSEGV"
+ncc_s_c_SIGTERM:
+.str "SIGTERM"
+ncc_s_c_SIG_DFL:
+.str "SIG_DFL"
+ncc_s_c_SIG_IGN:
+.str "SIG_IGN"
+ncc_s_f_M_PI:
+.str "M_PI"
+ncc_s_f_M_E:
+.str "M_E"
+ncc_s_f_M_SQRT2:
+.str "M_SQRT2"
+ncc_s_f_M_LN2:
+.str "M_LN2"
+ncc_s_f_M_LN10:
+.str "M_LN10"
+ncc_s_f_M_LOG2E:
+.str "M_LOG2E"
+ncc_s_f_M_LOG10E:
+.str "M_LOG10E"
+ncc_s_f_M_PI_2:
+.str "M_PI_2"
+ncc_s_f_M_PI_4:
+.str "M_PI_4"
+ncc_s_f_M_1_PI:
+.str "M_1_PI"
+ncc_s_f_M_2_PI:
+.str "M_2_PI"
+ncc_s_f_M_2_SQRTPI:
+.str "M_2_SQRTPI"
+ncc_s_f_M_SQRT1_2:
+.str "M_SQRT1_2"
+ncc_s_f_HUGE_VAL:
+.str "HUGE_VAL"
+ncc_s_f_INFINITY:
+.str "INFINITY"
+ncc_s_f_NAN:
+.str "NAN"
+ncc_s_time:
+.str "time"
+ncc_s_clock:
+.str "clock"
+ncc_s_difftime:
+.str "difftime"
+ncc_s_mktime:
+.str "mktime"
+ncc_s_localtime:
+.str "localtime"
+ncc_s_gmtime:
+.str "gmtime"
+ncc_s_asctime:
+.str "asctime"
+ncc_s_ctime:
+.str "ctime"
+ncc_s_setlocale:
+.str "setlocale"
+ncc_s_localeconv:
+.str "localeconv"
+ncc_s_signal:
+.str "signal"
+ncc_s_raise:
+.str "raise"
+ncc_s_atof:
+.str "atof"
+ncc_s_strtod:
+.str "strtod"
+ncc_s_lconv:
+.str "lconv"
+ncc_s_lc_decimal_point:
+.str "decimal_point"
+ncc_s_lc_thousands_sep:
+.str "thousands_sep"
+ncc_s_lc_grouping:
+.str "grouping"
+ncc_s_lc_int_curr_symbol:
+.str "int_curr_symbol"
+ncc_s_lc_currency_symbol:
+.str "currency_symbol"
+ncc_s_lc_mon_decimal_point:
+.str "mon_decimal_point"
+ncc_s_lc_mon_thousands_sep:
+.str "mon_thousands_sep"
+ncc_s_lc_mon_grouping:
+.str "mon_grouping"
+ncc_s_lc_positive_sign:
+.str "positive_sign"
+ncc_s_lc_negative_sign:
+.str "negative_sign"
+ncc_s_lc_int_frac_digits:
+.str "int_frac_digits"
+ncc_s_lc_frac_digits:
+.str "frac_digits"
+ncc_s_lc_p_cs_precedes:
+.str "p_cs_precedes"
+ncc_s_lc_p_sep_by_space:
+.str "p_sep_by_space"
+ncc_s_lc_n_cs_precedes:
+.str "n_cs_precedes"
+ncc_s_lc_n_sep_by_space:
+.str "n_sep_by_space"
+ncc_s_lc_p_sign_posn:
+.str "p_sign_posn"
+ncc_s_lc_n_sign_posn:
+.str "n_sign_posn"
+ncc_s_lc_int_p_cs_precedes:
+.str "int_p_cs_precedes"
+ncc_s_lc_int_p_sep_by_space:
+.str "int_p_sep_by_space"
+ncc_s_lc_int_n_cs_precedes:
+.str "int_n_cs_precedes"
+ncc_s_lc_int_n_sep_by_space:
+.str "int_n_sep_by_space"
+ncc_s_lc_int_p_sign_posn:
+.str "int_p_sign_posn"
+ncc_s_lc_int_n_sign_posn:
+.str "int_n_sign_posn"
 ncc_s_va_list:
 .str "va_list"
 ncc_s_bool:
@@ -12531,6 +13532,48 @@ JMP[EQ] @nbi_sprintf
 MOVI r2,#B_SNPRINTF
 CMP r1,r2
 JMP[EQ] @nbi_snprintf
+MOVI r2,#B_TIME
+CMP r1,r2
+JMP[EQ] @nbi_time
+MOVI r2,#B_CLOCK
+CMP r1,r2
+JMP[EQ] @nbi_clock
+MOVI r2,#B_DIFFTIME
+CMP r1,r2
+JMP[EQ] @nbi_difftime
+MOVI r2,#B_MKTIME
+CMP r1,r2
+JMP[EQ] @nbi_mktime
+MOVI r2,#B_LOCALTIME
+CMP r1,r2
+JMP[EQ] @nbi_localtime
+MOVI r2,#B_GMTIME
+CMP r1,r2
+JMP[EQ] @nbi_gmtime
+MOVI r2,#B_ASCTIME
+CMP r1,r2
+JMP[EQ] @nbi_asctime
+MOVI r2,#B_CTIME
+CMP r1,r2
+JMP[EQ] @nbi_ctime
+MOVI r2,#B_SETLOCALE
+CMP r1,r2
+JMP[EQ] @nbi_setlocale
+MOVI r2,#B_LOCALECONV
+CMP r1,r2
+JMP[EQ] @nbi_localeconv
+MOVI r2,#B_SIGNAL
+CMP r1,r2
+JMP[EQ] @nbi_signal
+MOVI r2,#B_RAISE
+CMP r1,r2
+JMP[EQ] @nbi_raise
+MOVI r2,#B_ATOF
+CMP r1,r2
+JMP[EQ] @nbi_atof
+MOVI r2,#B_STRTOD
+CMP r1,r2
+JMP[EQ] @nbi_strtod
 MOVI r2,#B_EXIT
 CMP r1,r2
 JMP[EQ] @nbi_exit

@@ -8,4 +8,4 @@ CALL @ncc_compile
 CALL @ncc_run
 HALT
 c_src:
-.str "int main(void){ printf(\"%g %g %g %g\\n\", 1e10, 1.5e-5, 2E3, 0.25); return 0; }"
+.str "int main(void){ struct lconv *lc = localeconv(); printf(\"%d %d %d\\n\", (int)lc, (int)lc->decimal_point, (int)&lc->decimal_point); char *p = lc->decimal_point; printf(\"%c%c\\n\", p[0], p[1]); return 0; }\n"
