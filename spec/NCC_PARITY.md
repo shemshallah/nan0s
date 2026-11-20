@@ -49,6 +49,7 @@ Implemented:
 - `printf` with `%d %i %u %x %X %c %s %p %f %%`, flags `-`/`0`, field
   width, and precision (including `%.2f`, `%.3s`, and zero-padded `%08.2f`)
 - `sprintf`/`snprintf` (including truncation and `snprintf`'s would-be length)
+- `%e`/`%E` (normalization, precision, width, sign)
 - variadic functions: `va_list`, `va_start`, `va_arg`, `va_end`
 - string and character literals with escapes (`\n`, `\t`, `\xNN`, octal)
 - `char` arrays with string-literal initializers, including unsized
@@ -79,7 +80,7 @@ Not implemented (honest list):
 - `const`/`volatile`/`register` are accepted but not enforced
 - user variadic functions are supported (`va_list`, `va_start`, `va_arg`,
   `va_end`; up to 16 variadic argument words per call)
-- `%e`/`%g` conversions
+- `%g` conversion
 - the path filesystem is RAM-backed (it resets on reboot); no disk
   persistence yet
 - the full C standard library and headers
@@ -183,6 +184,7 @@ tools/ncc_m14.sh    bit-fields (masked values, signed, anonymous, initializers)
 tools/ncc_m15.sh    math built-ins (sqrt/pow/exp/log/floor/ceil/fmod/...)
 tools/ncc_m16.sh    string/ctype/stdlib built-ins
 tools/ncc_m17.sh    sprintf/snprintf into guest buffers
+tools/ncc_m18.sh    printf %e/%E
 tools/ncc_donut.sh  original C donut (one frame) in raw NaN16
 tools/nfs2.sh       path-addressed RAM filesystem API
 tools/ncc_gui.sh    boot image, open terminal, .demo runs C in the vbuf

@@ -495,6 +495,9 @@
 .equ W_SNREG1   61442
 .equ W_SNREG2   61443
 .equ W_SNREG3   61444
+.equ W_F2EXP    61445
+.equ W_F2SIGN2  61446
+.equ W_F2TMP    61447
 .equ W_TKPTR    60990
 .equ W_CASEBASE 60971
 .equ W_DEFSET   60972
@@ -11013,6 +11016,12 @@ JMP[EQ] @npf_str
 MOVI r3,112
 CMP r2,r3
 JMP[EQ] @npf_hex_low
+MOVI r3,101
+CMP r2,r3
+JMP[EQ] @npf_exp
+MOVI r3,69
+CMP r2,r3
+JMP[EQ] @npf_exp
 MOVI r3,102
 CMP r2,r3
 JMP[EQ] @npf_float
@@ -11134,6 +11143,191 @@ LD r1,r0,#W_PF_LEN
 LD r2,r0,#W_PF_W
 CALL @ni_field_tail
 JMP @npf_adv
+
+
+npf_exp:
+ST r2,r0,#W_PF_CASE
+LD r1,r0,#W_PF_IDX
+ADD r1,r1,r13
+ST r1,r0,#W_PF_IDX
+CALL @ni_arg
+LD r2,r0,#W_PF_PREC
+CALL @ni_ecalc
+ST r3,r0,#W_PF_LEN
+LD r2,r0,#W_PF_FLAGS
+MOVI r3,1
+BOOL.8 r2,r2,r3
+CMP r2,r0
+JMP[NE] @npf_e_emit
+LD r1,r0,#W_PF_LEN
+LD r2,r0,#W_PF_W
+MOVI r3,32
+CALL @ni_field_pre
+npf_e_emit:
+CALL @ni_eemit
+LD r1,r0,#W_PF_LEN
+LD r2,r0,#W_PF_W
+CALL @ni_field_tail
+JMP @npf_adv
+
+; ni_ecalc: r1=float bits r2=precision -> r3=length; sets W_F2* and W_F2EXP
+ni_ecalc:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_F2V
+ST r2,r0,#W_F2P
+LA r4,0xFFFFFFFF
+CMP r2,r4
+JMP[NE] @nec_have
+MOVI r2,6
+ST r2,r0,#W_F2P
+nec_have:
+LD r2,r0,#W_F2P
+MOVI r4,9
+CMP r2,r4
+JMP[LE] @nec_ok
+MOVI r2,9
+ST r2,r0,#W_F2P
+nec_ok:
+LD r5,r0,#W_F2V
+LA r4,0x80000000
+BOOL.8 r6,r5,r4
+ST r0,r0,#W_F2NEG
+ST r0,r0,#W_F2SIGN2
+CMP r6,r0
+JMP[EQ] @nec_pos
+MOVI r6,1
+ST r6,r0,#W_F2NEG
+ST r6,r0,#W_F2SIGN2
+BOOL.6 r5,r5,r4
+nec_pos:
+ST r0,r0,#W_F2EXP
+CMP r5,r0
+JMP[EQ] @nec_zero
+nec_hi:
+LA r4,0x41200000
+FCMP r5,r4
+JMP[LT] @nec_lo
+FDIV r5,r5,r4
+LD r2,r0,#W_F2EXP
+ADD r2,r2,r13
+ST r2,r0,#W_F2EXP
+JMP @nec_hi
+nec_lo:
+LA r4,0x3F800000
+FCMP r5,r4
+JMP[GE] @nec_done
+LA r4,0x41200000
+FMUL r5,r5,r4
+LD r2,r0,#W_F2EXP
+SUB r2,r2,r13
+ST r2,r0,#W_F2EXP
+JMP @nec_lo
+nec_done:
+LD r2,r0,#W_F2P
+ADD r1,r5,r0
+CALL @ni_fcalc
+LD r2,r0,#W_F2SIGN2
+ST r2,r0,#W_F2NEG
+JMP @nec_len
+nec_zero:
+ST r0,r0,#W_F2EXP
+MOVI r1,0
+LD r2,r0,#W_F2P
+CALL @ni_fcalc
+nec_len:
+; exponent digit count first (ni_decdigits clobbers r3)
+LD r1,r0,#W_F2EXP
+CMPS r1,r0
+JMP[GE] @nec_abs
+SUB r1,r0,r1
+nec_abs:
+CALL @ni_decdigits
+ST r2,r0,#W_F2TMP
+; length = sign + 1 digit + (p ? 1+p : 0) + 'e' + exp sign + max(2,digits)
+LD r3,r0,#W_F2NEG
+ADD r3,r3,r13
+LD r1,r0,#W_F2P
+CMP r1,r0
+JMP[EQ] @nec_len2
+ADD r3,r3,r1
+ADD r3,r3,r13
+nec_len2:
+ADD r3,r3,r13
+ADD r3,r3,r13
+LD r1,r0,#W_F2TMP
+MOVI r2,2
+CMP r1,r2
+JMP[GE] @nec_len3
+MOVI r1,2
+nec_len3:
+ADD r3,r3,r1
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; ni_eemit: sign mantissa e exp using W_F2* state
+ni_eemit:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r4,r0,#W_F2NEG
+CMP r4,r0
+JMP[EQ] @nee_nosign
+MOVI r1,45
+CALL @ncc_putc
+nee_nosign:
+LD r5,r0,#W_F2I
+CALL @putudec
+LD r1,r0,#W_F2P
+CMP r1,r0
+JMP[EQ] @nee_exp
+MOVI r1,46
+CALL @ncc_putc
+LD r1,r0,#W_F2F
+CALL @ni_decdigits
+LD r1,r0,#W_F2P
+SUB r1,r1,r2
+CMP r1,r0
+JMP[LE] @nee_frac
+MOVI r2,48
+CALL @ni_pad
+nee_frac:
+LD r5,r0,#W_F2F
+CALL @putudec
+nee_exp:
+LD r3,r0,#W_PF_CASE
+MOVI r1,101
+CMP r3,r0
+JMP[EQ] @nee_emark
+MOVI r1,69
+nee_emark:
+CALL @ncc_putc
+LD r2,r0,#W_F2EXP
+ST r2,r0,#W_F2TMP
+CMPS r2,r0
+JMP[GE] @nee_epos
+MOVI r1,45
+CALL @ncc_putc
+LD r2,r0,#W_F2TMP
+SUB r2,r0,r2
+ST r2,r0,#W_F2TMP
+JMP @nee_edigits
+nee_epos:
+MOVI r1,43
+CALL @ncc_putc
+nee_edigits:
+LD r2,r0,#W_F2TMP
+MOVI r1,10
+CMP r2,r1
+JMP[GE] @nee_e2
+MOVI r1,48
+CALL @ncc_putc
+nee_e2:
+LD r5,r0,#W_F2TMP
+CALL @putudec
+SUB r14,r14,r13
+LD r15,r14,0
+RET
 
 npf_float:
 LD r1,r0,#W_PF_IDX
