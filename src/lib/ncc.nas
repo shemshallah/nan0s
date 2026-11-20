@@ -8281,6 +8281,48 @@ LD r15,r14,0
 RET
 
 
+; p_infer_str_array: r1=type. If it is an unsized char array followed by
+; '=' and a string literal, return a sized array type; else return r1.
+p_infer_str_array:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_TY_TMP
+CALL @ty_kind
+MOVI r2,#TY_ARRAY
+CMP r1,r2
+JMP[NE] @pisa_orig
+LD r1,r0,#W_TY_TMP
+CALL @ty_count
+CMP r1,r0
+JMP[NE] @pisa_orig
+MOVI r1,#P_ASSIGN
+CALL @p_at_p
+CMP r1,r0
+JMP[EQ] @pisa_orig
+CALL @p_peek
+LD r1,r0,#W_TKB
+MOVI r2,#K_STRING
+CMP r1,r2
+JMP[NE] @pisa_orig
+LD r1,r0,#W_TY_TMP
+CALL @ty_base
+ST r1,r0,#W_TY_ID
+CALL @ty_size
+MOVI r2,1
+CMP r1,r2
+JMP[NE] @pisa_orig
+LD r2,r0,#W_TKB+3
+ADD r2,r2,r13
+LD r1,r0,#W_TY_ID
+CALL @ty_array
+JMP @pisa_d
+pisa_orig:
+LD r1,r0,#W_TY_TMP
+pisa_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
 ; local declarations
 p_decl:
 ST r15,r14,0
@@ -8309,6 +8351,8 @@ ADD r14,r14,r13
 CALL @p_adv
 LD r1,r0,#W_TY_ID
 CALL @p_array_suffix
+ST r1,r0,#W_TY_ID
+CALL @p_infer_str_array
 ST r1,r0,#W_TY_ID
 ST r1,r0,#W_TY_BASE
 CALL @ty_size
@@ -9459,6 +9503,8 @@ ADD r14,r14,r13
 CALL @p_adv
 LD r1,r0,#W_TY_ID
 CALL @p_array_suffix
+ST r1,r0,#W_TY_ID
+CALL @p_infer_str_array
 ST r1,r0,#W_TY_ID
 CALL @ty_size
 ST r1,r0,#W_TY_TMP
