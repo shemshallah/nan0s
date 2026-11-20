@@ -88,7 +88,8 @@ Not implemented (honest list):
   `va_end`; up to 16 variadic argument words per call)
 - the path filesystem is RAM-backed (it resets on reboot); no disk
   persistence yet
-- `scanf`/`fscanf`/`sscanf` are not implemented yet
+- `scanf`/`fscanf`/`sscanf`: `%d %i %u %o %x %X %f %e %g %s %c %%`,
+  whitespace/literals, `*` suppression and field widths
 - `FILE` streams work over the path filesystem: `fopen`/`fclose`, `fgetc`/
   `fputc`, `fgets`/`fputs`, `fread`/`fwrite`, `fprintf`, `fseek`/`ftell`/
   `rewind`, `feof`/`ferror`/`fflush`, `remove`/`rename`
@@ -201,6 +202,7 @@ tools/ncc_m20.sh    function-like + variadic macros, #/##, nesting, #undef
 tools/ncc_m21.sh    printf %g/%G, # flag, float exponent literals
 tools/ncc_m22.sh    time/locale/signal, struct tm/lconv, atof/strtod, limits
 tools/ncc_m23.sh    stdio FILE streams over the path filesystem
+tools/ncc_m24.sh    scanf/fscanf/sscanf conversions and widths
 tools/ncc_donut.sh  original C donut (one frame) in raw NaN16
 tools/nfs2.sh       path-addressed RAM filesystem API
 tools/ncc_gui.sh    boot image, open terminal, .demo runs C in the vbuf

@@ -396,6 +396,9 @@
 .equ B_FFLUSH   82
 .equ B_REMOVE   83
 .equ B_RENAME   84
+.equ B_SCANF    85
+.equ B_FSCANF   86
+.equ B_SSCANF   87
 
 ; ------------------------------------------------------------------ compiler state
 ; Kept below word 65536 so ST/LD can use the 16-bit immediate form directly.
@@ -666,6 +669,7 @@
 .include "timeb.nas"
 .include "nfs2.nas"
 .include "stdio.nas"
+.include "scanf.nas"
 
 ; q2_skipsp: consume spaces and tabs
 q2_skipsp:
@@ -5645,6 +5649,28 @@ MOVI r4,#B_RENAME
 MOVI r5,2
 MOVI r6,#T_INT
 CALL @ncc_add_builtin
+; scanf family
+LA r1,0x7F91078A
+LA r2,@ncc_s_scanf
+MOVI r3,5
+MOVI r4,#B_SCANF
+MOVI r5,0xFFFF
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0x33E99396
+LA r2,@ncc_s_fscanf
+MOVI r3,6
+MOVI r4,#B_FSCANF
+MOVI r5,0xFFFF
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0x03AB1E13
+LA r2,@ncc_s_sscanf
+MOVI r3,6
+MOVI r4,#B_SSCANF
+MOVI r5,0xFFFF
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -6367,6 +6393,12 @@ ncc_s_remove:
 .str "remove"
 ncc_s_rename:
 .str "rename"
+ncc_s_scanf:
+.str "scanf"
+ncc_s_fscanf:
+.str "fscanf"
+ncc_s_sscanf:
+.str "sscanf"
 ncc_s_va_list:
 .str "va_list"
 ncc_s_bool:
@@ -13800,6 +13832,15 @@ JMP[EQ] @nbi_remove
 MOVI r2,#B_RENAME
 CMP r1,r2
 JMP[EQ] @nbi_rename
+MOVI r2,#B_SCANF
+CMP r1,r2
+JMP[EQ] @nbi_scanf
+MOVI r2,#B_FSCANF
+CMP r1,r2
+JMP[EQ] @nbi_fscanf
+MOVI r2,#B_SSCANF
+CMP r1,r2
+JMP[EQ] @nbi_sscanf
 MOVI r2,#B_EXIT
 CMP r1,r2
 JMP[EQ] @nbi_exit
