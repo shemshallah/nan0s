@@ -19,6 +19,7 @@ JMP @cart_entry
 .include "../lib/kbd.nas"
 .include "../lib/wm.nas"
 .include "../lib/ncc.nas"
+.include "../lib/nfs2.nas"
 cart_entry:
 ST r15,r0,@g_ret
 MOVI r13,1
@@ -31,6 +32,27 @@ ADD r1,r1,r2
 CALL @fb_init_mode
 CALL @kbd_init
 CALL @wm_init
+CALL @nfs_format
+LA r1,@fs_hello_path
+SHL r1,r1,2
+LA r2,@fs_hello_src
+CALL @fs_seed
+LA r1,@fs_donut_path
+SHL r1,r1,2
+LA r2,@fs_donut_src
+CALL @fs_seed
+LA r1,@fs_donutf_path
+SHL r1,r1,2
+LA r2,@fs_donutf_src
+CALL @fs_seed
+LA r1,@fs_inc_path
+SHL r1,r1,2
+LA r2,@fs_inc_src
+CALL @fs_seed
+LA r1,@fs_useinc_path
+SHL r1,r1,2
+LA r2,@fs_useinc_src
+CALL @fs_seed
 ST r0,r0,@g_quit
 ST r0,r0,@g_move
 ST r0,r0,@g_cnt
@@ -834,8 +856,23 @@ JMP @tk_ret
 tk_enter:
 LD r5,r0,@ce_mode
 CMP r5,r0
-JMP[EQ] @tk_enter_normal
+JMP[EQ] @tk_line_mode
 CALL @ce_enter
+JMP @tk_ret
+tk_line_mode:
+CALL @fs_readline
+CALL @fs_dispatch
+CMP r1,r0
+JMP[EQ] @tk_enter_normal
+LD r1,r0,@tk_id
+MOVI r2,10
+CALL @vc_putc
+LD r1,r0,@tk_id
+MOVI r2,@fs_s_prompt
+CALL @vc_puts
+LD r1,r0,@tk_id
+CALL @wm_wbase
+ST r0,r1,#W_A4
 JMP @tk_ret
 tk_enter_normal:
 CALL @wm_wbase
@@ -1056,7 +1093,10 @@ LD r1,r0,@tk_id
 ST r1,r0,@gco_id
 LA r1,@gui_c_out
 ST r1,r0,@ncc_out
-LA r1,#CE_BUF
+LA r1,#CEB
+LA r2,#EXB
+CALL @fs_expand
+LA r1,#EXP_BUF
 CALL @ncc_compile
 CALL @ncc_run
 ST r0,r0,@ncc_out
@@ -1180,6 +1220,9 @@ JMP[EQ] @ce_begin_run
 MOVI r4,100
 CMP r3,r4
 JMP[EQ] @ce_begin_demo
+MOVI r4,115
+CMP r3,r4
+JMP[EQ] @ce_save
 MOVI r4,99
 CMP r3,r4
 JMP[EQ] @ce_clear
@@ -4304,3 +4347,814 @@ bd2_ret:
 .word 0
 bk_ret:
 .word 0
+; ================================================================== FILESYSTEM
+; Path-addressed RAM filesystem (nfs2.nas) and terminal file commands.
+; Commands are full-line: ls, pwd, cat PATH, cc PATH, run PATH, rm PATH,
+; mkdir PATH, write PATH, edit PATH. The C editor adds .save.
+.equ FNB    10640000
+.equ FNPATH 10640400
+.equ FIPB   10644000
+.equ EXB    10680000
+.equ FXEND  10760000
+.equ EXP_BUF 2670000
+
+; fs_readline: copy the current terminal input line (after "> ") into FNB
+fs_readline:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r1,r0,@tk_id
+CALL @wm_wbase
+LD r5,r1,#W_A3
+ST r5,r0,@fs_row
+LD r6,r1,#W_A2
+ST r6,r0,@fs_col
+LD r1,r0,@tk_id
+CALL @wm_vbuf
+ST r1,r0,@fs_base
+LD r5,r0,@fs_row
+MOVI r6,#VCW
+MUL r5,r5,r6
+ADDI r5,r5,2
+ST r5,r0,@fs_start
+LD r6,r0,@fs_col
+MOVI r7,2
+SUB r6,r6,r7
+CMP r6,r0
+JMP[GE] @fs_rl_ok
+MOVI r6,0
+fs_rl_ok:
+ST r6,r0,@fs_n
+LD r3,r0,@fs_base
+LD r5,r0,@fs_start
+ADD r3,r3,r5
+LA r8,#FNB
+LD r6,r0,@fs_n
+fs_rl_l:
+CMP r6,r0
+JMP[EQ] @fs_rl_d
+LD r4,r3,0
+STB r4,r8,0
+ADD r3,r3,r13
+ADD r8,r8,r13
+SUB r6,r6,r13
+JMP @fs_rl_l
+fs_rl_d:
+STB r0,r8,0
+LD r1,r0,@fs_n
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; fs_prefix: r1=byte text, r2=packed .str -> 1 if the string is a prefix
+fs_prefix:
+SHL r2,r2,2
+fs_pf_l:
+LDB r4,r2,0
+CMP r4,r0
+JMP[EQ] @fs_pf_y
+LDB r3,r1,0
+CMP r3,r4
+JMP[NE] @fs_pf_n
+ADD r1,r1,r13
+ADD r2,r2,r13
+JMP @fs_pf_l
+fs_pf_y:
+MOVI r1,1
+RET
+fs_pf_n:
+MOVI r1,0
+RET
+
+; fs_dispatch: command line in FNB -> r1=1 handled
+fs_dispatch:
+ST r15,r14,0
+ADD r14,r14,r13
+LA r1,#FNB
+LA r2,@fs_s_cc
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @fs_d_cc
+LA r1,#FNB
+LA r2,@fs_s_run
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @fs_d_run
+LA r1,#FNB
+LA r2,@fs_s_cat
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @fs_d_cat
+LA r1,#FNB
+LA r2,@fs_s_write
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @fs_d_write
+LA r1,#FNB
+LA r2,@fs_s_edit
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @fs_d_edit
+LA r1,#FNB
+LA r2,@fs_s_mkdir
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @fs_d_mkdir
+LA r1,#FNB
+LA r2,@fs_s_rm
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @fs_d_rm
+LA r1,#FNB
+LA r2,@fs_s_ls
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @fs_d_ls
+LA r1,#FNB
+LA r2,@fs_s_pwd
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @fs_d_pwd
+MOVI r1,0
+JMP @fs_disp_d
+fs_d_cc:
+LA r1,#FNB
+ADDI r1,r1,3
+CALL @fs_cc
+JMP @fs_disp_y
+fs_d_run:
+LA r1,#FNB
+ADDI r1,r1,4
+CALL @fs_cc
+JMP @fs_disp_y
+fs_d_cat:
+LA r1,#FNB
+ADDI r1,r1,4
+CALL @fs_cat
+JMP @fs_disp_y
+fs_d_write:
+LA r1,#FNB
+ADDI r1,r1,6
+CALL @fs_write
+JMP @fs_disp_y
+fs_d_edit:
+LA r1,#FNB
+ADDI r1,r1,5
+CALL @fs_edit
+JMP @fs_disp_y
+fs_d_mkdir:
+LA r1,#FNB
+ADDI r1,r1,6
+MOVI r2,1
+CALL @nfs_create
+CALL @fs_created
+JMP @fs_disp_y
+fs_d_rm:
+LA r1,#FNB
+ADDI r1,r1,3
+CALL @nfs_delete
+CALL @fs_removed
+JMP @fs_disp_y
+fs_d_ls:
+CALL @fs_list
+JMP @fs_disp_y
+fs_d_pwd:
+LD r1,r0,@tk_id
+MOVI r2,@fs_s_root
+CALL @vc_puts
+fs_disp_y:
+MOVI r1,1
+fs_disp_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+fs_created:
+ST r1,r0,@fs_tmp
+LD r1,r0,@tk_id
+MOVI r2,@fs_s_made
+CALL @vc_puts
+RET
+fs_removed:
+ST r1,r0,@fs_tmp
+LD r1,r0,@tk_id
+MOVI r2,@fs_s_gone
+CALL @vc_puts
+RET
+
+fs_cc:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @nfs_data
+CMP r3,r0
+JMP[EQ] @fs_cc_nf
+SHL r1,r1,2
+LA r2,#EXB
+CALL @fs_expand
+LA r1,#EXP_BUF
+ST r1,r0,@fs_src
+LD r1,r0,@tk_id
+ST r1,r0,@gco_id
+LA r1,@gui_c_out
+ST r1,r0,@ncc_out
+LD r1,r0,@fs_src
+CALL @ncc_compile
+CALL @ncc_run
+ST r0,r0,@ncc_out
+JMP @fs_cc_d
+fs_cc_nf:
+LD r1,r0,@tk_id
+MOVI r2,@fs_s_nofile
+CALL @vc_puts
+fs_cc_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+fs_cat:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @nfs_data
+CMP r3,r0
+JMP[EQ] @fs_cat_nf
+SHL r1,r1,2
+ST r1,r0,@fs_ptr
+ST r2,r0,@fs_left
+fs_cat_l:
+LD r2,r0,@fs_left
+CMP r2,r0
+JMP[EQ] @fs_cat_d
+LD r1,r0,@fs_ptr
+LDB r2,r1,0
+ADD r1,r1,r13
+ST r1,r0,@fs_ptr
+LD r1,r0,@fs_left
+SUB r1,r1,r13
+ST r1,r0,@fs_left
+LD r1,r0,@tk_id
+CALL @vc_putc
+JMP @fs_cat_l
+fs_cat_d:
+JMP @fs_cat_e
+fs_cat_nf:
+LD r1,r0,@tk_id
+MOVI r2,@fs_s_nofile
+CALL @vc_puts
+fs_cat_e:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+fs_list:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r0,r0,@fs_i
+fs_ls_l:
+LD r1,r0,@fs_i
+CALL @nfs_entry
+CMP r1,r0
+JMP[EQ] @fs_ls_nx
+ST r1,r0,@fs_ent
+ADDI r1,r1,#NF_E_PATH
+SHL r1,r1,2
+CALL @fs_putb
+LD r1,r0,@tk_id
+MOVI r2,32
+CALL @vc_putc
+LD r1,r0,@fs_ent
+LD r5,r1,#NF_E_SIZE
+CALL @fs_putdec
+LD r1,r0,@tk_id
+MOVI r2,10
+CALL @vc_putc
+fs_ls_nx:
+LD r1,r0,@fs_i
+ADD r1,r1,r13
+ST r1,r0,@fs_i
+MOVI r2,#NFS_MAX
+CMP r1,r2
+JMP[LT] @fs_ls_l
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; fs_putb: r1=byte string -> terminal
+fs_putb:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,@fs_ptr
+fs_pb_l:
+LD r1,r0,@fs_ptr
+LDB r2,r1,0
+CMP r2,r0
+JMP[EQ] @fs_pb_d
+ADD r1,r1,r13
+ST r1,r0,@fs_ptr
+LD r1,r0,@tk_id
+CALL @vc_putc
+JMP @fs_pb_l
+fs_pb_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; fs_putdec: r5=value -> terminal
+fs_putdec:
+ST r15,r14,0
+ADD r14,r14,r13
+CMP r5,r0
+JMP[NE] @fs_pd_nz
+LD r1,r0,@tk_id
+MOVI r2,48
+CALL @vc_putc
+JMP @fs_pd_d
+fs_pd_nz:
+ST r0,r0,@fs_cnt
+fs_pd_l:
+MOVI r7,10
+DIVU r8,r5,r7
+MUL r9,r8,r7
+SUB r9,r5,r9
+LD r6,r0,@fs_cnt
+LA r10,@FSDEC
+ADD r10,r10,r6
+ST r9,r10,0
+ADD r6,r6,r13
+ST r6,r0,@fs_cnt
+ADD r5,r8,r0
+CMP r5,r0
+JMP[NE] @fs_pd_l
+fs_pd_r:
+LD r6,r0,@fs_cnt
+SUB r6,r6,r13
+ST r6,r0,@fs_cnt
+LA r10,@FSDEC
+ADD r10,r10,r6
+LD r1,r10,0
+ADDI r1,r1,48
+ADD r2,r1,r0
+LD r1,r0,@tk_id
+CALL @vc_putc
+LD r6,r0,@fs_cnt
+CMP r6,r0
+JMP[NE] @fs_pd_r
+fs_pd_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; fs_savepath: r1=byte path -> FNPATH
+fs_savepath:
+ST r15,r14,0
+ADD r14,r14,r13
+LA r2,#FNPATH
+MOVI r3,31
+fs_sp_l:
+CMP r3,r0
+JMP[EQ] @fs_sp_d
+LDB r5,r1,0
+CMP r5,r0
+JMP[EQ] @fs_sp_d
+STB r5,r2,0
+ADD r1,r1,r13
+ADD r2,r2,r13
+SUB r3,r3,r13
+JMP @fs_sp_l
+fs_sp_d:
+STB r0,r2,0
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+fs_write:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @fs_savepath
+ST r0,r0,@ce_len
+MOVI r1,1
+ST r1,r0,@ce_mode
+LD r1,r0,@tk_id
+MOVI r2,@fs_s_editmsg
+CALL @vc_puts
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+fs_edit:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,@fs_src
+CALL @fs_savepath
+LD r1,r0,@fs_src
+CALL @nfs_data
+CMP r3,r0
+JMP[EQ] @fs_ed_nf
+ST r1,r0,@fs_ptr
+ST r2,r0,@fs_len
+; copy packed bytes into CE buffer
+SHL r1,r1,2
+LA r2,#CEB
+LD r3,r0,@fs_len
+fs_ed_l:
+CMP r3,r0
+JMP[EQ] @fs_ed_d
+LDB r4,r1,0
+STB r4,r2,0
+ADD r1,r1,r13
+ADD r2,r2,r13
+SUB r3,r3,r13
+JMP @fs_ed_l
+fs_ed_d:
+LD r1,r0,@fs_len
+ST r1,r0,@ce_len
+MOVI r1,1
+ST r1,r0,@ce_mode
+LD r1,r0,@tk_id
+MOVI r2,@fs_s_editmsg
+CALL @vc_puts
+JMP @fs_ed_e
+fs_ed_nf:
+LD r1,r0,@tk_id
+MOVI r2,@fs_s_nofile
+CALL @vc_puts
+fs_ed_e:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; ce_save: write the editor buffer to the current path
+ce_save:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r1,r0,@ce_old
+ST r1,r0,@ce_len
+LA r2,#CEB
+ADD r2,r2,r1
+STB r0,r2,0
+LA r1,#FNPATH
+LDB r2,r1,0
+CMP r2,r0
+JMP[EQ] @ce_sv_noname
+LA r1,#FNPATH
+LA r2,#CE_BUF
+LD r3,r0,@ce_len
+CALL @nfs_write
+CMP r1,r0
+JMP[EQ] @ce_sv_bad
+LD r1,r0,@tk_id
+MOVI r2,@fs_s_saved
+CALL @vc_puts
+JMP @ce_prompt
+ce_sv_bad:
+LD r1,r0,@tk_id
+MOVI r2,@fs_s_savefail
+CALL @vc_puts
+JMP @ce_prompt
+ce_sv_noname:
+LD r1,r0,@tk_id
+MOVI r2,@fs_s_noname
+CALL @vc_puts
+JMP @ce_prompt
+
+; fs_seed: r1=path, r2=packed source -> store with computed length
+fs_seed:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,@fs_p1
+ST r2,r0,@fs_p2
+SHL r1,r2,2
+MOVI r3,0
+fs_sd_l:
+LDB r4,r1,0
+CMP r4,r0
+JMP[EQ] @fs_sd_d
+ADD r1,r1,r13
+ADD r3,r3,r13
+JMP @fs_sd_l
+fs_sd_d:
+LD r1,r0,@fs_p1
+LD r2,r0,@fs_p2
+CALL @nfs_write
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+fs_s_cc:
+.str "cc "
+fs_s_run:
+.str "run "
+fs_s_cat:
+.str "cat "
+fs_s_write:
+.str "write "
+fs_s_edit:
+.str "edit "
+fs_s_mkdir:
+.str "mkdir "
+fs_s_rm:
+.str "rm "
+fs_s_ls:
+.str "ls"
+fs_s_pwd:
+.str "pwd"
+fs_s_root:
+.str "/\n"
+fs_s_made:
+.str "ok\n"
+fs_s_gone:
+.str "removed\n"
+fs_s_nofile:
+.str "no file\n"
+fs_s_saved:
+.str "saved\n"
+fs_s_savefail:
+.str "save failed\n"
+fs_s_noname:
+.str "no file name\n"
+fs_s_editmsg:
+.str "C editor: .run .save .demo .clear .quit\n> "
+fs_i:
+.word 0
+fs_ent:
+.word 0
+fs_ptr:
+.word 0
+fs_left:
+.word 0
+fs_len:
+.word 0
+fs_src:
+.word 0
+fs_p1:
+.word 0
+fs_p2:
+.word 0
+fs_tmp:
+.word 0
+fs_row:
+.word 0
+fs_col:
+.word 0
+fs_start:
+.word 0
+fs_base:
+.word 0
+fs_n:
+.word 0
+fs_cnt:
+.word 0
+FSDEC:
+.word 0,0,0,0,0,0,0,0,0,0
+fs_s_prompt:
+.str "> "
+fs_hello_path:
+.str "/hello.c"
+fs_hello_src:
+.str "int main(void){ printf(\"hello from /hello.c\\n\"); return 0; }\n"
+
+fs_donut_path:
+.str "/donut.c"
+fs_donut_src:
+.str "int k;\nint main(){\n  float A=0,B=0.3,i,j,z[1760];\n  char b[1760];\n  printf(\"\\x1b[2J\");\n  memset(b,32,1760);\n  memset(z,0,7040);\n  for(j=0;6.28>j;j+=0.07)\n    for(i=0;6.28>i;i+=0.02){\n      float c=sin(i),d=cos(j),e=sin(A),f=sin(j),g=cos(A),h=d+2,D=1/(c*h*e+f*g+5),l=cos(i),m=cos(B),n=sin(B),t=c*h*g-f*e;\n      int x=40+30*D*(l*h*m-t*n),y=12+15*D*(l*h*n+t*m),o=x+80*y,N=8*((f*e-c*d*g)*m-c*d*e-f*g-l*d*n);\n      if(22>y&&y>0&&x>0&&80>x&&D>z[o]){z[o]=D;b[o]=\".,-~:;=!*#$@\"[N>0?N:0];}\n    }\n  printf(\"\\x1b[H\");\n  for(k=0;1761>k;k++) putchar(k%80?b[k]:10);\n  return 0;\n}\n"
+fs_donutf_path:
+.str "/donut_fast.c"
+fs_donutf_src:
+.str "int k;\nint main(){\n  float A=0,B=0.3,i,j,z[1760];\n  char b[1760];\n  printf(\"\\x1b[2J\");\n  memset(b,32,1760);\n  memset(z,0,7040);\n  for(j=0;6.28>j;j+=0.05)\n    for(i=0;6.28>i;i+=0.15){\n      float c=sin(i),d=cos(j),e=sin(A),f=sin(j),g=cos(A),h=d+2,D=1/(c*h*e+f*g+5),l=cos(i),m=cos(B),n=sin(B),t=c*h*g-f*e;\n      int x=40+30*D*(l*h*m-t*n),y=12+15*D*(l*h*n+t*m),o=x+80*y,N=8*((f*e-c*d*g)*m-c*d*e-f*g-l*d*n);\n      if(22>y&&y>0&&x>0&&80>x&&D>z[o]){z[o]=D;b[o]=\".,-~:;=!*#$@\"[N>0?N:0];}\n    }\n  printf(\"\\x1b[H\");\n  for(k=0;1761>k;k++) putchar(k%80?b[k]:10);\n  return 0;\n}\n"
+; ================================================================== INCLUDE EXPANDER
+; fs_match: r1=byte src r2=packed string -> r1=1/0, r2=advanced source
+fs_match:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,@fx_p
+SHL r2,r2,2
+fm_l:
+LDB r3,r2,0
+CMP r3,r0
+JMP[EQ] @fm_y
+LD r1,r0,@fx_p
+LDB r4,r1,0
+CMP r3,r4
+JMP[NE] @fm_n
+LD r1,r0,@fx_p
+ADD r1,r1,r13
+ST r1,r0,@fx_p
+ADD r2,r2,r13
+JMP @fm_l
+fm_y:
+LD r2,r0,@fx_p
+MOVI r1,1
+JMP @fm_d
+fm_n:
+MOVI r1,0
+fm_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; fs_expand: r1=source byte ptr, r2=dest byte ptr -> r1=end dest byte ptr.
+; Copies text and expands #include "path" recursively (depth <= 8).
+fs_expand:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,@fx_srcb
+ST r2,r0,@fx_dstb
+LD r1,r0,@fx_depth
+ADD r1,r1,r13
+ST r1,r0,@fx_depth
+MOVI r2,8
+CMP r1,r2
+JMP[GT] @fx_fail
+LD r3,r0,@fx_srcb
+LD r4,r0,@fx_dstb
+MOVI r1,1
+ST r1,r0,@fx_bol
+fx_loop:
+LDB r5,r3,0
+CMP r5,r0
+JMP[EQ] @fx_done
+LD r6,r0,@fx_bol
+CMP r6,r0
+JMP[EQ] @fx_copyc
+MOVI r7,32
+CMP r5,r7
+JMP[EQ] @fx_copyc
+MOVI r7,9
+CMP r5,r7
+JMP[EQ] @fx_copyc
+MOVI r7,10
+CMP r5,r7
+JMP[EQ] @fx_copyc
+MOVI r7,35
+CMP r5,r7
+JMP[EQ] @fx_dir
+ST r0,r0,@fx_bol
+fx_copyc:
+LA r7,#FXEND
+CMP r4,r7
+JMP[GE] @fx_done
+STB r5,r4,0
+ADD r3,r3,r13
+ADD r4,r4,r13
+MOVI r7,10
+CMP r5,r7
+JMP[EQ] @fx_bol1
+MOVI r7,32
+CMP r5,r7
+JMP[EQ] @fx_loop
+MOVI r7,9
+CMP r5,r7
+JMP[EQ] @fx_loop
+ST r0,r0,@fx_bol
+JMP @fx_loop
+fx_bol1:
+MOVI r7,1
+ST r7,r0,@fx_bol
+JMP @fx_loop
+fx_dir:
+ADD r1,r3,r13
+fx_dws:
+LDB r6,r1,0
+MOVI r7,32
+CMP r6,r7
+JMP[EQ] @fx_dadv
+MOVI r7,9
+CMP r6,r7
+JMP[NE] @fx_dchk
+fx_dadv:
+ADD r1,r1,r13
+JMP @fx_dws
+fx_dchk:
+ST r3,r14,0
+ADD r14,r14,r13
+ST r4,r14,0
+ADD r14,r14,r13
+LA r2,@fx_s_include
+CALL @fs_match
+SUB r14,r14,r13
+LD r4,r14,0
+SUB r14,r14,r13
+LD r3,r14,0
+CMP r1,r0
+JMP[EQ] @fx_copyline
+fx_iws:
+LDB r6,r2,0
+MOVI r7,32
+CMP r6,r7
+JMP[EQ] @fx_iadv
+MOVI r7,9
+CMP r6,r7
+JMP[NE] @fx_iquote
+fx_iadv:
+ADD r2,r2,r13
+JMP @fx_iws
+fx_iquote:
+MOVI r7,34
+CMP r6,r7
+JMP[NE] @fx_copyline
+ADD r2,r2,r13
+LA r1,#FIPB
+fx_ipath:
+LDB r6,r2,0
+CMP r6,r0
+JMP[EQ] @fx_copyline
+MOVI r7,34
+CMP r6,r7
+JMP[EQ] @fx_ipath_d
+STB r6,r1,0
+ADD r1,r1,r13
+ADD r2,r2,r13
+JMP @fx_ipath
+fx_ipath_d:
+STB r0,r1,0
+ST r3,r14,0
+ADD r14,r14,r13
+ST r4,r14,0
+ADD r14,r14,r13
+LA r1,#FIPB
+CALL @nfs_data
+ST r3,r0,@fx_found
+SUB r14,r14,r13
+LD r4,r14,0
+SUB r14,r14,r13
+LD r3,r14,0
+LD r6,r0,@fx_found
+CMP r6,r0
+JMP[EQ] @fx_skip
+SHL r1,r1,2
+ST r3,r14,0
+ADD r14,r14,r13
+ST r4,r14,0
+ADD r14,r14,r13
+ADD r2,r4,r0
+CALL @fs_expand
+ST r1,r0,@fx_tmp
+SUB r14,r14,r13
+LD r4,r14,0
+SUB r14,r14,r13
+LD r3,r14,0
+LD r4,r0,@fx_tmp
+fx_skip:
+LDB r6,r3,0
+CMP r6,r0
+JMP[EQ] @fx_done
+ADD r3,r3,r13
+MOVI r7,10
+CMP r6,r7
+JMP[NE] @fx_skip
+MOVI r6,1
+ST r6,r0,@fx_bol
+JMP @fx_loop
+fx_copyline:
+LDB r5,r3,0
+CMP r5,r0
+JMP[EQ] @fx_done
+LA r7,#FXEND
+CMP r4,r7
+JMP[GE] @fx_done
+STB r5,r4,0
+ADD r3,r3,r13
+ADD r4,r4,r13
+MOVI r7,10
+CMP r5,r7
+JMP[NE] @fx_copyline
+MOVI r6,1
+ST r6,r0,@fx_bol
+JMP @fx_loop
+fx_done:
+STB r0,r4,0
+ADD r1,r4,r0
+LD r6,r0,@fx_depth
+SUB r6,r6,r13
+ST r6,r0,@fx_depth
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+fx_fail:
+MOVI r1,0
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+fx_s_include:
+.str "include"
+fx_srcb:
+.word 0
+fx_dstb:
+.word 0
+fx_p:
+.word 0
+fx_depth:
+.word 0
+fx_bol:
+.word 0
+fx_tmp:
+.word 0
+fx_found:
+.word 0
+
+fs_inc_path:
+.str "/inc.h"
+fs_inc_src:
+.str "int add(int a,int b){ return a+b; }\n"
+fs_useinc_path:
+.str "/useinc.c"
+fs_useinc_src:
+.str "#include \"/inc.h\"\nint main(void){ printf(\"%d\\n\", add(20,22)); return 0; }\n"

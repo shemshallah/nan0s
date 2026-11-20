@@ -40,6 +40,8 @@ Implemented:
 - functions, prototypes, parameters, recursion, `return`
 - global and local arrays, multidimensions, pointer arithmetic/indexing
 - `char`/`short`/`int`/`long`, signed and unsigned, `sizeof` in bytes
+- `float`/`double` (32-bit IEEE storage), float literals, arithmetic,
+  comparisons, casts, and built-in `sin`/`cos`
 - string and character literals with escapes (`\n`, `\t`, `\xNN`, octal)
 - sized `char` arrays with string-literal initializers
 - `struct`/`union` with `.` and `->`, arrays of structs, alignment/padding
@@ -61,12 +63,13 @@ Not implemented (honest list):
   a struct or union, and unsized `char s[] = "..."` (declare a size)
 - bit-fields, `const`/`volatile` semantics, `register` semantics
 - user variadic functions; `printf` is a built-in variadic function
+- function-like macros, `#`/`##`
+- function pointers, struct/union pass or return by value, bit-fields
 - floating-point printing (`%f`); float arithmetic exists in the IR but is
   not exposed through `printf`
 - `printf` precision (`%.3s`, `%.2d`)
-- `cc FILE`: there is no path-based filesystem API in the raw NaN16 runtime,
-  so source entry is the terminal editor (a NaNFS block reader could be wired
-  later)
+- the path filesystem is RAM-backed (it resets on reboot); no disk
+  persistence yet
 
 ## Preprocessor subset
 
@@ -75,7 +78,8 @@ Lexer-integrated, line based:
 - `#define NAME integer` (object-like, integer replacement)
 - `#undef NAME`
 - `#ifdef`, `#ifndef`, `#if 0|1|defined(NAME)`, `#elif`, `#else`, `#endif`
-- `#include` is skipped
+- `#include "path"` is expanded from the runtime path filesystem (nested
+  includes up to 8 levels); `#include <...>` is skipped
 - nesting up to 16 levels; inactive branches are skipped without tokenizing
 
 ## Runtime library
@@ -88,6 +92,7 @@ printf(fmt, ...)   %d %i %u %x %X %c %s %p %%
                    (%05d, %-6s, %04x); %x/%X significant digits
 putchar(c)         print_int(v)      puts(s)        print_str(s)
 malloc(n)          calloc(n,size)     realloc(p,n)   free(p)
+sin(x)             cos(x)
 strlen(s)          strcmp(a,b)        strncmp(a,b,n)
 strcpy(d,s)        strncpy(d,s,n)      strcat(d,s)
 memcpy(d,s,n)      memset(d,c,n)       memcmp(a,b,n)
@@ -108,6 +113,32 @@ locals, signed overflow, invalid pointer arithmetic, division/modulo by zero
 (the NaN16 `DIV`/`MOD` behaviour applies), and `realloc` of a non-malloc
 pointer. There is no `-fsanitize` mode yet.
 
+## Path filesystem and multi-file C
+
+The runtime includes NPAF (`src/lib/nfs2.nas`), a path-addressed store with
+64 entries and paths up to 31 bytes. The GUI terminal commands are:
+
+```
+ls                 list live paths and sizes
+pwd                print /
+cat PATH           print a file
+cc PATH            compile and run a file (expands #include "PATH")
+run PATH           alias for cc
+write PATH         open the C editor and save to PATH with .save
+edit PATH          load PATH into the editor
+rm PATH            remove a file
+mkdir PATH         create a directory entry
+```
+
+The C editor adds `.save` to write the buffer back to the current path.
+`#include "path"` is flattened recursively from the same store before the
+compiler runs; `#include <stdio.h>` remains a no-op because the libc is
+built in.
+
+The classic C donut is shipped as `/donut.c` (original sampling) and
+`/donut_fast.c` (coarser sampling); `cc /donut_fast.c` renders a torus in the
+terminal.
+
 ## Gates
 
 ```
@@ -119,8 +150,13 @@ tools/ncc_m4.sh     byte types, structs/unions/enums/typedef/switch/goto, 11 lin
 tools/ncc_m5.sh     preprocessor subset, 1 line
 tools/ncc_m6.sh     libc + loop/operator extras, 10 lines
 tools/ncc_m7.sh     block scope, aggregate initializers, struct assignment
+tools/ncc_m8.sh     float literals/arithmetic/casts and sin/cos
+tools/ncc_donut.sh  original C donut (one frame) in raw NaN16
+tools/nfs2.sh       path-addressed RAM filesystem API
 tools/ncc_gui.sh    boot image, open terminal, .demo runs C in the vbuf
 tools/ncc_editor.sh boot image, type a C program, .run compiles and runs it
+tools/ncc_fs.sh     boot image, cc /useinc.c: path source + #include
+tools/ncc_donut_gui.sh  boot image, cc /donut_fast.c: torus in the terminal
 tools/mkproof.sh src/lib/ncc.nas   in-guest nasm0 reproduces every word
 ```
 

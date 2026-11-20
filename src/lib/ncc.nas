@@ -58,6 +58,7 @@
 .equ K_PUNCT    6
 .equ K_ERR      7
 .equ K_KEYWORD  8
+.equ K_FLOAT    9
 
 ; token structure: 8 fields + 64 words of packed text
 .equ TK_KIND    0
@@ -321,6 +322,8 @@
 .equ B_ABS      20
 .equ B_EXIT     21
 .equ B_STRNCMP  22
+.equ B_SIN     23
+.equ B_COS     24
 
 ; ------------------------------------------------------------------ compiler state
 ; Kept below word 65536 so ST/LD can use the 16-bit immediate form directly.
@@ -1593,6 +1596,7 @@ qds_endif:
 .equ W_SCOPEID 61310
 .equ W_FORCENEW 61311
 .equ W_NEXTSCOPE 61312
+.equ W_IDXTYPE 61341
 .equ W_SCOPEPAR 2001200
 
 ; q2_skipsp: consume spaces and tabs
@@ -3324,10 +3328,63 @@ ST r3,r0,#L_LEN
 CALL @lx_get
 JMP @sn_loop
 sn_fin:
+CALL @lx_peek
+MOVI r2,46
+CMP r1,r2
+JMP[NE] @sn_int
+MOVI r10,1
+CALL @peekn
+CALL @digit10
+MOVI r2,255
+CMP r1,r2
+JMP[EQ] @sn_int
+CALL @scan_float
+JMP @sn_done
+sn_int:
 MOVI r1,2
 ST r1,r0,#L_KIND
+sn_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; scan_float: integer part in L_VAL, cursor at '.', consume fraction.
+scan_float:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r0,r0,#L_TMP1
+MOVI r1,1
+ST r1,r0,#L_TMP2
+CALL @lx_get
+sf_l:
+CALL @lx_peek
+CALL @digit10
+MOVI r2,255
+CMP r1,r2
+JMP[EQ] @sf_done
+LD r3,r0,#L_TMP1
+MOVI r4,10
+MUL r3,r3,r4
+ADD r3,r3,r1
+ST r3,r0,#L_TMP1
+LD r3,r0,#L_TMP2
+MOVI r4,10
+MUL r3,r3,r4
+ST r3,r0,#L_TMP2
+CALL @lx_get
+JMP @sf_l
+sf_done:
 LD r1,r0,#L_VAL
-ST r1,r0,#L_VAL
+CVTIF r2,r1
+LD r1,r0,#L_TMP1
+CVTIF r3,r1
+LD r1,r0,#L_TMP2
+CVTIF r4,r1
+FDIV r3,r3,r4
+FADD r2,r2,r3
+ST r2,r0,#L_VAL
+MOVI r1,9
+ST r1,r0,#L_KIND
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -5422,6 +5479,22 @@ MOVI r4,#B_ABS
 MOVI r5,1
 MOVI r6,#T_INT
 CALL @ncc_add_builtin
+; sin
+LA r1,0xE0302A4D
+LA r2,@ncc_s_sin
+MOVI r3,3
+MOVI r4,#B_SIN
+MOVI r5,1
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+; cos
+LA r1,0xFB8DE29C
+LA r2,@ncc_s_cos
+MOVI r3,3
+MOVI r4,#B_COS
+MOVI r5,1
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
 ; exit
 LA r1,0xCDED1A85
 LA r2,@ncc_s_exit
@@ -5510,6 +5583,10 @@ ncc_s_abs:
 .str "abs"
 ncc_s_exit:
 .str "exit"
+ncc_s_sin:
+.str "sin"
+ncc_s_cos:
+.str "cos"
 
 ; ================================================================== STRING POOL
 ; str_add_cur: current K_STRING token -> r1 = byte address of a NUL-terminated
@@ -5805,10 +5882,10 @@ RET
 px_emit_store:
 ST r15,r14,0
 ADD r14,r14,r13
-ST r2,r0,#W_TY_TMP
+ST r2,r0,#W_TY_COUNT
 CALL @ty_store_code
 ADD r2,r1,r0
-LD r3,r0,#W_TY_TMP
+LD r3,r0,#W_TY_COUNT
 CMP r3,r0
 JMP[EQ] @pxs_plain
 LA r1,#I_STORE_K
@@ -5958,6 +6035,9 @@ JMP[EQ] @pp_lit
 MOVI r2,#K_CHAR
 CMP r1,r2
 JMP[EQ] @pp_lit
+MOVI r2,#K_FLOAT
+CMP r1,r2
+JMP[EQ] @pp_flit
 MOVI r2,#K_STRING
 CMP r1,r2
 JMP[EQ] @pp_string
@@ -5974,6 +6054,15 @@ LD r2,r0,#W_TKA+1
 LA r1,#I_PUSH
 CALL @ir_emit
 MOVI r1,#T_INT
+ST r1,r0,#W_ETYPE
+ST r0,r0,#W_LVAL
+CALL @p_adv
+JMP @pp_done
+pp_flit:
+LD r2,r0,#W_TKA+1
+LA r1,#I_PUSH
+CALL @ir_emit
+MOVI r1,#T_FLOAT
 ST r1,r0,#W_ETYPE
 ST r0,r0,#W_LVAL
 CALL @p_adv
@@ -6130,14 +6219,15 @@ CALL @p_adv
 CALL @p_typespec
 CALL @p_ptr_suffix
 ST r1,r0,#W_TY_ID
+ST r1,r0,#W_TY_SIGN
 MOVI r1,#P_RPAREN
 MOVI r2,10
 CALL @p_expect_p
 CALL @p_unary
 CALL @p_emit_rv
-LD r1,r0,#W_TY_ID
+LD r1,r0,#W_TY_SIGN
 CALL @px_cast_stack
-LD r1,r0,#W_TY_ID
+LD r1,r0,#W_TY_SIGN
 ST r1,r0,#W_ETYPE
 ST r0,r0,#W_LVAL
 JMP @pp_done
@@ -6175,13 +6265,14 @@ pxf_idx_ok:
 LD r1,r0,#W_ETYPE
 CALL @ty_base
 ST r1,r0,#W_TY_ID
+ST r1,r0,#W_IDXTYPE
 CALL @p_adv
 CALL @p_expr
 CALL @p_emit_rv
 MOVI r1,#P_RBRACK
 MOVI r2,33
 CALL @p_expect_p
-LD r1,r0,#W_TY_ID
+LD r1,r0,#W_IDXTYPE
 CALL @ty_size
 ADD r2,r1,r0
 LA r1,#I_PUSH
@@ -6190,7 +6281,7 @@ LA r1,#I_MUL
 CALL @ir_op
 LA r1,#I_ADD
 CALL @ir_op
-LD r1,r0,#W_TY_ID
+LD r1,r0,#W_IDXTYPE
 ST r1,r0,#W_LTYPE
 ST r1,r0,#W_ETYPE
 MOVI r1,1
@@ -8415,6 +8506,7 @@ CALL @sym_entry
 LD r2,r1,#SY_AUX
 LD r3,r1,#SY_TYPE
 ST r3,r0,#W_TY_ID
+ST r3,r0,#W_TY_SIGN
 LD r1,r0,#W_SCLASS
 MOVI r3,1
 CMP r1,r3
@@ -8428,9 +8520,9 @@ CALL @p_decl_store_addr
 pd_si_val:
 CALL @p_assign
 CALL @p_emit_rv
-LD r1,r0,#W_TY_ID
+LD r1,r0,#W_TY_SIGN
 CALL @px_cast_stack
-LD r1,r0,#W_TY_ID
+LD r1,r0,#W_TY_SIGN
 MOVI r2,0
 CALL @px_emit_store
 JMP @pd_afterinit
@@ -10086,6 +10178,75 @@ SUB r14,r14,r13
 LD r15,r14,0
 RET
 
+; ni_sin: r1=float bits -> r1=sin(r1)
+ni_sin:
+ST r15,r14,0
+ADD r14,r14,r13
+; reduce by 2*pi
+LA r2,0x40C90FDB
+FDIV r3,r1,r2
+CVTFI r3,r3
+CVTIF r3,r3
+FMUL r3,r3,r2
+FSUB r1,r1,r3
+; fold into [-pi,pi]
+LA r2,0x40490FDB
+FCMP r1,r2
+JMP[GT] @ns_hi
+LA r2,0xC0490FDB
+FCMP r1,r2
+JMP[LT] @ns_lo
+JMP @ns_taylor
+ns_hi:
+LA r2,0x40C90FDB
+FSUB r1,r1,r2
+JMP @ns_taylor
+ns_lo:
+LA r2,0x40C90FDB
+FADD r1,r1,r2
+ns_taylor:
+; fold into [-pi/2,pi/2] for Taylor accuracy
+LA r2,0x3FC90FDB
+FCMP r1,r2
+JMP[LE] @ns_chkneg
+LA r2,0x40490FDB
+FSUB r1,r2,r1
+JMP @ns_poly
+ns_chkneg:
+LA r2,0xBFC90FDB
+FCMP r1,r2
+JMP[GE] @ns_poly
+LA r2,0xC0490FDB
+FSUB r1,r2,r1
+ns_poly:
+ADD r5,r1,r0
+FMUL r2,r5,r5
+FMUL r3,r2,r5
+LA r4,0x3E2AAAAB
+FMUL r3,r3,r4
+FSUB r6,r5,r3
+FMUL r3,r2,r2
+FMUL r3,r3,r5
+LA r4,0x3C088889
+FMUL r3,r3,r4
+FADD r6,r6,r3
+FMUL r3,r2,r2
+FMUL r3,r3,r2
+FMUL r3,r3,r5
+LA r4,0x3951B717
+FMUL r3,r3,r4
+FSUB r6,r6,r3
+ADD r1,r6,r0
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; ni_cos: r1=float bits -> r1=cos(r1)
+ni_cos:
+LA r2,0x3FC90FDB
+FADD r1,r1,r2
+JMP @ni_sin
+
 ; ni_pad: r1=count r2=char -> emit count copies
 ni_pad:
 ST r15,r14,0
@@ -10859,6 +11020,12 @@ JMP[EQ] @nbi_atoi
 MOVI r2,#B_ABS
 CMP r1,r2
 JMP[EQ] @nbi_abs
+MOVI r2,#B_SIN
+CMP r1,r2
+JMP[EQ] @nbi_sin
+MOVI r2,#B_COS
+CMP r1,r2
+JMP[EQ] @nbi_cos
 MOVI r2,#B_EXIT
 CMP r1,r2
 JMP[EQ] @nbi_exit
@@ -11021,6 +11188,16 @@ CMPS r1,r0
 JMP[GE] @nbi_abs_p
 SUB r1,r0,r1
 nbi_abs_p:
+CALL @ni_push
+JMP @nbi_d
+nbi_sin:
+CALL @ni_pop
+CALL @ni_sin
+CALL @ni_push
+JMP @nbi_d
+nbi_cos:
+CALL @ni_pop
+CALL @ni_cos
 CALL @ni_push
 JMP @nbi_d
 nbi_exit:
