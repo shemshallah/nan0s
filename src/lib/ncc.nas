@@ -226,6 +226,7 @@
 .equ SY_SIZE    11
 .equ SY_CLS     12
 .equ SY_USED    13
+.equ SY_SCOPE   14
 .equ SYSZ       16
 
 .equ SK_GLOBAL  1
@@ -1581,6 +1582,10 @@ qds_endif:
 .equ W_Q2T0     61306
 .equ W_Q2SIGN   61307
 .equ W_Q2PTR    61308
+.equ W_SCOPEID 61310
+.equ W_FORCENEW 61311
+.equ W_NEXTSCOPE 61312
+.equ W_SCOPEPAR 2001200
 
 ; q2_skipsp: consume spaces and tabs
 q2_skipsp:
@@ -2235,6 +2240,9 @@ ST r0,r0,#W_Q2SKIP
 ST r0,r0,#W_Q2DEPTH
 ST r0,r0,#W_FUNCSYM
 ST r0,r0,#W_LOOPN
+ST r0,r0,#W_SCOPEID
+MOVI r1,1
+ST r1,r0,#W_NEXTSCOPE
 LA r1,#NCC_IRB
 ST r1,r0,#W_IRPC
 ST r0,r0,#W_SYMUSED
@@ -4957,12 +4965,13 @@ ST r15,r14,0
 ADD r14,r14,r13
 ST r1,r0,#W_SKIND
 ST r2,r0,#W_TKPTR
-ST r0,r0,#W_SIDX
+LD r1,r0,#W_SYMUSED
+SUB r1,r1,r13
+ST r1,r0,#W_SIDX
 sft_l:
 LD r2,r0,#W_SIDX
-LD r3,r0,#W_SYMUSED
-CMP r2,r3
-JMP[GE] @sft_n
+CMPS r2,r0
+JMP[LT] @sft_n
 SHL r3,r2,4
 LA r4,#NCC_SYMB
 ADD r3,r3,r4
@@ -4970,6 +4979,21 @@ LD r4,r3,#SY_KIND
 LD r5,r0,#W_SKIND
 CMP r4,r5
 JMP[NE] @sft_next
+MOVI r5,2
+CMP r4,r5
+JMP[NE] @sft_noscope
+LD r5,r3,#SY_SCOPE
+LD r6,r0,#W_SCOPEID
+sft_walk:
+CMP r5,r6
+JMP[EQ] @sft_noscope
+CMP r6,r0
+JMP[EQ] @sft_next
+LA r7,#W_SCOPEPAR
+ADD r7,r7,r6
+LD r6,r7,0
+JMP @sft_walk
+sft_noscope:
 MOVI r5,2
 CMP r4,r5
 JMP[EQ] @sft_owner
@@ -4997,7 +5021,7 @@ LD r1,r0,#W_SIDX
 JMP @sft_d
 sft_next:
 LD r2,r0,#W_SIDX
-ADD r2,r2,r13
+SUB r2,r2,r13
 ST r2,r0,#W_SIDX
 JMP @sft_l
 sft_n:
@@ -5018,12 +5042,19 @@ sym_get_cur:
 ST r15,r14,0
 ADD r14,r14,r13
 ST r1,r0,#R_T0
+LD r3,r0,#W_FORCENEW
+CMP r3,r0
+JMP[EQ] @sgc_find
+ST r0,r0,#W_FORCENEW
+JMP @sgc_create
+sgc_find:
 CALL @sym_find_cur
 MOVI r2,0xFFFF
 SHL r2,r2,16
 ADDI r2,r2,-1
 CMP r1,r2
 JMP[NE] @sgc_d
+sgc_create:
 ; create
 LD r1,r0,#W_SYMUSED
 ST r1,r0,#R_T1
@@ -5050,6 +5081,8 @@ ST r0,r3,#SY_OFF
 ST r0,r3,#SY_SIZE
 ST r0,r3,#SY_CLS
 ST r0,r3,#SY_USED
+LD r4,r0,#W_SCOPEID
+ST r4,r3,#SY_SCOPE
 LD r4,r0,#R_T0
 MOVI r5,2
 CMP r4,r5
@@ -5082,6 +5115,12 @@ sgc_d:
 SUB r14,r14,r13
 LD r15,r14,0
 RET
+
+; sym_new_cur: r1=kind -> always create a fresh entry
+sym_new_cur:
+MOVI r2,1
+ST r2,r0,#W_FORCENEW
+JMP @sym_get_cur
 
 ; sym_lookup_var: current token -> r1=index or -1. locals shadow globals.
 sym_lookup_var:
@@ -7558,9 +7597,6 @@ ST r15,r14,0
 ADD r14,r14,r13
 CALL @p_cond
 LD r1,r0,#W_LVAL
-LD r1,r0,#W_TKA
-ST r1,r0,#W_NPAR
-LD r1,r0,#W_LVAL
 CMP r1,r0
 JMP[EQ] @pas_d
 LD r1,r0,#W_TKA
@@ -7612,6 +7648,15 @@ ST r1,r0,#W_ETYPE
 ST r0,r0,#W_LVAL
 JMP @pas_d
 pas_simple:
+LD r1,r0,#W_LTYPE
+ST r1,r0,#W_TY_ID
+CALL @ty_kind
+MOVI r2,#TY_STRUCT
+CMP r1,r2
+JMP[EQ] @pas_struct
+MOVI r2,#TY_UNION
+CMP r1,r2
+JMP[EQ] @pas_struct
 CALL @p_assign
 CALL @p_emit_rv
 ADDI r3,r14,-2
@@ -7626,6 +7671,28 @@ ADDI r3,r14,-1
 LD r1,r3,0
 ST r1,r0,#W_ETYPE
 ST r0,r0,#W_LVAL
+JMP @pas_d
+pas_struct:
+ADDI r14,r14,-2
+LD r1,r0,#W_TY_ID
+CALL @ty_size
+ST r1,r0,#W_TY_TMP
+CALL @p_cond
+LD r1,r0,#W_LVAL
+CMP r1,r0
+JMP[NE] @pas_struct_ok
+MOVI r1,65
+CALL @p_err
+pas_struct_ok:
+LA r1,#I_PUSH
+LD r2,r0,#W_TY_TMP
+CALL @ir_emit
+LA r1,#I_MEMCPY
+CALL @ir_op
+LD r1,r0,#W_TY_ID
+ST r1,r0,#W_ETYPE
+ST r0,r0,#W_LVAL
+JMP @pas_d
 pas_d:
 SUB r14,r14,r13
 LD r15,r14,0
@@ -7672,6 +7739,14 @@ RET
 p_block:
 ST r15,r14,0
 ADD r14,r14,r13
+LD r1,r0,#W_SCOPEID
+LD r2,r0,#W_NEXTSCOPE
+LA r3,#W_SCOPEPAR
+ADD r3,r3,r2
+ST r1,r3,0
+ST r2,r0,#W_SCOPEID
+ADD r2,r2,r13
+ST r2,r0,#W_NEXTSCOPE
 MOVI r1,#P_LBRACE
 MOVI r2,20
 CALL @p_expect_p
@@ -7691,6 +7766,11 @@ CALL @p_stmt
 JMP @pb_l
 pb_d:
 CALL @p_adv
+LD r1,r0,#W_SCOPEID
+LA r2,#W_SCOPEPAR
+ADD r2,r2,r1
+LD r1,r2,0
+ST r1,r0,#W_SCOPEID
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -7956,6 +8036,89 @@ SUB r14,r14,r13
 LD r15,r14,0
 RET
 
+; p_struct_init: r1=global flag, r2=base address/offset, r3=type id.
+; Current token is '{'. Initialises members in declaration order; unions
+; initialise the first member only.
+p_struct_init:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_SKIND
+ST r2,r0,#W_SSIZE
+ST r3,r0,#W_STRUCTID
+; zero the whole object first
+LD r1,r0,#W_SKIND
+LD r2,r0,#W_SSIZE
+LD r3,r0,#W_STRUCTID
+CALL @ty_size
+ADD r3,r1,r0
+CALL @p_zero_range
+; member table
+LD r1,r0,#W_STRUCTID
+CALL @ty_addr
+LD r2,r1,#TY_MEM
+ST r2,r0,#W_SMEM
+LD r2,r1,#TY_NMEM
+ST r2,r0,#W_SNMEM
+ST r0,r0,#W_SALIGN
+CALL @p_adv
+psi_l:
+LD r1,r0,#W_SALIGN
+LD r2,r0,#W_SNMEM
+CMP r1,r2
+JMP[GE] @psi_done
+MOVI r1,#P_RBRACE
+CALL @p_at_p
+CMP r1,r0
+JMP[NE] @psi_done
+; member entry: [symidx, offset, type, 0]
+LD r2,r0,#W_SMEM
+LD r1,r0,#W_SALIGN
+SHL r1,r1,2
+ADD r2,r2,r1
+LD r3,r2,1
+ST r3,r0,#W_SOFF
+LD r3,r2,2
+ST r3,r0,#W_STYPE
+LD r2,r0,#W_SSIZE
+LD r3,r0,#W_SOFF
+ADD r2,r2,r3
+LD r1,r0,#W_SKIND
+LD r3,r0,#W_STYPE
+CALL @p_decl_store_addr
+CALL @p_assign
+CALL @p_emit_rv
+LD r1,r0,#W_STYPE
+CALL @px_cast_stack
+LD r1,r0,#W_STYPE
+MOVI r2,0
+CALL @px_emit_store
+; union: stop after one member
+LD r1,r0,#W_STRUCTID
+CALL @ty_addr
+LD r2,r1,#TY_KIND
+MOVI r3,#TY_UNION
+CMP r2,r3
+JMP[EQ] @psi_union_done
+MOVI r1,#P_COMMA
+CALL @p_take_p
+CMP r1,r0
+JMP[EQ] @psi_done
+LD r1,r0,#W_SALIGN
+ADD r1,r1,r13
+ST r1,r0,#W_SALIGN
+JMP @psi_l
+psi_union_done:
+MOVI r1,#P_COMMA
+CALL @p_take_p
+psi_done:
+MOVI r1,#P_RBRACE
+MOVI r2,35
+CALL @p_expect_p
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+
 ; local declarations
 p_decl:
 ST r15,r14,0
@@ -7978,7 +8141,7 @@ MOVI r2,3
 CMP r1,r2
 JMP[EQ] @pd_typedef
 MOVI r1,#SK_LOCAL
-CALL @sym_get_cur
+CALL @sym_new_cur
 ST r1,r14,0
 ADD r14,r14,r13
 CALL @p_adv
@@ -8058,6 +8221,12 @@ CMP r1,r0
 JMP[EQ] @pd_noinit
 LD r1,r0,#W_TY_ID
 CALL @ty_kind
+MOVI r2,#TY_STRUCT
+CMP r1,r2
+JMP[EQ] @pd_struct_init
+MOVI r2,#TY_UNION
+CMP r1,r2
+JMP[EQ] @pd_struct_init
 MOVI r2,#TY_ARRAY
 CMP r1,r2
 JMP[NE] @pd_scalar_init
@@ -8174,6 +8343,20 @@ CALL @px_emit_store
 JMP @pd_afterinit
 pd_noinit:
 ; C locals are uninitialised; static locals/globals are zeroed by the loader
+JMP @pd_afterinit
+pd_struct_init:
+MOVI r1,#P_LBRACE
+CALL @p_at_p
+CMP r1,r0
+JMP[EQ] @pd_scalar_init
+ADDI r3,r14,-1
+LD r1,r3,0
+CALL @sym_entry
+LD r2,r1,#SY_AUX
+LD r3,r1,#SY_TYPE
+MOVI r1,0
+CALL @p_struct_init
+JMP @pd_afterinit
 pd_afterinit:
 ADDI r14,r14,-1
 MOVI r1,#P_COMMA
@@ -9143,6 +9326,12 @@ CMP r1,r0
 JMP[EQ] @pde_zero
 LD r1,r0,#W_TY_ID
 CALL @ty_kind
+MOVI r2,#TY_STRUCT
+CMP r1,r2
+JMP[EQ] @pde_struct_init
+MOVI r2,#TY_UNION
+CMP r1,r2
+JMP[EQ] @pde_struct_init
 MOVI r2,#TY_ARRAY
 CMP r1,r2
 JMP[NE] @pde_scalar
@@ -9211,6 +9400,19 @@ MOVI r1,#P_RBRACE
 MOVI r2,35
 CALL @p_expect_p
 ADDI r14,r14,-1
+JMP @pde_after
+pde_struct_init:
+MOVI r1,#P_LBRACE
+CALL @p_at_p
+CMP r1,r0
+JMP[EQ] @pde_scalar
+ADDI r3,r14,-1
+LD r1,r3,0
+CALL @sym_entry
+LD r2,r1,#SY_AUX
+LD r3,r1,#SY_TYPE
+MOVI r1,1
+CALL @p_struct_init
 JMP @pde_after
 pde_scalar:
 ADDI r3,r14,-1
@@ -9309,6 +9511,9 @@ JMP @pde_d
 p_func:
 ST r15,r14,0
 ADD r14,r14,r13
+ST r0,r0,#W_SCOPEID
+MOVI r2,1
+ST r2,r0,#W_NEXTSCOPE
 ST r1,r0,#W_FUNCRET
 MOVI r1,#SK_FUNC
 CALL @sym_get_cur
@@ -9348,7 +9553,7 @@ MOVI r2,#K_IDENT
 CMP r1,r2
 JMP[NE] @pfu_no_name
 MOVI r1,#SK_LOCAL
-CALL @sym_get_cur
+CALL @sym_new_cur
 ST r1,r14,0
 ADD r14,r14,r13
 CALL @p_adv

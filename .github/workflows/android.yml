@@ -53,6 +53,7 @@ jobs:
           sh tools/ncc_m4.sh || exit 1
           sh tools/ncc_m5.sh || exit 1
           sh tools/ncc_m6.sh || exit 1
+          sh tools/ncc_m7.sh || exit 1
           sh tools/mkproof.sh src/lib/ncc.nas || exit 1
           sh tools/ncc_gui.sh || { rc=$?; [ "$rc" -eq 77 ] || exit "$rc"; }
           sh tools/ncc_editor.sh || { rc=$?; [ "$rc" -eq 77 ] || exit "$rc"; }

@@ -42,18 +42,22 @@ Implemented:
 - `char`/`short`/`int`/`long`, signed and unsigned, `sizeof` in bytes
 - string and character literals, escapes
 - `struct`/`union` with `.` and `->`, arrays of structs, alignment/padding
+- struct/union assignment as a byte copy of the object
+- aggregate brace initializers for structs and unions (flat member lists;
+  unions initialise the first member)
 - `enum` constants in expressions and `case` labels
 - `typedef`
 - `switch`/`case`/`default` with fallthrough, `goto`/labels
+- block scope with shadowing (locals and typedefs; labels stay function-wide)
 - casts, including pointer target casts and `sizeof(int *)`
 
 Not implemented (honest list):
 
 - function-like macros, `#`/`##`, recursive macro expansion
 - `#include "file"` (directive lines are skipped; libc is built in)
-- block scope/shadowing: locals live in one function-wide scope
-- struct/union assignment, pass-by-value, return-by-value, comparison
-- brace initializers for structs/unions and nested aggregate initializers
+- struct/union pass-by-value, return-by-value, comparison
+- nested aggregate initializers and brace initializers for array members
+  inside a struct or union
 - bit-fields, `const`/`volatile` semantics, `register` semantics
 - user variadic functions; `printf` is a built-in variadic function
 - floating-point printing (`%f`); float arithmetic exists in the IR but is
@@ -110,6 +114,7 @@ tools/ncc_m3.sh     pointers/arrays/strings/sizeof/casts, 12 lines exact
 tools/ncc_m4.sh     byte types, structs/unions/enums/typedef/switch/goto, 11 lines
 tools/ncc_m5.sh     preprocessor subset, 1 line
 tools/ncc_m6.sh     libc + loop/operator extras, 10 lines
+tools/ncc_m7.sh     block scope, aggregate initializers, struct assignment
 tools/ncc_gui.sh    boot image, open terminal, .demo runs C in the vbuf
 tools/ncc_editor.sh boot image, type a C program, .run compiles and runs it
 tools/mkproof.sh src/lib/ncc.nas   in-guest nasm0 reproduces every word
