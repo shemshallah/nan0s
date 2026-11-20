@@ -78,7 +78,8 @@ Not implemented (honest list):
 - the explicit function-returning-function-pointer declarator syntax
   (`int (*f(void))(int,int)`); use a typedef'd function-pointer return type
 - function-like macros: argument substitution, nesting, `#` stringification,
-  `##` pasting, zero-argument macros, multi-line bodies, `#undef`/redefine
+  `##` pasting, zero-argument macros, multi-line bodies, `#undef`/redefine,
+  C99 variadic macros (`...`, `__VA_ARGS__`, `, ##__VA_ARGS__`)
 - `const`/`volatile`/`register`/`inline`/`restrict` are accepted but not enforced
 - `_Bool`/`bool`/`true`/`false`, with `_Bool` values normalized to 0/1
 - `long long` is parsed but uses the 32-bit ILP32 slot (no 64-bit arithmetic yet)
@@ -190,7 +191,7 @@ tools/ncc_m16.sh    string/ctype/stdlib built-ins
 tools/ncc_m17.sh    sprintf/snprintf into guest buffers
 tools/ncc_m18.sh    printf %e/%E
 tools/ncc_m19.sh    _Bool/bool, inline/restrict
-tools/ncc_m20.sh    function-like macros, #/##, nesting, #undef
+tools/ncc_m20.sh    function-like + variadic macros, #/##, nesting, #undef
 tools/ncc_donut.sh  original C donut (one frame) in raw NaN16
 tools/nfs2.sh       path-addressed RAM filesystem API
 tools/ncc_gui.sh    boot image, open terminal, .demo runs C in the vbuf

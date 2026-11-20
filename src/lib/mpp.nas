@@ -52,6 +52,7 @@
 .equ W_MPBLEN   61520
 .equ W_MPOUTL   61521
 .equ W_MPENT2   61522
+.equ W_MPVA     61523
 
 ; ------------------------------------------------------------------ entry
 ; mp_preprocess: r1=source word ptr -> r1=source word ptr to compile
@@ -432,6 +433,7 @@ mdf_use:
 ADD r1,r4,r0
 mdf_have:
 ST r1,r0,#W_MPENT
+ST r0,r0,#W_MPENT2
 MOVI r4,1
 STB r4,r1,0
 MOVI r4,1
@@ -467,6 +469,9 @@ LDB r2,r1,0
 MOVI r3,41
 CMP r2,r3
 JMP[EQ] @mdf_pdone
+MOVI r3,46
+CMP r2,r3
+JMP[EQ] @mdf_variadic
 ; read one parameter name into slot W_MPARGN
 LD r2,r0,#W_MPARGN
 MOVI r3,#MPPARAMMAX
@@ -513,6 +518,14 @@ LD r1,r0,#W_MPCUR
 ADD r1,r1,r13
 ST r1,r0,#W_MPCUR
 JMP @mdf_pc
+mdf_variadic:
+LD r1,r0,#W_MPCUR
+ADDI r1,r1,3
+ST r1,r0,#W_MPCUR
+MOVI r1,1
+ST r1,r0,#W_MPENT2
+CALL @mp_skipsp
+JMP @mdf_pl
 mdf_pend:
 LD r1,r0,#W_MPARGN
 ADD r1,r1,r13
@@ -535,6 +548,12 @@ ADD r1,r1,r13
 ST r1,r0,#W_MPCUR
 LD r2,r0,#W_MPENT
 LD r1,r0,#W_MPARGN
+LD r3,r0,#W_MPENT2
+CMP r3,r0
+JMP[EQ] @mdf_pd_st
+SHL r3,r3,7
+ADD r1,r1,r3
+mdf_pd_st:
 STB r1,r2,1
 ; body starts after spaces (newlines are not part of the body)
 CALL @mp_skipsp
@@ -849,6 +868,8 @@ ST r1,r0,#W_MPSRC
 ; zero-parameter macro: accept "()" with optional spaces
 LD r2,r0,#W_MPENT
 LDB r2,r2,1
+SHL r2,r2,25
+SHR r2,r2,25
 CMP r2,r0
 JMP[NE] @mpe_arg_l
 mpe_zsp:
@@ -870,8 +891,7 @@ CMP r2,r3
 JMP[NE] @mpe_arg_l
 ADD r1,r1,r13
 ST r1,r0,#W_MPSRC
-MOVI r1,1
-ST r1,r0,#W_MPARGN
+ST r0,r0,#W_MPARGN
 JMP @mpe_sub
 mpe_arg_l:
 LD r1,r0,#W_MPSRC
@@ -960,6 +980,9 @@ LD r1,r0,#W_MPSRC
 ADD r1,r1,r13
 ST r1,r0,#W_MPSRC
 CALL @mpe_finish
+LD r1,r0,#W_MPARGN
+ADD r1,r1,r13
+ST r1,r0,#W_MPARGN
 JMP @mpe_sub
 mpe_close_in:
 SUB r2,r2,r13
@@ -1218,6 +1241,133 @@ SUB r14,r14,r13
 LD r15,r14,0
 RET
 
+; mp_is_va: r1=ptr r2=len -> 1 if the name is __VA_ARGS__
+mp_is_va:
+ST r15,r14,0
+ADD r14,r14,r13
+MOVI r3,11
+CMP r2,r3
+JMP[NE] @miv_n
+ST r1,r0,#W_MPENT2
+LA r3,@mp_s_va
+SHL r3,r3,2
+MOVI r4,0
+miv_l:
+CMP r4,r2
+JMP[GE] @miv_y
+LD r5,r0,#W_MPENT2
+ADD r5,r5,r4
+LDB r5,r5,0
+ADD r6,r3,r4
+LDB r6,r6,0
+CMP r5,r6
+JMP[NE] @miv_n
+ADD r4,r4,r13
+JMP @miv_l
+miv_y:
+MOVI r1,1
+JMP @miv_d
+miv_n:
+MOVI r1,0
+miv_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; mp_emit_va: append the variadic arguments joined by ", "
+mp_emit_va:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_MPENT
+LDB r1,r1,1
+SHL r1,r1,25
+SHR r1,r1,25
+ST r1,r0,#W_MPVA
+LD r2,r0,#W_MPARGN
+CMP r1,r2
+JMP[GE] @mev_d
+mev_l:
+LD r1,r0,#W_MPVA
+LD r2,r0,#W_MPARGN
+CMP r1,r2
+JMP[GE] @mev_d
+CALL @mp_emit_arg
+LD r1,r0,#W_MPVA
+ADD r1,r1,r13
+ST r1,r0,#W_MPVA
+LD r2,r0,#W_MPARGN
+CMP r1,r2
+JMP[GE] @mev_d
+MOVI r1,44
+CALL @mp_sub_putc
+MOVI r1,32
+CALL @mp_sub_putc
+JMP @mev_l
+mev_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; mp_emit_va_str: append the variadic arguments, escaped, joined by ", "
+mp_emit_va_str:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_MPENT
+LDB r1,r1,1
+SHL r1,r1,25
+SHR r1,r1,25
+ST r1,r0,#W_MPVA
+mevs_l:
+LD r1,r0,#W_MPVA
+LD r2,r0,#W_MPARGN
+CMP r1,r2
+JMP[GE] @mevs_d
+CALL @mp_arg_get
+ST r1,r0,#W_MPK
+ST r2,r0,#W_MPN
+mevs_c:
+LD r2,r0,#W_MPN
+CMP r2,r0
+JMP[EQ] @mevs_next
+LD r1,r0,#W_MPK
+LDB r1,r1,0
+ST r1,r0,#W_MPCHAR
+MOVI r3,34
+CMP r1,r3
+JMP[EQ] @mevs_esc
+MOVI r3,92
+CMP r1,r3
+JMP[NE] @mevs_put
+mevs_esc:
+MOVI r1,92
+CALL @mp_sub_putc
+mevs_put:
+LD r1,r0,#W_MPCHAR
+CALL @mp_sub_putc
+LD r1,r0,#W_MPK
+ADD r1,r1,r13
+ST r1,r0,#W_MPK
+LD r2,r0,#W_MPN
+SUB r2,r2,r13
+ST r2,r0,#W_MPN
+JMP @mevs_c
+mevs_next:
+LD r1,r0,#W_MPVA
+ADD r1,r1,r13
+ST r1,r0,#W_MPVA
+LD r2,r0,#W_MPARGN
+CMP r1,r2
+JMP[GE] @mevs_d
+MOVI r1,44
+CALL @mp_sub_putc
+MOVI r1,32
+CALL @mp_sub_putc
+JMP @mevs_l
+mevs_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
 ; mpe_sub: substitute the body into MPSUB
 mpe_sub:
 LD r1,r0,#W_MPENT
@@ -1333,11 +1483,52 @@ CMP r3,r4
 JMP[EQ] @mpe_paste_a
 MOVI r4,9
 CMP r3,r4
-JMP[NE] @mpe_b_l
+JMP[NE] @mpe_paste_chk
 mpe_paste_a:
 ADD r1,r1,r13
 ST r1,r0,#W_MPI
 JMP @mpe_paste_l
+mpe_paste_chk:
+; GNU ", ##__VA_ARGS__": drop the comma when the variadic list is empty
+LD r1,r0,#W_MPENT
+LDB r1,r1,1
+SHR r1,r1,7
+CMP r1,r0
+JMP[EQ] @mpe_b_l
+LD r1,r0,#W_MPENT
+LD r2,r0,#W_MPI
+ADD r1,r1,r2
+ADDI r1,r1,#MPBODY
+MOVI r2,11
+CALL @mp_is_va
+CMP r1,r0
+JMP[EQ] @mpe_b_l
+LD r1,r0,#W_MPENT
+LDB r1,r1,1
+SHL r1,r1,25
+SHR r1,r1,25
+LD r2,r0,#W_MPARGN
+CMP r2,r1
+JMP[GT] @mpe_b_l
+CALL @mp_sub_trim
+LD r2,r0,#W_MPOUTL
+CMP r2,r0
+JMP[EQ] @mpe_paste_sv
+ADDI r3,r2,-1
+LA r4,#MPSUB
+ADD r4,r4,r3
+LDB r4,r4,0
+MOVI r5,44
+CMP r4,r5
+JMP[NE] @mpe_paste_sv
+SUB r2,r2,r13
+ST r2,r0,#W_MPOUTL
+CALL @mp_sub_trim
+mpe_paste_sv:
+LD r1,r0,#W_MPI
+ADDI r1,r1,11
+ST r1,r0,#W_MPI
+JMP @mpe_b_l
 mpe_hash_one:
 ; possible stringification
 LD r1,r0,#W_MPI
@@ -1393,7 +1584,26 @@ SUB r2,r2,r3
 CALL @mp_param_find
 LA r2,0xFFFFFFFF
 CMP r1,r2
+JMP[NE] @mpe_hs_param
+LD r1,r0,#W_MPENT
+LD r2,r0,#W_MPI
+ADD r1,r1,r2
+ADDI r1,r1,#MPBODY
+LD r2,r0,#W_MPJ
+LD r3,r0,#W_MPI
+SUB r2,r2,r3
+CALL @mp_is_va
+CMP r1,r0
 JMP[EQ] @mpe_hash_copy
+MOVI r1,34
+CALL @mp_sub_putc
+CALL @mp_emit_va_str
+MOVI r1,34
+CALL @mp_sub_putc
+LD r1,r0,#W_MPJ
+ST r1,r0,#W_MPI
+JMP @mpe_b_l
+mpe_hs_param:
 ST r1,r0,#W_MPK
 MOVI r1,34
 CALL @mp_sub_putc
@@ -1466,6 +1676,13 @@ ADDI r1,r1,#MPBODY
 LD r2,r0,#W_MPJ
 LD r3,r0,#W_MPI
 SUB r2,r2,r3
+ST r1,r0,#W_MPK
+ST r2,r0,#W_MPN
+CALL @mp_is_va
+CMP r1,r0
+JMP[NE] @mpe_bi_va
+LD r1,r0,#W_MPK
+LD r2,r0,#W_MPN
 CALL @mp_param_find
 LA r2,0xFFFFFFFF
 CMP r1,r2
@@ -1493,6 +1710,11 @@ ST r1,r0,#W_MPI
 JMP @mpe_b_l
 mpe_bi_arg:
 CALL @mp_emit_arg
+LD r1,r0,#W_MPJ
+ST r1,r0,#W_MPI
+JMP @mpe_b_l
+mpe_bi_va:
+CALL @mp_emit_va
 LD r1,r0,#W_MPJ
 ST r1,r0,#W_MPI
 JMP @mpe_b_l
@@ -1526,3 +1748,5 @@ mp_s_define:
 .str "define"
 mp_s_undef:
 .str "undef"
+mp_s_va:
+.str "__VA_ARGS__"
