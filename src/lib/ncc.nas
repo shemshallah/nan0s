@@ -356,6 +356,8 @@
 .equ B_SRAND 49
 .equ B_LABS 50
 .equ B_MEMMOVE 51
+.equ B_SPRINTF 52
+.equ B_SNPRINTF 53
 
 ; ------------------------------------------------------------------ compiler state
 ; Kept below word 65536 so ST/LD can use the 16-bit immediate form directly.
@@ -451,6 +453,7 @@
 .equ W_PF_FMT   60986
 .equ W_PF_IDX   60987
 .equ W_PF_ARGC  60988
+.equ W_PF_OFF   60989
 .equ W_PF_CASE  60991
 .equ W_PF_W     60992
 .equ W_PF_FLAGS 60993
@@ -483,6 +486,15 @@
 .equ W_BITW     61430
 .equ W_SBASE    61434
 .equ W_RAND     61435
+.equ W_SNOUT    61436
+.equ W_SNLIM    61437
+.equ W_SNPOS    61438
+.equ W_SNTMP1   61439
+.equ W_SNTMP2   61440
+.equ W_SNTMP3   61441
+.equ W_SNREG1   61442
+.equ W_SNREG2   61443
+.equ W_SNREG3   61444
 .equ W_TKPTR    60990
 .equ W_CASEBASE 60971
 .equ W_DEFSET   60972
@@ -1314,6 +1326,9 @@ RET
 ; ncc_out = 0 -> COM1; otherwise it is a guest function pointer called with
 ; r1=char and must preserve r2..r12 (the GUI terminal hook does).
 ncc_putc:
+LD r2,r0,#W_SNOUT
+CMP r2,r0
+JMP[NE] @npc_buf
 LD r2,r0,@ncc_out
 CMP r2,r0
 JMP[EQ] @npc_serial
@@ -1322,6 +1337,23 @@ ADD r14,r14,r13
 CALLR r2
 SUB r14,r14,r13
 LD r15,r14,0
+RET
+npc_buf:
+ST r2,r0,#W_SNREG1
+ST r3,r0,#W_SNREG2
+ST r4,r0,#W_SNREG3
+LD r3,r0,#W_SNPOS
+LD r4,r0,#W_SNLIM
+CMP r3,r4
+JMP[GE] @npc_buf_skip
+ADD r2,r2,r3
+STB r1,r2,0
+npc_buf_skip:
+ADD r3,r3,r13
+ST r3,r0,#W_SNPOS
+LD r2,r0,#W_SNREG1
+LD r3,r0,#W_SNREG2
+LD r4,r0,#W_SNREG3
 RET
 npc_serial:
 PUTC r1
@@ -4827,6 +4859,22 @@ MOVI r4,#B_MEMMOVE
 MOVI r5,3
 LD r6,r0,#W_PTRV
 CALL @ncc_add_builtin
+; sprintf
+LA r1,0x70E2D349
+LA r2,@ncc_s_sprintf
+MOVI r3,7
+MOVI r4,#B_SPRINTF
+MOVI r5,0xFFFF
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+; snprintf
+LA r1,0x3FD5EB6F
+LA r2,@ncc_s_snprintf
+MOVI r3,8
+MOVI r4,#B_SNPRINTF
+MOVI r5,0xFFFF
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
 ; exit
 LA r1,0xCDED1A85
 LA r2,@ncc_s_exit
@@ -4955,6 +5003,10 @@ ncc_s_va_end:
 .str "va_end"
 ncc_s_va_list:
 .str "va_list"
+ncc_s_sprintf:
+.str "sprintf"
+ncc_s_snprintf:
+.str "snprintf"
 ncc_s_sin:
 .str "sin"
 ncc_s_cos:
@@ -10604,6 +10656,8 @@ RET
 
 ; ni_arg: r1=i -> r1=argument i (0-based)
 ni_arg:
+LD r3,r0,#W_PF_OFF
+ADD r1,r1,r3
 LD r2,r0,#R_SP
 LD r3,r0,#W_PF_ARGC
 SUB r2,r2,r3
@@ -11859,6 +11913,12 @@ JMP[EQ] @nbi_labs
 MOVI r2,#B_MEMMOVE
 CMP r1,r2
 JMP[EQ] @nbi_memmove
+MOVI r2,#B_SPRINTF
+CMP r1,r2
+JMP[EQ] @nbi_sprintf
+MOVI r2,#B_SNPRINTF
+CMP r1,r2
+JMP[EQ] @nbi_snprintf
 MOVI r2,#B_EXIT
 CMP r1,r2
 JMP[EQ] @nbi_exit
@@ -11893,6 +11953,7 @@ CALL @ni_pop
 CALL @ni_puts
 JMP @nbi_zero
 nbi_printf:
+ST r0,r0,#W_PF_OFF
 LD r1,r0,#R_T1
 CALL @ni_printf
 JMP @nbi_d
@@ -12399,6 +12460,77 @@ JMP @nbi_mm_f_l
 nbi_mm_d:
 LD r1,r0,#W_F2S
 CALL @ni_push
+JMP @nbi_d
+
+; sprintf/snprintf: redirect ncc_putc into a caller buffer.
+nbi_sprintf:
+ST r0,r0,#W_PF_OFF
+JMP @nbi_sn_common
+nbi_snprintf:
+MOVI r1,2
+ST r1,r0,#W_PF_OFF
+nbi_sn_common:
+; save output state
+LD r1,r0,#W_SNOUT
+ST r1,r0,#W_SNTMP1
+LD r1,r0,#W_SNLIM
+ST r1,r0,#W_SNTMP2
+LD r1,r0,#W_SNPOS
+ST r1,r0,#W_SNTMP3
+; destination (arg 0), count (arg 1), format offset
+LD r1,r0,#R_T1
+ST r1,r0,#W_PF_ARGC
+ST r0,r0,#W_PF_IDX
+ST r0,r0,#W_PF_OFF
+MOVI r1,0
+CALL @ni_arg
+ST r1,r0,#W_SNOUT
+ST r0,r0,#W_SNPOS
+LD r2,r0,#R_T0
+MOVI r3,#B_SNPRINTF
+CMP r2,r3
+JMP[NE] @nbi_sn_plain
+MOVI r1,1
+CALL @ni_arg
+ST r1,r0,#W_SNLIM
+MOVI r1,2
+ST r1,r0,#W_PF_OFF
+JMP @nbi_sn_fmt
+nbi_sn_plain:
+LA r1,0xFFFFFFFF
+ST r1,r0,#W_SNLIM
+MOVI r1,1
+ST r1,r0,#W_PF_OFF
+nbi_sn_fmt:
+MOVI r1,0
+ST r1,r0,#W_PF_IDX
+LD r1,r0,#R_T1
+CALL @ni_printf
+; drop ni_printf's 0 return
+CALL @ni_pop
+; terminate and return the character count
+LD r1,r0,#W_SNOUT
+LD r2,r0,#W_SNPOS
+LD r3,r0,#W_SNLIM
+CMP r3,r0
+JMP[EQ] @nbi_sn_nul_done
+SUB r3,r3,r13
+CMP r2,r3
+JMP[LE] @nbi_sn_nul_at
+ADD r2,r3,r0
+nbi_sn_nul_at:
+ADD r1,r1,r2
+STB r0,r1,0
+nbi_sn_nul_done:
+LD r1,r0,#W_SNPOS
+CALL @ni_push
+; restore output state
+LD r1,r0,#W_SNTMP1
+ST r1,r0,#W_SNOUT
+LD r1,r0,#W_SNTMP2
+ST r1,r0,#W_SNLIM
+LD r1,r0,#W_SNTMP3
+ST r1,r0,#W_SNPOS
 JMP @nbi_d
 nbi_exit:
 CALL @ni_pop
