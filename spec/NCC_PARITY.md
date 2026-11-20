@@ -46,8 +46,9 @@ Implemented:
 - `char`/`short`/`int`/`long`, signed and unsigned, `sizeof` in bytes
 - `float`/`double` (32-bit IEEE storage), float literals, arithmetic,
   comparisons, casts, and built-in `sin`/`cos`
-- `printf` with `%d %i %u %x %X %c %s %p %f %%`, flags `-`/`0`, field
-  width, and precision (including `%.2f`, `%.3s`, and zero-padded `%08.2f`)
+- `printf` with `%d %i %u %x %X %c %s %p %f %e %E %g %G %%`, flags
+  `-`/`0`/`#`, field width, and precision (including `%.2f`, `%.3s`,
+  zero-padded `%08.2f`, `%.6g`, and `%#g`)
 - `sprintf`/`snprintf` (including truncation and `snprintf`'s would-be length)
 - `%e`/`%E` (normalization, precision, width, sign)
 - variadic functions: `va_list`, `va_start`, `va_arg`, `va_end`
@@ -85,7 +86,6 @@ Not implemented (honest list):
 - `long long` is parsed but uses the 32-bit ILP32 slot (no 64-bit arithmetic yet)
 - user variadic functions are supported (`va_list`, `va_start`, `va_arg`,
   `va_end`; up to 16 variadic argument words per call)
-- `%g` conversion
 - the path filesystem is RAM-backed (it resets on reboot); no disk
   persistence yet
 - the full C standard library and headers
@@ -106,9 +106,9 @@ Lexer-integrated, line based:
 Built-in functions (no headers needed):
 
 ```
-printf(fmt, ...)   %d %i %u %x %X %c %s %p %%
-                   flags '-' (left) and '0' (zero pad), decimal field width
-                   (%05d, %-6s, %04x); %x/%X significant digits
+printf(fmt, ...)   %d %i %u %x %X %c %s %p %f %e %E %g %G %%
+                   flags '-' (left), '0' (zero pad), '#' (keep zeros),
+                   decimal field width (%05d, %-6s, %04x); %x/%X digits
 putchar(c)         print_int(v)      puts(s)        print_str(s)
 malloc(n)          calloc(n,size)     realloc(p,n)   free(p)
 sin(x)             cos(x)
@@ -192,6 +192,7 @@ tools/ncc_m17.sh    sprintf/snprintf into guest buffers
 tools/ncc_m18.sh    printf %e/%E
 tools/ncc_m19.sh    _Bool/bool, inline/restrict
 tools/ncc_m20.sh    function-like + variadic macros, #/##, nesting, #undef
+tools/ncc_m21.sh    printf %g/%G, # flag, float exponent literals
 tools/ncc_donut.sh  original C donut (one frame) in raw NaN16
 tools/nfs2.sh       path-addressed RAM filesystem API
 tools/ncc_gui.sh    boot image, open terminal, .demo runs C in the vbuf

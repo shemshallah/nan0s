@@ -2431,7 +2431,7 @@ sn_fin:
 CALL @lx_peek
 MOVI r2,46
 CMP r1,r2
-JMP[NE] @sn_int
+JMP[NE] @sn_expchk
 MOVI r10,1
 CALL @peekn
 CALL @digit10
@@ -2440,10 +2440,97 @@ CMP r1,r2
 JMP[EQ] @sn_int
 CALL @scan_float
 JMP @sn_done
+sn_expchk:
+MOVI r2,101
+CMP r1,r2
+JMP[EQ] @sn_int_exp
+MOVI r2,69
+CMP r1,r2
+JMP[EQ] @sn_int_exp
+JMP @sn_int
+sn_int_exp:
+LD r1,r0,#L_VAL
+CVTIF r2,r1
+ST r2,r0,#L_VAL
+CALL @scan_exp
+MOVI r1,9
+ST r1,r0,#L_KIND
+JMP @sn_done
 sn_int:
 MOVI r1,2
 ST r1,r0,#L_KIND
 sn_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; scan_exp: optional e/E exponent; L_VAL is a float.  r1=1 if consumed.
+scan_exp:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @lx_peek
+MOVI r2,101
+CMP r1,r2
+JMP[EQ] @se_go
+MOVI r2,69
+CMP r1,r2
+JMP[NE] @se_no
+se_go:
+CALL @lx_get
+MOVI r1,1
+ST r1,r0,#L_TMP3
+CALL @lx_peek
+MOVI r2,45
+CMP r1,r2
+JMP[NE] @se_plus
+LA r2,0xFFFFFFFF
+ST r2,r0,#L_TMP3
+CALL @lx_get
+JMP @se_digits
+se_plus:
+MOVI r2,43
+CMP r1,r2
+JMP[NE] @se_digits
+CALL @lx_get
+se_digits:
+ST r0,r0,#L_TMP2
+se_dl:
+CALL @lx_peek
+CALL @digit10
+MOVI r2,255
+CMP r1,r2
+JMP[EQ] @se_pow
+LD r3,r0,#L_TMP2
+MOVI r4,10
+MUL r3,r3,r4
+ADD r3,r3,r1
+ST r3,r0,#L_TMP2
+CALL @lx_get
+JMP @se_dl
+se_pow:
+LD r1,r0,#L_VAL
+LD r2,r0,#L_TMP2
+LD r3,r0,#L_TMP3
+LA r4,0x41200000
+se_pl:
+CMP r2,r0
+JMP[EQ] @se_pd
+CMPS r3,r0
+JMP[LT] @se_div
+FMUL r1,r1,r4
+JMP @se_pn
+se_div:
+FDIV r1,r1,r4
+se_pn:
+SUB r2,r2,r13
+JMP @se_pl
+se_pd:
+ST r1,r0,#L_VAL
+MOVI r1,1
+JMP @se_ret
+se_no:
+MOVI r1,0
+se_ret:
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -2483,6 +2570,8 @@ CVTIF r4,r1
 FDIV r3,r3,r4
 FADD r2,r2,r3
 ST r2,r0,#L_VAL
+CALL @scan_exp
+sf_kind:
 MOVI r1,9
 ST r1,r0,#L_KIND
 SUB r14,r14,r13
@@ -11025,9 +11114,20 @@ CMP r2,r0
 JMP[EQ] @npf_done
 MOVI r3,45
 CMP r2,r3
-JMP[NE] @npf_flag_z
+JMP[NE] @npf_flag_h
 LD r3,r0,#W_PF_FLAGS
 MOVI r4,1
+BOOL.14 r3,r3,r4
+ST r3,r0,#W_PF_FLAGS
+ADD r1,r1,r13
+ST r1,r0,#W_PF_FMT
+JMP @npf_flag_l
+npf_flag_h:
+MOVI r3,35
+CMP r2,r3
+JMP[NE] @npf_flag_z
+LD r3,r0,#W_PF_FLAGS
+MOVI r4,3
 BOOL.14 r3,r3,r4
 ST r3,r0,#W_PF_FLAGS
 ADD r1,r1,r13
@@ -11136,6 +11236,12 @@ JMP[EQ] @npf_float
 MOVI r3,70
 CMP r2,r3
 JMP[EQ] @npf_float
+MOVI r3,103
+CMP r2,r3
+JMP[EQ] @npf_g
+MOVI r3,71
+CMP r2,r3
+JMP[EQ] @npf_g
 MOVI r3,37
 CMP r2,r3
 JMP[EQ] @npf_pctc
@@ -11254,6 +11360,14 @@ JMP @npf_adv
 
 
 npf_exp:
+MOVI r3,101
+CMP r2,r3
+JMP[EQ] @npf_exp_lc
+MOVI r2,1
+JMP @npf_exp_set
+npf_exp_lc:
+MOVI r2,0
+npf_exp_set:
 ST r2,r0,#W_PF_CASE
 LD r1,r0,#W_PF_IDX
 ADD r1,r1,r13
@@ -11433,6 +11547,196 @@ CALL @ncc_putc
 nee_e2:
 LD r5,r0,#W_F2TMP
 CALL @putudec
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; %g/%G: precision P (default 6, 0 -> 1), choose %e when X < -4 or X >= P,
+; otherwise fixed with P-1-X fraction digits; trailing zeros removed unless '#'.
+npf_g:
+MOVI r3,103
+CMP r2,r3
+JMP[NE] @npf_g_up
+MOVI r3,0
+JMP @npf_g_case0
+npf_g_up:
+MOVI r3,1
+npf_g_case0:
+ST r3,r0,#W_PF_CASE
+CALL @ni_gprec
+ST r1,r0,#W_PF_PREC
+LD r1,r0,#W_PF_IDX
+ADD r1,r1,r13
+ST r1,r0,#W_PF_IDX
+CALL @ni_arg
+ST r1,r0,#W_PF_VAL
+LD r2,r0,#W_PF_PREC
+SUB r2,r2,r13
+CALL @ni_ecalc
+LD r1,r0,#W_F2EXP
+LD r2,r0,#W_PF_PREC
+LA r3,0xFFFFFFFC
+CMPS r1,r3
+JMP[LT] @npf_g_exp
+CMPS r1,r2
+JMP[GE] @npf_g_exp
+; fixed-point form
+SUB r2,r2,r13
+SUB r2,r2,r1
+LD r1,r0,#W_PF_VAL
+CALL @ni_fcalc
+CALL @ni_gtrim
+CALL @ni_glen_fix
+ST r0,r0,#W_F2TMP
+JMP @npf_g_emit
+npf_g_exp:
+CALL @ni_gtrim
+CALL @ni_glen_exp
+MOVI r1,1
+ST r1,r0,#W_F2TMP
+npf_g_emit:
+; zero-padded form keeps the sign before the zeros
+LD r2,r0,#W_PF_FLAGS
+MOVI r3,2
+BOOL.8 r2,r2,r3
+CMP r2,r0
+JMP[EQ] @npf_g_space
+LD r2,r0,#W_PF_FLAGS
+MOVI r3,1
+BOOL.8 r2,r2,r3
+CMP r2,r0
+JMP[NE] @npf_g_space
+LD r1,r0,#W_PF_LEN
+LD r2,r0,#W_PF_W
+CMP r2,r1
+JMP[LE] @npf_g_do
+LD r4,r0,#W_F2NEG
+CMP r4,r0
+JMP[EQ] @npf_g_zero
+MOVI r1,45
+CALL @ncc_putc
+ST r0,r0,#W_F2NEG
+npf_g_zero:
+LD r1,r0,#W_PF_W
+LD r2,r0,#W_PF_LEN
+SUB r1,r1,r2
+MOVI r2,48
+CALL @ni_pad
+JMP @npf_g_do
+npf_g_space:
+LD r2,r0,#W_PF_FLAGS
+MOVI r3,1
+BOOL.8 r2,r2,r3
+CMP r2,r0
+JMP[NE] @npf_g_do
+LD r1,r0,#W_PF_LEN
+LD r2,r0,#W_PF_W
+MOVI r3,32
+CALL @ni_field_pre
+npf_g_do:
+LD r1,r0,#W_F2TMP
+CMP r1,r0
+JMP[NE] @npf_g_e
+CALL @ni_femit
+JMP @npf_g_tail
+npf_g_e:
+CALL @ni_eemit
+npf_g_tail:
+LD r1,r0,#W_PF_LEN
+LD r2,r0,#W_PF_W
+CALL @ni_field_tail
+JMP @npf_adv
+
+; ni_gprec: r1 = normalized %g precision
+ni_gprec:
+LD r1,r0,#W_PF_PREC
+LA r2,0xFFFFFFFF
+CMP r1,r2
+JMP[NE] @ngp_have
+MOVI r1,6
+ngp_have:
+CMP r1,r0
+JMP[NE] @ngp_d
+MOVI r1,1
+ngp_d:
+RET
+
+; ni_gtrim: drop trailing zero fraction digits unless '#' is set
+ni_gtrim:
+LD r1,r0,#W_PF_FLAGS
+MOVI r2,3
+BOOL.8 r1,r1,r2
+CMP r1,r0
+JMP[NE] @ngt_d
+LD r2,r0,#W_F2P
+ngt_l:
+CMP r2,r0
+JMP[EQ] @ngt_d
+LD r1,r0,#W_F2F
+MOVI r3,10
+MODU r4,r1,r3
+CMP r4,r0
+JMP[NE] @ngt_d
+DIVU r1,r1,r3
+ST r1,r0,#W_F2F
+SUB r2,r2,r13
+ST r2,r0,#W_F2P
+JMP @ngt_l
+ngt_d:
+RET
+
+; ni_glen_fix: length of the fixed %g form
+ni_glen_fix:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_F2NEG
+ST r1,r0,#W_F2TMP
+LD r1,r0,#W_F2I
+CALL @ni_decdigits
+LD r3,r0,#W_F2TMP
+ADD r3,r3,r2
+LD r1,r0,#W_F2P
+CMP r1,r0
+JMP[EQ] @nglf_d
+ADD r3,r3,r1
+ADD r3,r3,r13
+nglf_d:
+ST r3,r0,#W_PF_LEN
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; ni_glen_exp: length of the scientific %g form
+ni_glen_exp:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_F2NEG
+ST r1,r0,#W_F2TMP
+LD r1,r0,#W_F2I
+CALL @ni_decdigits
+LD r3,r0,#W_F2TMP
+ADD r3,r3,r2
+LD r1,r0,#W_F2P
+CMP r1,r0
+JMP[EQ] @ngle_2
+ADD r3,r3,r1
+ADD r3,r3,r13
+ngle_2:
+ADD r3,r3,r13
+ADD r3,r3,r13
+LD r1,r0,#W_F2EXP
+CMPS r1,r0
+JMP[GE] @ngle_abs
+SUB r1,r0,r1
+ngle_abs:
+CALL @ni_decdigits
+MOVI r4,2
+CMP r2,r4
+JMP[GE] @ngle_3
+MOVI r2,2
+ngle_3:
+ADD r3,r3,r2
+ST r3,r0,#W_PF_LEN
 SUB r14,r14,r13
 LD r15,r14,0
 RET

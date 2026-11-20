@@ -8,4 +8,4 @@ CALL @ncc_compile
 CALL @ncc_run
 HALT
 c_src:
-.str "#define ADD(a,b) ((a)+(b))\nint main(void){ print_int(ADD(20,22)); putchar(10); return 0; }\n"
+.str "int main(void){ printf(\"%g %g %g %g\\n\", 1e10, 1.5e-5, 2E3, 0.25); return 0; }"
