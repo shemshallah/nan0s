@@ -213,6 +213,7 @@
 .equ I_FNE      65
 .equ I_CALLI    66
 .equ I_CALLB    67
+.equ I_RETSTRUCT 68
 .equ CALB_SCRATCH 2700000
 
 ; symbol entry: 16 words
@@ -5877,8 +5878,8 @@ ST r1,r0,#W_ETYPE
 ST r0,r0,#W_LVAL
 JMP @per_done
 per_struct:
-MOVI r1,65
-CALL @p_err
+; struct/union values are represented by their byte address
+JMP @per_done
 per_done:
 SUB r14,r14,r13
 LD r15,r14,0
@@ -5899,7 +5900,16 @@ RET
 px_emit_store:
 ST r15,r14,0
 ADD r14,r14,r13
+ST r1,r0,#W_TY_ID
 ST r2,r0,#W_TY_COUNT
+CALL @ty_kind
+MOVI r2,#TY_STRUCT
+CMP r1,r2
+JMP[EQ] @pxs_agg
+MOVI r2,#TY_UNION
+CMP r1,r2
+JMP[EQ] @pxs_agg
+LD r1,r0,#W_TY_ID
 CALL @ty_store_code
 ADD r2,r1,r0
 LD r3,r0,#W_TY_COUNT
@@ -5911,6 +5921,17 @@ pxs_plain:
 LA r1,#I_STORE
 pxs_go:
 CALL @ir_emit
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+pxs_agg:
+LD r1,r0,#W_TY_ID
+CALL @ty_size
+ADD r2,r1,r0
+LA r1,#I_PUSH
+CALL @ir_emit
+LA r1,#I_MEMCPY
+CALL @ir_op
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -6265,7 +6286,7 @@ CALL @sym_entry
 LD r1,r1,#SY_TYPE
 ST r1,r0,#W_ETYPE
 ADDI r14,r14,-3
-ST r0,r0,#W_LVAL
+CALL @p_set_call_result
 JMP @pp_done
 pp_callv_emit:
 ADDI r3,r14,-1
@@ -6299,7 +6320,7 @@ CALL @ir_emit
 LD r1,r0,#W_FPTR_TYPE
 CALL @ty_funcptr_ret
 ST r1,r0,#W_ETYPE
-ST r0,r0,#W_LVAL
+CALL @p_set_call_result
 JMP @pp_done
 pp_punct:
 LD r1,r0,#W_TKA+1
@@ -6489,7 +6510,7 @@ CALL @ir_emit
 ADDI r14,r14,-1
 LD r1,r0,#W_FPRET
 ST r1,r0,#W_ETYPE
-ST r0,r0,#W_LVAL
+CALL @p_set_call_result
 JMP @pxf_loop
 pxf_badcall:
 MOVI r1,8
@@ -8711,6 +8732,31 @@ SUB r14,r14,r13
 LD r15,r14,0
 RET
 
+; p_set_call_result: W_ETYPE holds the call's return type. Struct/union
+; results leave a byte address on the eval stack and are lvalues.
+p_set_call_result:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_ETYPE
+CALL @ty_kind
+MOVI r2,#TY_STRUCT
+CMP r1,r2
+JMP[EQ] @pscr_agg
+MOVI r2,#TY_UNION
+CMP r1,r2
+JMP[EQ] @pscr_agg
+ST r0,r0,#W_LVAL
+JMP @pscr_d
+pscr_agg:
+LD r1,r0,#W_ETYPE
+ST r1,r0,#W_LTYPE
+MOVI r1,1
+ST r1,r0,#W_LVAL
+pscr_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
 ; local declarations
 p_decl:
 ST r15,r14,0
@@ -9847,6 +9893,14 @@ CALL @p_expr
 CALL @p_emit_rv
 LD r1,r0,#W_FUNCRET
 CALL @ty_kind
+MOVI r2,#TY_STRUCT
+CMP r1,r2
+JMP[EQ] @pret_struct
+MOVI r2,#TY_UNION
+CMP r1,r2
+JMP[EQ] @pret_struct
+LD r1,r0,#W_FUNCRET
+CALL @ty_kind
 CMP r1,r0
 JMP[NE] @pret_cast
 LA r1,#I_POP
@@ -9858,6 +9912,13 @@ JMP @pret_go
 pret_cast:
 LD r1,r0,#W_FUNCRET
 CALL @px_cast_stack
+JMP @pret_go
+pret_struct:
+LD r1,r0,#W_FUNCRET
+CALL @ty_size
+ADD r2,r1,r0
+LA r1,#I_RETSTRUCT
+CALL @ir_emit
 pret_go:
 MOVI r1,#P_SEMI
 MOVI r2,24
@@ -12042,6 +12103,14 @@ LD r6,r4,0
 ST r5,r0,#W_TY_ALIGN
 ST r6,r0,#W_TY_RET
 ADD r1,r6,r0
+CALL @ty_kind
+MOVI r3,#TY_STRUCT
+CMP r1,r3
+JMP[EQ] @ncl_copy_agg
+MOVI r3,#TY_UNION
+CMP r1,r3
+JMP[EQ] @ncl_copy_agg
+LD r1,r0,#W_TY_RET
 CALL @ty_store_code
 ST r1,r0,#W_TY_SIGN
 LD r1,r0,#W_TY_ID
@@ -12055,6 +12124,25 @@ ADD r2,r2,r3
 LD r2,r2,0
 LD r3,r0,#W_TY_SIGN
 CALL @ni_storev
+LD r1,r0,#W_TY_KIND
+ADD r1,r1,r13
+ST r1,r0,#W_TY_KIND
+JMP @ncl_copy
+ncl_copy_agg:
+LD r1,r0,#W_TY_RET
+CALL @ty_size
+ST r1,r0,#W_TY_TMP
+LD r2,r0,#R_SP
+LD r3,r0,#R_T1
+SUB r2,r2,r3
+LD r3,r0,#W_TY_KIND
+ADD r2,r2,r3
+LD r2,r2,0
+LD r1,r0,#W_TY_ID
+LD r3,r0,#W_TY_ALIGN
+ADD r1,r1,r3
+LD r3,r0,#W_TY_TMP
+CALL @ni_memcpy_raw
 LD r1,r0,#W_TY_KIND
 ADD r1,r1,r13
 ST r1,r0,#W_TY_KIND
@@ -12287,6 +12375,9 @@ JMP[EQ] @nil_calli
 MOVI r2,#I_CALLB
 CMP r1,r2
 JMP[EQ] @nil_callb
+MOVI r2,#I_RETSTRUCT
+CMP r1,r2
+JMP[EQ] @nil_retstruct
 JMP @nil_bad
 
 nil_calli:
@@ -12337,6 +12428,20 @@ LD r2,r0,#R_T0
 BOOL.14 r1,r1,r2
 ST r1,r0,#R_T0
 CALL @ni_call
+JMP @nil_again
+nil_retstruct:
+CALL @ni_pop
+ST r1,r0,#R_T2
+LD r1,r0,#R_T0
+ST r1,r0,#R_T0
+CALL @ni_malloc
+ST r1,r0,#R_T1
+LD r2,r0,#R_T2
+LD r3,r0,#R_T0
+CALL @ni_memcpy_raw
+LD r1,r0,#R_T1
+CALL @ni_push
+CALL @ni_ret
 JMP @nil_again
 nil_halt:
 SUB r14,r14,r13

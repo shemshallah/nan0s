@@ -53,6 +53,8 @@ Implemented:
   `char s[] = "..."`
 - `struct`/`union` with `.` and `->`, arrays of structs, alignment/padding
 - struct/union assignment as a byte copy of the object
+- struct/union pass-by-value and return-by-value (including nested
+  expressions; returned objects are heap copies)
 - aggregate brace initializers for structs and unions (flat member lists;
   unions initialise the first member)
 - `enum` constants in expressions and `case` labels
@@ -67,7 +69,7 @@ Not implemented (honest list):
 - `#include <...>` system headers (they are skipped; the libc is built in)
 - the explicit function-returning-function-pointer declarator syntax
   (`int (*f(void))(int,int)`); use a typedef'd function-pointer return type
-- struct/union pass-by-value, return-by-value, comparison
+- struct/union comparison (`==`, `!=`)
 - nested aggregate initializers and brace initializers for array members
   inside a struct or union
 - bit-fields; `const`/`volatile`/`register` are accepted but not enforced
@@ -160,6 +162,7 @@ tools/ncc_m7.sh     block scope, aggregate initializers, struct assignment
 tools/ncc_m8.sh     float literals/arithmetic/casts and sin/cos
 tools/ncc_m9.sh     function pointers: globals/locals/assignment/indirect calls
 tools/ncc_m10.sh    printf %f, precision, float width/flags
+tools/ncc_m11.sh    struct/union pass-by-value and return-by-value
 tools/ncc_donut.sh  original C donut (one frame) in raw NaN16
 tools/nfs2.sh       path-addressed RAM filesystem API
 tools/ncc_gui.sh    boot image, open terminal, .demo runs C in the vbuf

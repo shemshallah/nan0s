@@ -57,6 +57,7 @@ jobs:
           sh tools/ncc_m8.sh || exit 1
           sh tools/ncc_m9.sh || exit 1
           sh tools/ncc_m10.sh || exit 1
+          sh tools/ncc_m11.sh || exit 1
           sh tools/ncc_donut.sh || exit 1
           sh tools/nfs2.sh || exit 1
           sh tools/mkproof.sh src/lib/ncc.nas || exit 1
