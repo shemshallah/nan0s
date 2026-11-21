@@ -530,6 +530,7 @@
 .equ W_EL_MTYPE 61666
 .equ W_FPOFF   61643
 .equ W_FPNP1   61644
+.equ W_FPDEF   61646
 .equ W_OUTER   61645
 .equ W_CN_N       61639
 .equ NCTAB        2300000
@@ -11041,6 +11042,7 @@ p_funcptr_decl:
 ST r15,r14,0
 ADD r14,r14,r13
 ST r0,r0,#W_OUTER
+ST r0,r0,#W_FPDEF
 ST r1,r0,#W_FPRET
 ST r2,r0,#W_FPGLOBAL
 MOVI r1,#P_LPAREN
@@ -11216,7 +11218,7 @@ JMP[NE] @fpof_params_done
 MOVI r1,#KW_VOID
 CALL @p_at_k
 CMP r1,r0
-JMP[EQ] @fpof_voidchk
+JMP[NE] @fpof_voidchk
 JMP @fpof_param_l
 fpof_voidchk:
 CALL @p_peek
@@ -11291,7 +11293,31 @@ LD r3,r0,#W_FUNCARG
 ST r3,r1,#SY_ARG
 ST r0,r1,#SY_ENTRY
 ST r0,r1,#SY_SIZE
+MOVI r1,#P_LBRACE
+CALL @p_at_p
+CMP r1,r0
+JMP[NE] @pfpd_outer_body
 JMP @pfpd_ret
+pfpd_outer_body:
+LD r2,r0,#W_FPNP1
+CMP r2,r0
+JMP[EQ] @pfpd_obody_ok
+MOVI r1,70
+CALL @p_err
+pfpd_obody_ok:
+MOVI r1,1
+ST r1,r0,#W_FPDEF
+LD r1,r0,#W_FPTR_TYPE
+ST r1,r0,#W_FUNCRET
+LD r1,r0,#W_FPNP1
+ST r1,r0,#W_FUNCNP
+LD r1,r0,#W_FPOFF
+ST r1,r0,#W_LOCALB
+LD r1,r0,#W_FPSYM
+ST r1,r0,#W_FUNCSYM
+ST r1,r14,0
+ADD r14,r14,r13
+JMP @pfu_body
 
 ; p_funcptr_init: optional '= expr' initializer for the function pointer
 ; declared by p_funcptr_decl (W_FPSYM/W_FPGLOBAL). Emits the store.
@@ -12782,6 +12808,9 @@ JMP[NE] @pde_fp_go
 MOVI r2,2
 pde_fp_go:
 CALL @p_funcptr_decl
+LD r2,r0,#W_FPDEF
+CMP r2,r0
+JMP[NE] @pde_d
 CALL @p_funcptr_init
 MOVI r1,#P_SEMI
 MOVI r2,24

@@ -88,8 +88,9 @@ Not implemented (honest list):
   aggregates or mixing braced and unbraced subobjects in one list is not
   implemented
 - the explicit function-returning-function-pointer declarator is parsed for
-  prototypes (`int (*f(void))(int,int);`); defining such a function still
-  requires a typedef'd function-pointer return type
+  prototypes and for definitions with no parameters
+  (`int (*f(void))(int,int){...}`); definitions with parameters still require
+  a typedef'd function-pointer return type
 - bit-field layout is implementation-defined and non-packed: each named field
   occupies its declared type's storage. This is valid C but not ABI-compatible
   with GCC/Clang
@@ -226,7 +227,7 @@ tools/ncc_m26.sh    qsort/bsearch callbacks (int, long long, strings),
 tools/ncc_m27.sh    strftime, tmpnam/tmpfile, wide-string helpers
 tools/ncc_m28.sh    const enforcement (locals/globals/params) and const pointers
 tools/ncc_m29.sh    signal handlers delivered by raise()
-tools/ncc_m30.sh    explicit function-returning-function-pointer prototypes
+tools/ncc_m30.sh    explicit function-returning-function-pointer prototypes/defs
 tools/ncc_m31.sh    alarm()/SIGALRM asynchronous delivery
 tools/ncc_m32.sh    C99 designated initializers (.member, [index], nested)
 tools/ncc_m33.sh    brace elision across arrays of flat aggregates
