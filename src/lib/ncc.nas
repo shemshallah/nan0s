@@ -510,6 +510,18 @@
 .equ W_DESOFF  61652
 .equ W_DESTYPE 61653
 .equ W_ELEMSZ  61654
+.equ W_EL_ELEM 61655
+.equ W_EL_COUNT 61656
+.equ W_EL_BASE 61657
+.equ W_EL_GLB 61658
+.equ W_EL_FIRST 61659
+.equ W_EL_I 61660
+.equ W_EL_M 61661
+.equ W_EL_ESIZE 61662
+.equ W_EL_MEM 61663
+.equ W_EL_NMEM 61664
+.equ W_EL_OFF 61665
+.equ W_EL_MTYPE 61666
 .equ W_FPOFF   61643
 .equ W_FPNP1   61644
 .equ W_OUTER   61645
@@ -10162,6 +10174,147 @@ SUB r14,r14,r13
 LD r15,r14,0
 RET
 
+; p_flat_agg: r1=type -> 1 if struct/union with only scalar members
+p_flat_agg:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_EL_MTYPE
+CALL @ty_kind
+MOVI r2,#TY_STRUCT
+CMP r1,r2
+JMP[EQ] @pfa_go
+MOVI r2,#TY_UNION
+CMP r1,r2
+JMP[EQ] @pfa_go
+MOVI r1,0
+JMP @pfa_d
+pfa_go:
+LD r1,r0,#W_EL_MTYPE
+CALL @ty_addr
+LD r2,r1,#TY_MEM
+ST r2,r0,#W_EL_MEM
+LD r2,r1,#TY_NMEM
+ST r2,r0,#W_EL_NMEM
+MOVI r1,0
+ST r1,r0,#W_EL_M
+pfa_l:
+LD r1,r0,#W_EL_M
+LD r2,r0,#W_EL_NMEM
+CMP r1,r2
+JMP[GE] @pfa_yes
+LD r2,r0,#W_EL_MEM
+SHL r3,r1,2
+ADD r2,r2,r3
+LD r1,r2,2
+CALL @ty_kind
+MOVI r2,#TY_ARRAY
+CMP r1,r2
+JMP[EQ] @pfa_no
+MOVI r2,#TY_STRUCT
+CMP r1,r2
+JMP[EQ] @pfa_no
+MOVI r2,#TY_UNION
+CMP r1,r2
+JMP[EQ] @pfa_no
+LD r1,r0,#W_EL_M
+ADD r1,r1,r13
+ST r1,r0,#W_EL_M
+JMP @pfa_l
+pfa_yes:
+MOVI r1,1
+JMP @pfa_d
+pfa_no:
+MOVI r1,0
+pfa_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; p_elide_elems: r1=elem type r2=count r3=base offset r4=global
+p_elide_elems:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_EL_ELEM
+ST r2,r0,#W_EL_COUNT
+ST r3,r0,#W_EL_BASE
+ST r4,r0,#W_EL_GLB
+MOVI r1,1
+ST r1,r0,#W_EL_FIRST
+LD r1,r0,#W_EL_ELEM
+CALL @ty_size
+ST r1,r0,#W_EL_ESIZE
+LD r1,r0,#W_EL_ELEM
+CALL @ty_addr
+LD r2,r1,#TY_MEM
+ST r2,r0,#W_EL_MEM
+LD r2,r1,#TY_NMEM
+ST r2,r0,#W_EL_NMEM
+ST r0,r0,#W_EL_I
+el_i:
+LD r1,r0,#W_EL_I
+LD r2,r0,#W_EL_COUNT
+CMP r1,r2
+JMP[GE] @el_done
+ST r0,r0,#W_EL_M
+el_m:
+LD r1,r0,#W_EL_M
+LD r2,r0,#W_EL_NMEM
+CMP r1,r2
+JMP[GE] @el_next_i
+LD r2,r0,#W_EL_MEM
+LD r1,r0,#W_EL_M
+SHL r1,r1,2
+ADD r2,r2,r1
+LD r3,r2,1
+LD r4,r2,2
+ST r4,r0,#W_EL_MTYPE
+LD r5,r0,#W_EL_I
+LD r6,r0,#W_EL_ESIZE
+MUL r5,r5,r6
+ADD r5,r5,r3
+LD r6,r0,#W_EL_BASE
+ADD r5,r5,r6
+ST r5,r0,#W_EL_OFF
+LD r1,r0,#W_EL_FIRST
+CMP r1,r0
+JMP[NE] @el_nocomma
+MOVI r1,#P_COMMA
+MOVI r2,24
+CALL @p_expect_p
+el_nocomma:
+LD r1,r0,#W_EL_GLB
+LD r2,r0,#W_EL_OFF
+LD r3,r0,#W_EL_MTYPE
+CALL @p_decl_store_addr
+CALL @p_assign
+CALL @p_emit_rv
+LD r1,r0,#W_EL_MTYPE
+CALL @px_cast_stack
+LD r1,r0,#W_EL_MTYPE
+MOVI r2,0
+CALL @px_emit_store
+ST r0,r0,#W_EL_FIRST
+LD r1,r0,#W_EL_ELEM
+CALL @ty_kind
+MOVI r2,#TY_UNION
+CMP r1,r2
+JMP[EQ] @el_next_i
+LD r1,r0,#W_EL_M
+ADD r1,r1,r13
+ST r1,r0,#W_EL_M
+JMP @el_m
+el_next_i:
+LD r1,r0,#W_EL_I
+ADD r1,r1,r13
+ST r1,r0,#W_EL_I
+JMP @el_i
+el_done:
+MOVI r1,#P_COMMA
+CALL @p_take_p
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
 ; p_decl: local declarations (one or more declarators)
 ; px_align_up: r1=value r2=align(1|2|4) -> r1 aligned up
 px_align_up:
@@ -10365,6 +10518,21 @@ MOVI r1,#P_DOT
 CALL @p_at_p
 CMP r1,r0
 JMP[NE] @psi_desig
+MOVI r1,#P_LBRACE
+CALL @p_at_p
+CMP r1,r0
+JMP[NE] @psi_normal
+LD r1,r0,#W_STRUCTID
+CALL @p_flat_agg
+CMP r1,r0
+JMP[EQ] @psi_normal
+LD r1,r0,#W_STRUCTID
+MOVI r2,1
+LD r3,r0,#W_SSIZE
+LD r4,r0,#W_SKIND
+CALL @p_elide_elems
+JMP @psi_done
+psi_normal:
 LD r1,r0,#W_SALIGN
 LD r2,r0,#W_SNMEM
 CMP r1,r2
@@ -11343,6 +11511,44 @@ LD r3,r1,#SY_SIZE
 LD r1,r0,#W_TY_SIGN
 CALL @p_zero_range
 CALL @p_adv
+; brace elision for arrays of flat aggregates
+ADDI r3,r14,-1
+LD r1,r3,0
+CALL @sym_entry
+LD r1,r1,#SY_TYPE
+ST r1,r0,#W_EL_ELEM
+ADDI r3,r14,-1
+LD r1,r3,0
+CALL @sym_entry
+LD r1,r1,#SY_AUX
+ST r1,r0,#W_EL_BASE
+LD r1,r0,#W_EL_ELEM
+CALL @ty_base
+ST r1,r0,#W_EL_OFF
+LD r1,r0,#W_EL_OFF
+CALL @p_flat_agg
+CMP r1,r0
+JMP[EQ] @pd_ai_normal
+MOVI r1,#P_LBRACE
+CALL @p_at_p
+CMP r1,r0
+JMP[NE] @pd_ai_normal
+MOVI r1,#P_LBRACK
+CALL @p_at_p
+CMP r1,r0
+JMP[NE] @pd_ai_normal
+LD r1,r0,#W_EL_ELEM
+CALL @ty_count
+ADD r2,r1,r0
+LD r1,r0,#W_EL_OFF
+LD r3,r0,#W_EL_BASE
+MOVI r4,0
+CALL @p_elide_elems
+MOVI r1,#P_RBRACE
+MOVI r2,35
+CALL @p_expect_p
+JMP @pd_afterinit
+pd_ai_normal:
 MOVI r1,0
 ST r1,r14,0
 ADD r14,r14,r13
@@ -12670,6 +12876,44 @@ LD r2,r1,#SY_AUX
 LD r3,r1,#SY_SIZE
 CALL @p_zero_range
 CALL @p_adv
+; brace elision for arrays of flat aggregates
+ADDI r3,r14,-1
+LD r1,r3,0
+CALL @sym_entry
+LD r1,r1,#SY_TYPE
+ST r1,r0,#W_EL_ELEM
+ADDI r3,r14,-1
+LD r1,r3,0
+CALL @sym_entry
+LD r1,r1,#SY_AUX
+ST r1,r0,#W_EL_BASE
+LD r1,r0,#W_EL_ELEM
+CALL @ty_base
+ST r1,r0,#W_EL_OFF
+LD r1,r0,#W_EL_OFF
+CALL @p_flat_agg
+CMP r1,r0
+JMP[EQ] @pde_ai_normal
+MOVI r1,#P_LBRACE
+CALL @p_at_p
+CMP r1,r0
+JMP[NE] @pde_ai_normal
+MOVI r1,#P_LBRACK
+CALL @p_at_p
+CMP r1,r0
+JMP[NE] @pde_ai_normal
+LD r1,r0,#W_EL_ELEM
+CALL @ty_count
+ADD r2,r1,r0
+LD r1,r0,#W_EL_OFF
+LD r3,r0,#W_EL_BASE
+MOVI r4,1
+CALL @p_elide_elems
+MOVI r1,#P_RBRACE
+MOVI r2,35
+CALL @p_expect_p
+JMP @pde_after
+pde_ai_normal:
 MOVI r1,0
 ST r1,r14,0
 ADD r14,r14,r13

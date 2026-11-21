@@ -83,8 +83,10 @@ Implemented:
 
 Not implemented (honest list):
 
-- brace elision across an array of aggregates (`struct S a[2] = {1,2,3,4};`)
-  is not implemented; use inner braces for each element
+- brace elision is supported across arrays of flat aggregates
+  (`struct S a[2] = {1,2,3,4};`) and plain structs; eliding through nested
+  aggregates or mixing braced and unbraced subobjects in one list is not
+  implemented
 - the explicit function-returning-function-pointer declarator is parsed for
   prototypes (`int (*f(void))(int,int);`); defining such a function still
   requires a typedef'd function-pointer return type
@@ -226,6 +228,7 @@ tools/ncc_m29.sh    signal handlers delivered by raise()
 tools/ncc_m30.sh    explicit function-returning-function-pointer prototypes
 tools/ncc_m31.sh    alarm()/SIGALRM asynchronous delivery
 tools/ncc_m32.sh    C99 designated initializers (.member, [index], nested)
+tools/ncc_m33.sh    brace elision across arrays of flat aggregates
 tools/ncc_donut.sh  original C donut (one frame) in raw NaN16
 tools/nfs2.sh       path-addressed RAM filesystem API
 tools/ncc_gui.sh    boot image, open terminal, .demo runs C in the vbuf
