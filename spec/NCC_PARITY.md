@@ -115,7 +115,8 @@ Not implemented (honest list):
   asynchronous `SIGALRM` delivery at IR-instruction boundaries. POSIX timers
   (`setitimer`) are not implemented
 - the path filesystem is RAM-backed (it resets on reboot); no disk
-  persistence yet
+  persistence yet. See `spec/BARE_METAL_INTERFACES.md` for the planned
+  POSIX-free machine interface
 - x86 BIOS boot images remain capped at 1.44 MB (Android/NaN0S images are
   arbitrary size)
 
