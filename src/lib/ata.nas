@@ -159,8 +159,11 @@ ata_present:
   MOVI r1,#ATA_DRIVE
   MOVI r2,0xA0
   OUTB r2,r1
-  CALL @ata_delay
   MOVI r1,#ATA_STATUS
+  INB r2,r1
+  INB r2,r1
+  INB r2,r1
+  INB r2,r1
   INB r2,r1
   CMP r2,r0
   JMP[EQ] @ap_no
