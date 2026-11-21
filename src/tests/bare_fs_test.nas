@@ -1,0 +1,189 @@
+.org 0
+JMP @main
+.include "../lib/ncc.nas"
+.equ H 61795
+.equ R 61796
+main:
+MOVI r13,1
+; ---- write "hello" ----
+LA r1,@path
+SHL r1,r1,2
+MOVI r2,1
+CALL @bare_fs_open
+ST r1,r0,#H
+CMP r1,r0
+JMP[EQ] @fail
+MOVI r5,79
+CALL @putdec
+MOVI r1,10
+CALL @ncc_putc
+LD r1,r0,#H
+LA r2,@msg
+SHL r2,r2,2
+MOVI r3,5
+CALL @bare_fs_write
+ST r1,r0,#R
+MOVI r5,87
+CALL @putdec
+MOVI r1,32
+CALL @ncc_putc
+LD r5,r0,#R
+CALL @putdec
+MOVI r1,10
+CALL @ncc_putc
+LD r1,r0,#H
+CALL @bare_fs_close
+MOVI r5,67
+CALL @putdec
+MOVI r1,10
+CALL @ncc_putc
+; ---- read back ----
+LA r1,@path
+SHL r1,r1,2
+MOVI r2,0
+CALL @bare_fs_open
+ST r1,r0,#H
+CMP r1,r0
+JMP[EQ] @fail
+LD r1,r0,#H
+LA r2,@buf
+SHL r2,r2,2
+MOVI r3,8
+CALL @bare_fs_read
+ST r1,r0,#R
+LD r5,r0,#R
+CALL @putdec
+MOVI r1,32
+CALL @ncc_putc
+LA r1,@buf
+SHL r1,r1,2
+CALL @ni_puts
+MOVI r1,10
+CALL @ncc_putc
+LD r1,r0,#H
+CALL @bare_fs_close
+; ---- seek + read ----
+LA r1,@path
+SHL r1,r1,2
+MOVI r2,0
+CALL @bare_fs_open
+ST r1,r0,#H
+CMP r1,r0
+JMP[EQ] @fail
+LD r1,r0,#H
+MOVI r2,1
+MOVI r3,0
+CALL @bare_fs_seek
+LD r1,r0,#H
+LA r2,@buf2
+SHL r2,r2,2
+MOVI r3,3
+CALL @bare_fs_read
+ST r1,r0,#R
+LD r5,r0,#R
+CALL @putdec
+MOVI r1,32
+CALL @ncc_putc
+LA r1,@buf2
+SHL r1,r1,2
+CALL @ni_puts
+MOVI r1,10
+CALL @ncc_putc
+LD r1,r0,#H
+CALL @bare_fs_close
+; ---- empty write truncates ----
+LA r1,@path3
+SHL r1,r1,2
+MOVI r2,1
+CALL @bare_fs_open
+ST r1,r0,#H
+LD r1,r0,#H
+CALL @bare_fs_close
+LA r1,@path3
+SHL r1,r1,2
+MOVI r2,0
+CALL @bare_fs_open
+ST r1,r0,#H
+LD r1,r0,#H
+LA r2,@buf
+SHL r2,r2,2
+MOVI r3,4
+CALL @bare_fs_read
+ST r1,r0,#R
+MOVI r5,84
+CALL @putdec
+MOVI r1,32
+CALL @ncc_putc
+LD r5,r0,#R
+CALL @putdec
+MOVI r1,10
+CALL @ncc_putc
+LD r1,r0,#H
+CALL @bare_fs_close
+LA r1,@path3
+SHL r1,r1,2
+CALL @bare_fs_remove
+; ---- rename ----
+LA r1,@path
+SHL r1,r1,2
+LA r2,@path2
+SHL r2,r2,2
+CALL @bare_fs_rename
+MOVI r5,78
+CALL @putdec
+MOVI r1,10
+CALL @ncc_putc
+LA r1,@path
+SHL r1,r1,2
+MOVI r2,0
+CALL @bare_fs_open
+MOVI r5,69
+CALL @putdec
+MOVI r1,10
+CALL @ncc_putc
+LA r1,@path2
+SHL r1,r1,2
+MOVI r2,0
+CALL @bare_fs_open
+ST r1,r0,#H
+LD r1,r0,#H
+LA r2,@buf
+SHL r2,r2,2
+MOVI r3,8
+CALL @bare_fs_read
+LD r1,r0,#H
+CALL @bare_fs_close
+LA r1,@buf
+SHL r1,r1,2
+CALL @ni_puts
+MOVI r1,10
+CALL @ncc_putc
+LA r1,@path2
+SHL r1,r1,2
+CALL @bare_fs_remove
+MOVI r5,68
+CALL @putdec
+MOVI r1,10
+CALL @ncc_putc
+HALT
+fail:
+LA r1,@bad
+SHL r1,r1,2
+CALL @ni_puts
+MOVI r1,10
+CALL @ncc_putc
+HALT
+path:
+.str "/baretest"
+path2:
+.str "/baretest2"
+path3:
+.str "/baretest3"
+msg:
+.str "hello"
+bad:
+.str "fail"
+buf:
+.word 0,0,0,0
+buf2:
+.word 0,0,0,0

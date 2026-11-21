@@ -1,11 +1,13 @@
 # Bare-metal interface plan (POSIX replacement)
 
-Status: **table implemented, adapters partial**. `src/lib/bare.nas` provides
+Status: **table implemented, adapters wired**. `src/lib/bare.nas` provides
 the guest table below and default implementations. Console output and keyboard
-input already pass through slots 1 and 3; block slots wrap the ATA driver;
-filesystem slots are adapter stubs because the C stdio layer currently talks
-to NPAF directly. Time/entropy/halt defaults use the NaN16 primitives. Hosted
-adapters can patch table words at boot without changing the C ABI.
+input pass through slots 1 and 3; block slots wrap the ATA driver; the
+filesystem slots now wrap the NPAF path store (open/read/write/seek/close/
+remove/rename) and work without a prior `ncc_compile` call by lazily
+initializing the C heap. The C stdio layer still calls NPAF directly, so both
+paths share one store. Time/entropy/halt defaults use the NaN16 primitives.
+Hosted adapters can patch table words at boot without changing the C ABI.
 
 ## Principles
 
@@ -47,7 +49,8 @@ interface itself does not deliver signals.
 - `ncc_putc`, stdio output → `con_putc`
 - stdin/`getchar`/`scanf` input → `con_getc`/`key_poll`
 - `time`, `clock`, `gmtime`, `localtime` → `tick_ms` + `rtc_get`
-- path filesystem (`nfs2`, stdio files) → `fs_*`
+- path filesystem (`nfs2`, stdio files) → `fs_*` (bare adapter wraps NPAF;
+  stdio still calls NPAF directly)
 - `tmpfile`/`tmpnam` → `fs_*` plus a guest counter
 - `rand`/`srand` → `entropy_u32` (or a guest PRNG seeded once)
 - `exit`/`abort`/`main` return → `halt`

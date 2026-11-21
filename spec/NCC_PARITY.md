@@ -20,8 +20,8 @@ The remaining documented limitations are platform or optional-scope items:
 - the C locale is the only locale (the ISO C minimum);
 - x86 BIOS boot media is capped at 1.44 MB by the floppy format;
 - the POSIX-free machine-interface table is implemented in
-  `src/lib/bare.nas`; console and block adapters are wired, filesystem slots
-  are still adapter stubs (see `spec/BARE_METAL_INTERFACES.md`);
+  `src/lib/bare.nas`; console, block, and NPAF-backed filesystem adapters are
+  wired (see `spec/BARE_METAL_INTERFACES.md`);
 - the library now covers the standard C names plus the POSIX interval timer
   interface; the remaining POSIX extensions are outside the subset.
 
@@ -312,6 +312,7 @@ tools/ncc_m58.sh    tgamma/lgamma/signgam, interface version
 tools/ncc_m59.sh    div/ldiv/lldiv aggregate returns
 tools/ncc_m60.sh    setitimer/getitimer (SIGALRM delivery)
 tools/ncc_m61.sh    strtof/strtold, llabs, strncat, remquo, restartable mbs
+tools/bare_fs.sh    NPAF-backed bare fs_open/read/write/seek/close/rename/remove
 tools/ncc_m31.sh    alarm()/SIGALRM asynchronous delivery
 tools/ncc_m32.sh    C99 designated initializers (.member, [index], nested)
 tools/ncc_m33.sh    brace elision across arrays of flat aggregates

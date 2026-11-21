@@ -60,26 +60,207 @@ JMP @ata_read28
 bare_block_write:
 JMP @ata_write28
 
+; ---- path filesystem adapter (NPAF-backed) -------------------------
+; Handles are opaque STTAB entry addresses.  The adapter works without a
+; prior ncc_compile call by lazily initializing the C heap.
+.equ W_BFS_PATH 61790
+.equ W_BFS_MODE 61791
+.equ W_BFS_ENT  61792
+.equ W_BFS_TMP  61793
+.equ W_BFS_OFF  61794
+
 bare_fs_open:
-LA r1,0xFFFFFFFF
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_BFS_PATH
+ST r2,r0,#W_BFS_MODE
+LD r1,r0,#W_HEAP
+CMP r1,r0
+JMP[NE] @bfo_heap
+LA r1,#C_HEAP
+ST r1,r0,#W_HEAP
+bfo_heap:
+CALL @nfs_ensure
+CALL @st_alloc
+CMP r1,r0
+JMP[EQ] @bfo_fail
+ST r1,r0,#W_BFS_ENT
+LD r1,r0,#W_BFS_PATH
+CALL @st_strdup
+LD r2,r0,#W_BFS_ENT
+ST r1,r2,1
+LD r1,r0,#W_BFS_MODE
+CMP r1,r0
+JMP[NE] @bfo_write
+; read mode: snapshot the current NPAF data into the stream buffer
+MOVI r2,1
+LD r3,r0,#W_BFS_ENT
+ST r2,r3,6
+LD r1,r0,#W_BFS_PATH
+CALL @nfs_find
+CMP r1,r0
+JMP[EQ] @bfo_bad
+LD r1,r0,#W_BFS_PATH
+CALL @nfs_data
+ST r2,r0,#W_BFS_TMP
+SHL r1,r1,2
+LD r2,r0,#W_BFS_ENT
+ST r1,r2,2
+LD r3,r0,#W_BFS_TMP
+ST r3,r2,3
+ST r3,r2,4
+ST r0,r2,5
+ST r0,r2,7
+ST r0,r2,8
+JMP @bfo_ok
+bfo_write:
+; write mode: create/truncate, then let st_write_buf grow the buffer
+MOVI r2,2
+LD r3,r0,#W_BFS_ENT
+ST r2,r3,6
+LD r1,r0,#W_BFS_PATH
+MOVI r2,0
+CALL @nfs_create
+CMP r1,r0
+JMP[EQ] @bfo_bad
+LD r2,r0,#W_BFS_ENT
+ST r0,r2,2
+ST r0,r2,3
+ST r0,r2,4
+ST r0,r2,5
+MOVI r3,1
+ST r3,r2,7
+ST r0,r2,8
+bfo_ok:
+LD r1,r0,#W_BFS_ENT
+JMP @bfo_d
+bfo_bad:
+LD r1,r0,#W_BFS_ENT
+ST r0,r1,0
+bfo_fail:
+MOVI r1,0
+bfo_d:
+SUB r14,r14,r13
+LD r15,r14,0
 RET
+
 bare_fs_read:
-LA r1,0xFFFFFFFF
+CMP r1,r0
+JMP[EQ] @bfr_read0
+JMP @st_read_buf
+bfr_read0:
+MOVI r1,0
 RET
+
 bare_fs_write:
-LA r1,0xFFFFFFFF
+CMP r1,r0
+JMP[EQ] @bfw_zero
+JMP @st_write_buf
+bfw_zero:
+MOVI r1,0
 RET
+
 bare_fs_seek:
+ST r15,r14,0
+ADD r14,r14,r13
+CMP r1,r0
+JMP[EQ] @bfs_err
+ST r1,r0,#W_BFS_ENT
+; r2=offset r3=whence
+CMP r3,r0
+JMP[EQ] @bfs_set
+MOVI r4,1
+CMP r3,r4
+JMP[EQ] @bfs_cur
+MOVI r4,2
+CMP r3,r4
+JMP[EQ] @bfs_end
+JMP @bfs_err
+bfs_set:
+ADD r4,r2,r0
+JMP @bfs_store
+bfs_cur:
+LD r4,r1,5
+ADD r4,r4,r2
+JMP @bfs_store
+bfs_end:
+LD r4,r1,3
+ADD r4,r4,r2
+bfs_store:
+CMPS r4,r0
+JMP[LT] @bfs_err
+ST r4,r1,5
+ST r0,r1,8
+MOVI r1,0
+JMP @bfs_d
+bfs_err:
 LA r1,0xFFFFFFFF
+bfs_d:
+SUB r14,r14,r13
+LD r15,r14,0
 RET
+
 bare_fs_close:
+ST r15,r14,0
+ADD r14,r14,r13
+CMP r1,r0
+JMP[EQ] @bfc_err
+ST r1,r0,#W_BFS_ENT
+CALL @st_flush
+LD r2,r0,#W_BFS_ENT
+ST r0,r2,0
+MOVI r1,0
+JMP @bfc_d
+bfc_err:
 LA r1,0xFFFFFFFF
+bfc_d:
+SUB r14,r14,r13
+LD r15,r14,0
 RET
+
 bare_fs_remove:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @nfs_delete
+CMP r1,r0
+JMP[EQ] @bfrm_n
 MOVI r1,0
+JMP @bfrm_d
+bfrm_n:
+LA r1,0xFFFFFFFF
+bfrm_d:
+SUB r14,r14,r13
+LD r15,r14,0
 RET
+
 bare_fs_rename:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_BFS_PATH
+ST r2,r0,#W_BFS_TMP
+CALL @nfs_find
+CMP r1,r0
+JMP[EQ] @bfrn_n
+LD r2,r1,#NF_E_SIZE
+ST r2,r0,#W_BFS_OFF
+LD r2,r1,#NF_E_OFF
+LA r3,#NFS_ARENA
+ADD r3,r3,r2
+LD r1,r0,#W_BFS_TMP
+ADD r2,r3,r0
+LD r3,r0,#W_BFS_OFF
+CALL @nfs_write
+CMP r1,r0
+JMP[EQ] @bfrn_n
+LD r1,r0,#W_BFS_PATH
+CALL @nfs_delete
 MOVI r1,0
+JMP @bfrn_d
+bfrn_n:
+LA r1,0xFFFFFFFF
+bfrn_d:
+SUB r14,r14,r13
+LD r15,r14,0
 RET
 
 bare_entropy:

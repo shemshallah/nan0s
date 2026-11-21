@@ -1,6 +1,8 @@
 ; nfs2 host test: format, write, find, read, list, delete.
 .org 0
 JMP @main
+.equ W_DK_I 61830
+.equ W_DK_N 61831
 .include "../lib/nfs2.nas"
 main:
 MOVI r13,1
@@ -77,3 +79,10 @@ d1:
 .str "hello"
 d2:
 .str "abc"
+
+; standalone RAM-only test: no ATA adapter is attached
+ata_present:
+MOVI r1,0
+RET
+bare_table:
+.word 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
