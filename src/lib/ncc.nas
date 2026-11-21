@@ -544,6 +544,18 @@
 .equ W_EL_OFF 61665
 .equ W_EL_MTYPE 61666
 .equ W_ARRMAX 61688
+.equ W_ELT_TYPE 61710
+.equ W_ELT_ELEM 61711
+.equ W_ELT_ESZ  61712
+.equ W_ELT_N    61713
+.equ W_ELT_I    61714
+.equ W_ELT_MEM  61715
+.equ W_ELT_NMEM 61716
+.equ W_ELT_KIND 61717
+.equ W_ELT_OFF  61718
+.equ W_ELT_MT   61719
+.equ W_ELT_TMP  61720
+.equ W_SIGLB    61721
 .equ W_FPOFF   61643
 .equ W_FPNP1   61644
 .equ W_FPDEF   61646
@@ -10689,12 +10701,15 @@ RET
 ; p_struct_init: r1=global flag, r2=base address/offset, r3=type id.
 ; Current token is '{'. Initialises members in declaration order; unions
 ; initialise the first member only.
+; p_struct_init: r1=global flag, r2=base address/offset, r3=type id.
+; Current token is '{'. Initialises members in declaration order; unions
+; initialise the first member only.
 ; p_str_init: r1=global flag, r2=base address/offset, r3=char array type,
 ; current token is a string literal. Zero-fill then copy string bytes.
 p_str_init:
 ST r15,r14,0
 ADD r14,r14,r13
-ST r1,r0,#W_SKIND
+ST r1,r0,#W_SIGLB
 ST r2,r0,#W_SSIZE
 ST r3,r0,#W_STRUCTID
 LD r1,r0,#W_STRUCTID
@@ -10703,11 +10718,11 @@ ST r1,r0,#W_STYPE
 LD r1,r0,#W_STRUCTID
 CALL @ty_size
 ST r1,r0,#W_MSIZE
-LD r1,r0,#W_SKIND
+LD r1,r0,#W_SIGLB
 LD r2,r0,#W_SSIZE
 LD r3,r0,#W_MSIZE
 CALL @p_zero_range
-LD r1,r0,#W_SKIND
+LD r1,r0,#W_SIGLB
 LD r2,r0,#W_SSIZE
 LD r3,r0,#W_STYPE
 CALL @p_decl_store_addr
@@ -10737,11 +10752,11 @@ RET
 p_struct_init:
 ST r15,r14,0
 ADD r14,r14,r13
-ST r1,r0,#W_SKIND
+ST r1,r0,#W_SIGLB
 ST r2,r0,#W_SSIZE
 ST r3,r0,#W_STRUCTID
 ; zero the whole object first
-LD r1,r0,#W_SKIND
+LD r1,r0,#W_SIGLB
 LD r2,r0,#W_SSIZE
 LD r3,r0,#W_STRUCTID
 CALL @ty_size
@@ -10772,7 +10787,7 @@ JMP[EQ] @psi_normal
 LD r1,r0,#W_STRUCTID
 MOVI r2,1
 LD r3,r0,#W_SSIZE
-LD r4,r0,#W_SKIND
+LD r4,r0,#W_SIGLB
 CALL @p_elide_elems
 JMP @psi_done
 psi_normal:
@@ -10807,7 +10822,7 @@ ST r3,r0,#W_STYPE
 LD r2,r0,#W_SSIZE
 LD r3,r0,#W_SOFF
 ADD r2,r2,r3
-LD r1,r0,#W_SKIND
+LD r1,r0,#W_SIGLB
 LD r3,r0,#W_STYPE
 CALL @p_decl_store_addr
 MOVI r1,#P_LBRACE
@@ -10831,13 +10846,8 @@ LD r1,r0,#W_STYPE
 CALL @p_init_braced
 JMP @psi_mem_next
 psi_mem_plain:
-CALL @p_assign
-CALL @p_emit_rv
 LD r1,r0,#W_STYPE
-CALL @px_cast_stack
-LD r1,r0,#W_STYPE
-MOVI r2,0
-CALL @px_emit_store
+CALL @p_init_value
 psi_mem_next:
 ; union: stop after one member
 LD r1,r0,#W_STRUCTID
@@ -10867,6 +10877,287 @@ RET
 
 
 ; ------------------------------------------------------------------ nested initializers
+
+; p_tok_agg_match: r1=aggregate type -> 1 if the current identifier
+; resolves to a variable or function of exactly that aggregate type.
+p_tok_agg_match:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_ELT_TYPE
+ST r0,r0,#W_ELT_TMP
+LD r1,r0,#W_TKA
+MOVI r2,#K_IDENT
+CMP r1,r2
+JMP[NE] @pam_d
+CALL @sym_lookup_var
+LA r2,0xFFFFFFFF
+CMP r1,r2
+JMP[EQ] @pam_func
+CALL @sym_entry
+LD r1,r1,#SY_TYPE
+LD r2,r0,#W_ELT_TYPE
+CMP r1,r2
+JMP[NE] @pam_d
+MOVI r1,1
+ST r1,r0,#W_ELT_TMP
+JMP @pam_d
+pam_func:
+CALL @sym_lookup_func
+LA r2,0xFFFFFFFF
+CMP r1,r2
+JMP[EQ] @pam_d
+CALL @sym_entry
+LD r1,r1,#SY_TYPE
+LD r2,r0,#W_ELT_TYPE
+CMP r1,r2
+JMP[NE] @pam_d
+MOVI r1,1
+ST r1,r0,#W_ELT_TMP
+pam_d:
+LD r1,r0,#W_ELT_TMP
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; p_str_init_stack: r1=char array type; destination on the eval stack.
+; Copies the current string literal into that destination.
+p_str_init_stack:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_ELT_TYPE
+CALL @ty_size
+ST r1,r0,#W_ELT_N
+LA r1,#I_DUP
+CALL @ir_op
+LA r1,#I_PUSH
+MOVI r2,0
+CALL @ir_emit
+LA r1,#I_PUSH
+LD r2,r0,#W_ELT_N
+CALL @ir_emit
+LA r1,#I_MEMSET
+CALL @ir_op
+LD r1,r0,#W_TKA+3
+ST r1,r0,#W_ELT_OFF
+CALL @str_add_cur
+ADD r2,r1,r0
+LA r1,#I_PUSH
+CALL @ir_emit
+LD r3,r0,#W_ELT_OFF
+LD r4,r0,#W_ELT_N
+CMP r3,r4
+JMP[LE] @psis_n
+ADD r3,r4,r0
+psis_n:
+LA r1,#I_PUSH
+ADD r2,r3,r0
+CALL @ir_emit
+LA r1,#I_MEMCPY
+CALL @ir_op
+CALL @p_adv
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; p_elide_into: r1=aggregate type; destination address on the eval stack.
+; Consumes the destination and parses comma-separated initializers for the
+; object's scalar leaves, without consuming the comma that follows it.
+p_elide_into:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_ELT_TYPE
+; a braced subobject may appear at any depth
+MOVI r1,#P_LBRACE
+CALL @p_at_p
+CMP r1,r0
+JMP[NE] @elt_brace
+LD r1,r0,#W_ELT_TYPE
+CALL @ty_kind
+ST r1,r0,#W_ELT_KIND
+MOVI r2,#TY_ARRAY
+CMP r1,r2
+JMP[EQ] @elt_arr
+MOVI r2,#TY_STRUCT
+CMP r1,r2
+JMP[EQ] @elt_str
+MOVI r2,#TY_UNION
+CMP r1,r2
+JMP[EQ] @elt_str
+JMP @elt_scalar
+elt_brace:
+LD r1,r0,#W_ELT_TYPE
+CALL @p_init_braced
+JMP @elt_d
+elt_scalar:
+LD r1,r0,#W_ELT_TYPE
+CALL @p_assign
+CALL @p_emit_rv
+LD r1,r0,#W_ELT_TYPE
+CALL @px_cast_stack
+LD r1,r0,#W_ELT_TYPE
+MOVI r2,0
+CALL @px_emit_store
+JMP @elt_d
+elt_arr:
+LD r1,r0,#W_ELT_TYPE
+CALL @ty_base
+ST r1,r0,#W_ELT_ELEM
+CALL @ty_size
+ST r1,r0,#W_ELT_ESZ
+LD r1,r0,#W_ELT_TYPE
+CALL @ty_count
+ST r1,r0,#W_ELT_N
+ST r0,r0,#W_ELT_I
+elt_a_l:
+LD r1,r0,#W_ELT_I
+LD r2,r0,#W_ELT_N
+CMP r1,r2
+JMP[GE] @elt_pop
+LD r1,r0,#W_ELT_I
+CMP r1,r0
+JMP[EQ] @elt_a_first
+MOVI r1,#P_COMMA
+CALL @p_take_p
+CMP r1,r0
+JMP[EQ] @elt_pop
+MOVI r1,#P_RBRACE
+CALL @p_at_p
+CMP r1,r0
+JMP[NE] @elt_pop
+elt_a_first:
+LA r1,#I_DUP
+CALL @ir_op
+LA r1,#I_PUSH
+LD r2,r0,#W_ELT_I
+LD r3,r0,#W_ELT_ESZ
+MUL r2,r2,r3
+CALL @ir_emit
+LA r1,#I_ADD
+CALL @ir_op
+LD r1,r0,#W_ELT_TYPE
+ST r1,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_ELT_ELEM
+ST r1,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_ELT_ESZ
+ST r1,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_ELT_N
+ST r1,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_ELT_I
+ST r1,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_ELT_ELEM
+CALL @p_elide_into
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_ELT_I
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_ELT_N
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_ELT_ESZ
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_ELT_ELEM
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_ELT_TYPE
+LD r1,r0,#W_ELT_I
+ADD r1,r1,r13
+ST r1,r0,#W_ELT_I
+JMP @elt_a_l
+elt_str:
+LD r1,r0,#W_ELT_TYPE
+CALL @ty_addr
+LD r2,r1,#TY_MEM
+ST r2,r0,#W_ELT_MEM
+LD r2,r1,#TY_NMEM
+ST r2,r0,#W_ELT_NMEM
+ST r0,r0,#W_ELT_I
+elt_s_l:
+LD r1,r0,#W_ELT_I
+LD r2,r0,#W_ELT_NMEM
+CMP r1,r2
+JMP[GE] @elt_pop
+LD r1,r0,#W_ELT_I
+CMP r1,r0
+JMP[EQ] @elt_s_first
+MOVI r1,#P_COMMA
+CALL @p_take_p
+CMP r1,r0
+JMP[EQ] @elt_pop
+MOVI r1,#P_RBRACE
+CALL @p_at_p
+CMP r1,r0
+JMP[NE] @elt_pop
+elt_s_first:
+LD r2,r0,#W_ELT_MEM
+LD r1,r0,#W_ELT_I
+SHL r1,r1,2
+ADD r2,r2,r1
+LD r3,r2,1
+ST r3,r0,#W_ELT_OFF
+LD r3,r2,2
+ST r3,r0,#W_ELT_MT
+LA r1,#I_DUP
+CALL @ir_op
+LA r1,#I_PUSH
+LD r2,r0,#W_ELT_OFF
+CALL @ir_emit
+LA r1,#I_ADD
+CALL @ir_op
+LD r1,r0,#W_ELT_TYPE
+ST r1,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_ELT_MEM
+ST r1,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_ELT_NMEM
+ST r1,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_ELT_I
+ST r1,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_ELT_KIND
+ST r1,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_ELT_MT
+CALL @p_elide_into
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_ELT_KIND
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_ELT_I
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_ELT_NMEM
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_ELT_MEM
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_ELT_TYPE
+LD r1,r0,#W_ELT_KIND
+MOVI r2,#TY_UNION
+CMP r1,r2
+JMP[EQ] @elt_pop
+LD r1,r0,#W_ELT_I
+ADD r1,r1,r13
+ST r1,r0,#W_ELT_I
+JMP @elt_s_l
+elt_pop:
+LA r1,#I_POP
+CALL @ir_op
+elt_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
 ; p_init_value: r1=type; destination address is on the eval stack.
 ; Parses a braced initializer or a scalar/aggregate expression, and consumes
 ; the destination address.
@@ -10880,6 +11171,7 @@ CMP r1,r0
 JMP[NE] @piv_brace
 LD r1,r0,#W_ITYPE
 CALL @ty_kind
+ST r1,r0,#W_ELT_KIND
 MOVI r2,#TY_STRUCT
 CMP r1,r2
 JMP[EQ] @piv_agg
@@ -10888,7 +11180,7 @@ CMP r1,r2
 JMP[EQ] @piv_agg
 MOVI r2,#TY_ARRAY
 CMP r1,r2
-JMP[EQ] @piv_agg
+JMP[EQ] @piv_arr
 CALL @p_assign
 CALL @p_emit_rv
 LD r1,r0,#W_ITYPE
@@ -10897,7 +11189,31 @@ LD r1,r0,#W_ITYPE
 MOVI r2,0
 CALL @px_emit_store
 JMP @piv_d
+piv_arr:
+LD r1,r0,#W_TKA
+MOVI r2,#K_STRING
+CMP r1,r2
+JMP[NE] @piv_arr_elide
+LD r1,r0,#W_ITYPE
+CALL @ty_base
+CALL @ty_size
+MOVI r2,1
+CMP r1,r2
+JMP[NE] @piv_arr_elide
+LD r1,r0,#W_ITYPE
+CALL @p_str_init_stack
+JMP @piv_d
+piv_arr_elide:
+LD r1,r0,#W_ITYPE
+CALL @p_elide_into
+JMP @piv_d
 piv_agg:
+; an expression of the same aggregate type copies the whole object;
+; otherwise a brace-elided list feeds its scalar leaves
+LD r1,r0,#W_ITYPE
+CALL @p_tok_agg_match
+CMP r1,r0
+JMP[EQ] @piv_agg_elide
 CALL @p_assign
 CALL @p_emit_rv
 LD r1,r0,#W_ITYPE
@@ -10907,6 +11223,10 @@ LA r1,#I_PUSH
 CALL @ir_emit
 LA r1,#I_MEMCPY
 CALL @ir_op
+JMP @piv_d
+piv_agg_elide:
+LD r1,r0,#W_ITYPE
+CALL @p_elide_into
 JMP @piv_d
 piv_brace:
 LD r1,r0,#W_ITYPE
@@ -11982,8 +12302,6 @@ LD r1,r0,#W_TY_RET
 CALL @p_init_braced
 JMP @pd_ai_next
 pd_ai_plain:
-CALL @p_assign
-CALL @p_emit_rv
 ADDI r3,r14,-2
 LD r1,r3,0
 CALL @sym_entry
@@ -11997,10 +12315,7 @@ JMP[EQ] @pd_ai_pv
 ST r1,r0,#W_TY_RET
 pd_ai_pv:
 LD r1,r0,#W_TY_RET
-CALL @px_cast_stack
-LD r1,r0,#W_TY_RET
-MOVI r2,0
-CALL @px_emit_store
+CALL @p_init_value
 pd_ai_next:
 ADDI r3,r14,-1
 LD r4,r3,0
@@ -13354,8 +13669,6 @@ LD r1,r0,#W_TY_COUNT
 CALL @p_init_braced
 JMP @pde_ai_next
 pde_ai_plain:
-CALL @p_assign
-CALL @p_emit_rv
 ADDI r3,r14,-2
 LD r1,r3,0
 CALL @sym_entry
@@ -13369,10 +13682,7 @@ JMP[EQ] @pde_ai_pv
 ST r1,r0,#W_TY_COUNT
 pde_ai_pv:
 LD r1,r0,#W_TY_COUNT
-CALL @px_cast_stack
-LD r1,r0,#W_TY_COUNT
-MOVI r2,0
-CALL @px_emit_store
+CALL @p_init_value
 pde_ai_next:
 ADDI r3,r14,-1
 LD r4,r3,0

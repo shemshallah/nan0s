@@ -85,9 +85,9 @@ Implemented:
 Not implemented (honest list):
 
 - brace elision is supported across arrays of flat aggregates
-  (`struct S a[2] = {1,2,3,4};`) and plain structs; eliding through nested
-  aggregates or mixing braced and unbraced subobjects in one list is not
-  implemented
+  (`struct S a[2] = {1,2,3,4};`), nested aggregates
+  (`struct T{struct S s; int z;} t = {1,2,3};`), mixed braced/unbraced
+  subobjects, and aggregate expressions (`t = {other, 5}`)
 - the explicit function-returning-function-pointer declarator is parsed for
   prototypes and for definitions with any parameters
   (`int (*f(int k))(int,int){...}`)
@@ -234,6 +234,7 @@ tools/ncc_m28.sh    const enforcement (locals/globals/params) and const pointers
 tools/ncc_m29.sh    signal handlers delivered by raise()
 tools/ncc_m30.sh    explicit function-returning-function-pointer prototypes/defs
 tools/ncc_m40.sh    FP-returning definitions with parameters
+tools/ncc_m41.sh    nested/mixed brace elision
 tools/ncc_m31.sh    alarm()/SIGALRM asynchronous delivery
 tools/ncc_m32.sh    C99 designated initializers (.member, [index], nested)
 tools/ncc_m33.sh    brace elision across arrays of flat aggregates
