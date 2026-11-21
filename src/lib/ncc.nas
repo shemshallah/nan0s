@@ -453,6 +453,10 @@
 .equ B_PUTC     125
 .equ B_CLEARERR 126
 .equ B_SETVBUF  127
+.equ B_VPRINTF  128
+.equ B_VFPRINTF 129
+.equ B_VSPRINTF 130
+.equ B_VSNPRINTF 131
 
 ; ------------------------------------------------------------------ compiler state
 ; Kept below word 65536 so ST/LD can use the 16-bit immediate form directly.
@@ -816,6 +820,7 @@
 .include "bare.nas"
 .include "nfs2.nas"
 .include "stdio.nas"
+.include "vprintf.nas"
 .include "scanf.nas"
 .include "ll.nas"
 .include "qsort.nas"
@@ -6036,6 +6041,34 @@ LA r1,0x36ACEE80
 LA r2,@ncc_s_setvbuf
 MOVI r3,7
 MOVI r4,#B_SETVBUF
+MOVI r5,4
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0x7E011206
+LA r2,@ncc_s_vprintf
+MOVI r3,7
+MOVI r4,#B_VPRINTF
+MOVI r5,2
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0x01BE7C82
+LA r2,@ncc_s_vfprintf
+MOVI r3,8
+MOVI r4,#B_VFPRINTF
+MOVI r5,3
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0xCA35402D
+LA r2,@ncc_s_vsprintf
+MOVI r3,8
+MOVI r4,#B_VSPRINTF
+MOVI r5,3
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0xA4383EF3
+LA r2,@ncc_s_vsnprintf
+MOVI r3,9
+MOVI r4,#B_VSNPRINTF
 MOVI r5,4
 MOVI r6,#T_INT
 CALL @ncc_add_builtin
@@ -14824,6 +14857,28 @@ JMP @npf_flag_l
 npf_w_l:
 LD r1,r0,#W_PF_FMT
 LDB r2,r1,0
+MOVI r3,42
+CMP r2,r3
+JMP[NE] @npf_w_digits
+LD r1,r0,#W_PF_IDX
+ADD r1,r1,r13
+ST r1,r0,#W_PF_IDX
+CALL @ni_arg
+ST r1,r0,#W_PF_W
+CMPS r1,r0
+JMP[GE] @npf_w_abs
+SUB r1,r0,r1
+ST r1,r0,#W_PF_W
+LD r2,r0,#W_PF_FLAGS
+MOVI r3,1
+BOOL.14 r2,r2,r3
+ST r2,r0,#W_PF_FLAGS
+npf_w_abs:
+LD r1,r0,#W_PF_FMT
+ADD r1,r1,r13
+ST r1,r0,#W_PF_FMT
+JMP @npf_w_d
+npf_w_digits:
 MOVI r3,48
 CMP r2,r3
 JMP[LT] @npf_w_d
@@ -14852,6 +14907,23 @@ ST r3,r0,#W_PF_PREC
 npf_prec_l:
 LD r1,r0,#W_PF_FMT
 LDB r2,r1,0
+MOVI r3,42
+CMP r2,r3
+JMP[NE] @npf_prec_digits
+LD r1,r0,#W_PF_IDX
+ADD r1,r1,r13
+ST r1,r0,#W_PF_IDX
+CALL @ni_arg
+CMPS r1,r0
+JMP[GE] @npf_prec_abs
+MOVI r1,0
+npf_prec_abs:
+ST r1,r0,#W_PF_PREC
+LD r1,r0,#W_PF_FMT
+ADD r1,r1,r13
+ST r1,r0,#W_PF_FMT
+JMP @npf_prec_done
+npf_prec_digits:
 MOVI r3,48
 CMP r2,r3
 JMP[LT] @npf_prec_done
@@ -16720,6 +16792,18 @@ JMP[EQ] @nbi_clearerr
 MOVI r2,#B_SETVBUF
 CMP r1,r2
 JMP[EQ] @nbi_setvbuf
+MOVI r2,#B_VPRINTF
+CMP r1,r2
+JMP[EQ] @nbi_vprintf
+MOVI r2,#B_VFPRINTF
+CMP r1,r2
+JMP[EQ] @nbi_vfprintf
+MOVI r2,#B_VSPRINTF
+CMP r1,r2
+JMP[EQ] @nbi_vsprintf
+MOVI r2,#B_VSNPRINTF
+CMP r1,r2
+JMP[EQ] @nbi_vsnprintf
 MOVI r2,#B_FPUTS
 CMP r1,r2
 JMP[EQ] @nbi_fputs

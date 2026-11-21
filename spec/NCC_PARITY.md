@@ -19,8 +19,8 @@ The remaining documented limitations are platform or optional-scope items:
 - the POSIX-free machine-interface table is implemented in
   `src/lib/bare.nas`; console and block adapters are wired, filesystem slots
   are still adapter stubs (see `spec/BARE_METAL_INTERFACES.md`);
-- the library is the practical subset documented below (for example the
-  `vprintf` family is not part of it).
+- the library is the practical subset documented below (multibyte conversion
+  functions and some POSIX extensions are still outside it).
 
 None of these blocks the Python port; they are deployment or optional-library
 work.
@@ -161,10 +161,14 @@ Lexer-integrated, line based:
 Built-in functions (no headers needed):
 
 ```
-printf(fmt, ...)   %d %i %u %x %X %c %s %p %f %e %E %g %G %%
+printf(fmt, ...)   %d %i %u %o %x %X %c %s %p %f %e %E %g %G %%
                    flags '-' (left), '0' (zero pad), '#' (keep zeros),
-                   decimal field width (%05d, %-6s, %04x); %x/%X digits
-putchar(c)         print_int(v)      puts(s)        print_str(s)
+                   '+'/' ', width/precision including '*' and '.*';
+                   %x/%X digits; %ls for wide strings
+vprintf/vfprintf/vsprintf/vsnprintf  va_list-based formatters
+putchar(c)         getchar()          getc(f)        putc(c,f)
+ungetc(c,f)        clearerr(f)       setvbuf(...)   print_int(v)
+puts(s)            print_str(s)
 malloc(n)          calloc(n,size)     realloc(p,n)   free(p)
 sin(x)             cos(x)
 sqrt(x)            fabs(x)           pow(x,y)
@@ -266,6 +270,7 @@ tools/ncc_m43.sh    wscanf (console input, %ls widening)
 tools/ncc_m44.sh    packed bit-fields, sizeof, neighbors, arrays
 tools/ncc_m45.sh    getchar/getc/putc/ungetc/clearerr/setvbuf
 tools/ncc_m46.sh    persistent files over ATA (two boots, same disk)
+tools/ncc_m47.sh    vprintf/vfprintf/vsprintf/vsnprintf, * width/precision
 tools/ncc_m31.sh    alarm()/SIGALRM asynchronous delivery
 tools/ncc_m32.sh    C99 designated initializers (.member, [index], nested)
 tools/ncc_m33.sh    brace elision across arrays of flat aggregates
