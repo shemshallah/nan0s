@@ -32,8 +32,8 @@ The remaining documented limitations are platform or optional-scope items:
 - the library now covers the standard C names plus the POSIX interval timer
   interface; the remaining POSIX extensions are outside the subset.
 
-None of these blocks the Python port; they are deployment or optional-library
-work.
+None of these blocks the Python port; the Py-M1 subset now runs in-guest
+(`spec/PYTHON_PORT.md`).
 
 ## Memory model
 
@@ -323,6 +323,7 @@ tools/ncc_m59.sh    div/ldiv/lldiv aggregate returns
 tools/ncc_m60.sh    setitimer/getitimer (SIGALRM delivery)
 tools/ncc_m61.sh    strtof/strtold, llabs, strncat, remquo, restartable mbs
 tools/ncc_m62.sh    inttypes, wide ctype, errno, assert, fwide
+tools/py_m1.sh      Python-subset interpreter (Py-M1) on NaN16
 tools/bare_fs.sh    NPAF-backed bare fs_open/read/write/seek/close/rename/remove
 tools/ncc_m31.sh    alarm()/SIGALRM asynchronous delivery
 tools/ncc_m32.sh    C99 designated initializers (.member, [index], nested)
