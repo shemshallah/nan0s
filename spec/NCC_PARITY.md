@@ -107,9 +107,10 @@ Not implemented (honest list):
   `strpbrk`/`strtok`/`memchr`/`strcoll`/`strxfrm`/`strtol`/`strtoul`/
   `strtoll`/`strtoull`/`strchr`/`strrchr`/`strndup`/`stpcpy`/`memccpy`,
   plus `strerror`/`perror`
-  and `getenv`/`system` stubs are implemented. A `wprintf` subset (`%d`, `%s`,
-  `%ls`, `%x`, `%X`, `%c`, `%%`, literal wide text) is implemented; `wscanf`
-  is currently a stub returning EOF. Only the C locale is provided
+  and `getenv`/`system` stubs are implemented. `wprintf` now supports
+  flags, width, precision, `%d`/`%i`/`%u`/`%o`/`%x`/`%X`/`%c`/`%s`/`%ls`/`%p`/
+  `%%` and literal wide text; `wscanf` translates the wide format to narrow
+  scanf syntax and widens `%ls` destinations. Only the C locale is provided
 - signal handlers are installed and delivered by `raise`; `alarm()` performs
   asynchronous `SIGALRM` delivery at IR-instruction boundaries. POSIX timers
   (`setitimer`) are not implemented
@@ -235,6 +236,8 @@ tools/ncc_m29.sh    signal handlers delivered by raise()
 tools/ncc_m30.sh    explicit function-returning-function-pointer prototypes/defs
 tools/ncc_m40.sh    FP-returning definitions with parameters
 tools/ncc_m41.sh    nested/mixed brace elision
+tools/ncc_m42.sh    wprintf flags/width/precision
+tools/ncc_m43.sh    wscanf (console input, %ls widening)
 tools/ncc_m31.sh    alarm()/SIGALRM asynchronous delivery
 tools/ncc_m32.sh    C99 designated initializers (.member, [index], nested)
 tools/ncc_m33.sh    brace elision across arrays of flat aggregates

@@ -628,6 +628,7 @@
 .equ W_F2F      61005
 .equ W_F2L      61006
 .equ W_F2BIG    61007
+.equ W_PF_LSTR   61008
 .equ W_VARNP    61390
 .equ W_VARFLAG  61391
 .equ W_VARCNT   61393
@@ -14525,6 +14526,7 @@ ST r1,r0,#W_PF_FMT
 ST r0,r0,#W_PF_W
 ST r0,r0,#W_PF_FLAGS
 ST r0,r0,#W_PF_LL
+ST r0,r0,#W_PF_LSTR
 LA r3,0xFFFFFFFF
 ST r3,r0,#W_PF_PREC
 npf_flag_l:
@@ -14621,12 +14623,17 @@ ST r1,r0,#W_PF_FMT
 LDB r2,r1,0
 MOVI r3,108
 CMP r2,r3
-JMP[NE] @npf_fmt
+JMP[NE] @npf_single_l
 ADD r1,r1,r13
 ST r1,r0,#W_PF_FMT
 LDB r2,r1,0
 MOVI r3,1
 ST r3,r0,#W_PF_LL
+ST r0,r0,#W_PF_LSTR
+JMP @npf_fmt
+npf_single_l:
+MOVI r3,1
+ST r3,r0,#W_PF_LSTR
 npf_fmt:
 ST r2,r0,#W_PF_CASE
 MOVI r3,100
@@ -15814,6 +15821,9 @@ LD r2,r0,#W_PF_W
 CALL @ni_field_tail
 JMP @npf_adv
 npf_str:
+LD r1,r0,#W_PF_LSTR
+CMP r1,r0
+JMP[NE] @npf_lstr
 LD r1,r0,#W_PF_IDX
 ADD r1,r1,r13
 ST r1,r0,#W_PF_IDX
@@ -15843,6 +15853,68 @@ npf_s_print:
 LD r1,r0,#W_PF_VAL
 LD r2,r0,#W_PF_LEN
 CALL @ni_putsn
+LD r1,r0,#W_PF_LEN
+LD r2,r0,#W_PF_W
+CALL @ni_field_tail
+JMP @npf_adv
+npf_lstr:
+LD r1,r0,#W_PF_IDX
+ADD r1,r1,r13
+ST r1,r0,#W_PF_IDX
+CALL @ni_arg
+ST r1,r0,#W_PF_VAL
+ST r0,r0,#W_PF_LEN
+npf_ls_l:
+LD r2,r0,#W_PF_PREC
+LA r3,0xFFFFFFFF
+CMP r2,r3
+JMP[EQ] @npf_ls_load
+LD r1,r0,#W_PF_LEN
+CMP r1,r2
+JMP[GE] @npf_ls_have
+npf_ls_load:
+LD r1,r0,#W_PF_VAL
+LD r2,r0,#W_PF_LEN
+SHL r2,r2,2
+ADD r1,r1,r2
+MOVI r2,#SZ_32
+CALL @ni_loadv
+CMP r1,r0
+JMP[EQ] @npf_ls_have
+LD r2,r0,#W_PF_LEN
+ADD r2,r2,r13
+ST r2,r0,#W_PF_LEN
+JMP @npf_ls_l
+npf_ls_have:
+LD r2,r0,#W_PF_FLAGS
+MOVI r3,1
+BOOL.8 r2,r2,r3
+CMP r2,r0
+JMP[NE] @npf_ls_print
+LD r1,r0,#W_PF_LEN
+LD r2,r0,#W_PF_W
+MOVI r3,32
+CALL @ni_field_pre
+npf_ls_print:
+ST r0,r0,#W_PF_TMP
+npf_ls_pl:
+LD r1,r0,#W_PF_TMP
+LD r2,r0,#W_PF_LEN
+CMP r1,r2
+JMP[GE] @npf_ls_tail
+LD r3,r0,#W_PF_VAL
+SHL r1,r1,2
+ADD r1,r3,r1
+MOVI r2,#SZ_32
+CALL @ni_loadv
+MOVI r2,255
+BOOL.8 r1,r1,r2
+CALL @ncc_putc
+LD r1,r0,#W_PF_TMP
+ADD r1,r1,r13
+ST r1,r0,#W_PF_TMP
+JMP @npf_ls_pl
+npf_ls_tail:
 LD r1,r0,#W_PF_LEN
 LD r2,r0,#W_PF_W
 CALL @ni_field_tail
