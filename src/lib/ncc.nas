@@ -526,6 +526,15 @@
 .equ B_FREOPEN  198
 .equ B_FREXP    199
 .equ B_NEXTAFTER 200
+.equ B_WCSTOL   201
+.equ B_WCSTOUL  202
+.equ B_WCSTOLL  203
+.equ B_WCSTOULL 204
+.equ B_WCSTOD   205
+.equ B_WCSTOF   206
+.equ B_WCSTOLD  207
+.equ B_WCSCOLL  208
+.equ B_WCSXFRM  209
 
 ; ------------------------------------------------------------------ compiler state
 ; Kept below word 65536 so ST/LD can use the 16-bit immediate form directly.
@@ -906,6 +915,7 @@
 .include "wide.nas"
 .include "wide2.nas"
 .include "mathx.nas"
+.include "wcsto.nas"
 .include "strtox.nas"
 
 ; q2_skipsp: consume spaces and tabs
@@ -6634,6 +6644,69 @@ MOVI r3,9
 MOVI r4,#B_NEXTAFTER
 MOVI r5,2
 MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+LA r1,0x6E991783
+LA r2,@ncc_s_wcstol
+MOVI r3,6
+MOVI r4,#B_WCSTOL
+MOVI r5,3
+MOVI r6,#T_LONG
+CALL @ncc_add_builtin
+LA r1,0x23E97CDC
+LA r2,@ncc_s_wcstoul
+MOVI r3,7
+MOVI r4,#B_WCSTOUL
+MOVI r5,3
+MOVI r6,#T_ULONG
+CALL @ncc_add_builtin
+LA r1,0x0A00AD3D
+LA r2,@ncc_s_wcstoll
+MOVI r3,7
+MOVI r4,#B_WCSTOLL
+MOVI r5,3
+MOVI r6,#T_LONGLONG
+CALL @ncc_add_builtin
+LA r1,0x388F4910
+LA r2,@ncc_s_wcstoull
+MOVI r3,8
+MOVI r4,#B_WCSTOULL
+MOVI r5,3
+MOVI r6,#T_ULONGLONG
+CALL @ncc_add_builtin
+LA r1,0x7699241B
+LA r2,@ncc_s_wcstod
+MOVI r3,6
+MOVI r4,#B_WCSTOD
+MOVI r5,2
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+LA r1,0x78992741
+LA r2,@ncc_s_wcstof
+MOVI r3,6
+MOVI r4,#B_WCSTOF
+MOVI r5,2
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+LA r1,0x0200A0A5
+LA r2,@ncc_s_wcstold
+MOVI r3,7
+MOVI r4,#B_WCSTOLD
+MOVI r5,2
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+LA r1,0x4749493E
+LA r2,@ncc_s_wcscoll
+MOVI r3,7
+MOVI r4,#B_WCSCOLL
+MOVI r5,2
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0xF6FB2783
+LA r2,@ncc_s_wcsxfrm
+MOVI r3,7
+MOVI r4,#B_WCSXFRM
+MOVI r5,3
+MOVI r6,#T_UINT
 CALL @ncc_add_builtin
 
 
@@ -17576,6 +17649,33 @@ JMP[EQ] @nbi_frexp
 MOVI r2,#B_NEXTAFTER
 CMP r1,r2
 JMP[EQ] @nbi_nextafter
+MOVI r2,#B_WCSTOL
+CMP r1,r2
+JMP[EQ] @nbi_wcstol
+MOVI r2,#B_WCSTOUL
+CMP r1,r2
+JMP[EQ] @nbi_wcstoul
+MOVI r2,#B_WCSTOLL
+CMP r1,r2
+JMP[EQ] @nbi_wcstoll
+MOVI r2,#B_WCSTOULL
+CMP r1,r2
+JMP[EQ] @nbi_wcstoull
+MOVI r2,#B_WCSTOD
+CMP r1,r2
+JMP[EQ] @nbi_wcstod
+MOVI r2,#B_WCSTOF
+CMP r1,r2
+JMP[EQ] @nbi_wcstof
+MOVI r2,#B_WCSTOLD
+CMP r1,r2
+JMP[EQ] @nbi_wcstold
+MOVI r2,#B_WCSCOLL
+CMP r1,r2
+JMP[EQ] @nbi_wcscoll
+MOVI r2,#B_WCSXFRM
+CMP r1,r2
+JMP[EQ] @nbi_wcsxfrm
 
 
 MOVI r2,#B_FPUTS

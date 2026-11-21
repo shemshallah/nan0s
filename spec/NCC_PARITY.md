@@ -20,8 +20,8 @@ The remaining documented limitations are platform or optional-scope items:
   `src/lib/bare.nas`; console and block adapters are wired, filesystem slots
   are still adapter stubs (see `spec/BARE_METAL_INTERFACES.md`);
 - the library is the practical subset documented below (`erf`/gamma,
-  `div`/`ldiv` struct returns, wide `wcsto*` conversions, and some POSIX
-  extensions are still outside it).
+  `div`/`ldiv` struct returns, and some POSIX extensions are still outside
+  it).
 
 None of these blocks the Python port; they are deployment or optional-library
 work.
@@ -131,7 +131,9 @@ Not implemented (honest list):
   `atol`/`atoll`, the remaining ctype predicates (`isalnum`, `iscntrl`,
   `isgraph`, `isprint`, `ispunct`, `isxdigit`), wide-string helpers
   (`wcschr`/`wcsrchr`/`wcsncmp`/`wcsncpy`/`wcsncat`/`wcsspn`/`wcscspn`/
-  `wcspbrk`/`wcsstr`/`wcstok`/`wmem*`), multibyte conversion
+  `wcspbrk`/`wcsstr`/`wcstok`/`wmem*`/`wcscoll`/`wcsxfrm`, wide numeric
+  conversions (`wcstol`/`wcstoul`/`wcstoll`/`wcstoull`/`wcstod`/`wcstof`/
+  `wcstold`), multibyte conversion
   (`btowc`/`wctob`/`mblen`/`mbtowc`/`wctomb`/`mbstowcs`/`wcstombs`),
   plus `strerror`/`perror`
   and `getenv`/`system` stubs are implemented. `wprintf` now supports
@@ -296,6 +298,8 @@ tools/ncc_m51.sh    atexit ordering, exit(), _Exit()
 tools/ncc_m52.sh    vscanf/vfscanf/vsscanf
 tools/ncc_m53.sh    fgetpos/fsetpos/freopen
 tools/ncc_m54.sh    frexp/nextafter
+tools/ncc_m55.sh    wcstol/wcstoul/wcstoll/wcstoull/wcstod
+tools/ncc_m56.sh    wcscoll/wcsxfrm
 tools/ncc_m31.sh    alarm()/SIGALRM asynchronous delivery
 tools/ncc_m32.sh    C99 designated initializers (.member, [index], nested)
 tools/ncc_m33.sh    brace elision across arrays of flat aggregates

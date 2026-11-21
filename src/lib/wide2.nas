@@ -8,6 +8,11 @@
 .equ W_W2C 61874
 .equ W_W2D 61875
 .equ W_W2E 61876
+.equ W_W2F 61877
+.equ W_W2G 61878
+.equ W_W2H 61879
+.equ W_W2I 61880
+.equ W_W2J 61881
 w2_load:
 MOVI r2,#SZ_32
 JMP @ni_loadv
