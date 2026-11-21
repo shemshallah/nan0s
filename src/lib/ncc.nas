@@ -745,6 +745,24 @@
 .equ W_F2L      61006
 .equ W_F2BIG    61007
 .equ W_PF_LSTR   61008
+; libm soft-double scratch (ni_sin/ni_cos range reduction and kernels)
+.equ W_LM_X     61900
+.equ W_LM_AX    61901
+.equ W_LM_N     61902
+.equ W_LM_ND    61903
+.equ W_LM_Q     61904
+.equ W_LM_RH    61905
+.equ W_LM_RL    61906
+.equ W_LM_ZH    61907
+.equ W_LM_ZL    61908
+.equ W_LM_AH    61909
+.equ W_LM_AL    61910
+.equ W_LM_PH    61911
+.equ W_LM_PL    61912
+.equ W_LM_TH    61913
+.equ W_LM_TL    61914
+.equ W_LM_C     61915
+.equ W_LM_SG    61916
 .equ W_BITUNIT   61800
 .equ W_BITUSED   61801
 .equ W_MEMBIT    61802
@@ -15565,10 +15583,379 @@ SUB r14,r14,r13
 LD r15,r14,0
 RET
 
-; ni_sin: r1=float bits -> r1=sin(r1)
-ni_sin:
+; ------------------------------------------------------------------ libm sin/cos
+; Correctly-rounded binary32 sin/cos for a scoped range.
+;
+; Internal arithmetic is a software double-float (two binary32 values hi+lo,
+; about 48 significant bits). Range reduction is Cody-Waite against a
+; five-part binary32 expansion of pi/2; the polynomial kernels use fdlibm's
+; minimax coefficients split into hi/lo binary32 pairs.
+;
+; Exactness scope: |x| <= 65536 (all finite binary32 inputs in that range).
+; Above that the old float32 reduction is used as a coarse fallback; those
+; results are not claimed correctly rounded (and may be NaN for enormous
+; finite arguments). NaN -> qNaN,
+; +-Inf -> qNaN, sin(+-0) = +-0, cos(+-0) = 1.
+
+; nix_dadd: (r1,r2) + (r3,r4) -> (r1,r2), normalised double-float.
+nix_dadd:
+FADD r5,r1,r3
+FSUB r6,r5,r1
+FSUB r7,r5,r6
+FSUB r7,r1,r7
+FSUB r8,r3,r6
+FADD r7,r7,r8
+FADD r7,r7,r2
+FADD r7,r7,r4
+FADD r9,r5,r7
+FSUB r10,r9,r5
+FSUB r2,r7,r10
+ADD r1,r9,r0
+RET
+
+; nix_dsub: (r1,r2) - (r3,r4) -> (r1,r2).
+nix_dsub:
+LA r5,0x80000000
+BOOL.6 r3,r3,r5
+BOOL.6 r4,r4,r5
+JMP @nix_dadd
+
+; nix_dmul: (r1,r2) * (r3,r4) -> (r1,r2), Dekker split + TwoProduct.
+nix_dmul:
+LA r5,0x45800800
+FMUL r6,r1,r5
+FSUB r7,r6,r1
+FSUB r7,r6,r7
+FSUB r8,r1,r7
+FMUL r11,r3,r5
+FSUB r9,r11,r3
+FSUB r9,r11,r9
+FSUB r10,r3,r9
+FMUL r11,r1,r3
+FMUL r12,r7,r9
+FSUB r12,r12,r11
+FMUL r6,r7,r10
+FADD r12,r12,r6
+FMUL r6,r8,r9
+FADD r12,r12,r6
+FMUL r6,r8,r10
+FADD r12,r12,r6
+FMUL r6,r1,r4
+FADD r12,r12,r6
+FMUL r6,r2,r3
+FADD r12,r12,r6
+FADD r5,r11,r12
+FSUB r6,r5,r11
+FSUB r2,r12,r6
+ADD r1,r5,r0
+RET
+
+; nix_rsubc: r=(r1=const bits) -> W_LM_R - W_LM_ND*const, kept double-float.
+nix_rsubc:
 ST r15,r14,0
 ADD r14,r14,r13
+ST r1,r0,#W_LM_C
+LD r1,r0,#W_LM_C
+MOVI r2,0
+LD r3,r0,#W_LM_ND
+MOVI r4,0
+CALL @nix_dmul
+ST r1,r0,#W_LM_PH
+ST r2,r0,#W_LM_PL
+LD r1,r0,#W_LM_RH
+LD r2,r0,#W_LM_RL
+LD r3,r0,#W_LM_PH
+LD r4,r0,#W_LM_PL
+CALL @nix_dsub
+ST r1,r0,#W_LM_RH
+ST r2,r0,#W_LM_RL
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; nix_reduce: r1=x bits -> W_LM_RH/RL = x-n*pi/2, W_LM_Q = n&3.
+; n = round(x*2/pi); Cody-Waite with five pi/2 parts.
+nix_reduce:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_LM_X
+LA r2,0x3F22F983
+FMUL r3,r1,r2
+LA r2,0x3F000000
+LA r4,0x80000000
+BOOL.8 r5,r3,r4
+BOOL.14 r2,r2,r5
+FADD r3,r3,r2
+CVTFI r4,r3
+ST r4,r0,#W_LM_N
+MOVI r5,3
+BOOL.8 r5,r4,r5
+ST r5,r0,#W_LM_Q
+CVTIF r5,r4
+ST r5,r0,#W_LM_ND
+ST r1,r0,#W_LM_RH
+MOVI r6,0
+ST r6,r0,#W_LM_RL
+LA r1,0x3FC90FDB
+CALL @nix_rsubc
+LA r1,0xB33BBD2E
+CALL @nix_rsubc
+LA r1,0xA6F72CED
+CALL @nix_rsubc
+LA r1,0x194C5170
+CALL @nix_rsubc
+LA r1,0x0BDC1CD1
+CALL @nix_rsubc
+LD r1,r0,#W_LM_RH
+LD r2,r0,#W_LM_RL
+LD r3,r0,#W_LM_Q
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; nix_sin_kernel: r=W_LM_RH/RL, |r|<=pi/4 -> r1,r2 = sin(r) double-float.
+nix_sin_kernel:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_LM_RH
+LD r2,r0,#W_LM_RL
+LD r3,r0,#W_LM_RH
+LD r4,r0,#W_LM_RL
+CALL @nix_dmul
+ST r1,r0,#W_LM_ZH
+ST r2,r0,#W_LM_ZL
+LA r1,0x2F2EC9D3
+LA r2,0xA2260550
+ST r1,r0,#W_LM_AH
+ST r2,r0,#W_LM_AL
+; acc = S5 + z*acc
+LD r1,r0,#W_LM_ZH
+LD r2,r0,#W_LM_ZL
+LD r3,r0,#W_LM_AH
+LD r4,r0,#W_LM_AL
+CALL @nix_dmul
+ST r1,r0,#W_LM_TH
+ST r2,r0,#W_LM_TL
+LA r1,0xB2D72F34
+LA r2,0xA622B9CF
+LD r3,r0,#W_LM_TH
+LD r4,r0,#W_LM_TL
+CALL @nix_dadd
+ST r1,r0,#W_LM_AH
+ST r2,r0,#W_LM_AL
+; acc = S4 + z*acc
+LD r1,r0,#W_LM_ZH
+LD r2,r0,#W_LM_ZL
+LD r3,r0,#W_LM_AH
+LD r4,r0,#W_LM_AL
+CALL @nix_dmul
+ST r1,r0,#W_LM_TH
+ST r2,r0,#W_LM_TL
+LA r1,0x3638EF1B
+LA r2,0xA984E018
+LD r3,r0,#W_LM_TH
+LD r4,r0,#W_LM_TL
+CALL @nix_dadd
+ST r1,r0,#W_LM_AH
+ST r2,r0,#W_LM_AL
+; acc = S3 + z*acc
+LD r1,r0,#W_LM_ZH
+LD r2,r0,#W_LM_ZL
+LD r3,r0,#W_LM_AH
+LD r4,r0,#W_LM_AL
+CALL @nix_dmul
+ST r1,r0,#W_LM_TH
+ST r2,r0,#W_LM_TL
+LA r1,0xB9500D01
+LA r2,0x2C47D3C5
+LD r3,r0,#W_LM_TH
+LD r4,r0,#W_LM_TL
+CALL @nix_dadd
+ST r1,r0,#W_LM_AH
+ST r2,r0,#W_LM_AL
+; acc = S2 + z*acc
+LD r1,r0,#W_LM_ZH
+LD r2,r0,#W_LM_ZL
+LD r3,r0,#W_LM_AH
+LD r4,r0,#W_LM_AL
+CALL @nix_dmul
+ST r1,r0,#W_LM_TH
+ST r2,r0,#W_LM_TL
+LA r1,0x3C088889
+LA r2,0xAFEEF076
+LD r3,r0,#W_LM_TH
+LD r4,r0,#W_LM_TL
+CALL @nix_dadd
+ST r1,r0,#W_LM_AH
+ST r2,r0,#W_LM_AL
+; acc = S1 + z*acc
+LD r1,r0,#W_LM_ZH
+LD r2,r0,#W_LM_ZL
+LD r3,r0,#W_LM_AH
+LD r4,r0,#W_LM_AL
+CALL @nix_dmul
+ST r1,r0,#W_LM_TH
+ST r2,r0,#W_LM_TL
+LA r1,0xBE2AAAAB
+LA r2,0x31AAAAAB
+LD r3,r0,#W_LM_TH
+LD r4,r0,#W_LM_TL
+CALL @nix_dadd
+ST r1,r0,#W_LM_AH
+ST r2,r0,#W_LM_AL
+; return r + r*(z*acc)
+LD r1,r0,#W_LM_ZH
+LD r2,r0,#W_LM_ZL
+LD r3,r0,#W_LM_AH
+LD r4,r0,#W_LM_AL
+CALL @nix_dmul
+ST r1,r0,#W_LM_TH
+ST r2,r0,#W_LM_TL
+LD r1,r0,#W_LM_RH
+LD r2,r0,#W_LM_RL
+LD r3,r0,#W_LM_TH
+LD r4,r0,#W_LM_TL
+CALL @nix_dmul
+ST r1,r0,#W_LM_TH
+ST r2,r0,#W_LM_TL
+LD r1,r0,#W_LM_RH
+LD r2,r0,#W_LM_RL
+LD r3,r0,#W_LM_TH
+LD r4,r0,#W_LM_TL
+CALL @nix_dadd
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; nix_cos_kernel: r=W_LM_RH/RL, |r|<=pi/4 -> r1,r2 = cos(r) double-float.
+nix_cos_kernel:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_LM_RH
+LD r2,r0,#W_LM_RL
+LD r3,r0,#W_LM_RH
+LD r4,r0,#W_LM_RL
+CALL @nix_dmul
+ST r1,r0,#W_LM_ZH
+ST r2,r0,#W_LM_ZL
+LA r1,0xAD47D74E
+LA r2,0x1F3BE396
+ST r1,r0,#W_LM_AH
+ST r2,r0,#W_LM_AL
+; acc = C5 + z*acc
+LD r1,r0,#W_LM_ZH
+LD r2,r0,#W_LM_ZL
+LD r3,r0,#W_LM_AH
+LD r4,r0,#W_LM_AL
+CALL @nix_dmul
+ST r1,r0,#W_LM_TH
+ST r2,r0,#W_LM_TL
+LA r1,0x310F74F6
+LA r2,0xA392D38F
+LD r3,r0,#W_LM_TH
+LD r4,r0,#W_LM_TL
+CALL @nix_dadd
+ST r1,r0,#W_LM_AH
+ST r2,r0,#W_LM_AL
+; acc = C4 + z*acc
+LD r1,r0,#W_LM_ZH
+LD r2,r0,#W_LM_ZL
+LD r3,r0,#W_LM_AH
+LD r4,r0,#W_LM_AL
+CALL @nix_dmul
+ST r1,r0,#W_LM_TH
+ST r2,r0,#W_LM_TL
+LA r1,0xB493F27C
+LA r2,0xA61C52AD
+LD r3,r0,#W_LM_TH
+LD r4,r0,#W_LM_TL
+CALL @nix_dadd
+ST r1,r0,#W_LM_AH
+ST r2,r0,#W_LM_AL
+; acc = C3 + z*acc
+LD r1,r0,#W_LM_ZH
+LD r2,r0,#W_LM_ZL
+LD r3,r0,#W_LM_AH
+LD r4,r0,#W_LM_AL
+CALL @nix_dmul
+ST r1,r0,#W_LM_TH
+ST r2,r0,#W_LM_TL
+LA r1,0x37D00D01
+LA r2,0xAAC69D4E
+LD r3,r0,#W_LM_TH
+LD r4,r0,#W_LM_TL
+CALL @nix_dadd
+ST r1,r0,#W_LM_AH
+ST r2,r0,#W_LM_AL
+; acc = C2 + z*acc
+LD r1,r0,#W_LM_ZH
+LD r2,r0,#W_LM_ZL
+LD r3,r0,#W_LM_AH
+LD r4,r0,#W_LM_AL
+CALL @nix_dmul
+ST r1,r0,#W_LM_TH
+ST r2,r0,#W_LM_TL
+LA r1,0xBAB60B61
+LA r2,0x2E13EAE9
+LD r3,r0,#W_LM_TH
+LD r4,r0,#W_LM_TL
+CALL @nix_dadd
+ST r1,r0,#W_LM_AH
+ST r2,r0,#W_LM_AL
+; acc = C1 + z*acc
+LD r1,r0,#W_LM_ZH
+LD r2,r0,#W_LM_ZL
+LD r3,r0,#W_LM_AH
+LD r4,r0,#W_LM_AL
+CALL @nix_dmul
+ST r1,r0,#W_LM_TH
+ST r2,r0,#W_LM_TL
+LA r1,0x3D2AAAAB
+LA r2,0xB0AAAAAB
+LD r3,r0,#W_LM_TH
+LD r4,r0,#W_LM_TL
+CALL @nix_dadd
+ST r1,r0,#W_LM_AH
+ST r2,r0,#W_LM_AL
+; q = z*z*acc
+LD r1,r0,#W_LM_ZH
+LD r2,r0,#W_LM_ZL
+LD r3,r0,#W_LM_AH
+LD r4,r0,#W_LM_AL
+CALL @nix_dmul
+ST r1,r0,#W_LM_TH
+ST r2,r0,#W_LM_TL
+LD r1,r0,#W_LM_ZH
+LD r2,r0,#W_LM_ZL
+LD r3,r0,#W_LM_TH
+LD r4,r0,#W_LM_TL
+CALL @nix_dmul
+ST r1,r0,#W_LM_TH
+ST r2,r0,#W_LM_TL
+; h = z/2 (exact); return 1 - (h - q)
+LD r1,r0,#W_LM_ZH
+LD r2,r0,#W_LM_ZL
+LA r3,0x3F000000
+FMUL r1,r1,r3
+FMUL r2,r2,r3
+ST r1,r0,#W_LM_PH
+ST r2,r0,#W_LM_PL
+LD r3,r0,#W_LM_TH
+LD r4,r0,#W_LM_TL
+CALL @nix_dsub
+ST r1,r0,#W_LM_TH
+ST r2,r0,#W_LM_TL
+LA r1,0x3F800000
+MOVI r2,0
+LD r3,r0,#W_LM_TH
+LD r4,r0,#W_LM_TL
+CALL @nix_dsub
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; nix_sin_coarse: old float32 path, finite fallback for |x| > 65536.
+nix_sin_coarse:
 ; reduce by 2*pi
 LA r2,0x40C90FDB
 FDIV r3,r1,r2
@@ -15579,33 +15966,33 @@ FSUB r1,r1,r3
 ; fold into [-pi,pi]
 LA r2,0x40490FDB
 FCMP r1,r2
-JMP[GT] @ns_hi
+JMP[GT] @nsc_hi
 LA r2,0xC0490FDB
 FCMP r1,r2
-JMP[LT] @ns_lo
-JMP @ns_taylor
-ns_hi:
+JMP[LT] @nsc_lo
+JMP @nsc_taylor
+nsc_hi:
 LA r2,0x40C90FDB
 FSUB r1,r1,r2
-JMP @ns_taylor
-ns_lo:
+JMP @nsc_taylor
+nsc_lo:
 LA r2,0x40C90FDB
 FADD r1,r1,r2
-ns_taylor:
-; fold into [-pi/2,pi/2] for Taylor accuracy
+nsc_taylor:
+; fold into [-pi/2,pi/2]
 LA r2,0x3FC90FDB
 FCMP r1,r2
-JMP[LE] @ns_chkneg
+JMP[LE] @nsc_chkneg
 LA r2,0x40490FDB
 FSUB r1,r2,r1
-JMP @ns_poly
-ns_chkneg:
+JMP @nsc_poly
+nsc_chkneg:
 LA r2,0xBFC90FDB
 FCMP r1,r2
-JMP[GE] @ns_poly
+JMP[GE] @nsc_poly
 LA r2,0xC0490FDB
 FSUB r1,r2,r1
-ns_poly:
+nsc_poly:
 ADD r5,r1,r0
 FMUL r2,r5,r5
 FMUL r3,r2,r5
@@ -15639,15 +16026,116 @@ LA r4,0x32D7322B
 FMUL r3,r3,r4
 FSUB r6,r6,r3
 ADD r1,r6,r0
+RET
+
+; ni_sin: r1=float bits -> r1=sin(r1)
+ni_sin:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_LM_X
+LA r2,0x7FFFFFFF
+BOOL.8 r3,r1,r2
+ST r3,r0,#W_LM_AX
+LA r2,0x7F800000
+CMP r3,r2
+JMP[GT] @ns_nan
+JMP[EQ] @ns_nan
+CMP r3,r0
+JMP[EQ] @ns_zero
+LA r2,0x47800000
+CMP r3,r2
+JMP[GT] @ns_coarse
+LD r1,r0,#W_LM_X
+CALL @nix_reduce
+MOVI r2,1
+BOOL.8 r4,r3,r2
+CMP r4,r0
+JMP[NE] @ns_cos
+CALL @nix_sin_kernel
+JMP @ns_sign
+ns_cos:
+CALL @nix_cos_kernel
+ns_sign:
+LD r3,r0,#W_LM_Q
+MOVI r4,2
+BOOL.8 r3,r3,r4
+CMP r3,r0
+JMP[EQ] @ns_round
+LA r3,0x80000000
+BOOL.6 r1,r1,r3
+BOOL.6 r2,r2,r3
+ns_round:
+FADD r1,r1,r2
+JMP @ns_done
+ns_nan:
+LA r1,0x7FC00000
+JMP @ns_done
+ns_zero:
+LD r1,r0,#W_LM_X
+JMP @ns_done
+ns_coarse:
+LD r1,r0,#W_LM_X
+CALL @nix_sin_coarse
+ns_done:
 SUB r14,r14,r13
 LD r15,r14,0
 RET
 
 ; ni_cos: r1=float bits -> r1=cos(r1)
 ni_cos:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_LM_X
+LA r2,0x7FFFFFFF
+BOOL.8 r3,r1,r2
+ST r3,r0,#W_LM_AX
+LA r2,0x7F800000
+CMP r3,r2
+JMP[GT] @nc_nan
+JMP[EQ] @nc_nan
+CMP r3,r0
+JMP[EQ] @nlc_zero
+LA r2,0x47800000
+CMP r3,r2
+JMP[GT] @nc_coarse
+LD r1,r0,#W_LM_X
+CALL @nix_reduce
+MOVI r2,1
+BOOL.8 r4,r3,r2
+CMP r4,r0
+JMP[NE] @nc_sin
+CALL @nix_cos_kernel
+JMP @nc_sign
+nc_sin:
+CALL @nix_sin_kernel
+nc_sign:
+LD r3,r0,#W_LM_Q
+ADDI r3,r3,1
+MOVI r4,2
+BOOL.8 r3,r3,r4
+CMP r3,r0
+JMP[EQ] @nc_round
+LA r3,0x80000000
+BOOL.6 r1,r1,r3
+BOOL.6 r2,r2,r3
+nc_round:
+FADD r1,r1,r2
+JMP @nc_done
+nc_nan:
+LA r1,0x7FC00000
+JMP @nc_done
+nlc_zero:
+LA r1,0x3F800000
+JMP @nc_done
+nc_coarse:
+LD r1,r0,#W_LM_X
 LA r2,0x3FC90FDB
 FADD r1,r1,r2
-JMP @ni_sin
+CALL @nix_sin_coarse
+nc_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
 
 ; ni_pad: r1=count r2=char -> emit count copies
 ni_pad:
@@ -18755,6 +19243,13 @@ CALL @ni_push
 JMP @nbi_d
 nbi_floor:
 CALL @ni_pop
+LA r2,0x7FFFFFFF
+BOOL.8 r3,r1,r2
+CMP r3,r0
+JMP[EQ] @nbi_floor_x
+LA r2,0x4B000000
+CMP r3,r2
+JMP[GE] @nbi_floor_x
 CVTFI r2,r1
 CVTIF r3,r2
 FCMP r1,r3
@@ -18762,10 +19257,21 @@ JMP[GE] @nbi_floor_d
 SUB r2,r2,r13
 nbi_floor_d:
 CVTIF r1,r2
+nbi_floor_x:
 CALL @ni_push
 JMP @nbi_d
 nbi_ceil:
 CALL @ni_pop
+LA r2,0x80000000
+BOOL.8 r3,r1,r2
+ST r3,r0,#W_LM_SG
+LA r2,0x7FFFFFFF
+BOOL.8 r3,r1,r2
+CMP r3,r0
+JMP[EQ] @nbi_ceil_x
+LA r2,0x4B000000
+CMP r3,r2
+JMP[GE] @nbi_ceil_x
 CVTFI r2,r1
 CVTIF r3,r2
 FCMP r1,r3
@@ -18773,20 +19279,137 @@ JMP[LE] @nbi_ceil_d
 ADD r2,r2,r13
 nbi_ceil_d:
 CVTIF r1,r2
+nbi_ceil_x:
+CMP r1,r0
+JMP[NE] @nbi_ceil_p
+LD r3,r0,#W_LM_SG
+BOOL.14 r1,r1,r3
+nbi_ceil_p:
 CALL @ni_push
 JMP @nbi_d
 nbi_fmod:
+; fmod(x,y) = x - trunc(x/y)*y. The quotient/product/subtract are carried
+; in double-float, then one exact float correction fixes the possible
+; off-by-one in trunc(x/y). Exact for |x/y| < 2^23 with |x|,|y| < 2^116
+; (the Dekker split's range; see libm.md scope).
+ST r15,r14,0
+ADD r14,r14,r13
 CALL @ni_pop
-ST r1,r0,#W_F2P
+ST r1,r0,#W_LM_AX
 CALL @ni_pop
-ST r1,r0,#W_F2V
-LD r2,r0,#W_F2P
-FDIV r3,r1,r2
+ST r1,r0,#W_LM_X
+; y == 0 or y is NaN -> qNaN
+LD r2,r0,#W_LM_AX
+LA r3,0x7FFFFFFF
+BOOL.8 r4,r2,r3
+CMP r4,r0
+JMP[EQ] @nfm_nan
+LA r3,0x7F800000
+CMP r4,r3
+JMP[GT] @nfm_nan
+JMP[EQ] @nfm_yinf
+; x == +-0 -> x
+LD r2,r0,#W_LM_X
+LA r3,0x7FFFFFFF
+BOOL.8 r5,r2,r3
+CMP r5,r0
+JMP[EQ] @nfm_xret
+LA r3,0x7F800000
+CMP r5,r3
+JMP[GE] @nfm_nan
+; the Dekker split overflows above 2^116; use the coarse path there
+LA r3,0x79800000
+CMP r4,r3
+JMP[GE] @nfm_coarse
+CMP r5,r3
+JMP[GE] @nfm_coarse
+; n = trunc(x/y)
+LD r7,r0,#W_LM_AX
+FDIV r6,r2,r7
+CVTFI r8,r6
+CMP r8,r0
+JMP[EQ] @nfm_xret
+CVTIF r9,r8
+ST r9,r0,#W_LM_ND
+; p = n*y in double-float
+ADD r1,r9,r0
+MOVI r2,0
+LD r3,r0,#W_LM_AX
+MOVI r4,0
+CALL @nix_dmul
+ST r1,r0,#W_LM_PH
+ST r2,r0,#W_LM_PL
+; r = x - p
+LD r1,r0,#W_LM_X
+MOVI r2,0
+LD r3,r0,#W_LM_PH
+LD r4,r0,#W_LM_PL
+CALL @nix_dsub
+FADD r1,r1,r2
+ST r1,r0,#W_LM_RH
+CMP r1,r0
+JMP[EQ] @nfm_zerores
+; if sign(r) != sign(x), r += copysign(|y|,x)
+LD r2,r0,#W_LM_X
+LA r3,0x80000000
+BOOL.8 r4,r1,r3
+BOOL.8 r5,r2,r3
+CMP r4,r5
+JMP[EQ] @nfm_mag
+LD r6,r0,#W_LM_AX
+LA r3,0x7FFFFFFF
+BOOL.8 r6,r6,r3
+BOOL.14 r6,r6,r5
+FADD r1,r1,r6
+ST r1,r0,#W_LM_RH
+nfm_mag:
+; if |r| >= |y|, r -= copysign(|y|,x)
+LD r6,r0,#W_LM_AX
+LA r3,0x7FFFFFFF
+BOOL.8 r6,r6,r3
+LA r3,0x7FFFFFFF
+BOOL.8 r7,r1,r3
+FCMP r7,r6
+JMP[LT] @nfm_done
+LD r5,r0,#W_LM_X
+LA r3,0x80000000
+BOOL.8 r5,r5,r3
+BOOL.14 r6,r6,r5
+FSUB r1,r1,r6
+ST r1,r0,#W_LM_RH
+JMP @nfm_done
+nfm_zerores:
+LD r2,r0,#W_LM_X
+LA r3,0x80000000
+BOOL.8 r1,r2,r3
+JMP @nfm_done
+nfm_yinf:
+LD r2,r0,#W_LM_X
+LA r3,0x7FFFFFFF
+BOOL.8 r5,r2,r3
+LA r3,0x7F800000
+CMP r5,r3
+JMP[GE] @nfm_nan
+LD r1,r0,#W_LM_X
+JMP @nfm_done
+nfm_xret:
+LD r1,r0,#W_LM_X
+JMP @nfm_done
+nfm_coarse:
+LD r2,r0,#W_LM_X
+LD r7,r0,#W_LM_AX
+FDIV r3,r2,r7
 CVTFI r3,r3
 CVTIF r3,r3
-FMUL r3,r3,r2
-FSUB r1,r1,r3
+FMUL r3,r3,r7
+FSUB r1,r2,r3
+JMP @nfm_done
+nfm_nan:
+LA r1,0x7FC00000
+nfm_done:
 CALL @ni_push
+SUB r14,r14,r13
+LD r15,r14,0
 JMP @nbi_d
 nbi_fmin:
 CALL @ni_pop
@@ -18823,6 +19446,16 @@ JMP @nbi_d
 
 ; ---- additional math wrappers -------------------------------------
 ni_round_bits:
+LA r5,0x80000000
+BOOL.8 r5,r1,r5
+ST r5,r0,#W_LM_SG
+LA r5,0x7FFFFFFF
+BOOL.8 r4,r1,r5
+CMP r4,r0
+JMP[EQ] @nrb_ret
+LA r5,0x4B000000
+CMP r4,r5
+JMP[GE] @nrb_ret
 CVTFI r2,r1
 CVTIF r3,r2
 FSUB r4,r1,r3
@@ -18833,18 +19466,34 @@ LA r5,0xBF000000
 FCMP r4,r5
 JMP[LE] @nrb_dn
 ADD r1,r3,r0
-RET
+JMP @nrb_ret
 nrb_up:
 ADD r2,r2,r13
 CVTIF r1,r2
-RET
+JMP @nrb_ret
 nrb_dn:
 SUB r2,r2,r13
 CVTIF r1,r2
+nrb_ret:
+CMP r1,r0
+JMP[NE] @nrb_realret
+LD r5,r0,#W_LM_SG
+BOOL.14 r1,r1,r5
+nrb_realret:
 RET
 
 ; ni_round_even_bits: round to nearest, ties to even (the default IEEE mode).
 ni_round_even_bits:
+LA r5,0x80000000
+BOOL.8 r5,r1,r5
+ST r5,r0,#W_LM_SG
+LA r5,0x7FFFFFFF
+BOOL.8 r4,r1,r5
+CMP r4,r0
+JMP[EQ] @nre_ret
+LA r5,0x4B000000
+CMP r4,r5
+JMP[GE] @nre_ret
 CVTFI r2,r1
 CVTIF r3,r2
 FSUB r4,r1,r3
@@ -18875,6 +19524,12 @@ nre_dn:
 SUB r2,r2,r13
 nre_trunc:
 CVTIF r1,r2
+nre_ret:
+CMP r1,r0
+JMP[NE] @nre_realret
+LD r5,r0,#W_LM_SG
+BOOL.14 r1,r1,r5
+nre_realret:
 RET
 
 nbi_exp2:
@@ -19003,8 +19658,24 @@ CALL @ni_push
 JMP @nbi_d
 nbi_trunc:
 CALL @ni_pop
+LA r2,0x80000000
+BOOL.8 r3,r1,r2
+ST r3,r0,#W_LM_SG
+LA r2,0x7FFFFFFF
+BOOL.8 r3,r1,r2
+CMP r3,r0
+JMP[EQ] @nbi_trunc_x
+LA r2,0x4B000000
+CMP r3,r2
+JMP[GE] @nbi_trunc_x
 CVTFI r2,r1
 CVTIF r1,r2
+nbi_trunc_x:
+CMP r1,r0
+JMP[NE] @nbi_trunc_p
+LD r3,r0,#W_LM_SG
+BOOL.14 r1,r1,r3
+nbi_trunc_p:
 CALL @ni_push
 JMP @nbi_d
 nbi_round:
