@@ -294,7 +294,8 @@ copies `min(old,new)` bytes and frees the old block, so shrinking cannot
 leave a stray split. `tools/ncc_alloc.sh` runs 10,000 random
 malloc/free/realloc operations and checks 4-byte alignment, overlap among
 live blocks, full-pattern preservation across realloc, leak-free reuse
-(including a final 1.9 MB allocation), `calloc` zeroing/overflow and
+(including a whole-heap 1,999,992-byte allocation, then the same
+allocation again after `free`), `calloc` zeroing/overflow and
 `realloc(NULL,n)`.
 
 ## Diagnostics and undefined behaviour
