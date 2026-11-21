@@ -22,10 +22,12 @@ ASCII wide formatter/scanner (`wprintf`/`wscanf`) is present.
 The remaining documented limitations are platform or optional-scope items:
 
 - the C locale is the only locale (the ISO C minimum);
-- x86 BIOS boot media is capped at 1.44 MB by the floppy CHS loader; the
-  current unified payload is about 0.67 MB, so the cap is not yet binding.
-  Enlarging the loader is deferred until qemu-system-i386 is available to
-  verify the new boot path;
+- x86 BIOS boot media: qemu-system-i386 is installed and `tools/qgate.sh`
+  passes. The floppy image is 1.44 MB, but the current kernel copies only the
+  first 512 KiB of guest data, and the real-mode loader cannot stage past the
+  EBDA/VGA window at about 0xA0000. The 0.67 MB image's GUI-cart tail is
+  therefore truncated on x86; the fix is the two-stage/ATA loader described
+  in `spec/IMAGE_SCALE_PLAN.md`. The nan_cli GUI gates load the whole image;
 - the POSIX-free machine-interface table is implemented in
   `src/lib/bare.nas`; console, block, and NPAF-backed filesystem adapters are
   wired (see `spec/BARE_METAL_INTERFACES.md`);
