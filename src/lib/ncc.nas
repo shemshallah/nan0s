@@ -425,6 +425,12 @@
 .equ B_WCSCPY   97
 .equ B_WCSCAT   98
 .equ B_ALARM    99
+.equ B_STRSPN   100
+.equ B_STRCSPN  101
+.equ B_STRPBRK  102
+.equ B_STRTOK   103
+.equ B_GETENV   104
+.equ B_SYSTEM   105
 
 ; ------------------------------------------------------------------ compiler state
 ; Kept below word 65536 so ST/LD can use the 16-bit immediate form directly.
@@ -759,6 +765,7 @@
 .include "qsort.nas"
 .include "setjmp.nas"
 .include "libcx.nas"
+.include "strx.nas"
 
 ; q2_skipsp: consume spaces and tabs
 q2_skipsp:
@@ -6360,6 +6367,49 @@ MOVI r3,5
 MOVI r4,#B_ALARM
 MOVI r5,1
 MOVI r6,#T_UINT
+CALL @ncc_add_builtin
+; extra string helpers
+LA r1,0xB573D07F
+LA r2,@ncc_s_strspn
+MOVI r3,6
+MOVI r4,#B_STRSPN
+MOVI r5,2
+MOVI r6,#T_UINT
+CALL @ncc_add_builtin
+LA r1,0xD462345C
+LA r2,@ncc_s_strcspn
+MOVI r3,7
+MOVI r4,#B_STRCSPN
+MOVI r5,2
+MOVI r6,#T_UINT
+CALL @ncc_add_builtin
+LA r1,0x6B070B35
+LA r2,@ncc_s_strpbrk
+MOVI r3,7
+MOVI r4,#B_STRPBRK
+MOVI r5,2
+LD r6,r0,#W_PTRV
+CALL @ncc_add_builtin
+LA r1,0x3CCCDC16
+LA r2,@ncc_s_strtok
+MOVI r3,6
+MOVI r4,#B_STRTOK
+MOVI r5,2
+LD r6,r0,#W_PTRC
+CALL @ncc_add_builtin
+LA r1,0x4DDDED5A
+LA r2,@ncc_s_getenv
+MOVI r3,6
+MOVI r4,#B_GETENV
+MOVI r5,1
+LD r6,r0,#W_PTRC
+CALL @ncc_add_builtin
+LA r1,0x491E0A9C
+LA r2,@ncc_s_system
+MOVI r3,6
+MOVI r4,#B_SYSTEM
+MOVI r5,1
+MOVI r6,#T_INT
 CALL @ncc_add_builtin
 SUB r14,r14,r13
 LD r15,r14,0
@@ -15792,6 +15842,24 @@ JMP[EQ] @nbi_wcscat
 MOVI r2,#B_ALARM
 CMP r1,r2
 JMP[EQ] @nbi_alarm
+MOVI r2,#B_STRSPN
+CMP r1,r2
+JMP[EQ] @nbi_strspn
+MOVI r2,#B_STRCSPN
+CMP r1,r2
+JMP[EQ] @nbi_strcspn
+MOVI r2,#B_STRPBRK
+CMP r1,r2
+JMP[EQ] @nbi_strpbrk
+MOVI r2,#B_STRTOK
+CMP r1,r2
+JMP[EQ] @nbi_strtok
+MOVI r2,#B_GETENV
+CMP r1,r2
+JMP[EQ] @nbi_getenv
+MOVI r2,#B_SYSTEM
+CMP r1,r2
+JMP[EQ] @nbi_system
 JMP @nbi_zero
 nbi_putc:
 CALL @ni_pop

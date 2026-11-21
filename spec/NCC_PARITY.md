@@ -102,7 +102,8 @@ Not implemented (honest list):
 - the standard library is a practical subset. Sorting/searching
   (`qsort`/`bsearch`, including guest and builtin callbacks), non-local jumps
   (`setjmp`/`longjmp`), `strftime`, `tmpnam`/`tmpfile`, and the wide-string
-  helpers `wcslen`/`wcscmp`/`wcscpy`/`wcscat` are implemented. Only the C
+  helpers `wcslen`/`wcscmp`/`wcscpy`/`wcscat`, plus `strspn`/`strcspn`/
+  `strpbrk`/`strtok` and `getenv`/`system` stubs are implemented. Only the C
   locale is provided, and wide stdio (`wprintf`/`wscanf`) is still missing
 - signal handlers are installed and delivered by `raise`; `alarm()` performs
   asynchronous `SIGALRM` delivery at IR-instruction boundaries. POSIX timers
@@ -229,6 +230,7 @@ tools/ncc_m30.sh    explicit function-returning-function-pointer prototypes
 tools/ncc_m31.sh    alarm()/SIGALRM asynchronous delivery
 tools/ncc_m32.sh    C99 designated initializers (.member, [index], nested)
 tools/ncc_m33.sh    brace elision across arrays of flat aggregates
+tools/ncc_m34.sh    strspn/strcspn/strpbrk/strtok, getenv/system
 tools/ncc_donut.sh  original C donut (one frame) in raw NaN16
 tools/nfs2.sh       path-addressed RAM filesystem API
 tools/ncc_gui.sh    boot image, open terminal, .demo runs C in the vbuf
