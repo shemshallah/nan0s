@@ -438,6 +438,10 @@
 .equ B_PERROR   110
 .equ B_WPRINTF  111
 .equ B_WSCANF   112
+.equ B_STRTOL   113
+.equ B_STRTOUL  114
+.equ B_STRTOLL  115
+.equ B_STRTOULL 116
 
 ; ------------------------------------------------------------------ compiler state
 ; Kept below word 65536 so ST/LD can use the 16-bit immediate form directly.
@@ -776,6 +780,7 @@
 .include "libcx.nas"
 .include "strx.nas"
 .include "wide.nas"
+.include "strtox.nas"
 
 ; q2_skipsp: consume spaces and tabs
 q2_skipsp:
@@ -6469,6 +6474,34 @@ MOVI r3,6
 MOVI r4,#B_WSCANF
 MOVI r5,0xFFFF
 MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0x3FCCE0CF
+LA r2,@ncc_s_strtol
+MOVI r3,6
+MOVI r4,#B_STRTOL
+MOVI r5,3
+MOVI r6,#T_LONG
+CALL @ncc_add_builtin
+LA r1,0xC6FD0D8
+LA r2,@ncc_s_strtoul
+MOVI r3,7
+MOVI r4,#B_STRTOUL
+MOVI r5,3
+MOVI r6,#T_ULONG
+CALL @ncc_add_builtin
+LA r1,0x1285A099
+LA r2,@ncc_s_strtoll
+MOVI r3,7
+MOVI r4,#B_STRTOLL
+MOVI r5,3
+MOVI r6,#T_LONGLONG
+CALL @ncc_add_builtin
+LA r1,0x48058B5C
+LA r2,@ncc_s_strtoull
+MOVI r3,8
+MOVI r4,#B_STRTOULL
+MOVI r5,3
+MOVI r6,#T_ULONGLONG
 CALL @ncc_add_builtin
 SUB r14,r14,r13
 LD r15,r14,0
@@ -16065,6 +16098,18 @@ JMP[EQ] @nbi_wprintf
 MOVI r2,#B_WSCANF
 CMP r1,r2
 JMP[EQ] @nbi_wscanf
+MOVI r2,#B_STRTOL
+CMP r1,r2
+JMP[EQ] @nbi_strtol
+MOVI r2,#B_STRTOUL
+CMP r1,r2
+JMP[EQ] @nbi_strtoul
+MOVI r2,#B_STRTOLL
+CMP r1,r2
+JMP[EQ] @nbi_strtoll
+MOVI r2,#B_STRTOULL
+CMP r1,r2
+JMP[EQ] @nbi_strtoull
 JMP @nbi_zero
 nbi_putc:
 CALL @ni_pop
