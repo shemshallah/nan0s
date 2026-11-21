@@ -365,7 +365,9 @@ ST r4,r1,1
 ST r0,r1,2
 MOVI r1,#NFS_DISK_LBA
 LA r2,#NFS_HDR
-CALL @ata_write28
+LA r4,@bare_table
+LD r4,r4,7
+CALLR r4
 LA r1,#NFS_BASE
 LD r2,r1,2
 ADDI r2,r2,1032
@@ -384,7 +386,9 @@ LA r2,#NFS_BASE
 LD r3,r0,#W_DK_I
 SHL r3,r3,7
 ADD r2,r2,r3
-CALL @ata_write28
+LA r4,@bare_table
+LD r4,r4,7
+CALLR r4
 LD r1,r0,#W_DK_I
 ADD r1,r1,r13
 ST r1,r0,#W_DK_I
@@ -402,7 +406,9 @@ CMP r1,r0
 JMP[EQ] @nld_n
 MOVI r1,#NFS_DISK_LBA
 LA r2,#NFS_HDR
-CALL @ata_read28
+LA r4,@bare_table
+LD r4,r4,6
+CALLR r4
 LA r1,#NFS_HDR
 LD r2,r1,0
 LA r3,0x4E465359
@@ -429,7 +435,9 @@ LA r2,#NFS_BASE
 LD r3,r0,#W_DK_I
 SHL r3,r3,7
 ADD r2,r2,r3
-CALL @ata_read28
+LA r4,@bare_table
+LD r4,r4,6
+CALLR r4
 LD r1,r0,#W_DK_I
 ADD r1,r1,r13
 ST r1,r0,#W_DK_I

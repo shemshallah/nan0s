@@ -537,6 +537,9 @@
 .equ B_WCSXFRM  209
 .equ B_ERF      210
 .equ B_ERFC     211
+.equ B_TGAMMA   212
+.equ B_LGAMMA   213
+.equ B_IFVER    214
 
 ; ------------------------------------------------------------------ compiler state
 ; Kept below word 65536 so ST/LD can use the 16-bit immediate form directly.
@@ -742,6 +745,12 @@
 .equ W_ATEXIT_SYM 61892
 .equ W_ATEXIT_OLD 61893
 .equ W_ATEXIT_SKIP 61894
+.equ W_GM_X     61884
+.equ W_GM_SIGN  61885
+.equ W_GM_S     61886
+.equ W_SIGNGAM  61887
+.equ W_GM_A     61888
+.equ W_GM_P     61889
 .equ W_ATEXIT_RUN 61895
 .equ W_VARNP    61390
 .equ W_VARFLAG  61391
@@ -5693,6 +5702,15 @@ MOVI r3,6
 LD r4,r0,#W_PTRV
 MOVI r5,3
 CALL @ncc_add_global
+LA r1,0xD237B23F
+LA r2,@ncc_s_signgam
+MOVI r3,7
+MOVI r4,#T_INT
+MOVI r5,1
+CALL @ncc_add_global
+LD r1,r0,#W_AGSYM
+LD r1,r1,#SY_AUX
+ST r1,r0,#W_SIGNGAM
 LA r1,0x396FDE24
 LA r2,@ncc_s_c_NULL
 MOVI r3,4
@@ -6723,6 +6741,27 @@ MOVI r3,4
 MOVI r4,#B_ERFC
 MOVI r5,1
 MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+LA r1,0x161E14A8
+LA r2,@ncc_s_tgamma
+MOVI r3,6
+MOVI r4,#B_TGAMMA
+MOVI r5,1
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+LA r1,0xE0B8A600
+LA r2,@ncc_s_lgamma
+MOVI r3,6
+MOVI r4,#B_LGAMMA
+MOVI r5,1
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+LA r1,0x1750BD42
+LA r2,@ncc_s_iface_version
+MOVI r3,13
+MOVI r4,#B_IFVER
+MOVI r5,0
+MOVI r6,#T_INT
 CALL @ncc_add_builtin
 
 
@@ -17698,6 +17737,15 @@ JMP[EQ] @nbi_erf
 MOVI r2,#B_ERFC
 CMP r1,r2
 JMP[EQ] @nbi_erfc
+MOVI r2,#B_TGAMMA
+CMP r1,r2
+JMP[EQ] @nbi_tgamma
+MOVI r2,#B_LGAMMA
+CMP r1,r2
+JMP[EQ] @nbi_lgamma
+MOVI r2,#B_IFVER
+CMP r1,r2
+JMP[EQ] @nbi_iface_version
 
 
 MOVI r2,#B_FPUTS

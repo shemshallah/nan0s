@@ -416,3 +416,179 @@ ncc_s_asin:
 .str "asin"
 ncc_s_acos:
 .str "acos"
+
+; ---- gamma via Lanczos (float) -------------------------------------
+ni_lgamma_pos:
+ST r1,r0,#W_GM_X
+LA r2,0x3F800000
+FSUB r1,r1,r2
+ST r1,r0,#W_GM_X
+; a = c0 + sum ci/(x+i)
+LA r4,0x3F800000
+LA r2,0x4429214E
+LD r1,r0,#W_GM_X
+LA r3,0x3F800000
+FADD r1,r1,r3
+FDIV r5,r2,r1
+FADD r4,r4,r5
+LA r2,0xC49D6474
+LD r1,r0,#W_GM_X
+LA r3,0x40000000
+FADD r1,r1,r3
+FDIV r5,r2,r1
+FADD r4,r4,r5
+LA r2,0x4440D4B3
+LD r1,r0,#W_GM_X
+LA r3,0x40400000
+FADD r1,r1,r3
+FDIV r5,r2,r1
+FADD r4,r4,r5
+LA r2,0xC3309D73
+LD r1,r0,#W_GM_X
+LA r3,0x40800000
+FADD r1,r1,r3
+FDIV r5,r2,r1
+FADD r4,r4,r5
+LA r2,0x41481E14
+LD r1,r0,#W_GM_X
+LA r3,0x40A00000
+FADD r1,r1,r3
+FDIV r5,r2,r1
+FADD r4,r4,r5
+LA r2,0xBE0DE595
+LD r1,r0,#W_GM_X
+LA r3,0x40C00000
+FADD r1,r1,r3
+FDIV r5,r2,r1
+FADD r4,r4,r5
+LA r2,0x3727828A
+LD r1,r0,#W_GM_X
+LA r3,0x40E00000
+FADD r1,r1,r3
+FDIV r5,r2,r1
+FADD r4,r4,r5
+LA r2,0x3421AA84
+LD r1,r0,#W_GM_X
+LA r3,0x41000000
+FADD r1,r1,r3
+FDIV r5,r2,r1
+FADD r4,r4,r5
+; t = x + g + 0.5
+LD r1,r0,#W_GM_X
+LA r2,0x40E00000
+FADD r1,r1,r2
+LA r2,0x3F000000
+FADD r1,r1,r2
+ST r1,r0,#W_GM_S
+; log = halflog2pi + (x+0.5)*log(t) - t + log(a)
+FLOG r6,r4
+ST r6,r0,#W_GM_A
+LD r1,r0,#W_GM_X
+LA r2,0x3F000000
+FADD r1,r1,r2
+LD r2,r0,#W_GM_S
+FLOG r2,r2
+FMUL r1,r1,r2
+LA r2,0x3F6B3F8E
+FADD r1,r1,r2
+LD r2,r0,#W_GM_S
+FSUB r1,r1,r2
+LD r2,r0,#W_GM_A
+FADD r1,r1,r2
+RET
+
+ni_lgamma_core:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_GM_X
+MOVI r2,1
+ST r2,r0,#W_GM_SIGN
+LA r2,0x3F000000
+FSUB r2,r1,r2
+LA r3,0x80000000
+BOOL.8 r2,r2,r3
+CMP r2,r0
+JMP[EQ] @lgc_pos
+; reflection
+LA r2,0x40490FDB
+FMUL r1,r1,r2
+CALL @ni_sin
+ST r1,r0,#W_GM_S
+CMP r1,r0
+JMP[EQ] @lgc_nan
+LA r2,0x80000000
+BOOL.8 r2,r1,r2
+CMP r2,r0
+JMP[EQ] @lgc_sp
+LA r2,0xFFFFFFFF
+ST r2,r0,#W_GM_SIGN
+lgc_sp:
+LA r2,0x7FFFFFFF
+BOOL.8 r1,r1,r2
+FLOG r1,r1
+ST r1,r0,#W_GM_S
+LA r2,0x3F928682
+FSUB r1,r2,r1
+ST r1,r0,#W_GM_P
+; 1-x
+LA r1,0x3F800000
+LD r2,r0,#W_GM_X
+FSUB r1,r1,r2
+CALL @ni_lgamma_pos
+LD r2,r0,#W_GM_P
+FSUB r1,r2,r1
+JMP @lgc_d
+lgc_pos:
+CALL @ni_lgamma_pos
+JMP @lgc_d
+lgc_nan:
+LA r1,0x7FC00000
+lgc_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+nbi_lgamma:
+CALL @ni_pop
+CALL @ni_lgamma_core
+ST r1,r0,#W_GM_S
+LD r1,r0,#W_SIGNGAM
+CMP r1,r0
+JMP[EQ] @nlg_nosg
+LD r2,r0,#W_GM_SIGN
+MOVI r3,#SZ_32
+CALL @ni_storev
+nlg_nosg:
+LD r1,r0,#W_GM_S
+CALL @ni_push
+JMP @nbi_d
+
+nbi_tgamma:
+CALL @ni_pop
+CALL @ni_lgamma_core
+FEXP r1,r1
+LD r2,r0,#W_GM_SIGN
+CMPS r2,r0
+JMP[LT] @ntg_neg
+LA r2,0x3F800000
+JMP @ntg_mul
+ntg_neg:
+LA r2,0xBF800000
+ntg_mul:
+FMUL r1,r1,r2
+CALL @ni_push
+JMP @nbi_d
+
+nbi_iface_version:
+MOVI r1,1
+CALL @ni_push
+JMP @nbi_d
+
+ncc_s_tgamma:
+.str "tgamma"
+ncc_s_lgamma:
+.str "lgamma"
+ncc_s_signgam:
+.str "signgam"
+ncc_s_iface_version:
+.str "iface_version"
