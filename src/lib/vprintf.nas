@@ -512,3 +512,23 @@ ncc_s_vsprintf:
 .str "vsprintf"
 ncc_s_vsnprintf:
 .str "vsnprintf"
+ncc_s_isalnum:
+.str "isalnum"
+ncc_s_iscntrl:
+.str "iscntrl"
+ncc_s_isgraph:
+.str "isgraph"
+ncc_s_isprint:
+.str "isprint"
+ncc_s_ispunct:
+.str "ispunct"
+ncc_s_isxdigit:
+.str "isxdigit"
+ncc_s_atol:
+.str "atol"
+ncc_s_atoll:
+.str "atoll"
+ncc_s_abort:
+.str "abort"
+ncc_s_setbuf:
+.str "setbuf"

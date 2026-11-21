@@ -457,6 +457,61 @@
 .equ B_VFPRINTF 129
 .equ B_VSPRINTF 130
 .equ B_VSNPRINTF 131
+.equ B_ISALNUM  132
+.equ B_ISCNTRL  133
+.equ B_ISGRAPH  134
+.equ B_ISPRINT  135
+.equ B_ISPUNCT  136
+.equ B_ISXDIGIT 137
+.equ B_ATOL     138
+.equ B_ATOLL    139
+.equ B_ABORT    140
+.equ B_SETBUF   141
+.equ B_WCSCHR   142
+.equ B_WCSRCHR  143
+.equ B_WCSNCMP  144
+.equ B_WCSNCPY  145
+.equ B_WCSNCAT  146
+.equ B_WCSSPN   147
+.equ B_WCSCSPN  148
+.equ B_WCSPBRK  149
+.equ B_WCSSTR   150
+.equ B_WCSTOK   151
+.equ B_WMEMCHR  152
+.equ B_WMEMCMP  153
+.equ B_WMEMCPY  154
+.equ B_WMEMMOVE 155
+.equ B_WMEMSET  156
+.equ B_BTOWC    157
+.equ B_WCTOB    158
+.equ B_MBLEN    159
+.equ B_MBTOWC   160
+.equ B_WCTOMB   161
+.equ B_MBSTOWCS 162
+.equ B_WCSTOMBS 163
+.equ B_EXP2 164
+.equ B_LOG2 165
+.equ B_LOG1P 166
+.equ B_EXPM1 167
+.equ B_HYPOT 168
+.equ B_CBRT 169
+.equ B_SINH 170
+.equ B_COSH 171
+.equ B_ASINH 172
+.equ B_ACOSH 173
+.equ B_ATANH 174
+.equ B_TRUNC 175
+.equ B_ROUND 176
+.equ B_RINT 177
+.equ B_NEARBYINT 178
+.equ B_COPYSIGN 179
+.equ B_NAN 180
+.equ B_FDIM 181
+.equ B_FMA 182
+.equ B_MODF 183
+.equ B_LDEXP 184
+.equ B_SCALBN 185
+.equ B_REMAINDER 186
 
 ; ------------------------------------------------------------------ compiler state
 ; Kept below word 65536 so ST/LD can use the 16-bit immediate form directly.
@@ -828,6 +883,7 @@
 .include "libcx.nas"
 .include "strx.nas"
 .include "wide.nas"
+.include "wide2.nas"
 .include "strtox.nas"
 
 ; q2_skipsp: consume spaces and tabs
@@ -6072,6 +6128,393 @@ MOVI r4,#B_VSNPRINTF
 MOVI r5,4
 MOVI r6,#T_INT
 CALL @ncc_add_builtin
+LA r1,0x25A94A70
+LA r2,@ncc_s_isalnum
+MOVI r3,7
+MOVI r4,#B_ISALNUM
+MOVI r5,1
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0x61D09D1E
+LA r2,@ncc_s_iscntrl
+MOVI r3,7
+MOVI r4,#B_ISCNTRL
+MOVI r5,1
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0x3A2097F7
+LA r2,@ncc_s_isgraph
+MOVI r3,7
+MOVI r4,#B_ISGRAPH
+MOVI r5,1
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0xC41553D8
+LA r2,@ncc_s_isprint
+MOVI r3,7
+MOVI r4,#B_ISPRINT
+MOVI r5,1
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0x1AD615A7
+LA r2,@ncc_s_ispunct
+MOVI r3,7
+MOVI r4,#B_ISPUNCT
+MOVI r5,1
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0x00A52190
+LA r2,@ncc_s_isxdigit
+MOVI r3,8
+MOVI r4,#B_ISXDIGIT
+MOVI r5,1
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0x04744A6B
+LA r2,@ncc_s_atol
+MOVI r3,4
+MOVI r4,#B_ATOL
+MOVI r5,1
+MOVI r6,#T_LONG
+CALL @ncc_add_builtin
+LA r1,0x0A108905
+LA r2,@ncc_s_atoll
+MOVI r3,5
+MOVI r4,#B_ATOLL
+MOVI r5,1
+MOVI r6,#T_LONGLONG
+CALL @ncc_add_builtin
+LA r1,0xA52BCAF9
+LA r2,@ncc_s_abort
+MOVI r3,5
+MOVI r4,#B_ABORT
+MOVI r5,0
+MOVI r6,#T_VOID
+CALL @ncc_add_builtin
+LA r1,0x6AED47BC
+LA r2,@ncc_s_setbuf
+MOVI r3,6
+MOVI r4,#B_SETBUF
+MOVI r5,2
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0x24A29F8F
+LA r2,@ncc_s_wcschr
+MOVI r3,6
+MOVI r4,#B_WCSCHR
+MOVI r5,2
+LD r6,r0,#W_PTRV
+CALL @ncc_add_builtin
+LA r1,0xED2AE2F9
+LA r2,@ncc_s_wcsrchr
+MOVI r3,7
+MOVI r4,#B_WCSRCHR
+MOVI r5,2
+LD r6,r0,#W_PTRV
+CALL @ncc_add_builtin
+LA r1,0x8FF437BA
+LA r2,@ncc_s_wcsncmp
+MOVI r3,7
+MOVI r4,#B_WCSNCMP
+MOVI r5,3
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0x84C65B34
+LA r2,@ncc_s_wcsncpy
+MOVI r3,7
+MOVI r4,#B_WCSNCPY
+MOVI r5,3
+LD r6,r0,#W_PTRV
+CALL @ncc_add_builtin
+LA r1,0x7BEB1DE2
+LA r2,@ncc_s_wcsncat
+MOVI r3,7
+MOVI r4,#B_WCSNCAT
+MOVI r5,3
+LD r6,r0,#W_PTRV
+CALL @ncc_add_builtin
+LA r1,0x4AEA75D3
+LA r2,@ncc_s_wcsspn
+MOVI r3,6
+MOVI r4,#B_WCSSPN
+MOVI r5,2
+MOVI r6,#T_UINT
+CALL @ncc_add_builtin
+LA r1,0xC3395A98
+LA r2,@ncc_s_wcscspn
+MOVI r3,7
+MOVI r4,#B_WCSCSPN
+MOVI r5,2
+MOVI r6,#T_UINT
+CALL @ncc_add_builtin
+LA r1,0xEFA33F19
+LA r2,@ncc_s_wcspbrk
+MOVI r3,7
+MOVI r4,#B_WCSPBRK
+MOVI r5,2
+LD r6,r0,#W_PTRV
+CALL @ncc_add_builtin
+LA r1,0x4EDFEEC3
+LA r2,@ncc_s_wcsstr
+MOVI r3,6
+MOVI r4,#B_WCSSTR
+MOVI r5,2
+LD r6,r0,#W_PTRV
+CALL @ncc_add_builtin
+LA r1,0x73991F62
+LA r2,@ncc_s_wcstok
+MOVI r3,6
+MOVI r4,#B_WCSTOK
+MOVI r5,2
+LD r6,r0,#W_PTRV
+CALL @ncc_add_builtin
+LA r1,0xF866346E
+LA r2,@ncc_s_wmemchr
+MOVI r3,7
+MOVI r4,#B_WMEMCHR
+MOVI r5,3
+LD r6,r0,#W_PTRV
+CALL @ncc_add_builtin
+LA r1,0xF472FA15
+LA r2,@ncc_s_wmemcmp
+MOVI r3,7
+MOVI r4,#B_WMEMCMP
+MOVI r5,3
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0xEF2B8F1B
+LA r2,@ncc_s_wmemcpy
+MOVI r3,7
+MOVI r4,#B_WMEMCPY
+MOVI r5,3
+LD r6,r0,#W_PTRV
+CALL @ncc_add_builtin
+LA r1,0xDBC2DE5A
+LA r2,@ncc_s_wmemmove
+MOVI r3,8
+MOVI r4,#B_WMEMMOVE
+MOVI r5,3
+LD r6,r0,#W_PTRV
+CALL @ncc_add_builtin
+LA r1,0x3017EAB1
+LA r2,@ncc_s_wmemset
+MOVI r3,7
+MOVI r4,#B_WMEMSET
+MOVI r5,3
+LD r6,r0,#W_PTRV
+CALL @ncc_add_builtin
+LA r1,0x300D481E
+LA r2,@ncc_s_btowc
+MOVI r3,5
+MOVI r4,#B_BTOWC
+MOVI r5,1
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0xAA2F01B8
+LA r2,@ncc_s_wctob
+MOVI r3,5
+MOVI r4,#B_WCTOB
+MOVI r5,1
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0x03D226B5
+LA r2,@ncc_s_mblen
+MOVI r3,5
+MOVI r4,#B_MBLEN
+MOVI r5,2
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0x8B57371D
+LA r2,@ncc_s_mbtowc
+MOVI r3,6
+MOVI r4,#B_MBTOWC
+MOVI r5,3
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0x9BFD6FC5
+LA r2,@ncc_s_wctomb
+MOVI r3,6
+MOVI r4,#B_WCTOMB
+MOVI r5,2
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0xC0176FC5
+LA r2,@ncc_s_mbstowcs
+MOVI r3,8
+MOVI r4,#B_MBSTOWCS
+MOVI r5,3
+MOVI r6,#T_UINT
+CALL @ncc_add_builtin
+LA r1,0x8E351FBF
+LA r2,@ncc_s_wcstombs
+MOVI r3,8
+MOVI r4,#B_WCSTOMBS
+MOVI r5,3
+MOVI r6,#T_UINT
+CALL @ncc_add_builtin
+LA r1,0x9626ADEE
+LA r2,@ncc_s_exp2
+MOVI r3,4
+MOVI r4,#B_EXP2
+MOVI r5,1
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+LA r1,0x10031ED9
+LA r2,@ncc_s_log2
+MOVI r3,4
+MOVI r4,#B_LOG2
+MOVI r5,1
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+LA r1,0xCBE26BF0
+LA r2,@ncc_s_log1p
+MOVI r3,5
+MOVI r4,#B_LOG1P
+MOVI r5,1
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+LA r1,0xBE4E74EA
+LA r2,@ncc_s_expm1
+MOVI r3,5
+MOVI r4,#B_EXPM1
+MOVI r5,1
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+LA r1,0x18265A25
+LA r2,@ncc_s_hypot
+MOVI r3,5
+MOVI r4,#B_HYPOT
+MOVI r5,2
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+LA r1,0x54619836
+LA r2,@ncc_s_cbrt
+MOVI r3,4
+MOVI r4,#B_CBRT
+MOVI r5,1
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+LA r1,0x10D2583F
+LA r2,@ncc_s_sinh
+MOVI r3,4
+MOVI r4,#B_SINH
+MOVI r5,1
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+LA r1,0xF45C461C
+LA r2,@ncc_s_cosh
+MOVI r3,4
+MOVI r4,#B_COSH
+MOVI r5,1
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+LA r1,0xBAB19E4A
+LA r2,@ncc_s_asinh
+MOVI r3,5
+MOVI r4,#B_ASINH
+MOVI r5,1
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+LA r1,0xEDF2C855
+LA r2,@ncc_s_acosh
+MOVI r3,5
+MOVI r4,#B_ACOSH
+MOVI r5,1
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+LA r1,0x07275075
+LA r2,@ncc_s_atanh
+MOVI r3,5
+MOVI r4,#B_ATANH
+MOVI r5,1
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+LA r1,0xD55E61E5
+LA r2,@ncc_s_trunc
+MOVI r3,5
+MOVI r4,#B_TRUNC
+MOVI r5,1
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+LA r1,0x4F0BE23B
+LA r2,@ncc_s_round
+MOVI r3,5
+MOVI r4,#B_ROUND
+MOVI r5,1
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+LA r1,0x085B162E
+LA r2,@ncc_s_rint
+MOVI r3,4
+MOVI r4,#B_RINT
+MOVI r5,1
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+LA r1,0xEB53FAD3
+LA r2,@ncc_s_nearbyint
+MOVI r3,9
+MOVI r4,#B_NEARBYINT
+MOVI r5,1
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+LA r1,0x0BC83BC5
+LA r2,@ncc_s_copysign
+MOVI r3,8
+MOVI r4,#B_COPYSIGN
+MOVI r5,2
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+LA r1,0x2F8F13BA
+LA r2,@ncc_s_nan
+MOVI r3,3
+MOVI r4,#B_NAN
+MOVI r5,1
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+LA r1,0x1E950E05
+LA r2,@ncc_s_fdim
+MOVI r3,4
+MOVI r4,#B_FDIM
+MOVI r5,2
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+LA r1,0xD3EF43C7
+LA r2,@ncc_s_fma
+MOVI r3,3
+MOVI r4,#B_FMA
+MOVI r5,3
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+LA r1,0xEB6EDE7F
+LA r2,@ncc_s_modf
+MOVI r3,4
+MOVI r4,#B_MODF
+MOVI r5,2
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+LA r1,0x8C63F160
+LA r2,@ncc_s_ldexp
+MOVI r3,5
+MOVI r4,#B_LDEXP
+MOVI r5,2
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+LA r1,0x90E4E0DE
+LA r2,@ncc_s_scalbn
+MOVI r3,6
+MOVI r4,#B_SCALBN
+MOVI r5,2
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+LA r1,0x348D7A98
+LA r2,@ncc_s_remainder
+MOVI r3,9
+MOVI r4,#B_REMAINDER
+MOVI r5,2
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+
+
 LA r1,0x854B1879
 LA r2,@ncc_s_fread
 MOVI r3,5
@@ -16804,6 +17247,173 @@ JMP[EQ] @nbi_vsprintf
 MOVI r2,#B_VSNPRINTF
 CMP r1,r2
 JMP[EQ] @nbi_vsnprintf
+MOVI r2,#B_ISALNUM
+CMP r1,r2
+JMP[EQ] @nbi_isalnum
+MOVI r2,#B_ISCNTRL
+CMP r1,r2
+JMP[EQ] @nbi_iscntrl
+MOVI r2,#B_ISGRAPH
+CMP r1,r2
+JMP[EQ] @nbi_isgraph
+MOVI r2,#B_ISPRINT
+CMP r1,r2
+JMP[EQ] @nbi_isprint
+MOVI r2,#B_ISPUNCT
+CMP r1,r2
+JMP[EQ] @nbi_ispunct
+MOVI r2,#B_ISXDIGIT
+CMP r1,r2
+JMP[EQ] @nbi_isxdigit
+MOVI r2,#B_ATOL
+CMP r1,r2
+JMP[EQ] @nbi_atol
+MOVI r2,#B_ATOLL
+CMP r1,r2
+JMP[EQ] @nbi_atoll
+MOVI r2,#B_ABORT
+CMP r1,r2
+JMP[EQ] @nbi_abort
+MOVI r2,#B_SETBUF
+CMP r1,r2
+JMP[EQ] @nbi_setvbuf
+MOVI r2,#B_WCSCHR
+CMP r1,r2
+JMP[EQ] @nbi_wcschr
+MOVI r2,#B_WCSRCHR
+CMP r1,r2
+JMP[EQ] @nbi_wcsrchr
+MOVI r2,#B_WCSNCMP
+CMP r1,r2
+JMP[EQ] @nbi_wcsncmp
+MOVI r2,#B_WCSNCPY
+CMP r1,r2
+JMP[EQ] @nbi_wcsncpy
+MOVI r2,#B_WCSNCAT
+CMP r1,r2
+JMP[EQ] @nbi_wcsncat
+MOVI r2,#B_WCSSPN
+CMP r1,r2
+JMP[EQ] @nbi_wcsspn
+MOVI r2,#B_WCSCSPN
+CMP r1,r2
+JMP[EQ] @nbi_wcscspn
+MOVI r2,#B_WCSPBRK
+CMP r1,r2
+JMP[EQ] @nbi_wcspbrk
+MOVI r2,#B_WCSSTR
+CMP r1,r2
+JMP[EQ] @nbi_wcsstr
+MOVI r2,#B_WCSTOK
+CMP r1,r2
+JMP[EQ] @nbi_wcstok
+MOVI r2,#B_WMEMCHR
+CMP r1,r2
+JMP[EQ] @nbi_wmemchr
+MOVI r2,#B_WMEMCMP
+CMP r1,r2
+JMP[EQ] @nbi_wmemcmp
+MOVI r2,#B_WMEMCPY
+CMP r1,r2
+JMP[EQ] @nbi_wmemcpy
+MOVI r2,#B_WMEMMOVE
+CMP r1,r2
+JMP[EQ] @nbi_wmemmove
+MOVI r2,#B_WMEMSET
+CMP r1,r2
+JMP[EQ] @nbi_wmemset
+MOVI r2,#B_BTOWC
+CMP r1,r2
+JMP[EQ] @nbi_btowc
+MOVI r2,#B_WCTOB
+CMP r1,r2
+JMP[EQ] @nbi_wctob
+MOVI r2,#B_MBLEN
+CMP r1,r2
+JMP[EQ] @nbi_mblen
+MOVI r2,#B_MBTOWC
+CMP r1,r2
+JMP[EQ] @nbi_mbtowc
+MOVI r2,#B_WCTOMB
+CMP r1,r2
+JMP[EQ] @nbi_wctomb
+MOVI r2,#B_MBSTOWCS
+CMP r1,r2
+JMP[EQ] @nbi_mbstowcs
+MOVI r2,#B_WCSTOMBS
+CMP r1,r2
+JMP[EQ] @nbi_wcstombs
+MOVI r2,#B_EXP2
+CMP r1,r2
+JMP[EQ] @nbi_exp2
+MOVI r2,#B_LOG2
+CMP r1,r2
+JMP[EQ] @nbi_log2
+MOVI r2,#B_LOG1P
+CMP r1,r2
+JMP[EQ] @nbi_log1p
+MOVI r2,#B_EXPM1
+CMP r1,r2
+JMP[EQ] @nbi_expm1
+MOVI r2,#B_HYPOT
+CMP r1,r2
+JMP[EQ] @nbi_hypot
+MOVI r2,#B_CBRT
+CMP r1,r2
+JMP[EQ] @nbi_cbrt
+MOVI r2,#B_SINH
+CMP r1,r2
+JMP[EQ] @nbi_sinh
+MOVI r2,#B_COSH
+CMP r1,r2
+JMP[EQ] @nbi_cosh
+MOVI r2,#B_ASINH
+CMP r1,r2
+JMP[EQ] @nbi_asinh
+MOVI r2,#B_ACOSH
+CMP r1,r2
+JMP[EQ] @nbi_acosh
+MOVI r2,#B_ATANH
+CMP r1,r2
+JMP[EQ] @nbi_atanh
+MOVI r2,#B_TRUNC
+CMP r1,r2
+JMP[EQ] @nbi_trunc
+MOVI r2,#B_ROUND
+CMP r1,r2
+JMP[EQ] @nbi_round
+MOVI r2,#B_RINT
+CMP r1,r2
+JMP[EQ] @nbi_rint
+MOVI r2,#B_NEARBYINT
+CMP r1,r2
+JMP[EQ] @nbi_nearbyint
+MOVI r2,#B_COPYSIGN
+CMP r1,r2
+JMP[EQ] @nbi_copysign
+MOVI r2,#B_NAN
+CMP r1,r2
+JMP[EQ] @nbi_nan
+MOVI r2,#B_FDIM
+CMP r1,r2
+JMP[EQ] @nbi_fdim
+MOVI r2,#B_FMA
+CMP r1,r2
+JMP[EQ] @nbi_fma
+MOVI r2,#B_MODF
+CMP r1,r2
+JMP[EQ] @nbi_modf
+MOVI r2,#B_LDEXP
+CMP r1,r2
+JMP[EQ] @nbi_ldexp
+MOVI r2,#B_SCALBN
+CMP r1,r2
+JMP[EQ] @nbi_scalbn
+MOVI r2,#B_REMAINDER
+CMP r1,r2
+JMP[EQ] @nbi_remainder
+
+
 MOVI r2,#B_FPUTS
 CMP r1,r2
 JMP[EQ] @nbi_fputs
@@ -17105,6 +17715,38 @@ CALL @ni_pop
 CALL @ni_atoi
 CALL @ni_push
 JMP @nbi_d
+nbi_atol:
+CALL @ni_pop
+ST r1,r0,#W_SX_S
+ST r1,r0,#W_SX_ORIG
+ST r0,r0,#W_SX_ENDP
+MOVI r2,10
+ST r2,r0,#W_SX_BASE
+ST r0,r0,#W_SX_SIGN
+CALL @sx_parse
+LD r1,r0,#W_LLD0
+CALL @ni_push
+JMP @nbi_d
+nbi_atoll:
+CALL @ni_pop
+ST r1,r0,#W_SX_S
+ST r1,r0,#W_SX_ORIG
+ST r0,r0,#W_SX_ENDP
+MOVI r2,10
+ST r2,r0,#W_SX_BASE
+ST r0,r0,#W_SX_SIGN
+CALL @sx_parse
+LD r1,r0,#W_LLD0
+CALL @ni_push
+LD r1,r0,#W_LLD1
+CALL @ni_push
+JMP @nbi_d
+nbi_abort:
+ST r0,r0,#W_SNOUT
+ST r0,r0,#W_SNPOS
+LD r1,r0,#W_TAILHALT
+ST r1,r0,#R_IP
+JMP @nbi_d
 nbi_abs:
 CALL @ni_pop
 CMPS r1,r0
@@ -17222,6 +17864,263 @@ FLOG r1,r1
 LD r2,r0,#W_F2P
 FMUL r1,r1,r2
 FEXP r1,r1
+CALL @ni_push
+JMP @nbi_d
+
+; ---- additional math wrappers -------------------------------------
+ni_round_bits:
+CVTFI r2,r1
+CVTIF r3,r2
+FSUB r4,r1,r3
+LA r5,0x3F000000
+FCMP r4,r5
+JMP[GE] @nrb_up
+LA r5,0xBF000000
+FCMP r4,r5
+JMP[LE] @nrb_dn
+ADD r1,r3,r0
+RET
+nrb_up:
+ADD r2,r2,r13
+CVTIF r1,r2
+RET
+nrb_dn:
+SUB r2,r2,r13
+CVTIF r1,r2
+RET
+
+nbi_exp2:
+CALL @ni_pop
+LA r2,0x3F317218
+FMUL r1,r1,r2
+FEXP r1,r1
+CALL @ni_push
+JMP @nbi_d
+nbi_log2:
+CALL @ni_pop
+FLOG r1,r1
+LA r2,0x3F317218
+FDIV r1,r1,r2
+CALL @ni_push
+JMP @nbi_d
+nbi_log1p:
+CALL @ni_pop
+LA r2,0x3F800000
+FADD r1,r1,r2
+FLOG r1,r1
+CALL @ni_push
+JMP @nbi_d
+nbi_expm1:
+CALL @ni_pop
+FEXP r1,r1
+LA r2,0x3F800000
+FSUB r1,r1,r2
+CALL @ni_push
+JMP @nbi_d
+nbi_hypot:
+CALL @ni_pop
+ST r1,r0,#W_F2P
+CALL @ni_pop
+ST r1,r0,#W_F2V
+FMUL r1,r1,r1
+LD r2,r0,#W_F2P
+FMUL r2,r2,r2
+FADD r1,r1,r2
+FSQRT r1,r1
+CALL @ni_push
+JMP @nbi_d
+nbi_cbrt:
+CALL @ni_pop
+ST r1,r0,#W_F2S
+LA r2,0x7FFFFFFF
+BOOL.8 r1,r1,r2
+FLOG r1,r1
+LA r2,0x40400000
+FDIV r1,r1,r2
+FEXP r1,r1
+LD r3,r0,#W_F2S
+LA r4,0x80000000
+BOOL.8 r3,r3,r4
+BOOL.14 r1,r1,r3
+CALL @ni_push
+JMP @nbi_d
+nbi_sinh:
+CALL @ni_pop
+ST r1,r0,#W_F2V
+FEXP r1,r1
+ST r1,r0,#W_F2S
+LD r1,r0,#W_F2V
+LA r2,0x80000000
+BOOL.6 r1,r1,r2
+FEXP r1,r1
+ST r1,r0,#W_F2P
+LD r1,r0,#W_F2S
+LD r2,r0,#W_F2P
+FSUB r1,r1,r2
+LA r2,0x40000000
+FDIV r1,r1,r2
+CALL @ni_push
+JMP @nbi_d
+nbi_cosh:
+CALL @ni_pop
+ST r1,r0,#W_F2V
+FEXP r1,r1
+ST r1,r0,#W_F2S
+LD r1,r0,#W_F2V
+LA r2,0x80000000
+BOOL.6 r1,r1,r2
+FEXP r1,r1
+LD r2,r0,#W_F2S
+FADD r1,r1,r2
+LA r2,0x40000000
+FDIV r1,r1,r2
+CALL @ni_push
+JMP @nbi_d
+nbi_asinh:
+CALL @ni_pop
+ST r1,r0,#W_F2V
+FMUL r1,r1,r1
+LA r2,0x3F800000
+FADD r1,r1,r2
+FSQRT r1,r1
+LD r2,r0,#W_F2V
+FADD r1,r1,r2
+FLOG r1,r1
+CALL @ni_push
+JMP @nbi_d
+nbi_acosh:
+CALL @ni_pop
+ST r1,r0,#W_F2V
+FMUL r1,r1,r1
+LA r2,0x3F800000
+FSUB r1,r1,r2
+FSQRT r1,r1
+LD r2,r0,#W_F2V
+FADD r1,r1,r2
+FLOG r1,r1
+CALL @ni_push
+JMP @nbi_d
+nbi_atanh:
+CALL @ni_pop
+ST r1,r0,#W_F2V
+LA r2,0x3F800000
+LD r3,r0,#W_F2V
+FADD r3,r3,r2
+FSUB r2,r2,r1
+FDIV r1,r3,r2
+FLOG r1,r1
+LA r2,0x3F000000
+FMUL r1,r1,r2
+CALL @ni_push
+JMP @nbi_d
+nbi_trunc:
+CALL @ni_pop
+CVTFI r2,r1
+CVTIF r1,r2
+CALL @ni_push
+JMP @nbi_d
+nbi_round:
+CALL @ni_pop
+CALL @ni_round_bits
+CALL @ni_push
+JMP @nbi_d
+nbi_rint:
+CALL @ni_pop
+CALL @ni_round_bits
+CALL @ni_push
+JMP @nbi_d
+nbi_nearbyint:
+CALL @ni_pop
+CALL @ni_round_bits
+CALL @ni_push
+JMP @nbi_d
+nbi_copysign:
+CALL @ni_pop
+ST r1,r0,#W_F2P
+CALL @ni_pop
+LA r2,0x7FFFFFFF
+BOOL.8 r1,r1,r2
+LD r2,r0,#W_F2P
+LA r3,0x80000000
+BOOL.8 r2,r2,r3
+BOOL.14 r1,r1,r2
+CALL @ni_push
+JMP @nbi_d
+nbi_nan:
+LA r1,0x7FC00000
+CALL @ni_push
+JMP @nbi_d
+nbi_fdim:
+CALL @ni_pop
+ST r1,r0,#W_F2P
+CALL @ni_pop
+LD r2,r0,#W_F2P
+FCMP r1,r2
+JMP[LE] @nbi_fdim_z
+FSUB r1,r1,r2
+JMP @nbi_fdim_p
+nbi_fdim_z:
+MOVI r1,0
+nbi_fdim_p:
+CALL @ni_push
+JMP @nbi_d
+nbi_fma:
+CALL @ni_pop
+ST r1,r0,#W_F2S
+CALL @ni_pop
+ST r1,r0,#W_F2P
+CALL @ni_pop
+LD r2,r0,#W_F2P
+FMUL r1,r1,r2
+LD r2,r0,#W_F2S
+FADD r1,r1,r2
+CALL @ni_push
+JMP @nbi_d
+nbi_modf:
+CALL @ni_pop
+ST r1,r0,#W_F2P
+CALL @ni_pop
+ST r1,r0,#W_F2V
+CVTFI r2,r1
+CVTIF r3,r2
+FSUB r4,r1,r3
+ST r4,r0,#W_F2S
+LD r1,r0,#W_F2P
+CVTIF r2,r2
+MOVI r3,#SZ_32
+CALL @ni_storev
+LD r1,r0,#W_F2S
+CALL @ni_push
+JMP @nbi_d
+nbi_ldexp:
+CALL @ni_pop
+ST r1,r0,#W_F2P
+CALL @ni_pop
+ST r1,r0,#W_F2V
+LD r1,r0,#W_F2P
+CVTIF r1,r1
+LA r2,0x3F317218
+FMUL r1,r1,r2
+FEXP r1,r1
+LD r2,r0,#W_F2V
+FMUL r1,r1,r2
+CALL @ni_push
+JMP @nbi_d
+nbi_scalbn:
+JMP @nbi_ldexp
+nbi_remainder:
+CALL @ni_pop
+ST r1,r0,#W_F2P
+CALL @ni_pop
+ST r1,r0,#W_F2V
+LD r2,r0,#W_F2P
+FDIV r3,r1,r2
+ADD r1,r3,r0
+CALL @ni_round_bits
+LD r2,r0,#W_F2P
+FMUL r1,r1,r2
+LD r2,r0,#W_F2V
+FSUB r1,r2,r1
 CALL @ni_push
 JMP @nbi_d
 nbi_tan:
@@ -17391,6 +18290,124 @@ CALL @ni_push
 JMP @nbi_d
 nbi_ctype_n:
 MOVI r1,0
+CALL @ni_push
+JMP @nbi_d
+
+nbi_isalnum:
+CALL @ni_pop
+ST r1,r0,#W_TA
+CALL @nbi_ct_alpha_ck
+CMP r1,r0
+JMP[NE] @nbi_ct_y2
+LD r1,r0,#W_TA
+CALL @nbi_ct_digit_ck
+JMP @nbi_ct_res
+nbi_iscntrl:
+CALL @ni_pop
+MOVI r2,32
+CMP r1,r2
+JMP[LT] @nbi_ct_y2
+MOVI r2,127
+CMP r1,r2
+JMP[EQ] @nbi_ct_y2
+MOVI r1,0
+JMP @nbi_ct_res
+nbi_isgraph:
+CALL @ni_pop
+MOVI r2,33
+CMP r1,r2
+JMP[LT] @nbi_ct_n2
+MOVI r2,127
+CMP r1,r2
+JMP[GE] @nbi_ct_n2
+MOVI r1,1
+JMP @nbi_ct_res
+nbi_isprint:
+CALL @ni_pop
+MOVI r2,32
+CMP r1,r2
+JMP[LT] @nbi_ct_n2
+MOVI r2,127
+CMP r1,r2
+JMP[GE] @nbi_ct_n2
+MOVI r1,1
+JMP @nbi_ct_res
+nbi_ispunct:
+CALL @ni_pop
+ST r1,r0,#W_TA
+MOVI r2,33
+CMP r1,r2
+JMP[LT] @nbi_ct_n2
+MOVI r2,127
+CMP r1,r2
+JMP[GE] @nbi_ct_n2
+LD r1,r0,#W_TA
+CALL @nbi_ct_alpha_ck
+CMP r1,r0
+JMP[NE] @nbi_ct_n2
+LD r1,r0,#W_TA
+CALL @nbi_ct_digit_ck
+CMP r1,r0
+JMP[NE] @nbi_ct_n2
+MOVI r1,1
+JMP @nbi_ct_res
+nbi_isxdigit:
+CALL @ni_pop
+ST r1,r0,#W_TA
+CALL @nbi_ct_digit_ck
+CMP r1,r0
+JMP[NE] @nbi_ct_y2
+LD r1,r0,#W_TA
+MOVI r2,65
+CMP r1,r2
+JMP[LT] @nbi_ct_xlo
+MOVI r2,70
+CMP r1,r2
+JMP[LE] @nbi_ct_y2
+nbi_ct_xlo:
+LD r1,r0,#W_TA
+MOVI r2,97
+CMP r1,r2
+JMP[LT] @nbi_ct_n2
+MOVI r2,102
+CMP r1,r2
+JMP[LE] @nbi_ct_y2
+JMP @nbi_ct_n2
+nbi_ct_alpha_ck:
+MOVI r2,65
+CMP r1,r2
+JMP[LT] @nbi_ct_alo
+MOVI r2,90
+CMP r1,r2
+JMP[LE] @nbi_ct_cy
+nbi_ct_alo:
+MOVI r2,97
+CMP r1,r2
+JMP[LT] @nbi_ct_cn
+MOVI r2,122
+CMP r1,r2
+JMP[LE] @nbi_ct_cy
+JMP @nbi_ct_cn
+nbi_ct_digit_ck:
+MOVI r2,48
+CMP r1,r2
+JMP[LT] @nbi_ct_cn
+MOVI r2,57
+CMP r1,r2
+JMP[LE] @nbi_ct_cy
+JMP @nbi_ct_cn
+nbi_ct_cy:
+MOVI r1,1
+RET
+nbi_ct_cn:
+MOVI r1,0
+RET
+nbi_ct_y2:
+MOVI r1,1
+JMP @nbi_ct_res
+nbi_ct_n2:
+MOVI r1,0
+nbi_ct_res:
 CALL @ni_push
 JMP @nbi_d
 

@@ -19,8 +19,9 @@ The remaining documented limitations are platform or optional-scope items:
 - the POSIX-free machine-interface table is implemented in
   `src/lib/bare.nas`; console and block adapters are wired, filesystem slots
   are still adapter stubs (see `spec/BARE_METAL_INTERFACES.md`);
-- the library is the practical subset documented below (multibyte conversion
-  functions and some POSIX extensions are still outside it).
+- the library is the practical subset documented below (inverse trig,
+  `erf`/gamma, `frexp`/`nextafter`, and some POSIX extensions are still
+  outside it).
 
 None of these blocks the Python port; they are deployment or optional-library
 work.
@@ -127,6 +128,11 @@ Not implemented (honest list):
   helpers `wcslen`/`wcscmp`/`wcscpy`/`wcscat`, plus `strspn`/`strcspn`/
   `strpbrk`/`strtok`/`memchr`/`strcoll`/`strxfrm`/`strtol`/`strtoul`/
   `strtoll`/`strtoull`/`strchr`/`strrchr`/`strndup`/`stpcpy`/`memccpy`,
+  `atol`/`atoll`, the remaining ctype predicates (`isalnum`, `iscntrl`,
+  `isgraph`, `isprint`, `ispunct`, `isxdigit`), wide-string helpers
+  (`wcschr`/`wcsrchr`/`wcsncmp`/`wcsncpy`/`wcsncat`/`wcsspn`/`wcscspn`/
+  `wcspbrk`/`wcsstr`/`wcstok`/`wmem*`), multibyte conversion
+  (`btowc`/`wctob`/`mblen`/`mbtowc`/`wctomb`/`mbstowcs`/`wcstombs`),
   plus `strerror`/`perror`
   and `getenv`/`system` stubs are implemented. `wprintf` now supports
   flags, width, precision, `%d`/`%i`/`%u`/`%o`/`%x`/`%X`/`%c`/`%s`/`%ls`/`%p`/
@@ -176,6 +182,12 @@ exp(x)             log(x)            log10(x)
 tanh(x)            tan(x)
 floor(x)           ceil(x)           fmod(x,y)
 fmin(x,y)          fmax(x,y)
+exp2(x)            log2(x)          log1p(x)       expm1(x)
+hypot(x,y)         cbrt(x)          sinh(x)        cosh(x)
+asinh(x)           acosh(x)         atanh(x)       trunc(x)
+round(x)           rint(x)          nearbyint(x)   copysign(x,y)
+nan(s)             fdim(x,y)        fma(x,y,z)     modf(x,p)
+ldexp(x,n)         scalbn(x,n)      remainder(x,y)
 strchr(s,c)        strstr(s,t)       strdup(s)
 isdigit(c)         isalpha(c)        isspace(c)
 isupper(c)         islower(c)        toupper(c)       tolower(c)
@@ -271,6 +283,8 @@ tools/ncc_m44.sh    packed bit-fields, sizeof, neighbors, arrays
 tools/ncc_m45.sh    getchar/getc/putc/ungetc/clearerr/setvbuf
 tools/ncc_m46.sh    persistent files over ATA (two boots, same disk)
 tools/ncc_m47.sh    vprintf/vfprintf/vsprintf/vsnprintf, * width/precision
+tools/ncc_m48.sh    wide-string and multibyte helpers
+tools/ncc_m49.sh    additional math wrappers
 tools/ncc_m31.sh    alarm()/SIGALRM asynchronous delivery
 tools/ncc_m32.sh    C99 designated initializers (.member, [index], nested)
 tools/ncc_m33.sh    brace elision across arrays of flat aggregates
