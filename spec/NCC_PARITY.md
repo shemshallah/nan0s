@@ -19,9 +19,8 @@ The remaining documented limitations are platform or optional-scope items:
 - the POSIX-free machine-interface table is implemented in
   `src/lib/bare.nas`; console and block adapters are wired, filesystem slots
   are still adapter stubs (see `spec/BARE_METAL_INTERFACES.md`);
-- the library is the practical subset documented below (inverse trig,
-  `erf`/gamma, `frexp`/`nextafter`, and some POSIX extensions are still
-  outside it).
+- the library is the practical subset documented below (`erf`/gamma,
+  `frexp`/`nextafter`, and some POSIX extensions are still outside it).
 
 None of these blocks the Python port; they are deployment or optional-library
 work.
@@ -187,7 +186,8 @@ hypot(x,y)         cbrt(x)          sinh(x)        cosh(x)
 asinh(x)           acosh(x)         atanh(x)       trunc(x)
 round(x)           rint(x)          nearbyint(x)   copysign(x,y)
 nan(s)             fdim(x,y)        fma(x,y,z)     modf(x,p)
-ldexp(x,n)         scalbn(x,n)      remainder(x,y)
+ldexp(x,n)         scalbn(x,n)      remainder(x,y) atan(x)
+atan2(y,x)         asin(x)          acos(x)
 strchr(s,c)        strstr(s,t)       strdup(s)
 isdigit(c)         isalpha(c)        isspace(c)
 isupper(c)         islower(c)        toupper(c)       tolower(c)
@@ -285,6 +285,7 @@ tools/ncc_m46.sh    persistent files over ATA (two boots, same disk)
 tools/ncc_m47.sh    vprintf/vfprintf/vsprintf/vsnprintf, * width/precision
 tools/ncc_m48.sh    wide-string and multibyte helpers
 tools/ncc_m49.sh    additional math wrappers
+tools/ncc_m50.sh    atan/atan2/asin/acos
 tools/ncc_m31.sh    alarm()/SIGALRM asynchronous delivery
 tools/ncc_m32.sh    C99 designated initializers (.member, [index], nested)
 tools/ncc_m33.sh    brace elision across arrays of flat aggregates

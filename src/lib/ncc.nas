@@ -512,6 +512,10 @@
 .equ B_LDEXP 184
 .equ B_SCALBN 185
 .equ B_REMAINDER 186
+.equ B_ATAN     187
+.equ B_ATAN2    188
+.equ B_ASIN     189
+.equ B_ACOS     190
 
 ; ------------------------------------------------------------------ compiler state
 ; Kept below word 65536 so ST/LD can use the 16-bit immediate form directly.
@@ -884,6 +888,7 @@
 .include "strx.nas"
 .include "wide.nas"
 .include "wide2.nas"
+.include "mathx.nas"
 .include "strtox.nas"
 
 ; q2_skipsp: consume spaces and tabs
@@ -6511,6 +6516,34 @@ LA r2,@ncc_s_remainder
 MOVI r3,9
 MOVI r4,#B_REMAINDER
 MOVI r5,2
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+LA r1,0x0678CABF
+LA r2,@ncc_s_atan
+MOVI r3,4
+MOVI r4,#B_ATAN
+MOVI r5,1
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+LA r1,0xBD26DBF7
+LA r2,@ncc_s_atan2
+MOVI r3,5
+MOVI r4,#B_ATAN2
+MOVI r5,2
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+LA r1,0xFEAE7EA6
+LA r2,@ncc_s_asin
+MOVI r3,4
+MOVI r4,#B_ASIN
+MOVI r5,1
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+LA r1,0x3C01DF1F
+LA r2,@ncc_s_acos
+MOVI r3,4
+MOVI r4,#B_ACOS
+MOVI r5,1
 MOVI r6,#T_FLOAT
 CALL @ncc_add_builtin
 
@@ -17412,6 +17445,18 @@ JMP[EQ] @nbi_scalbn
 MOVI r2,#B_REMAINDER
 CMP r1,r2
 JMP[EQ] @nbi_remainder
+MOVI r2,#B_ATAN
+CMP r1,r2
+JMP[EQ] @nbi_atan
+MOVI r2,#B_ATAN2
+CMP r1,r2
+JMP[EQ] @nbi_atan2
+MOVI r2,#B_ASIN
+CMP r1,r2
+JMP[EQ] @nbi_asin
+MOVI r2,#B_ACOS
+CMP r1,r2
+JMP[EQ] @nbi_acos
 
 
 MOVI r2,#B_FPUTS
