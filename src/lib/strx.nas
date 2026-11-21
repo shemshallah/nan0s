@@ -290,14 +290,166 @@ nbi_strerror:
 ST r15,r14,0
 ADD r14,r14,r13
 CALL @ni_pop
-CMP r1,r0
-JMP[LT] @ser_def
+MOVI r2,0
+CMP r1,r2
+JMP[EQ] @ser_0
+MOVI r2,1
+CMP r1,r2
+JMP[EQ] @ser_1
+MOVI r2,2
+CMP r1,r2
+JMP[EQ] @ser_2
+MOVI r2,3
+CMP r1,r2
+JMP[EQ] @ser_3
+MOVI r2,4
+CMP r1,r2
+JMP[EQ] @ser_4
+MOVI r2,5
+CMP r1,r2
+JMP[EQ] @ser_5
+MOVI r2,6
+CMP r1,r2
+JMP[EQ] @ser_6
+MOVI r2,7
+CMP r1,r2
+JMP[EQ] @ser_7
+MOVI r2,8
+CMP r1,r2
+JMP[EQ] @ser_8
+MOVI r2,9
+CMP r1,r2
+JMP[EQ] @ser_9
+MOVI r2,10
+CMP r1,r2
+JMP[EQ] @ser_10
+MOVI r2,11
+CMP r1,r2
+JMP[EQ] @ser_11
+MOVI r2,12
+CMP r1,r2
+JMP[EQ] @ser_12
+MOVI r2,13
+CMP r1,r2
+JMP[EQ] @ser_13
+MOVI r2,14
+CMP r1,r2
+JMP[EQ] @ser_14
+MOVI r2,15
+CMP r1,r2
+JMP[EQ] @ser_15
+MOVI r2,16
+CMP r1,r2
+JMP[EQ] @ser_16
+MOVI r2,17
+CMP r1,r2
+JMP[EQ] @ser_17
+MOVI r2,18
+CMP r1,r2
+JMP[EQ] @ser_18
+MOVI r2,19
+CMP r1,r2
+JMP[EQ] @ser_19
+MOVI r2,20
+CMP r1,r2
+JMP[EQ] @ser_20
+MOVI r2,21
+CMP r1,r2
+JMP[EQ] @ser_21
 MOVI r2,22
 CMP r1,r2
-JMP[GT] @ser_def
-LA r2,@sx_errtab
-ADD r2,r2,r1
-LD r1,r2,0
+JMP[EQ] @ser_22
+JMP @ser_def
+ser_0:
+LA r1,@sx_e0
+SHL r1,r1,2
+JMP @ser_p
+ser_1:
+LA r1,@sx_e1
+SHL r1,r1,2
+JMP @ser_p
+ser_2:
+LA r1,@sx_e2
+SHL r1,r1,2
+JMP @ser_p
+ser_3:
+LA r1,@sx_e3
+SHL r1,r1,2
+JMP @ser_p
+ser_4:
+LA r1,@sx_e4
+SHL r1,r1,2
+JMP @ser_p
+ser_5:
+LA r1,@sx_e5
+SHL r1,r1,2
+JMP @ser_p
+ser_6:
+LA r1,@sx_e6
+SHL r1,r1,2
+JMP @ser_p
+ser_7:
+LA r1,@sx_e7
+SHL r1,r1,2
+JMP @ser_p
+ser_8:
+LA r1,@sx_e8
+SHL r1,r1,2
+JMP @ser_p
+ser_9:
+LA r1,@sx_e9
+SHL r1,r1,2
+JMP @ser_p
+ser_10:
+LA r1,@sx_e10
+SHL r1,r1,2
+JMP @ser_p
+ser_11:
+LA r1,@sx_e11
+SHL r1,r1,2
+JMP @ser_p
+ser_12:
+LA r1,@sx_e12
+SHL r1,r1,2
+JMP @ser_p
+ser_13:
+LA r1,@sx_e13
+SHL r1,r1,2
+JMP @ser_p
+ser_14:
+LA r1,@sx_e14
+SHL r1,r1,2
+JMP @ser_p
+ser_15:
+LA r1,@sx_e15
+SHL r1,r1,2
+JMP @ser_p
+ser_16:
+LA r1,@sx_e16
+SHL r1,r1,2
+JMP @ser_p
+ser_17:
+LA r1,@sx_e17
+SHL r1,r1,2
+JMP @ser_p
+ser_18:
+LA r1,@sx_e18
+SHL r1,r1,2
+JMP @ser_p
+ser_19:
+LA r1,@sx_e19
+SHL r1,r1,2
+JMP @ser_p
+ser_20:
+LA r1,@sx_e20
+SHL r1,r1,2
+JMP @ser_p
+ser_21:
+LA r1,@sx_e21
+SHL r1,r1,2
+JMP @ser_p
+ser_22:
+LA r1,@sx_e22
 SHL r1,r1,2
 JMP @ser_p
 ser_def:
@@ -309,7 +461,6 @@ SUB r14,r14,r13
 LD r15,r14,0
 JMP @nbi_d
 
-; nbi_perror(prefix)
 nbi_perror:
 ST r15,r14,0
 ADD r14,r14,r13
@@ -333,10 +484,6 @@ SUB r14,r14,r13
 LD r15,r14,0
 JMP @nbi_d
 
-sx_errtab:
-.word @sx_e0,@sx_e1,@sx_e2,@sx_e3,@sx_e4,@sx_e5,@sx_e6,@sx_e7
-.word @sx_e8,@sx_e9,@sx_e10,@sx_e11,@sx_e12,@sx_e13,@sx_e14,@sx_e15
-.word @sx_e16,@sx_e17,@sx_e18,@sx_e19,@sx_e20,@sx_e21,@sx_e22
 sx_e0:
 .str "Success"
 sx_e1:
@@ -396,3 +543,134 @@ ncc_s_strerror:
 .str "strerror"
 ncc_s_perror:
 .str "perror"
+
+; nbi_strrchr(s,c)
+nbi_strrchr:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @ni_pop
+ADD r9,r1,r0
+CALL @ni_pop
+ADD r7,r1,r0
+MOVI r10,0
+srr_l:
+LDB r1,r7,0
+CMP r1,r9
+JMP[NE] @srr_nx
+ADD r10,r7,r0
+srr_nx:
+CMP r1,r0
+JMP[EQ] @srr_d
+ADD r7,r7,r13
+JMP @srr_l
+srr_d:
+ADD r1,r10,r0
+CALL @ni_push
+SUB r14,r14,r13
+LD r15,r14,0
+JMP @nbi_d
+
+; nbi_strndup(s,n)
+nbi_strndup:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @ni_pop
+ADD r6,r1,r0
+CALL @ni_pop
+ST r1,r0,#W_EL_OFF
+ST r0,r0,#W_EL_COUNT
+snd_l:
+LD r2,r0,#W_EL_COUNT
+CMP r2,r6
+JMP[GE] @snd_c
+LD r1,r0,#W_EL_OFF
+ADD r1,r1,r2
+LDB r1,r1,0
+CMP r1,r0
+JMP[EQ] @snd_c
+ADD r2,r2,r13
+ST r2,r0,#W_EL_COUNT
+JMP @snd_l
+snd_c:
+LD r1,r0,#W_EL_COUNT
+ADD r1,r1,r13
+CALL @ni_malloc
+ST r1,r0,#W_EL_ELEM
+LD r2,r0,#W_EL_OFF
+LD r3,r0,#W_EL_COUNT
+CALL @ni_memcpy_raw
+LD r1,r0,#W_EL_ELEM
+LD r2,r0,#W_EL_COUNT
+ADD r1,r1,r2
+STB r0,r1,0
+LD r1,r0,#W_EL_ELEM
+CALL @ni_push
+SUB r14,r14,r13
+LD r15,r14,0
+JMP @nbi_d
+
+; nbi_stpcpy(dst,src)
+nbi_stpcpy:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @ni_pop
+ADD r7,r1,r0
+CALL @ni_pop
+ADD r6,r1,r0
+spc_l:
+LDB r1,r7,0
+STB r1,r6,0
+CMP r1,r0
+JMP[EQ] @spc_d
+ADD r7,r7,r13
+ADD r6,r6,r13
+JMP @spc_l
+spc_d:
+ADD r1,r6,r0
+CALL @ni_push
+SUB r14,r14,r13
+LD r15,r14,0
+JMP @nbi_d
+
+; nbi_memccpy(dst,src,c,n)
+nbi_memccpy:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @ni_pop
+ADD r8,r1,r0
+CALL @ni_pop
+ADD r9,r1,r0
+CALL @ni_pop
+ADD r10,r1,r0
+CALL @ni_pop
+ADD r11,r1,r0
+mcc_l:
+CMP r8,r0
+JMP[EQ] @mcc_n
+LDB r1,r10,0
+STB r1,r11,0
+CMP r1,r9
+JMP[EQ] @mcc_y
+ADD r10,r10,r13
+ADD r11,r11,r13
+SUB r8,r8,r13
+JMP @mcc_l
+mcc_y:
+ADD r1,r11,r13
+JMP @mcc_p
+mcc_n:
+MOVI r1,0
+mcc_p:
+CALL @ni_push
+SUB r14,r14,r13
+LD r15,r14,0
+JMP @nbi_d
+
+ncc_s_strrchr:
+.str "strrchr"
+ncc_s_strndup:
+.str "strndup"
+ncc_s_stpcpy:
+.str "stpcpy"
+ncc_s_memccpy:
+.str "memccpy"

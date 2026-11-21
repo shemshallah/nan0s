@@ -106,7 +106,8 @@ Not implemented (honest list):
   (`setjmp`/`longjmp`), `strftime`, `tmpnam`/`tmpfile`, and the wide-string
   helpers `wcslen`/`wcscmp`/`wcscpy`/`wcscat`, plus `strspn`/`strcspn`/
   `strpbrk`/`strtok`/`memchr`/`strcoll`/`strxfrm`/`strtol`/`strtoul`/
-  `strtoll`/`strtoull`, plus `strerror`/`perror`
+  `strtoll`/`strtoull`/`strchr`/`strrchr`/`strndup`/`stpcpy`/`memccpy`,
+  plus `strerror`/`perror`
   and `getenv`/`system` stubs are implemented. A `wprintf` subset (`%d`, `%s`,
   `%ls`, `%x`, `%X`, `%c`, `%%`, literal wide text) is implemented; `wscanf`
   is currently a stub returning EOF. Only the C locale is provided
@@ -240,6 +241,7 @@ tools/ncc_m35.sh    memchr/strcoll/strxfrm/strerror/perror
 tools/ncc_m36.sh    [] array size inference from brace lists
 tools/ncc_m37.sh    wprintf subset
 tools/ncc_m38.sh    strtol/strtoul/strtoll/strtoull
+tools/ncc_m39.sh    strchr/strrchr/strndup/stpcpy/memccpy
 tools/ncc_donut.sh  original C donut (one frame) in raw NaN16
 tools/nfs2.sh       path-addressed RAM filesystem API
 tools/ncc_gui.sh    boot image, open terminal, .demo runs C in the vbuf

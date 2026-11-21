@@ -442,6 +442,10 @@
 .equ B_STRTOUL  114
 .equ B_STRTOLL  115
 .equ B_STRTOULL 116
+.equ B_STRRCHR  118
+.equ B_STRNDUP  119
+.equ B_STPCPY   120
+.equ B_MEMCCPY  121
 
 ; ------------------------------------------------------------------ compiler state
 ; Kept below word 65536 so ST/LD can use the 16-bit immediate form directly.
@@ -6502,6 +6506,34 @@ MOVI r3,8
 MOVI r4,#B_STRTOULL
 MOVI r5,3
 MOVI r6,#T_ULONGLONG
+CALL @ncc_add_builtin
+LA r1,0x49053E05
+LA r2,@ncc_s_strrchr
+MOVI r3,7
+MOVI r4,#B_STRRCHR
+MOVI r5,2
+LD r6,r0,#W_PTRC
+CALL @ncc_add_builtin
+LA r1,0xD4F595B7
+LA r2,@ncc_s_strndup
+MOVI r3,7
+MOVI r4,#B_STRNDUP
+MOVI r5,2
+LD r6,r0,#W_PTRC
+CALL @ncc_add_builtin
+LA r1,0x1C3EE03C
+LA r2,@ncc_s_stpcpy
+MOVI r3,6
+MOVI r4,#B_STPCPY
+MOVI r5,2
+LD r6,r0,#W_PTRC
+CALL @ncc_add_builtin
+LA r1,0xC842BD37
+LA r2,@ncc_s_memccpy
+MOVI r3,7
+MOVI r4,#B_MEMCCPY
+MOVI r5,4
+LD r6,r0,#W_PTRV
 CALL @ncc_add_builtin
 SUB r14,r14,r13
 LD r15,r14,0
@@ -16110,6 +16142,18 @@ JMP[EQ] @nbi_strtoll
 MOVI r2,#B_STRTOULL
 CMP r1,r2
 JMP[EQ] @nbi_strtoull
+MOVI r2,#B_STRRCHR
+CMP r1,r2
+JMP[EQ] @nbi_strrchr
+MOVI r2,#B_STRNDUP
+CMP r1,r2
+JMP[EQ] @nbi_strndup
+MOVI r2,#B_STPCPY
+CMP r1,r2
+JMP[EQ] @nbi_stpcpy
+MOVI r2,#B_MEMCCPY
+CMP r1,r2
+JMP[EQ] @nbi_memccpy
 JMP @nbi_zero
 nbi_putc:
 CALL @ni_pop
