@@ -20,7 +20,8 @@ The remaining documented limitations are platform or optional-scope items:
   `src/lib/bare.nas`; console and block adapters are wired, filesystem slots
   are still adapter stubs (see `spec/BARE_METAL_INTERFACES.md`);
 - the library is the practical subset documented below (`erf`/gamma,
-  `frexp`/`nextafter`, and some POSIX extensions are still outside it).
+  `frexp`/`nextafter`, `div`/`ldiv` struct returns, `freopen`, and some POSIX
+  extensions are still outside it).
 
 None of these blocks the Python port; they are deployment or optional-library
 work.
@@ -171,10 +172,13 @@ printf(fmt, ...)   %d %i %u %o %x %X %c %s %p %f %e %E %g %G %%
                    '+'/' ', width/precision including '*' and '.*';
                    %x/%X digits; %ls for wide strings
 vprintf/vfprintf/vsprintf/vsnprintf  va_list-based formatters
+vscanf/vfscanf/vsscanf                va_list-based scanners
 putchar(c)         getchar()          getc(f)        putc(c,f)
 ungetc(c,f)        clearerr(f)       setvbuf(...)   print_int(v)
 puts(s)            print_str(s)
 malloc(n)          calloc(n,size)     realloc(p,n)   free(p)
+atexit(f)          _Exit(n)           abort()        setbuf(f,b)
+atol(s)            atoll(s)
 sin(x)             cos(x)
 sqrt(x)            fabs(x)           pow(x,y)
 exp(x)             log(x)            log10(x)
@@ -286,6 +290,8 @@ tools/ncc_m47.sh    vprintf/vfprintf/vsprintf/vsnprintf, * width/precision
 tools/ncc_m48.sh    wide-string and multibyte helpers
 tools/ncc_m49.sh    additional math wrappers
 tools/ncc_m50.sh    atan/atan2/asin/acos
+tools/ncc_m51.sh    atexit ordering, exit(), _Exit()
+tools/ncc_m52.sh    vscanf/vfscanf/vsscanf
 tools/ncc_m31.sh    alarm()/SIGALRM asynchronous delivery
 tools/ncc_m32.sh    C99 designated initializers (.member, [index], nested)
 tools/ncc_m33.sh    brace elision across arrays of flat aggregates

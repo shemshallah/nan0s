@@ -516,6 +516,11 @@
 .equ B_ATAN2    188
 .equ B_ASIN     189
 .equ B_ACOS     190
+.equ B_ATEXIT   191
+.equ B__EXIT    192
+.equ B_VSCANF   193
+.equ B_VFSCANF  194
+.equ B_VSSCANF  195
 
 ; ------------------------------------------------------------------ compiler state
 ; Kept below word 65536 so ST/LD can use the 16-bit immediate form directly.
@@ -716,6 +721,12 @@
 .equ W_STDPB     61820
 .equ W_DK_I      61830
 .equ W_DK_N      61831
+.equ W_ATEXIT_N 61890
+.equ W_ATEXIT_I 61891
+.equ W_ATEXIT_SYM 61892
+.equ W_ATEXIT_OLD 61893
+.equ W_ATEXIT_SKIP 61894
+.equ W_ATEXIT_RUN 61895
 .equ W_VARNP    61390
 .equ W_VARFLAG  61391
 .equ W_VARCNT   61393
@@ -880,6 +891,7 @@
 .include "nfs2.nas"
 .include "stdio.nas"
 .include "vprintf.nas"
+.include "vscanf.nas"
 .include "scanf.nas"
 .include "ll.nas"
 .include "qsort.nas"
@@ -1605,6 +1617,8 @@ LA r1,#NCC_ESB
 ST r1,r0,#R_SP
 ST r0,r0,#W_IRYSTOP
 ST r0,r0,#W_ALARM
+ST r0,r0,#W_ATEXIT_RUN
+ST r0,r0,#W_ATEXIT_N
 LA r1,#C_STACK
 ST r1,r0,#R_FP
 LA r1,#NCC_IRB
@@ -6545,6 +6559,41 @@ MOVI r3,4
 MOVI r4,#B_ACOS
 MOVI r5,1
 MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+LA r1,0xD41E7BD8
+LA r2,@ncc_s_atexit
+MOVI r3,6
+MOVI r4,#B_ATEXIT
+MOVI r5,1
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0xB3002016
+LA r2,@ncc_s__Exit
+MOVI r3,5
+MOVI r4,#B__EXIT
+MOVI r5,1
+MOVI r6,#T_VOID
+CALL @ncc_add_builtin
+LA r1,0x4734E946
+LA r2,@ncc_s_vscanf
+MOVI r3,6
+MOVI r4,#B_VSCANF
+MOVI r5,2
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0x0C5FFD02
+LA r2,@ncc_s_vfscanf
+MOVI r3,7
+MOVI r4,#B_VFSCANF
+MOVI r5,3
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0xD391E587
+LA r2,@ncc_s_vsscanf
+MOVI r3,7
+MOVI r4,#B_VSSCANF
+MOVI r5,3
+MOVI r6,#T_INT
 CALL @ncc_add_builtin
 
 
@@ -17457,6 +17506,21 @@ JMP[EQ] @nbi_asin
 MOVI r2,#B_ACOS
 CMP r1,r2
 JMP[EQ] @nbi_acos
+MOVI r2,#B_ATEXIT
+CMP r1,r2
+JMP[EQ] @nbi_atexit
+MOVI r2,#B__EXIT
+CMP r1,r2
+JMP[EQ] @nbi__exit
+MOVI r2,#B_VSCANF
+CMP r1,r2
+JMP[EQ] @nbi_vscanf
+MOVI r2,#B_VFSCANF
+CMP r1,r2
+JMP[EQ] @nbi_vfscanf
+MOVI r2,#B_VSSCANF
+CMP r1,r2
+JMP[EQ] @nbi_vsscanf
 
 
 MOVI r2,#B_FPUTS
@@ -17792,6 +17856,92 @@ ST r0,r0,#W_SNPOS
 LD r1,r0,#W_TAILHALT
 ST r1,r0,#R_IP
 JMP @nbi_d
+
+; nbi_call0: r1=function symbol -> call it with no arguments
+nbi_call0:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_ATEXIT_SYM
+MOVI r7,0
+BOOL.14 r1,r1,r7
+ST r1,r0,#R_T0
+CALL @sym_entry
+LD r2,r1,#SY_KIND
+MOVI r3,#SK_BUILTIN
+CMP r2,r3
+JMP[NE] @ac0_user
+LD r1,r1,#SY_AUX
+MOVI r2,0
+CALL @ni_builtin
+CALL @ni_pop
+JMP @ac0_d
+ac0_user:
+LD r4,r0,#R_FP
+ST r4,r0,#W_ATEXIT_OLD
+CALL @ni_call
+LD r4,r0,#W_ATEXIT_OLD
+ST r4,r0,#W_IRYSTOP
+CALL @ncc_ir_loop
+ST r0,r0,#W_IRYSTOP
+CALL @ni_pop
+ac0_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+run_atexit:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_ATEXIT_N
+MOVI r2,32
+CMP r1,r2
+JMP[LE] @rae_l
+MOVI r1,32
+rae_l:
+CMP r1,r0
+JMP[EQ] @rae_d
+SUB r1,r1,r13
+ST r1,r0,#W_ATEXIT_I
+LA r2,@atexit_tab
+SHL r3,r1,2
+ADD r2,r2,r3
+LD r1,r2,0
+CALL @nbi_call0
+LD r1,r0,#W_ATEXIT_I
+JMP @rae_l
+rae_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+nbi_atexit:
+CALL @ni_pop
+ST r1,r0,#W_ATEXIT_SYM
+LD r2,r0,#W_ATEXIT_N
+MOVI r3,32
+CMP r2,r3
+JMP[GE] @ate_f
+LA r3,@atexit_tab
+SHL r4,r2,2
+ADD r3,r3,r4
+LD r4,r0,#W_ATEXIT_SYM
+ST r4,r3,0
+ADD r2,r2,r13
+ST r2,r0,#W_ATEXIT_N
+MOVI r1,0
+CALL @ni_push
+JMP @nbi_d
+ate_f:
+LA r1,0xFFFFFFFF
+CALL @ni_push
+JMP @nbi_d
+
+nbi__exit:
+CALL @ni_pop
+LD r1,r0,#W_TAILHALT
+ST r1,r0,#R_IP
+JMP @nbi_d
+
 nbi_abs:
 CALL @ni_pop
 CMPS r1,r0
@@ -18625,6 +18775,13 @@ ST r1,r0,#W_SNPOS
 JMP @nbi_d
 nbi_exit:
 CALL @ni_pop
+LD r1,r0,#W_ATEXIT_RUN
+CMP r1,r0
+JMP[NE] @nex_go
+MOVI r1,1
+ST r1,r0,#W_ATEXIT_RUN
+CALL @run_atexit
+nex_go:
 LD r2,r0,#W_TAILHALT
 ST r2,r0,#R_IP
 JMP @nbi_d
@@ -18908,7 +19065,33 @@ CALL @ni_push
 MOVI r1,0
 CALL @ni_push
 nrt_restore:
+ST r3,r14,0
+ADD r14,r14,r13
+ST r4,r14,0
+ADD r14,r14,r13
 LD r2,r0,#R_FP
+SHR r2,r2,2
+LD r3,r2,0
+LA r4,#C_STACK
+CMP r3,r4
+JMP[NE] @nrt_noexit
+LD r1,r0,#W_ATEXIT_RUN
+CMP r1,r0
+JMP[NE] @nrt_noexit
+LD r1,r0,#W_ATEXIT_N
+CMP r1,r0
+JMP[EQ] @nrt_noexit
+MOVI r2,32
+CMP r1,r2
+JMP[GT] @nrt_noexit
+MOVI r1,1
+ST r1,r0,#W_ATEXIT_RUN
+CALL @run_atexit
+nrt_noexit:
+SUB r14,r14,r13
+LD r4,r14,0
+SUB r14,r14,r13
+LD r3,r14,0
 LD r2,r0,#R_FP
 SHR r2,r2,2
 LD r1,r2,1

@@ -891,3 +891,10 @@ ncc_s_scalbn:
 .str "scalbn"
 ncc_s_remainder:
 .str "remainder"
+ncc_s_atexit:
+.str "atexit"
+ncc_s__Exit:
+.str "_Exit"
+atexit_tab:
+.word 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+.word 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
