@@ -762,6 +762,15 @@
 .equ W_EX_A      61814
 .equ W_EX_B      61815
 .equ W_RAND_INIT 61816
+.equ W_HEAP_INIT 61817
+.equ W_FREELIST  61818
+.equ W_ALLOC_NEED 61819
+.equ W_ALLOC_BLK 61821
+.equ W_ALLOC_SIZE 61822
+.equ W_ALLOC_A   61823
+.equ W_ALLOC_B   61824
+.equ W_ALLOC_OLD 61825
+.equ W_ALLOC_NEW 61826
 .equ W_ERRNO     61795
 .equ W_FWIDE_STD 61796
 .equ W_STDPB     61820
@@ -1672,6 +1681,10 @@ ST r15,r14,0
 ADD r14,r14,r13
 ST r0,r0,#W_SNOUT
 ST r0,r0,#W_SNPOS
+; fresh C heap for this run: discard compiler-side allocations and start
+; with one free block spanning C_HEAP..C_HEAP_END
+ST r0,r0,#W_HEAP_INIT
+ST r0,r0,#W_FREELIST
 LA r1,#NCC_ESB
 ST r1,r0,#R_SP
 ST r0,r0,#W_IRYSTOP
@@ -9387,9 +9400,16 @@ LD r1,r0,#W_ETYPE
 CALL @ty_base
 ST r1,r0,#W_TY_ID
 ST r1,r0,#W_IDXTYPE
+; save the base type across the index expression: a nested subscript
+; (e.g. lp[j][ls[j]-1]) would otherwise clobber W_IDXTYPE
+ST r1,r14,0
+ADD r14,r14,r13
 CALL @p_adv
 CALL @p_expr
 CALL @p_emit_rv
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_IDXTYPE
 MOVI r1,#P_RBRACK
 MOVI r2,33
 CALL @p_expect_p
@@ -10757,10 +10777,10 @@ CALL @p_at_p
 CMP r1,r0
 JMP[EQ] @pbal_d
 CALL @p_emit_rv
-LD r1,r0,#W_ETYPE
+MOVI r1,#BIN_AND
 ST r1,r14,0
 ADD r14,r14,r13
-MOVI r1,#BIN_AND
+LD r1,r0,#W_ETYPE
 ST r1,r14,0
 ADD r14,r14,r13
 CALL @p_adv
@@ -10789,10 +10809,10 @@ CALL @p_at_p
 CMP r1,r0
 JMP[EQ] @pbxl_d
 CALL @p_emit_rv
-LD r1,r0,#W_ETYPE
+MOVI r1,#BIN_XOR
 ST r1,r14,0
 ADD r14,r14,r13
-MOVI r1,#BIN_XOR
+LD r1,r0,#W_ETYPE
 ST r1,r14,0
 ADD r14,r14,r13
 CALL @p_adv
@@ -10821,10 +10841,10 @@ CALL @p_at_p
 CMP r1,r0
 JMP[EQ] @pbol_d
 CALL @p_emit_rv
-LD r1,r0,#W_ETYPE
+MOVI r1,#BIN_OR
 ST r1,r14,0
 ADD r14,r14,r13
-MOVI r1,#BIN_OR
+LD r1,r0,#W_ETYPE
 ST r1,r14,0
 ADD r14,r14,r13
 CALL @p_adv
@@ -17254,37 +17274,220 @@ JMP @nms_l
 nms_d:
 RET
 
-; malloc: r1=size -> r1=ptr
+; ---- free-list C heap (4-byte aligned, coalescing) -----------------
+; Header word: size_words | 0x80000000 when allocated.
+; Block layout (word addresses): [header][payload...][footer].
+; Free payload words 0/1 hold next/prev; minimum block = 4 words.
+; The whole heap starts as one free block; ncc_run resets the allocator.
+
+ni_heap_init:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_HEAP_INIT
+CMP r1,r0
+JMP[NE] @nhi_d
+MOVI r1,1
+ST r1,r0,#W_HEAP_INIT
+LA r1,#C_HEAP
+SHR r1,r1,2
+LA r2,#C_HEAP_END
+SHR r2,r2,2
+SUB r2,r2,r1
+ST r2,r1,0
+ADD r3,r1,r2
+ADDI r3,r3,-1
+ST r2,r3,0
+ST r0,r1,1
+ST r0,r1,2
+ST r1,r0,#W_FREELIST
+nhi_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; insert block r1 into the free list
+ni_fl_insert:
+LD r2,r0,#W_FREELIST
+ST r2,r1,1
+ST r0,r1,2
+CMP r2,r0
+JMP[EQ] @nfi_set
+ST r1,r2,2
+nfi_set:
+ST r1,r0,#W_FREELIST
+RET
+
+; remove block r1 from the free list
+ni_fl_remove:
+LD r2,r1,1
+LD r3,r1,2
+CMP r3,r0
+JMP[EQ] @nfr_head
+ST r2,r3,1
+JMP @nfr_next
+nfr_head:
+ST r2,r0,#W_FREELIST
+nfr_next:
+CMP r2,r0
+JMP[EQ] @nfr_d
+ST r3,r2,2
+nfr_d:
+RET
+
 ni_malloc:
 ST r15,r14,0
 ADD r14,r14,r13
-ST r1,r0,#W_TY_TMP
-LD r1,r0,#W_HEAP
+CMP r1,r0
+JMP[EQ] @nm_zero
+LA r2,0xFFFFFFF0
+CMP r1,r2
+JMP[GT] @nm_zero
+ADDI r1,r1,3
+SHR r1,r1,2
+ADDI r1,r1,2
 MOVI r2,4
-CALL @px_align_up
-ST r1,r0,#W_TY_BASE
-LD r1,r0,#W_TY_TMP
-MOVI r2,4
-CALL @px_align_up
-ST r1,r0,#W_TY_ID
-LD r2,r0,#W_TY_BASE
-ADDI r3,r1,4
-ADD r3,r3,r2
-LA r4,#C_HEAP_END
+CMP r1,r2
+JMP[GE] @nm_min
+ADD r1,r2,r0
+nm_min:
+ST r1,r0,#W_ALLOC_NEED
+CALL @ni_heap_init
+LD r2,r0,#W_FREELIST
+nm_search:
+CMP r2,r0
+JMP[EQ] @nm_zero
+LD r3,r2,0
+LD r4,r0,#W_ALLOC_NEED
 CMP r3,r4
-JMP[LT] @nm_room
-MOVI r1,83
-CALL @ncc_err
-nm_room:
-LD r1,r0,#W_TY_BASE
-SHR r2,r1,2
-LD r3,r0,#W_TY_ID
-ST r3,r2,0
-LD r2,r0,#W_TY_BASE
-ADDI r3,r3,4
-ADD r2,r2,r3
-ST r2,r0,#W_HEAP
+JMP[GE] @nm_found
+LD r2,r2,1
+JMP @nm_search
+nm_found:
+ST r2,r0,#W_ALLOC_BLK
+ST r3,r0,#W_ALLOC_SIZE
+ADD r1,r2,r0
+CALL @ni_fl_remove
+LD r1,r0,#W_ALLOC_SIZE
+LD r2,r0,#W_ALLOC_NEED
+SUB r5,r1,r2
+MOVI r6,4
+CMP r5,r6
+JMP[LT] @nm_nosplit
+; split: remainder at block+need
+LD r2,r0,#W_ALLOC_BLK
+LD r1,r0,#W_ALLOC_NEED
+ADD r3,r2,r1
+ST r5,r3,0
+ADD r4,r3,r5
+ADDI r4,r4,-1
+ST r5,r4,0
+ADD r1,r3,r0
+CALL @ni_fl_insert
+LD r2,r0,#W_ALLOC_BLK
+LD r1,r0,#W_ALLOC_NEED
+LA r4,0x80000000
+BOOL.14 r5,r1,r4
+ST r5,r2,0
+ADD r4,r2,r1
+ADDI r4,r4,-1
+ST r1,r4,0
+JMP @nm_ret
+nm_nosplit:
+LD r2,r0,#W_ALLOC_BLK
+LD r1,r0,#W_ALLOC_SIZE
+LA r4,0x80000000
+BOOL.14 r5,r1,r4
+ST r5,r2,0
+ADD r4,r2,r1
+ADDI r4,r4,-1
+ST r1,r4,0
+nm_ret:
+LD r1,r0,#W_ALLOC_BLK
+SHL r1,r1,2
 ADDI r1,r1,4
+JMP @nm_d
+nm_zero:
+MOVI r1,0
+nm_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+ni_free:
+ST r15,r14,0
+ADD r14,r14,r13
+CMP r1,r0
+JMP[EQ] @nf_d
+SHR r1,r1,2
+ADDI r1,r1,-1
+LD r2,r1,0
+LA r3,0x80000000
+BOOL.8 r4,r2,r3
+CMP r4,r0
+JMP[EQ] @nf_d
+LA r3,0x7FFFFFFF
+BOOL.8 r2,r2,r3
+ST r1,r0,#W_ALLOC_BLK
+ST r2,r0,#W_ALLOC_SIZE
+ST r2,r1,0
+ADD r3,r1,r2
+ADDI r3,r3,-1
+ST r2,r3,0
+; coalesce with the previous block (unless this is the heap start)
+LA r4,#C_HEAP
+SHR r4,r4,2
+CMP r1,r4
+JMP[LE] @nf_next
+ADDI r4,r1,-1
+LD r5,r4,0
+CMP r5,r0
+JMP[EQ] @nf_next
+SUB r6,r1,r5
+LD r7,r6,0
+LA r8,0x80000000
+BOOL.8 r9,r7,r8
+CMP r9,r0
+JMP[NE] @nf_next
+ADD r1,r6,r0
+CALL @ni_fl_remove
+LD r2,r0,#W_ALLOC_SIZE
+ADD r2,r2,r5
+ST r2,r0,#W_ALLOC_SIZE
+ST r6,r0,#W_ALLOC_BLK
+nf_next:
+LD r1,r0,#W_ALLOC_BLK
+LD r2,r0,#W_ALLOC_SIZE
+nf_mark:
+ST r2,r1,0
+ADD r3,r1,r2
+ADDI r3,r3,-1
+ST r2,r3,0
+ADD r4,r1,r2
+LA r5,#C_HEAP_END
+SHR r5,r5,2
+CMP r4,r5
+JMP[GE] @nf_insert
+LD r5,r4,0
+LA r6,0x80000000
+BOOL.8 r7,r5,r6
+CMP r7,r0
+JMP[NE] @nf_insert
+ST r5,r0,#W_ALLOC_A
+ADD r1,r4,r0
+CALL @ni_fl_remove
+LD r1,r0,#W_ALLOC_BLK
+LD r2,r0,#W_ALLOC_SIZE
+LD r5,r0,#W_ALLOC_A
+ADD r2,r2,r5
+ST r2,r0,#W_ALLOC_SIZE
+ST r2,r1,0
+ADD r3,r1,r2
+ADDI r3,r3,-1
+ST r2,r3,0
+nf_insert:
+LD r1,r0,#W_ALLOC_BLK
+CALL @ni_fl_insert
+nf_d:
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -17293,21 +17496,33 @@ ni_calloc:
 ; r1=n r2=size
 ST r15,r14,0
 ADD r14,r14,r13
-ST r2,r0,#W_TY_TMP
-MUL r1,r1,r2
-ST r1,r0,#W_TY_COUNT
+ST r1,r0,#W_ALLOC_A
+ST r2,r0,#W_ALLOC_B
+MUL r3,r1,r2
+MULHU r4,r1,r2
+CMP r4,r0
+JMP[NE] @nc_zero
+ADD r1,r3,r0
 CALL @ni_malloc
-ST r1,r0,#W_TY_BASE
-LD r2,r0,#W_TY_COUNT
-MOVI r3,0
+CMP r1,r0
+JMP[EQ] @nc_d
+ST r1,r0,#W_ALLOC_NEW
+LD r2,r0,#W_ALLOC_A
+LD r3,r0,#W_ALLOC_B
+MUL r3,r2,r3
+MOVI r2,0
 CALL @ni_memset_raw
-LD r1,r0,#W_TY_BASE
+LD r1,r0,#W_ALLOC_NEW
+JMP @nc_d
+nc_zero:
+MOVI r1,0
+nc_d:
 SUB r14,r14,r13
 LD r15,r14,0
 RET
 
 ni_realloc:
-; r1=oldptr r2=newsize
+; r1=oldptr r2=newsize. Always move: malloc, copy the old payload, free.
 ST r15,r14,0
 ADD r14,r14,r13
 CMP r1,r0
@@ -17316,25 +17531,42 @@ ADD r1,r2,r0
 CALL @ni_malloc
 JMP @nr_d
 nr_old:
-ST r1,r0,#W_TY_SIGN
-ST r2,r0,#W_TY_ALIGN
-ADDI r3,r1,-4
-SHR r3,r3,2
-LD r3,r3,0
-ST r3,r0,#W_TY_COUNT
-ADD r1,r2,r0
+CMP r2,r0
+JMP[NE] @nr_need
+CALL @ni_free
+MOVI r1,0
+JMP @nr_d
+nr_need:
+ST r1,r0,#W_ALLOC_OLD
+ST r2,r0,#W_ALLOC_B
+SHR r3,r1,2
+ADDI r3,r3,-1
+LD r4,r3,0
+LA r5,0x7FFFFFFF
+BOOL.8 r4,r4,r5
+ADDI r6,r4,-2
+SHL r6,r6,2
+ST r6,r0,#W_ALLOC_A
+LD r1,r0,#W_ALLOC_B
 CALL @ni_malloc
-ST r1,r0,#W_TY_RET
-LD r1,r0,#W_TY_RET
-LD r2,r0,#W_TY_SIGN
-LD r3,r0,#W_TY_COUNT
-LD r4,r0,#W_TY_ALIGN
+CMP r1,r0
+JMP[EQ] @nr_zero
+ST r1,r0,#W_ALLOC_NEW
+LD r3,r0,#W_ALLOC_A
+LD r4,r0,#W_ALLOC_B
 CMP r3,r4
-JMP[LE] @nr_copy
+JMP[LE] @nr_cp
 ADD r3,r4,r0
-nr_copy:
+nr_cp:
+LD r1,r0,#W_ALLOC_NEW
+LD r2,r0,#W_ALLOC_OLD
 CALL @ni_memcpy_raw
-LD r1,r0,#W_TY_RET
+LD r1,r0,#W_ALLOC_OLD
+CALL @ni_free
+LD r1,r0,#W_ALLOC_NEW
+JMP @nr_d
+nr_zero:
+MOVI r1,0
 nr_d:
 SUB r14,r14,r13
 LD r15,r14,0
@@ -18274,6 +18506,7 @@ CALL @ni_push
 JMP @nbi_d
 nbi_free:
 CALL @ni_pop
+CALL @ni_free
 JMP @nbi_zero
 nbi_calloc:
 CALL @ni_pop

@@ -69,9 +69,11 @@ are heap copies. There is no external ELF/COFF ABI to match.
 - **Differential torture parity**: `tools/ncc_torture.sh` compiles the same C
   source with clang and ncc; the saved clang output is the expected file.
   The current case covers integer promotions, signed division/remainder, shifts,
-  pointer arithmetic, multidimensional arrays, struct/union layout, function
-  pointers, recursion, varargs, `for(;;)`, `switch`, `goto`,
-  `setjmp`/`longjmp`, strings and `long long`.
+  bitwise `&`/`|`/`^` (including compound assignment), pointer arithmetic,
+  multidimensional arrays and nested subscripts whose index expression itself
+  contains a subscript (`lp[j][ls[j]-1]`; the base type is saved across the
+  index parse), struct/union layout, function pointers, recursion, varargs,
+  `for(;;)`, `switch`, `goto`, `setjmp`/`longjmp`, strings and `long long`.
 - **Visual parity** for the classic a1k0n donut:
   `tools/ncc_donut_exact.sh` runs the ported source and checks the first frame
   byte-for-byte against a saved ncc frame. Against a host clang build of the
@@ -283,8 +285,17 @@ memcpy(d,s,n)      memset(d,c,n)       memcmp(a,b,n)
 atoi(s)            abs(n)             exit(code)
 ```
 
-`malloc` uses a 4-byte size header in the C heap and 4-byte alignment.
-`realloc` copies `min(old,new)` bytes. `free` is a no-op (bump allocator).
+`malloc` is an S0 boundary-tag free-list allocator over
+`C_HEAP..C_HEAP_END` (2 MB): 4-byte alignment, a header/footer word per
+block, `next`/`prev` in the free payload, minimum 4 words, and coalescing
+with the previous and next physical blocks on `free`. The whole heap starts
+as one free block; `ncc_run` resets it. `realloc` always moves: it allocates,
+copies `min(old,new)` bytes and frees the old block, so shrinking cannot
+leave a stray split. `tools/ncc_alloc.sh` runs 10,000 random
+malloc/free/realloc operations and checks 4-byte alignment, overlap among
+live blocks, full-pattern preservation across realloc, leak-free reuse
+(including a final 1.9 MB allocation), `calloc` zeroing/overflow and
+`realloc(NULL,n)`.
 
 ## Diagnostics and undefined behaviour
 
@@ -383,6 +394,7 @@ tools/ncc_m59.sh    div/ldiv/lldiv aggregate returns
 tools/ncc_m60.sh    setitimer/getitimer (SIGALRM delivery)
 tools/ncc_m61.sh    strtof/strtold, llabs, strncat, remquo, restartable mbs
 tools/ncc_m62.sh    inttypes, wide ctype, errno, assert, fwide
+tools/ncc_alloc.sh  S0 free-list heap: 10,000 malloc/free/realloc operations
 tools/ncc_torture.sh differential C torture case (clang vs ncc)
 tools/ncc_donut_exact.sh a1k0n donut first-frame parity
 tools/qgate_gui.sh  x86 GUI + kernel ATA guest loader
