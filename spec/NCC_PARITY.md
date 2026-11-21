@@ -6,6 +6,24 @@ NaN16. It is usable from the GUI terminal: press `e`, type C lines, then
 the editor are guest NaN16 code; there is no host C/Python/JS in the execution
 path.
 
+## Port readiness
+
+All tracked C language/library blockers are closed: the explicit
+function-returning-function-pointer definitions, nested/mixed brace elision,
+packed bit-fields, `wprintf`/`wscanf`, the `getchar`/`getc`/`putc`/`ungetc`
+family, and persistent files over ATA are implemented and gated by `M40`-`M46`.
+The remaining documented limitations are platform or optional-scope items:
+
+- the C locale is the only locale (the ISO C minimum);
+- x86 BIOS boot media is capped at 1.44 MB by the floppy format;
+- the POSIX-free machine-interface layer is still design-only in
+  `spec/BARE_METAL_INTERFACES.md`;
+- the library is the practical subset documented below (for example the
+  `vprintf` family is not part of it).
+
+None of these blocks the Python port; they are deployment or optional-library
+work.
+
 ## Memory model
 
 C memory is byte-addressed on top of the 32-bit NaN word:
