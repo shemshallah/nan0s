@@ -19,8 +19,8 @@ The remaining documented limitations are platform or optional-scope items:
 - the POSIX-free machine-interface table is implemented in
   `src/lib/bare.nas`; console and block adapters are wired, filesystem slots
   are still adapter stubs (see `spec/BARE_METAL_INTERFACES.md`);
-- the library is the practical subset documented below (some POSIX
-  extensions are still outside it).
+- the library now covers the standard C names plus the POSIX interval timer
+  interface; the remaining POSIX extensions are outside the subset.
 
 None of these blocks the Python port; they are deployment or optional-library
 work.
@@ -141,9 +141,9 @@ Not implemented (honest list):
   scanf syntax and widens `%ls` destinations. The C locale is the only locale,
   which is the minimum required by ISO C; `setlocale` returns `"C"` and
   `localeconv` reports the C conventions
-- signal handlers are installed and delivered by `raise`; `alarm()` performs
-  asynchronous `SIGALRM` delivery at IR-instruction boundaries. POSIX timers
-  (`setitimer`) are not implemented
+- signal handlers are installed and delivered by `raise`; `alarm()` and
+  `setitimer`/`getitimer` perform asynchronous `SIGALRM` delivery at
+  IR-instruction boundaries (ITIMER_REAL, with interval reload)
 - the path filesystem is RAM-backed by default. When an ATA primary-master
   disk is attached, NPAF snapshots to LBA 2048 after each write/delete and
   reloads the snapshot at startup; without a disk it still resets on reboot.
@@ -181,6 +181,7 @@ puts(s)            print_str(s)
 malloc(n)          calloc(n,size)     realloc(p,n)   free(p)
 atexit(f)          _Exit(n)           abort()        setbuf(f,b)
 atol(s)            atoll(s)           div/ldiv/lldiv
+setitimer/getitimer (ITIMER_REAL)
 sin(x)             cos(x)
 sqrt(x)            fabs(x)           pow(x,y)
 exp(x)             log(x)            log10(x)
@@ -303,6 +304,7 @@ tools/ncc_m56.sh    wcscoll/wcsxfrm
 tools/ncc_m57.sh    erf/erfc
 tools/ncc_m58.sh    tgamma/lgamma/signgam, interface version
 tools/ncc_m59.sh    div/ldiv/lldiv aggregate returns
+tools/ncc_m60.sh    setitimer/getitimer (SIGALRM delivery)
 tools/ncc_m31.sh    alarm()/SIGALRM asynchronous delivery
 tools/ncc_m32.sh    C99 designated initializers (.member, [index], nested)
 tools/ncc_m33.sh    brace elision across arrays of flat aggregates

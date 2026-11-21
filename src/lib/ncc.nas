@@ -543,6 +543,8 @@
 .equ B_DIV      215
 .equ B_LDIV     216
 .equ B_LLDIV    217
+.equ B_SETITIMER 218
+.equ B_GETITIMER 219
 
 ; ------------------------------------------------------------------ compiler state
 ; Kept below word 65536 so ST/LD can use the 16-bit immediate form directly.
@@ -757,6 +759,7 @@
 .equ W_DIVTYPE  61896
 .equ W_LDIVTYPE 61897
 .equ W_LLDIVTYPE 61898
+.equ W_IT_INTERVAL 61899
 .equ W_ATEXIT_RUN 61895
 .equ W_VARNP    61390
 .equ W_VARFLAG  61391
@@ -6882,6 +6885,20 @@ MOVI r3,5
 MOVI r4,#B_LLDIV
 MOVI r5,2
 LD r6,r0,#W_LLDIVTYPE
+CALL @ncc_add_builtin
+LA r1,0x23F04D1F
+LA r2,@ncc_s_setitimer
+MOVI r3,9
+MOVI r4,#B_SETITIMER
+MOVI r5,3
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0xD27CD00B
+LA r2,@ncc_s_getitimer
+MOVI r3,9
+MOVI r4,#B_GETITIMER
+MOVI r5,2
+MOVI r6,#T_INT
 CALL @ncc_add_builtin
 
 
@@ -17875,6 +17892,12 @@ JMP[EQ] @nbi_div
 MOVI r2,#B_LLDIV
 CMP r1,r2
 JMP[EQ] @nbi_lldiv
+MOVI r2,#B_SETITIMER
+CMP r1,r2
+JMP[EQ] @nbi_setitimer
+MOVI r2,#B_GETITIMER
+CMP r1,r2
+JMP[EQ] @nbi_getitimer
 
 
 MOVI r2,#B_FPUTS
@@ -19467,6 +19490,8 @@ SUB r1,r1,r13
 ST r1,r0,#W_ALARM
 CMP r1,r0
 JMP[NE] @nil_noalarm
+LD r1,r0,#W_IT_INTERVAL
+ST r1,r0,#W_ALARM
 MOVI r1,14
 ST r1,r0,#W_LLQ0
 SHL r2,r1,2

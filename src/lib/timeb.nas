@@ -917,3 +917,132 @@ asc_days:
 .str "SunMonTueWedThuFriSat"
 asc_months:
 .str "JanFebMarAprMayJunJulAugSepOctNovDec"
+
+; ---- POSIX interval timers (ITIMER_REAL) --------------------------
+; itimerval layout: {tv_sec,tv_usec} interval, {tv_sec,tv_usec} value.
+nbi_setitimer:
+CALL @ni_pop
+ST r1,r0,#W_TA
+CALL @ni_pop
+ST r1,r0,#W_TB
+CALL @ni_pop
+CMP r1,r0
+JMP[NE] @sit_f
+; old values
+LD r1,r0,#W_TA
+CMP r1,r0
+JMP[EQ] @sit_new
+CALL @iti_store
+sit_new:
+LD r1,r0,#W_TB
+CMP r1,r0
+JMP[EQ] @sit_ok
+; value: sec*100000 + usec/10
+LD r1,r0,#W_TB
+ADDI r1,r1,8
+MOVI r2,#SZ_32
+CALL @ni_loadv
+LA r2,100000
+MUL r1,r1,r2
+ST r1,r0,#W_TM0
+LD r1,r0,#W_TB
+ADDI r1,r1,12
+MOVI r2,#SZ_32
+CALL @ni_loadv
+MOVI r2,10
+DIVU r1,r1,r2
+LD r2,r0,#W_TM0
+ADD r1,r1,r2
+ST r1,r0,#W_ALARM
+; interval
+LD r1,r0,#W_TB
+MOVI r2,#SZ_32
+CALL @ni_loadv
+LA r2,100000
+MUL r1,r1,r2
+ST r1,r0,#W_TM0
+LD r1,r0,#W_TB
+ADDI r1,r1,4
+MOVI r2,#SZ_32
+CALL @ni_loadv
+MOVI r2,10
+DIVU r1,r1,r2
+LD r2,r0,#W_TM0
+ADD r1,r1,r2
+ST r1,r0,#W_IT_INTERVAL
+sit_ok:
+MOVI r1,0
+JMP @sit_p
+sit_f:
+LA r1,0xFFFFFFFF
+sit_p:
+CALL @ni_push
+JMP @nbi_d
+
+; iti_store: r1=itimerval pointer -> write interval and remaining time
+iti_store:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_TC
+; interval
+LD r5,r0,#W_IT_INTERVAL
+LA r2,100000
+DIVU r6,r5,r2
+MUL r7,r6,r2
+SUB r7,r5,r7
+MOVI r8,10
+MUL r7,r7,r8
+LD r1,r0,#W_TC
+ADD r2,r6,r0
+MOVI r3,#SZ_32
+CALL @ni_storev
+LD r1,r0,#W_TC
+ADDI r1,r1,4
+ADD r2,r7,r0
+MOVI r3,#SZ_32
+CALL @ni_storev
+; remaining
+LD r5,r0,#W_ALARM
+LA r2,100000
+DIVU r6,r5,r2
+MUL r7,r6,r2
+SUB r7,r5,r7
+MOVI r8,10
+MUL r7,r7,r8
+LD r1,r0,#W_TC
+ADDI r1,r1,8
+ADD r2,r6,r0
+MOVI r3,#SZ_32
+CALL @ni_storev
+LD r1,r0,#W_TC
+ADDI r1,r1,12
+ADD r2,r7,r0
+MOVI r3,#SZ_32
+CALL @ni_storev
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+nbi_getitimer:
+CALL @ni_pop
+ST r1,r0,#W_TA
+CALL @ni_pop
+CMP r1,r0
+JMP[NE] @git_f
+LD r1,r0,#W_TA
+CMP r1,r0
+JMP[EQ] @git_ok
+CALL @iti_store
+git_ok:
+MOVI r1,0
+JMP @git_p
+git_f:
+LA r1,0xFFFFFFFF
+git_p:
+CALL @ni_push
+JMP @nbi_d
+
+ncc_s_setitimer:
+.str "setitimer"
+ncc_s_getitimer:
+.str "getitimer"
