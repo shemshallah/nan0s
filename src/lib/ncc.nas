@@ -813,6 +813,7 @@
 .equ W_SCOPEPAR 2001200
 .include "timeb.nas"
 .include "ata.nas"
+.include "bare.nas"
 .include "nfs2.nas"
 .include "stdio.nas"
 .include "scanf.nas"
@@ -1589,7 +1590,13 @@ LD r3,r0,#W_SNREG2
 LD r4,r0,#W_SNREG3
 RET
 npc_serial:
-PUTC r1
+ST r15,r14,0
+ADD r14,r14,r13
+LA r2,@bare_table
+LD r2,r2,1
+CALLR r2
+SUB r14,r14,r13
+LD r15,r14,0
 RET
 
 ; ------------------------------------------------------------------ fatal errors

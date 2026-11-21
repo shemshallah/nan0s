@@ -54,7 +54,13 @@ JMP[EQ] @csg_eof
 CALL @st_getc
 RET
 csg_key:
-KEYQ r1
+ST r15,r14,0
+ADD r14,r14,r13
+LA r2,@bare_table
+LD r2,r2,3
+CALLR r2
+SUB r14,r14,r13
+LD r15,r14,0
 CMP r1,r0
 JMP[EQ] @csg_eof
 RET

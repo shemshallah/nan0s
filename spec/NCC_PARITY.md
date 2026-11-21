@@ -16,8 +16,9 @@ The remaining documented limitations are platform or optional-scope items:
 
 - the C locale is the only locale (the ISO C minimum);
 - x86 BIOS boot media is capped at 1.44 MB by the floppy format;
-- the POSIX-free machine-interface layer is still design-only in
-  `spec/BARE_METAL_INTERFACES.md`;
+- the POSIX-free machine-interface table is implemented in
+  `src/lib/bare.nas`; console and block adapters are wired, filesystem slots
+  are still adapter stubs (see `spec/BARE_METAL_INTERFACES.md`);
 - the library is the practical subset documented below (for example the
   `vprintf` family is not part of it).
 

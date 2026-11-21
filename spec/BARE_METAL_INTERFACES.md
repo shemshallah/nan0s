@@ -1,10 +1,11 @@
 # Bare-metal interface plan (POSIX replacement)
 
-Status: **deferred** (design only). The C compiler and runtime are complete
-enough to target a small machine interface; the current libc still contains
-POSIX-shaped entry points (`fopen`, `time`, `signal`, …). This document fixes
-the minimal interface boundary so those calls can be re-pointed without
-changing the C source ABI.
+Status: **table implemented, adapters partial**. `src/lib/bare.nas` provides
+the guest table below and default implementations. Console output and keyboard
+input already pass through slots 1 and 3; block slots wrap the ATA driver;
+filesystem slots are adapter stubs because the C stdio layer currently talks
+to NPAF directly. Time/entropy/halt defaults use the NaN16 primitives. Hosted
+adapters can patch table words at boot without changing the C ABI.
 
 ## Principles
 
