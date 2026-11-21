@@ -498,6 +498,14 @@
 .equ W_FPSTART  61596
 .equ W_CALLFTYPE 61597
 .equ W_FPTMP   61598
+.equ W_DECL_CONST 61636
+.equ W_DECL_HASH  61637
+.equ W_LCONST     61638
+.equ W_TCONST     61640
+.equ W_MARK_CONST 61641
+.equ W_CONSTSYM 61642
+.equ W_CN_N       61639
+.equ NCTAB        2300000
 .equ W_IRYSTOP 61601
 .equ W_CMPFP   61602
 .equ W_CMPA    61603
@@ -3888,6 +3896,7 @@ ST r0,r0,#W_TCHAR
 ST r0,r0,#W_TVOID
 ST r0,r0,#W_TFLOAT
 ST r0,r0,#W_TSEEN
+ST r0,r0,#W_TCONST
 pts_l:
 LD r1,r0,#W_TKA
 MOVI r2,#K_KEYWORD
@@ -3911,7 +3920,7 @@ CMP r1,r2
 JMP[EQ] @pts_typedef
 MOVI r2,#KW_CONST
 CMP r1,r2
-JMP[EQ] @pts_qual
+JMP[EQ] @pts_const
 MOVI r2,#KW_VOLATILE
 CMP r1,r2
 JMP[EQ] @pts_qual
@@ -3978,6 +3987,10 @@ MOVI r1,3
 ST r1,r0,#W_SCLASS
 JMP @pts_skip
 pts_qual:
+JMP @pts_skip
+pts_const:
+MOVI r1,1
+ST r1,r0,#W_TCONST
 JMP @pts_skip
 pts_bool:
 CALL @p_adv
@@ -7580,6 +7593,10 @@ MOVI r1,6
 CALL @p_err
 pp_var_ok:
 CALL @sym_entry
+LD r2,r1,#SY_USED
+LA r3,0x80000000
+BOOL.8 r2,r2,r3
+ST r2,r0,#W_LCONST
 LD r2,r1,#SY_KIND
 LD r3,r1,#SY_AUX
 LD r4,r1,#SY_TYPE
@@ -9709,6 +9726,12 @@ LD r1,r0,#W_TKA+1
 CALL @p_is_assign
 CMP r1,r0
 JMP[EQ] @pas_d
+LD r2,r0,#W_LCONST
+CMP r2,r0
+JMP[EQ] @pas_ok
+MOVI r1,11
+CALL @p_err
+pas_ok:
 LD r1,r0,#W_LTYPE
 ST r1,r14,0
 ADD r14,r14,r13
@@ -10004,6 +10027,112 @@ MOVI r1,#P_SEMI
 MOVI r2,22
 CALL @p_expect_p
 pst_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; px_const_add: r1=name hash; record as const
+px_const_add:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_DECL_CONST
+LD r2,r0,#W_CN_N
+MOVI r3,0
+pxca_l:
+CMP r3,r2
+JMP[GE] @pxca_add
+LA r4,#NCTAB
+ADD r4,r4,r3
+LD r5,r4,0
+LD r6,r0,#W_DECL_CONST
+CMP r5,r6
+JMP[EQ] @pxca_d
+ADD r3,r3,r13
+JMP @pxca_l
+pxca_add:
+MOVI r6,64
+CMP r2,r6
+JMP[GE] @pxca_d
+LA r4,#NCTAB
+ADD r4,r4,r2
+LD r6,r0,#W_DECL_CONST
+ST r6,r4,0
+ADD r2,r2,r13
+ST r2,r0,#W_CN_N
+pxca_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; px_const_sym: r1=symbol index; apply pending const mark
+px_const_sym:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r2,r0,#W_MARK_CONST
+CMP r2,r0
+JMP[EQ] @pxcs_d
+ST r0,r0,#W_MARK_CONST
+ST r1,r0,#W_CONSTSYM
+CALL @sym_entry
+LD r2,r1,#SY_USED
+LA r3,0x80000000
+BOOL.14 r2,r2,r3
+ST r2,r1,#SY_USED
+LD r1,r0,#W_CONSTSYM
+pxcs_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; px_decl_mark: if declaration was const and not pointer, record current identifier
+px_decl_mark:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r2,r0,#W_DECL_CONST
+CMP r2,r0
+JMP[EQ] @pxdm_d
+LD r2,r0,#W_TY_ID
+ST r2,r0,#W_DECL_HASH
+LD r1,r0,#W_DECL_HASH
+CALL @ty_kind
+MOVI r2,#TY_PTR
+CMP r1,r2
+JMP[EQ] @pxdm_d
+LD r1,r0,#W_TKA
+MOVI r2,#K_IDENT
+CMP r1,r2
+JMP[NE] @pxdm_d
+MOVI r1,1
+ST r1,r0,#W_MARK_CONST
+pxdm_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; px_const_check: r1=name hash -> W_LCONST
+px_const_check:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r0,r0,#W_LCONST
+ST r1,r0,#W_DECL_HASH
+LD r2,r0,#W_CN_N
+MOVI r3,0
+pxcc_l:
+CMP r3,r2
+JMP[GE] @pxcc_d
+LA r4,#NCTAB
+ADD r4,r4,r3
+LD r5,r4,0
+LD r6,r0,#W_DECL_HASH
+CMP r5,r6
+JMP[NE] @pxcc_n
+MOVI r5,1
+ST r5,r0,#W_LCONST
+JMP @pxcc_d
+pxcc_n:
+ADD r3,r3,r13
+JMP @pxcc_l
+pxcc_d:
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -10877,6 +11006,9 @@ ST r15,r14,0
 ADD r14,r14,r13
 CALL @p_typespec
 ST r1,r0,#W_TY_RET
+ST r0,r0,#W_MARK_CONST
+LD r2,r0,#W_TCONST
+ST r2,r0,#W_DECL_CONST
 CALL @p_at_funcptr_decl
 CMP r1,r0
 JMP[EQ] @pd_one
@@ -10900,6 +11032,7 @@ pd_one:
 LD r1,r0,#W_TY_RET
 CALL @p_ptr_suffix
 ST r1,r0,#W_TY_ID
+CALL @px_decl_mark
 LD r1,r0,#W_TKA
 MOVI r2,#K_IDENT
 CMP r1,r2
@@ -10913,6 +11046,7 @@ CMP r1,r2
 JMP[EQ] @pd_typedef
 MOVI r1,#SK_LOCAL
 CALL @sym_new_cur
+CALL @px_const_sym
 ST r1,r14,0
 ADD r14,r14,r13
 CALL @p_adv
@@ -12158,6 +12292,9 @@ p_decl_external:
 ST r15,r14,0
 ADD r14,r14,r13
 ST r1,r0,#W_TY_RET
+ST r0,r0,#W_MARK_CONST
+LD r2,r0,#W_TCONST
+ST r2,r0,#W_DECL_CONST
 CALL @p_at_funcptr_decl
 CMP r1,r0
 JMP[EQ] @pde_not_fp
@@ -12188,6 +12325,7 @@ pde_one:
 LD r1,r0,#W_TY_RET
 CALL @p_ptr_suffix
 ST r1,r0,#W_TY_ID
+CALL @px_decl_mark
 LD r1,r0,#W_TKA
 MOVI r2,#K_IDENT
 CMP r1,r2
@@ -12207,6 +12345,7 @@ JMP[EQ] @pde_func
 pde_var:
 MOVI r1,#SK_GLOBAL
 CALL @sym_get_cur
+CALL @px_const_sym
 ST r1,r14,0
 ADD r14,r14,r13
 CALL @p_adv
@@ -12495,6 +12634,7 @@ JMP @pde_d
 p_func:
 ST r15,r14,0
 ADD r14,r14,r13
+ST r0,r0,#W_MARK_CONST
 ST r0,r0,#W_SCOPEID
 MOVI r2,1
 ST r2,r0,#W_NEXTSCOPE
@@ -12582,6 +12722,9 @@ pfu_plain_type:
 LD r1,r0,#W_TY_ID
 CALL @p_ptr_suffix
 ST r1,r0,#W_TY_ID
+LD r2,r0,#W_TCONST
+ST r2,r0,#W_DECL_CONST
+CALL @px_decl_mark
 MOVI r2,0
 ST r2,r0,#W_TY_BASE
 LD r1,r0,#W_TKA
@@ -12590,6 +12733,7 @@ CMP r1,r2
 JMP[NE] @pfu_no_name
 MOVI r1,#SK_LOCAL
 CALL @sym_new_cur
+CALL @px_const_sym
 ST r1,r14,0
 ADD r14,r14,r13
 CALL @p_adv
@@ -12650,6 +12794,7 @@ LD r3,r0,#W_FUNCNP
 ADD r3,r3,r13
 ST r3,r0,#W_FUNCNP
 pfu_param_next:
+ST r0,r0,#W_MARK_CONST
 MOVI r1,#P_COMMA
 CALL @p_take_p
 CMP r1,r0

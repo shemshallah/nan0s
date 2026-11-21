@@ -607,3 +607,45 @@ ncc_s_wcscpy:
 .str "wcscpy"
 ncc_s_wcscat:
 .str "wcscat"
+
+; nbi_call1: r1=function pointer, r2=one argument -> r1=result
+nbi_call1:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_CMPFP
+ST r2,r0,#W_CMPA
+LD r4,r0,#R_FP
+ST r4,r0,#W_CMPOLD
+LD r5,r0,#R_SP
+LD r6,r0,#W_CMPA
+ST r6,r5,0
+ADD r5,r5,r13
+ST r5,r0,#R_SP
+LD r1,r0,#W_CMPFP
+CALL @sym_entry
+LD r2,r1,#SY_KIND
+MOVI r3,#SK_BUILTIN
+CMP r2,r3
+JMP[NE] @cc1_func
+LD r1,r1,#SY_AUX
+MOVI r2,1
+CALL @ni_builtin
+CALL @ni_pop
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+cc1_func:
+LD r6,r0,#W_CMPFP
+MOVI r7,1
+SHL r7,r7,16
+BOOL.14 r6,r6,r7
+ST r6,r0,#R_T0
+CALL @ni_call
+LD r4,r0,#W_CMPOLD
+ST r4,r0,#W_IRYSTOP
+CALL @ncc_ir_loop
+ST r0,r0,#W_IRYSTOP
+CALL @ni_pop
+SUB r14,r14,r13
+LD r15,r14,0
+RET

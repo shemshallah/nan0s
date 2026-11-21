@@ -650,9 +650,26 @@ CALL @ni_push
 JMP @nbi_d
 
 nbi_raise:
+ST r15,r14,0
+ADD r14,r14,r13
 CALL @ni_pop
+ST r1,r0,#W_LLQ0
+SHL r2,r1,2
+LA r3,11020300
+ADD r3,r3,r2
+LD r4,r3,0
+CMP r4,r0
+JMP[EQ] @nrs_d
+CMP r4,r13
+JMP[EQ] @nrs_d
+ADD r1,r4,r0
+LD r2,r0,#W_LLQ0
+CALL @nbi_call1
+nrs_d:
 MOVI r1,0
 CALL @ni_push
+SUB r14,r14,r13
+LD r15,r14,0
 JMP @nbi_d
 
 ; ---- atof / strtod ------------------------------------------------
