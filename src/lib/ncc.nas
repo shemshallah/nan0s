@@ -504,6 +504,9 @@
 .equ W_TCONST     61640
 .equ W_MARK_CONST 61641
 .equ W_CONSTSYM 61642
+.equ W_FPOFF   61643
+.equ W_FPNP1   61644
+.equ W_OUTER   61645
 .equ W_CN_N       61639
 .equ NCTAB        2300000
 .equ W_IRYSTOP 61601
@@ -10767,6 +10770,7 @@ RET
 p_funcptr_decl:
 ST r15,r14,0
 ADD r14,r14,r13
+ST r0,r0,#W_OUTER
 ST r1,r0,#W_FPRET
 ST r2,r0,#W_FPGLOBAL
 MOVI r1,#P_LPAREN
@@ -10809,9 +10813,14 @@ CALL @sym_get_cur
 pfpd_sym:
 ST r1,r0,#W_FPSYM
 CALL @p_adv
+MOVI r1,#P_LPAREN
+CALL @p_at_p
+CMP r1,r0
+JMP[NE] @pfpd_outer
 MOVI r1,#P_RPAREN
 MOVI r2,10
 CALL @p_expect_p
+pfpd_second:
 MOVI r1,#P_LPAREN
 MOVI r2,9
 CALL @p_expect_p
@@ -10874,6 +10883,9 @@ CALL @ty_func_set_params
 LD r1,r0,#W_TY_TMP
 CALL @ty_ptr
 ST r1,r0,#W_FPTR_TYPE
+LD r1,r0,#W_OUTER
+CMP r1,r0
+JMP[NE] @pfpd_outer_final
 LD r1,r0,#W_FPSYM
 CALL @sym_entry
 LD r2,r0,#W_FPTR_TYPE
@@ -10915,6 +10927,101 @@ LD r1,r0,#W_FPTR_TYPE
 SUB r14,r14,r13
 LD r15,r14,0
 RET
+
+pfpd_outer:
+MOVI r1,1
+ST r1,r0,#W_OUTER
+MOVI r1,#P_LPAREN
+MOVI r2,9
+CALL @p_expect_p
+MOVI r1,80
+ST r1,r0,#W_FPOFF
+LD r1,r0,#W_PARAMP
+ST r1,r0,#W_FUNCARG
+ST r0,r0,#W_FPNP
+MOVI r1,#P_RPAREN
+CALL @p_at_p
+CMP r1,r0
+JMP[NE] @fpof_params_done
+MOVI r1,#KW_VOID
+CALL @p_at_k
+CMP r1,r0
+JMP[EQ] @fpof_voidchk
+JMP @fpof_param_l
+fpof_voidchk:
+CALL @p_peek
+LD r1,r0,#W_TKB
+MOVI r2,#K_PUNCT
+CMP r1,r2
+JMP[NE] @fpof_param_l
+LD r1,r0,#W_TKB+1
+MOVI r2,#P_RPAREN
+CMP r1,r2
+JMP[NE] @fpof_param_l
+CALL @p_adv
+JMP @fpof_params_done
+fpof_param_l:
+CALL @p_typespec
+CALL @p_ptr_suffix
+ST r1,r0,#W_FPTMP
+LD r1,r0,#W_TKA
+MOVI r2,#K_IDENT
+CMP r1,r2
+JMP[NE] @fpof_noid
+CALL @p_adv
+fpof_noid:
+LD r1,r0,#W_FPTMP
+CALL @ty_align
+ADD r2,r1,r0
+LD r1,r0,#W_FPOFF
+CALL @px_align_up
+ST r1,r0,#W_FPOFF
+LD r2,r0,#W_FUNCARG
+LD r3,r0,#W_FPNP
+MUL r3,r3,r13
+ADD r3,r3,r3
+ADD r2,r2,r3
+LD r3,r0,#W_FPOFF
+ST r3,r2,0
+LD r3,r0,#W_FPTMP
+ST r3,r2,1
+LD r1,r0,#W_FPTMP
+CALL @ty_size
+LD r2,r0,#W_FPOFF
+ADD r2,r2,r1
+ST r2,r0,#W_FPOFF
+LD r1,r0,#W_FPNP
+ADD r1,r1,r13
+ST r1,r0,#W_FPNP
+MOVI r1,#P_COMMA
+CALL @p_take_p
+CMP r1,r0
+JMP[NE] @fpof_param_l
+fpof_params_done:
+MOVI r1,#P_RPAREN
+MOVI r2,10
+CALL @p_expect_p
+MOVI r1,#P_RPAREN
+MOVI r2,10
+CALL @p_expect_p
+LD r1,r0,#W_FPNP
+ST r1,r0,#W_FPNP1
+JMP @pfpd_second
+
+pfpd_outer_final:
+LD r1,r0,#W_FPSYM
+CALL @sym_entry
+MOVI r3,#SK_FUNC
+ST r3,r1,#SY_KIND
+LD r3,r0,#W_FPTR_TYPE
+ST r3,r1,#SY_TYPE
+LD r3,r0,#W_FPNP1
+ST r3,r1,#SY_NP
+LD r3,r0,#W_FUNCARG
+ST r3,r1,#SY_ARG
+ST r0,r1,#SY_ENTRY
+ST r0,r1,#SY_SIZE
+JMP @pfpd_ret
 
 ; p_funcptr_init: optional '= expr' initializer for the function pointer
 ; declared by p_funcptr_decl (W_FPSYM/W_FPGLOBAL). Emits the store.

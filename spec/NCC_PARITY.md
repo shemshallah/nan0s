@@ -81,8 +81,9 @@ Implemented:
 
 Not implemented (honest list):
 
-- the explicit function-returning-function-pointer declarator syntax
-  (`int (*f(void))(int,int)`); use a typedef'd function-pointer return type
+- the explicit function-returning-function-pointer declarator is parsed for
+  prototypes (`int (*f(void))(int,int);`); defining such a function still
+  requires a typedef'd function-pointer return type
 - packed bit-field ABI: fields are laid out one per declared storage unit
   (valid implementation-defined C, but not ABI-compatible with GCC/Clang)
 - `const` is enforced for scalar objects, globals, and function parameters
@@ -215,6 +216,7 @@ tools/ncc_m26.sh    qsort/bsearch callbacks (int, long long, strings),
 tools/ncc_m27.sh    strftime, tmpnam/tmpfile, wide-string helpers
 tools/ncc_m28.sh    const enforcement (locals/globals/params) and const pointers
 tools/ncc_m29.sh    signal handlers delivered by raise()
+tools/ncc_m30.sh    explicit function-returning-function-pointer prototypes
 tools/ncc_donut.sh  original C donut (one frame) in raw NaN16
 tools/nfs2.sh       path-addressed RAM filesystem API
 tools/ncc_gui.sh    boot image, open terminal, .demo runs C in the vbuf
