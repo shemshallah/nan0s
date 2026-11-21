@@ -624,6 +624,45 @@ SUB r14,r14,r13
 LD r15,r14,0
 RET
 
+; ll_neg: negate the pair on top of the stack
+ll_neg:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r2,r0,#R_SP
+ADDI r2,r2,-2
+LD r1,r2,0
+LD r3,r2,1
+ADD r2,r3,r0
+CALL @ll_neg_pair
+LD r3,r0,#R_SP
+ADDI r3,r3,-2
+ST r1,r3,0
+ST r2,r3,1
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; ll_bool: pop pair, push 1 if either word nonzero
+ll_bool:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r2,r0,#R_SP
+ADDI r2,r2,-2
+LD r1,r2,0
+LD r3,r2,1
+BOOL.14 r1,r1,r3
+MOVI r4,0
+CMP r1,r0
+JMP[EQ] @llb_d
+MOVI r4,1
+llb_d:
+ST r4,r2,0
+ADD r2,r2,r13
+ST r2,r0,#R_SP
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
 ; ll_load: pop address, push 8-byte value
 ll_load:
 ST r15,r14,0

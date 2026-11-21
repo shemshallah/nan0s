@@ -229,6 +229,8 @@
 .equ I_WORDS    75
 .equ I_LLF2I   76
 .equ I_LLI2F   77
+.equ I_LLBOOL  78
+.equ I_LLNEG   79
 .equ CALB_SCRATCH 2700000
 
 ; symbol entry: 16 words
@@ -411,6 +413,17 @@
 .equ B_SCANF    85
 .equ B_FSCANF   86
 .equ B_SSCANF   87
+.equ B_QSORT    88
+.equ B_BSEARCH  89
+.equ B_SETJMP   90
+.equ B_LONGJMP  91
+.equ B_STRFTIME 92
+.equ B_TMPNAM   93
+.equ B_TMPFILE  94
+.equ B_WCSLEN   95
+.equ B_WCSCMP   96
+.equ B_WCSCPY   97
+.equ B_WCSCAT   98
 
 ; ------------------------------------------------------------------ compiler state
 ; Kept below word 65536 so ST/LD can use the 16-bit immediate form directly.
@@ -485,6 +498,22 @@
 .equ W_FPSTART  61596
 .equ W_CALLFTYPE 61597
 .equ W_FPTMP   61598
+.equ W_IRYSTOP 61601
+.equ W_CMPFP   61602
+.equ W_CMPA    61603
+.equ W_CMPB    61604
+.equ W_CMPOLD  61605
+.equ QS_BASE   61606
+.equ QS_N      61607
+.equ QS_SIZE   61608
+.equ QS_CMP    61609
+.equ QS_I      61610
+.equ QS_J      61611
+.equ QS_P1     61612
+.equ QS_P2     61613
+.equ QS_KEY    61614
+.equ W_CALLENTRY 61615
+.equ W_DECLTYPE 61616
 .equ W_TCHAR    60933
 .equ W_TVOID    60934
 .equ W_TFLOAT   60935
@@ -697,6 +726,9 @@
 .include "stdio.nas"
 .include "scanf.nas"
 .include "ll.nas"
+.include "qsort.nas"
+.include "setjmp.nas"
+.include "libcx.nas"
 
 ; q2_skipsp: consume spaces and tabs
 q2_skipsp:
@@ -1410,6 +1442,7 @@ ST r0,r0,#W_SNOUT
 ST r0,r0,#W_SNPOS
 LA r1,#NCC_ESB
 ST r1,r0,#R_SP
+ST r0,r0,#W_IRYSTOP
 LA r1,#C_STACK
 ST r1,r0,#R_FP
 LA r1,#NCC_IRB
@@ -6190,6 +6223,94 @@ LA r2,@ncc_s_lconv
 MOVI r3,5
 LD r4,r0,#W_TMTYPE
 CALL @ncc_add_typedef
+; qsort(base,n,size,cmp)
+LA r1,0xBE456288
+LA r2,@ncc_s_qsort
+MOVI r3,5
+MOVI r4,#B_QSORT
+MOVI r5,4
+MOVI r6,#T_VOID
+CALL @ncc_add_builtin
+; bsearch(key,base,n,size,cmp)
+LA r1,0xE039B2C9
+LA r2,@ncc_s_bsearch
+MOVI r3,7
+MOVI r4,#B_BSEARCH
+MOVI r5,5
+LD r6,r0,#W_PTRV
+CALL @ncc_add_builtin
+; setjmp/longjmp
+LA r1,0xBF979A06
+LA r2,@ncc_s_setjmp
+MOVI r3,6
+MOVI r4,#B_SETJMP
+MOVI r5,1
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0xC8F2ABD6
+LA r2,@ncc_s_longjmp
+MOVI r3,7
+MOVI r4,#B_LONGJMP
+MOVI r5,2
+MOVI r6,#T_VOID
+CALL @ncc_add_builtin
+LA r1,0x12CFF05A
+LA r2,@ncc_s_jmp_buf
+MOVI r3,7
+LD r4,r0,#W_PTRV
+CALL @ncc_add_typedef
+; strftime
+LA r1,0x0B30AAE3
+LA r2,@ncc_s_strftime
+MOVI r3,8
+MOVI r4,#B_STRFTIME
+MOVI r5,4
+MOVI r6,#T_UINT
+CALL @ncc_add_builtin
+; tmpnam/tmpfile
+LA r1,0xA6B648DA
+LA r2,@ncc_s_tmpnam
+MOVI r3,6
+MOVI r4,#B_TMPNAM
+MOVI r5,1
+LD r6,r0,#W_PTRC
+CALL @ncc_add_builtin
+LA r1,0x94E5B448
+LA r2,@ncc_s_tmpfile
+MOVI r3,7
+MOVI r4,#B_TMPFILE
+MOVI r5,0
+LD r6,r0,#W_PTRV
+CALL @ncc_add_builtin
+; wide strings
+LA r1,0xA4E39B3B
+LA r2,@ncc_s_wcslen
+MOVI r3,6
+MOVI r4,#B_WCSLEN
+MOVI r5,1
+MOVI r6,#T_UINT
+CALL @ncc_add_builtin
+LA r1,0x28976CE8
+LA r2,@ncc_s_wcscmp
+MOVI r3,6
+MOVI r4,#B_WCSCMP
+MOVI r5,2
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0x2D681692
+LA r2,@ncc_s_wcscpy
+MOVI r3,6
+MOVI r4,#B_WCSCPY
+MOVI r5,2
+LD r6,r0,#W_PTRV
+CALL @ncc_add_builtin
+LA r1,0x2C8CE5D8
+LA r2,@ncc_s_wcscat
+MOVI r3,6
+MOVI r4,#B_WCSCAT
+MOVI r5,2
+LD r6,r0,#W_PTRV
+CALL @ncc_add_builtin
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -7433,6 +7554,28 @@ ST r0,r0,#W_LVAL
 CALL @p_adv
 JMP @pp_done
 pp_var_bad:
+; builtin function used as a value (callback)
+MOVI r1,#SK_BUILTIN
+CALL @sym_find_cur
+MOVI r2,0xFFFF
+SHL r2,r2,16
+ADDI r2,r2,-1
+CMP r1,r2
+JMP[EQ] @pp_var_err
+ST r1,r0,#W_FPSYM
+CALL @sym_entry
+LD r1,r1,#SY_TYPE
+MOVI r2,0
+CALL @ty_func
+CALL @ty_ptr
+ST r1,r0,#W_ETYPE
+LD r2,r0,#W_FPSYM
+LA r1,#I_PUSH
+CALL @ir_emit
+ST r0,r0,#W_LVAL
+CALL @p_adv
+JMP @pp_done
+pp_var_err:
 MOVI r1,6
 CALL @p_err
 pp_var_ok:
@@ -7461,6 +7604,13 @@ ST r1,r0,#W_LVAL
 CALL @p_adv
 JMP @pp_done
 pp_call:
+LD r1,r0,#W_TKA+2
+LA r2,0xBF979A06
+CMP r1,r2
+JMP[EQ] @pp_setjmp
+LA r2,0xC8F2ABD6
+CMP r1,r2
+JMP[EQ] @pp_longjmp
 MOVI r1,#SK_FUNC
 CALL @sym_find_cur
 MOVI r2,0xFFFF
@@ -7598,6 +7748,71 @@ CALL @ty_funcptr_ret
 ST r1,r0,#W_ETYPE
 CALL @p_set_call_result
 JMP @pp_done
+pp_setjmp:
+MOVI r1,#SK_BUILTIN
+CALL @sym_find_cur
+ST r1,r0,#W_CALLSYM
+CALL @p_adv
+MOVI r1,#P_LPAREN
+MOVI r2,9
+CALL @p_expect_p
+CALL @p_assign
+LD r1,r0,#W_LVAL
+CMP r1,r0
+JMP[NE] @pp_sj_ok
+MOVI r1,6
+CALL @p_err
+pp_sj_ok:
+MOVI r1,#P_RPAREN
+MOVI r2,10
+CALL @p_expect_p
+LD r2,r0,#W_CALLSYM
+MOVI r3,1
+SHL r3,r3,16
+BOOL.14 r2,r2,r3
+LA r1,#I_CALL
+CALL @ir_emit
+LD r1,r0,#W_CALLSYM
+CALL @sym_entry
+LD r1,r1,#SY_TYPE
+ST r1,r0,#W_ETYPE
+ST r0,r0,#W_LVAL
+JMP @pp_done
+
+pp_longjmp:
+MOVI r1,#SK_BUILTIN
+CALL @sym_find_cur
+ST r1,r0,#W_CALLSYM
+CALL @p_adv
+MOVI r1,#P_LPAREN
+MOVI r2,9
+CALL @p_expect_p
+CALL @p_assign
+LD r1,r0,#W_LVAL
+CMP r1,r0
+JMP[NE] @pp_lj_ok
+MOVI r1,6
+CALL @p_err
+pp_lj_ok:
+MOVI r1,#P_COMMA
+MOVI r2,24
+CALL @p_expect_p
+CALL @p_assign
+CALL @p_emit_rv
+MOVI r1,#P_RPAREN
+MOVI r2,10
+CALL @p_expect_p
+LD r2,r0,#W_CALLSYM
+MOVI r3,2
+SHL r3,r3,16
+BOOL.14 r2,r2,r3
+LA r1,#I_CALL
+CALL @ir_emit
+MOVI r1,#T_VOID
+ST r1,r0,#W_ETYPE
+ST r0,r0,#W_LVAL
+JMP @pp_done
+
 pp_va_start:
 CALL @p_adv
 MOVI r1,#P_LPAREN
@@ -8084,6 +8299,16 @@ CALL @ir_op
 JMP @pu_done
 pu_minus_int:
 LD r1,r0,#W_ETYPE
+CALL @ty_kind
+MOVI r2,#TY_LL
+CMP r1,r2
+JMP[NE] @pu_minus_i
+LA r1,#I_LLNEG
+MOVI r2,0
+CALL @ir_emit
+JMP @pu_done
+pu_minus_i:
+LD r1,r0,#W_ETYPE
 CALL @px_promote
 ST r1,r0,#W_ETYPE
 LA r1,#I_NEG
@@ -8093,6 +8318,15 @@ pu_lnot:
 CALL @p_adv
 CALL @p_unary
 CALL @p_emit_rv
+LD r1,r0,#W_ETYPE
+CALL @ty_kind
+MOVI r2,#TY_LL
+CMP r1,r2
+JMP[NE] @pu_lnot_i
+LA r1,#I_LLBOOL
+MOVI r2,0
+CALL @ir_emit
+pu_lnot_i:
 LA r1,#I_LNOT
 CALL @ir_op
 MOVI r1,#T_INT
@@ -8102,6 +8336,22 @@ pu_not:
 CALL @p_adv
 CALL @p_unary
 CALL @p_emit_rv
+LD r1,r0,#W_ETYPE
+CALL @ty_kind
+MOVI r2,#TY_LL
+CMP r1,r2
+JMP[NE] @pu_not_i
+LA r1,#I_PUSH
+LA r2,0xFFFFFFFF
+CALL @ir_emit
+LA r1,#I_PUSH
+LA r2,0xFFFFFFFF
+CALL @ir_emit
+LA r1,#I_LLOP
+MOVI r2,#BIN_XOR
+CALL @ir_emit
+JMP @pu_done
+pu_not_i:
 LD r1,r0,#W_ETYPE
 CALL @px_promote
 ST r1,r0,#W_ETYPE
@@ -10889,7 +11139,7 @@ CALL @sym_entry
 LD r2,r1,#SY_AUX
 LD r3,r1,#SY_TYPE
 ST r3,r0,#W_TY_ID
-ST r3,r0,#W_TY_SIGN
+ST r3,r0,#W_DECLTYPE
 LD r1,r0,#W_SCLASS
 MOVI r3,1
 CMP r1,r3
@@ -10903,9 +11153,9 @@ CALL @p_decl_store_addr
 pd_si_val:
 CALL @p_assign
 CALL @p_emit_rv
-LD r1,r0,#W_TY_SIGN
+LD r1,r0,#W_DECLTYPE
 CALL @px_cast_stack
-LD r1,r0,#W_TY_SIGN
+LD r1,r0,#W_DECLTYPE
 MOVI r2,0
 CALL @px_emit_store
 JMP @pd_afterinit
@@ -14425,7 +14675,7 @@ RET
 nsc_ne:
 CMP r3,r4
 MOVI r1,1
-MOVI[LT] r1,-1
+SUB[LT] r1,r0,r13
 RET
 
 ni_strncmp:
@@ -14449,7 +14699,7 @@ RET
 snc_ne:
 CMP r4,r5
 MOVI r1,1
-MOVI[LT] r1,-1
+SUB[LT] r1,r0,r13
 RET
 
 ni_strcpy:
@@ -14536,7 +14786,7 @@ RET
 nmc_ne:
 CMP r4,r5
 MOVI r1,1
-MOVI[LT] r1,-1
+SUB[LT] r1,r0,r13
 RET
 
 ni_atoi:
@@ -14838,6 +15088,39 @@ JMP[EQ] @nbi_sscanf
 MOVI r2,#B_EXIT
 CMP r1,r2
 JMP[EQ] @nbi_exit
+MOVI r2,#B_QSORT
+CMP r1,r2
+JMP[EQ] @nbi_qsort
+MOVI r2,#B_BSEARCH
+CMP r1,r2
+JMP[EQ] @nbi_bsearch
+MOVI r2,#B_SETJMP
+CMP r1,r2
+JMP[EQ] @nbi_setjmp
+MOVI r2,#B_LONGJMP
+CMP r1,r2
+JMP[EQ] @nbi_longjmp
+MOVI r2,#B_STRFTIME
+CMP r1,r2
+JMP[EQ] @nbi_strftime
+MOVI r2,#B_TMPNAM
+CMP r1,r2
+JMP[EQ] @nbi_tmpnam
+MOVI r2,#B_TMPFILE
+CMP r1,r2
+JMP[EQ] @nbi_tmpfile
+MOVI r2,#B_WCSLEN
+CMP r1,r2
+JMP[EQ] @nbi_wcslen
+MOVI r2,#B_WCSCMP
+CMP r1,r2
+JMP[EQ] @nbi_wcscmp
+MOVI r2,#B_WCSCPY
+CMP r1,r2
+JMP[EQ] @nbi_wcscpy
+MOVI r2,#B_WCSCAT
+CMP r1,r2
+JMP[EQ] @nbi_wcscat
 JMP @nbi_zero
 nbi_putc:
 CALL @ni_pop
@@ -15513,7 +15796,7 @@ CALL @ncc_err
 ncl_argc_ok:
 LD r5,r1,#SY_NL
 LD r6,r1,#SY_ARG
-ST r4,r0,#W_TY_COUNT
+ST r4,r0,#W_CALLENTRY
 ST r6,r0,#W_TY_BASE
 ST r5,r0,#W_TY_RET
 ; header setup
@@ -15678,7 +15961,7 @@ LD r1,r14,0
 ST r1,r0,#R_SP
 LD r1,r0,#W_TY_ID
 ST r1,r0,#R_FP
-LD r1,r0,#W_TY_COUNT
+LD r1,r0,#W_CALLENTRY
 ST r1,r0,#R_IP
 JMP @ncl_d
 ncl_bad:
@@ -15957,6 +16240,12 @@ JMP[EQ] @nil_llf2i
 MOVI r2,#I_LLI2F
 CMP r1,r2
 JMP[EQ] @nil_lli2f
+MOVI r2,#I_LLBOOL
+CMP r1,r2
+JMP[EQ] @nil_llbool
+MOVI r2,#I_LLNEG
+CMP r1,r2
+JMP[EQ] @nil_llneg
 JMP @nil_bad
 
 nil_words:
@@ -15970,6 +16259,12 @@ CALL @ll_from_f
 JMP @nil_again
 nil_lli2f:
 CALL @ll_to_f
+JMP @nil_again
+nil_llbool:
+CALL @ll_bool
+JMP @nil_again
+nil_llneg:
+CALL @ll_neg
 JMP @nil_again
 
 nil_llext:
@@ -16413,7 +16708,14 @@ CALL @ni_call
 JMP @nil_again
 nil_ret:
 CALL @ni_ret
-JMP @nil_again
+LD r2,r0,#W_IRYSTOP
+CMP r2,r0
+JMP[EQ] @nil_again
+LD r3,r0,#R_FP
+CMP r3,r2
+JMP[NE] @nil_again
+ST r0,r0,#W_IRYSTOP
+JMP @nil_halt
 nil_cast:
 CALL @ni_pop
 LD r2,r0,#R_T0

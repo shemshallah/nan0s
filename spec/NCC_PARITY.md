@@ -88,9 +88,11 @@ Not implemented (honest list):
 - `const`/`volatile`/`register` are accepted but not enforced
 - `#include <...>` system headers are skipped; the libc and standard types are
   built in
-- the standard library is a practical subset: notable missing pieces include
-  `qsort`/`bsearch` callbacks, `setjmp`/`longjmp`, wide-character APIs,
-  `strftime`, `tmpfile`/`tmpnam`, and full locale data
+- the standard library is a practical subset. Sorting/searching
+  (`qsort`/`bsearch`, including guest and builtin callbacks), non-local jumps
+  (`setjmp`/`longjmp`), `strftime`, `tmpnam`/`tmpfile`, and the wide-string
+  helpers `wcslen`/`wcscmp`/`wcscpy`/`wcscat` are implemented. Full locale
+  data and wide stdio (`wprintf`/`wscanf`) are still missing
 - signal handlers are recorded but not delivered asynchronously
 - the path filesystem is RAM-backed (it resets on reboot); no disk
   persistence yet
@@ -205,6 +207,9 @@ tools/ncc_m23.sh    stdio FILE streams over the path filesystem
 tools/ncc_m24.sh    scanf/fscanf/sscanf conversions and widths
 tools/ncc_m25.sh    64-bit long long: literals, arithmetic, casts, printf/scanf,
                     structs/arrays, varargs, function pointers, LL<->float
+tools/ncc_m26.sh    qsort/bsearch callbacks (int, long long, strings),
+                    setjmp/longjmp and deep-frame unwinding
+tools/ncc_m27.sh    strftime, tmpnam/tmpfile, wide-string helpers
 tools/ncc_donut.sh  original C donut (one frame) in raw NaN16
 tools/nfs2.sh       path-addressed RAM filesystem API
 tools/ncc_gui.sh    boot image, open terminal, .demo runs C in the vbuf
