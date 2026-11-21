@@ -447,6 +447,12 @@
 .equ B_STRNDUP  119
 .equ B_STPCPY   120
 .equ B_MEMCCPY  121
+.equ B_GETCHAR  122
+.equ B_GETC     123
+.equ B_UNGETC   124
+.equ B_PUTC     125
+.equ B_CLEARERR 126
+.equ B_SETVBUF  127
 
 ; ------------------------------------------------------------------ compiler state
 ; Kept below word 65536 so ST/LD can use the 16-bit immediate form directly.
@@ -644,6 +650,7 @@
 .equ W_BITS_W    61811
 .equ W_STBIT     61812
 .equ W_ELT_BIT   61813
+.equ W_STDPB     61820
 .equ W_VARNP    61390
 .equ W_VARFLAG  61391
 .equ W_VARCNT   61393
@@ -5978,6 +5985,48 @@ LA r2,@ncc_s_fputs
 MOVI r3,5
 MOVI r4,#B_FPUTS
 MOVI r5,2
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0xAE94BD2F
+LA r2,@ncc_s_getchar
+MOVI r3,7
+MOVI r4,#B_GETCHAR
+MOVI r5,0
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0x83EB36DC
+LA r2,@ncc_s_getc
+MOVI r3,4
+MOVI r4,#B_GETC
+MOVI r5,1
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0x96183D4F
+LA r2,@ncc_s_ungetc
+MOVI r3,6
+MOVI r4,#B_UNGETC
+MOVI r5,2
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0x8C67B8F7
+LA r2,@ncc_s_putc
+MOVI r3,4
+MOVI r4,#B_PUTC
+MOVI r5,2
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0xE6AECF25
+LA r2,@ncc_s_clearerr
+MOVI r3,8
+MOVI r4,#B_CLEARERR
+MOVI r5,1
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0x36ACEE80
+LA r2,@ncc_s_setvbuf
+MOVI r3,7
+MOVI r4,#B_SETVBUF
+MOVI r5,4
 MOVI r6,#T_INT
 CALL @ncc_add_builtin
 LA r1,0x854B1879
@@ -16643,6 +16692,24 @@ JMP[EQ] @nbi_fputc
 MOVI r2,#B_FGETS
 CMP r1,r2
 JMP[EQ] @nbi_fgets
+MOVI r2,#B_GETCHAR
+CMP r1,r2
+JMP[EQ] @nbi_getchar
+MOVI r2,#B_GETC
+CMP r1,r2
+JMP[EQ] @nbi_getc
+MOVI r2,#B_UNGETC
+CMP r1,r2
+JMP[EQ] @nbi_ungetc
+MOVI r2,#B_PUTC
+CMP r1,r2
+JMP[EQ] @nbi_putc2
+MOVI r2,#B_CLEARERR
+CMP r1,r2
+JMP[EQ] @nbi_clearerr
+MOVI r2,#B_SETVBUF
+CMP r1,r2
+JMP[EQ] @nbi_setvbuf
 MOVI r2,#B_FPUTS
 CMP r1,r2
 JMP[EQ] @nbi_fputs

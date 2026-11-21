@@ -947,3 +947,152 @@ ren_e:
 LA r1,0xFFFFFFFF
 CALL @ni_push
 JMP @nbi_d
+
+; ---- stdio convenience wrappers -----------------------------------
+; Blocking console character for stdin.
+st_stdin_getc:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_STDPB
+CMP r1,r0
+JMP[EQ] @ssg_key
+ST r0,r0,#W_STDPB
+ADDI r1,r1,-1
+JMP @ssg_d
+ssg_key:
+KEYQ r1
+CMP r1,r0
+JMP[EQ] @ssg_key
+ssg_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+nbi_getchar:
+CALL @st_stdin_getc
+CALL @ni_push
+JMP @nbi_d
+
+nbi_getc:
+CALL @ni_pop
+MOVI r2,4
+CMP r1,r2
+JMP[GE] @ngc_file
+MOVI r2,1
+CMP r1,r2
+JMP[NE] @ngc_eof
+CALL @st_stdin_getc
+CALL @ni_push
+JMP @nbi_d
+ngc_file:
+CALL @st_entry
+CMP r1,r0
+JMP[EQ] @ngc_eof
+CALL @st_getc
+CALL @ni_push
+JMP @nbi_d
+ngc_eof:
+LA r1,0xFFFFFFFF
+CALL @ni_push
+JMP @nbi_d
+
+nbi_ungetc:
+CALL @ni_pop
+ST r1,r0,#W_TA
+CALL @ni_pop
+ST r1,r0,#W_TB
+LD r1,r0,#W_TA
+MOVI r2,4
+CMP r1,r2
+JMP[GE] @nug_file
+MOVI r2,1
+CMP r1,r2
+JMP[NE] @nug_eof
+LD r1,r0,#W_TB
+ADDI r1,r1,1
+ST r1,r0,#W_STDPB
+LD r1,r0,#W_TB
+CALL @ni_push
+JMP @nbi_d
+nug_file:
+LD r1,r0,#W_TA
+CALL @st_entry
+CMP r1,r0
+JMP[EQ] @nug_eof
+LD r2,r1,5
+CMP r2,r0
+JMP[EQ] @nug_eof
+SUB r2,r2,r13
+ST r2,r1,5
+ST r0,r1,8
+LD r1,r0,#W_TB
+CALL @ni_push
+JMP @nbi_d
+nug_eof:
+LA r1,0xFFFFFFFF
+CALL @ni_push
+JMP @nbi_d
+
+nbi_putc2:
+CALL @ni_pop
+ST r1,r0,#W_TA
+CALL @ni_pop
+ST r1,r0,#W_TB
+LD r1,r0,#W_TA
+MOVI r2,4
+CMP r1,r2
+JMP[GE] @npc_file
+LD r1,r0,#W_TB
+CALL @ncc_putc
+LD r1,r0,#W_TB
+CALL @ni_push
+JMP @nbi_d
+npc_file:
+LD r1,r0,#W_TA
+CALL @st_entry
+CMP r1,r0
+JMP[EQ] @npc_e
+LD r2,r0,#W_TB
+CALL @st_putc
+CALL @ni_push
+JMP @nbi_d
+npc_e:
+LA r1,0xFFFFFFFF
+CALL @ni_push
+JMP @nbi_d
+
+nbi_clearerr:
+CALL @ni_pop
+MOVI r2,4
+CMP r1,r2
+JMP[LT] @nce_d
+CALL @st_entry
+CMP r1,r0
+JMP[EQ] @nce_d
+ST r0,r1,8
+nce_d:
+MOVI r1,0
+CALL @ni_push
+JMP @nbi_d
+
+nbi_setvbuf:
+CALL @ni_pop
+CALL @ni_pop
+CALL @ni_pop
+CALL @ni_pop
+MOVI r1,0
+CALL @ni_push
+JMP @nbi_d
+
+ncc_s_getchar:
+.str "getchar"
+ncc_s_getc:
+.str "getc"
+ncc_s_ungetc:
+.str "ungetc"
+ncc_s_putc:
+.str "putc"
+ncc_s_clearerr:
+.str "clearerr"
+ncc_s_setvbuf:
+.str "setvbuf"

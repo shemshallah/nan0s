@@ -112,15 +112,18 @@ Not implemented (honest list):
   and `getenv`/`system` stubs are implemented. `wprintf` now supports
   flags, width, precision, `%d`/`%i`/`%u`/`%o`/`%x`/`%X`/`%c`/`%s`/`%ls`/`%p`/
   `%%` and literal wide text; `wscanf` translates the wide format to narrow
-  scanf syntax and widens `%ls` destinations. Only the C locale is provided
+  scanf syntax and widens `%ls` destinations. The C locale is the only locale,
+  which is the minimum required by ISO C; `setlocale` returns `"C"` and
+  `localeconv` reports the C conventions
 - signal handlers are installed and delivered by `raise`; `alarm()` performs
   asynchronous `SIGALRM` delivery at IR-instruction boundaries. POSIX timers
   (`setitimer`) are not implemented
 - the path filesystem is RAM-backed (it resets on reboot); no disk
-  persistence yet. See `spec/BARE_METAL_INTERFACES.md` for the planned
-  POSIX-free machine interface
+  persistence yet. This is a platform/storage limit, not a C language or
+  library gap. See `spec/BARE_METAL_INTERFACES.md` for the planned POSIX-free
+  machine interface
 - x86 BIOS boot images remain capped at 1.44 MB (Android/NaN0S images are
-  arbitrary size)
+  arbitrary size). This is a boot-media limit, not a C language gap
 
 ## Preprocessor subset
 
@@ -241,6 +244,7 @@ tools/ncc_m41.sh    nested/mixed brace elision
 tools/ncc_m42.sh    wprintf flags/width/precision
 tools/ncc_m43.sh    wscanf (console input, %ls widening)
 tools/ncc_m44.sh    packed bit-fields, sizeof, neighbors, arrays
+tools/ncc_m45.sh    getchar/getc/putc/ungetc/clearerr/setvbuf
 tools/ncc_m31.sh    alarm()/SIGALRM asynchronous delivery
 tools/ncc_m32.sh    C99 designated initializers (.member, [index], nested)
 tools/ncc_m33.sh    brace elision across arrays of flat aggregates
