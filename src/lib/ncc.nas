@@ -524,6 +524,8 @@
 .equ B_FGETPOS  196
 .equ B_FSETPOS  197
 .equ B_FREOPEN  198
+.equ B_FREXP    199
+.equ B_NEXTAFTER 200
 
 ; ------------------------------------------------------------------ compiler state
 ; Kept below word 65536 so ST/LD can use the 16-bit immediate form directly.
@@ -6618,6 +6620,20 @@ MOVI r3,7
 MOVI r4,#B_FREOPEN
 MOVI r5,3
 MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0xA30CDEF4
+LA r2,@ncc_s_frexp
+MOVI r3,5
+MOVI r4,#B_FREXP
+MOVI r5,2
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+LA r1,0x26789F12
+LA r2,@ncc_s_nextafter
+MOVI r3,9
+MOVI r4,#B_NEXTAFTER
+MOVI r5,2
+MOVI r6,#T_FLOAT
 CALL @ncc_add_builtin
 
 
@@ -17554,6 +17570,12 @@ JMP[EQ] @nbi_fsetpos
 MOVI r2,#B_FREOPEN
 CMP r1,r2
 JMP[EQ] @nbi_freopen
+MOVI r2,#B_FREXP
+CMP r1,r2
+JMP[EQ] @nbi_frexp
+MOVI r2,#B_NEXTAFTER
+CMP r1,r2
+JMP[EQ] @nbi_nextafter
 
 
 MOVI r2,#B_FPUTS

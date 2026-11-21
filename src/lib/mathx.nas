@@ -73,6 +73,99 @@ SUB r14,r14,r13
 LD r15,r14,0
 RET
 
+
+nbi_frexp:
+CALL @ni_pop
+ST r1,r0,#W_F2P
+CALL @ni_pop
+CMP r1,r0
+JMP[NE] @frx_nz
+LD r1,r0,#W_F2P
+MOVI r2,0
+MOVI r3,#SZ_32
+CALL @ni_storev
+MOVI r1,0
+CALL @ni_push
+JMP @nbi_d
+frx_nz:
+ST r1,r0,#W_F2V
+LA r2,0x7FFFFFFF
+BOOL.8 r2,r1,r2
+ADD r1,r2,r0
+FLOG r1,r1
+LA r2,0x3F317218
+FDIV r1,r1,r2
+CVTFI r3,r1
+CVTIF r4,r3
+FCMP r1,r4
+JMP[GE] @frx_floor
+SUB r3,r3,r13
+frx_floor:
+ADD r3,r3,r13
+ST r3,r0,#W_F2S
+CVTIF r1,r3
+LA r2,0x80000000
+BOOL.6 r1,r1,r2
+LA r2,0x3F317218
+FMUL r1,r1,r2
+FEXP r1,r1
+LD r2,r0,#W_F2V
+FMUL r1,r1,r2
+ST r1,r0,#W_F2V
+LD r1,r0,#W_F2P
+LD r2,r0,#W_F2S
+MOVI r3,#SZ_32
+CALL @ni_storev
+LD r1,r0,#W_F2V
+CALL @ni_push
+JMP @nbi_d
+
+nbi_nextafter:
+CALL @ni_pop
+ST r1,r0,#W_F2P
+CALL @ni_pop
+ST r1,r0,#W_F2V
+LD r2,r0,#W_F2P
+FCMP r1,r2
+JMP[EQ] @nxa_same
+CMP r1,r0
+JMP[NE] @nxa_nz
+LD r1,r0,#W_F2P
+LA r2,0x80000000
+BOOL.8 r1,r1,r2
+ADDI r1,r1,1
+JMP @nxa_pp
+nxa_nz:
+LD r2,r0,#W_F2V
+MOVI r3,0
+FCMP r2,r3
+JMP[LT] @nxa_neg
+LD r3,r0,#W_F2P
+FCMP r2,r3
+JMP[LT] @nxa_inc
+SUB r2,r2,r13
+JMP @nxa_p
+nxa_inc:
+ADDI r2,r2,1
+JMP @nxa_p
+nxa_neg:
+LD r3,r0,#W_F2P
+FCMP r2,r3
+JMP[LT] @nxa_ndec
+ADDI r2,r2,1
+JMP @nxa_p
+nxa_ndec:
+SUB r2,r2,r13
+JMP @nxa_p
+nxa_same:
+LD r1,r0,#W_F2P
+JMP @nxa_pp
+nxa_p:
+ADD r1,r2,r0
+nxa_pp:
+CALL @ni_push
+JMP @nbi_d
+
 nbi_atan:
 CALL @ni_pop
 CALL @ni_atan_core

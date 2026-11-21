@@ -253,3 +253,7 @@ ncc_s_fsetpos:
 .str "fsetpos"
 ncc_s_freopen:
 .str "freopen"
+ncc_s_frexp:
+.str "frexp"
+ncc_s_nextafter:
+.str "nextafter"
