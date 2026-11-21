@@ -1381,6 +1381,13 @@ LA r1,@q2s_undef
 CALL @q2_bufeq
 CMP r1,r0
 JMP[NE] @q2dir_undef
+LA r1,@q2s_include
+CALL @q2_bufeq
+CMP r1,r0
+JMP[EQ] @q2dir_notinc
+CALL @q2dir_include
+JMP @q2dir_ret
+q2dir_notinc:
 LA r1,@q2s_ifdef
 CALL @q2_bufeq
 CMP r1,r0
@@ -1517,6 +1524,7 @@ q2dir_endif:
 CALL @q2_cond_pop
 q2dir_eat:
 CALL @q2_eat
+q2dir_ret:
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -1525,6 +1533,8 @@ q2s_define:
 .str "define"
 q2s_undef:
 .str "undef"
+q2s_include:
+.str "include"
 q2s_ifdef:
 .str "ifdef"
 q2s_ifndef:
@@ -1539,6 +1549,7 @@ q2s_endif:
 .str "endif"
 
 .include "ppexpr.nas"
+.include "nccinc.nas"
 
 ; ------------------------------------------------------------------ entry points
 ncc_compile:
@@ -1551,6 +1562,7 @@ ST r1,r0,#L_WP
 ST r0,r0,#L_BI
 MOVI r1,1
 ST r1,r0,#L_LINE
+CALL @inc_init
 ST r0,r0,#W_Q2N
 ST r0,r0,#W_Q2SKIP
 ST r0,r0,#W_SNOUT
@@ -2385,7 +2397,14 @@ RET
 
 ; ---- cursor -------------------------------------------------------
 lx_peek:
+LD r2,r0,#W_INC_SYNTH
+CMP r2,r0
+JMP[EQ] @lpk_nosynth
+MOVI r1,10
+RET
+lpk_nosynth:
 LD r2,r0,#L_WP
+lpk_top:
 LD r1,r2,0
 LD r3,r0,#L_BI
 lpk_l:
@@ -2397,6 +2416,17 @@ JMP @lpk_l
 lpk_d:
 MOVI r2,255
 BOOL.8 r1,r1,r2
+CMP r1,r0
+JMP[NE] @lpk_ret
+; end of an included file: resume the including file transparently
+LD r3,r0,#W_INC_DEPTH
+CMP r3,r0
+JMP[EQ] @lpk_ret
+ST r15,r0,#W_INC_RET
+CALL @inc_pop
+LD r15,r0,#W_INC_RET
+JMP @lx_peek
+lpk_ret:
 RET
 lx_adv:
 LD r2,r0,#L_BI
@@ -2414,6 +2444,18 @@ RET
 lx_get:
 ST r15,r14,0
 ADD r14,r14,r13
+LD r2,r0,#W_INC_SYNTH
+CMP r2,r0
+JMP[EQ] @lgt_normal
+ST r0,r0,#W_INC_SYNTH
+MOVI r1,10
+ST r1,r0,#L_CH
+LD r2,r0,#L_LINE
+ADD r2,r2,r13
+ST r2,r0,#L_LINE
+LD r1,r0,#L_CH
+JMP @lgt_d
+lgt_normal:
 CALL @lx_peek
 ST r1,r0,#L_CH
 CALL @lx_adv
