@@ -118,10 +118,11 @@ Not implemented (honest list):
 - signal handlers are installed and delivered by `raise`; `alarm()` performs
   asynchronous `SIGALRM` delivery at IR-instruction boundaries. POSIX timers
   (`setitimer`) are not implemented
-- the path filesystem is RAM-backed (it resets on reboot); no disk
-  persistence yet. This is a platform/storage limit, not a C language or
-  library gap. See `spec/BARE_METAL_INTERFACES.md` for the planned POSIX-free
-  machine interface
+- the path filesystem is RAM-backed by default. When an ATA primary-master
+  disk is attached, NPAF snapshots to LBA 2048 after each write/delete and
+  reloads the snapshot at startup; without a disk it still resets on reboot.
+  The POSIX-free machine interface remains planned; see
+  `spec/BARE_METAL_INTERFACES.md`
 - x86 BIOS boot images remain capped at 1.44 MB (Android/NaN0S images are
   arbitrary size). This is a boot-media limit, not a C language gap
 
@@ -245,6 +246,7 @@ tools/ncc_m42.sh    wprintf flags/width/precision
 tools/ncc_m43.sh    wscanf (console input, %ls widening)
 tools/ncc_m44.sh    packed bit-fields, sizeof, neighbors, arrays
 tools/ncc_m45.sh    getchar/getc/putc/ungetc/clearerr/setvbuf
+tools/ncc_m46.sh    persistent files over ATA (two boots, same disk)
 tools/ncc_m31.sh    alarm()/SIGALRM asynchronous delivery
 tools/ncc_m32.sh    C99 designated initializers (.member, [index], nested)
 tools/ncc_m33.sh    brace elision across arrays of flat aggregates

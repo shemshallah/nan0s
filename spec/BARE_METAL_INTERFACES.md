@@ -50,8 +50,8 @@ interface itself does not deliver signals.
 - `tmpfile`/`tmpnam` → `fs_*` plus a guest counter
 - `rand`/`srand` → `entropy_u32` (or a guest PRNG seeded once)
 - `exit`/`abort`/`main` return → `halt`
-- block-backed persistence → `block_read`/`block_write` (later than the RAM
-  path filesystem)
+- block-backed persistence → `block_read`/`block_write`; the current ATA
+  adapter already snapshots NPAF to LBA 2048 and reloads it at startup
 
 ## Phases
 

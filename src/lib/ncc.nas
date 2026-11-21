@@ -651,6 +651,8 @@
 .equ W_STBIT     61812
 .equ W_ELT_BIT   61813
 .equ W_STDPB     61820
+.equ W_DK_I      61830
+.equ W_DK_N      61831
 .equ W_VARNP    61390
 .equ W_VARFLAG  61391
 .equ W_VARCNT   61393
@@ -810,6 +812,7 @@
 .equ W_FPNP     61355
 .equ W_SCOPEPAR 2001200
 .include "timeb.nas"
+.include "ata.nas"
 .include "nfs2.nas"
 .include "stdio.nas"
 .include "scanf.nas"

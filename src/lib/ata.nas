@@ -82,9 +82,12 @@ ata_read28:
   CALL @ata_wait_bsy
   CALL @ata_wait_drq
   MOVI r1,#ATA_DATA
-  MOVI r12,256
+  MOVI r12,128
 ar_l:
   INW r3,r1
+  INW r4,r1
+  SHL r4,r4,16
+  BOOL.14 r3,r3,r4
   ST r3,r11,0
   ADD r11,r11,r13
   SUB r12,r12,r13
@@ -134,12 +137,12 @@ ata_write28:
 aw_l:
   MOVI r4,0xFFFF
   LD r3,r11,0
+  BOOL.8 r5,r3,r4
+  OUTW r5,r1
+  SHR r3,r3,16
   BOOL.8 r3,r3,r4
   OUTW r3,r1
-  LD r3,r11,1
-  BOOL.8 r3,r3,r4
-  OUTW r3,r1
-  ADDI r11,r11,2
+  ADD r11,r11,r13
   SUB r12,r12,r13
   JMP[NE] @aw_l
   MOVI r1,#ATA_CMD
@@ -150,3 +153,18 @@ aw_l:
   RET
 aw_ret:
 .word 0
+
+; ata_present -> r1=1 if the primary master reports a sane status
+ata_present:
+  MOVI r1,#ATA_STATUS
+  INB r2,r1
+  CMP r2,r0
+  JMP[EQ] @ap_no
+  MOVI r1,255
+  CMP r2,r1
+  JMP[EQ] @ap_no
+  MOVI r1,1
+  RET
+ap_no:
+  MOVI r1,0
+  RET

@@ -13,6 +13,7 @@
 nfs_ensure:
 ST r15,r14,0
 ADD r14,r14,r13
+CALL @nfs_load
 LA r1,#NFS_BASE
 LD r2,r1,0
 LA r3,0x4E504146

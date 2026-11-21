@@ -29,6 +29,8 @@
 .equ W_NF_ENT  61333
 .equ W_NF_DIR  61334
 .equ W_NF_IDX  61335
+.equ NFS_DISK_LBA 2048
+.equ NFS_HDR 11023000
 
 nfs_format:
 ST r15,r14,0
@@ -218,6 +220,11 @@ LD r4,r3,1
 ADD r4,r4,r13
 ST r4,r3,1
 ADD r1,r2,r0
+ST r1,r14,0
+ADD r14,r14,r13
+CALL @nfs_sync
+SUB r14,r14,r13
+LD r1,r14,0
 JMP @nfs_c_d
 nfs_c_n:
 MOVI r1,0
@@ -241,6 +248,11 @@ SUB r3,r3,r13
 ST r3,r2,1
 nfs_d_ok:
 MOVI r1,1
+ST r1,r14,0
+ADD r14,r14,r13
+CALL @nfs_sync
+SUB r14,r14,r13
+LD r1,r14,0
 JMP @nfs_d
 nfs_d_n:
 MOVI r1,0
@@ -302,6 +314,11 @@ STB r0,r1,0
 ADD r1,r1,r13
 STB r0,r1,0
 LD r1,r0,#W_NF_ENT
+ST r1,r14,0
+ADD r14,r14,r13
+CALL @nfs_sync
+SUB r14,r14,r13
+LD r1,r14,0
 nfs_w_d:
 SUB r14,r14,r13
 LD r15,r14,0
@@ -325,6 +342,104 @@ MOVI r1,0
 MOVI r2,0
 MOVI r3,0
 nfs_dd:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; ---- persistence over ATA primary master ---------------------------
+; Snapshot: header sector (magic, word count) at LBA 4096, then the live
+; NFS words (entries + arena) as consecutive sectors.
+nfs_sync:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @ata_present
+CMP r1,r0
+JMP[EQ] @nsy_d
+LA r1,#NFS_HDR
+LA r2,0x4E465359
+ST r2,r1,0
+LA r2,#NFS_BASE
+LD r3,r2,2
+ADDI r4,r3,1032
+ST r4,r1,1
+ST r0,r1,2
+MOVI r1,#NFS_DISK_LBA
+LA r2,#NFS_HDR
+CALL @ata_write28
+LA r1,#NFS_BASE
+LD r2,r1,2
+ADDI r2,r2,1032
+ADDI r2,r2,127
+SHR r2,r2,7
+ST r2,r0,#W_DK_N
+ST r0,r0,#W_DK_I
+nsy_l:
+LD r1,r0,#W_DK_I
+LD r2,r0,#W_DK_N
+CMP r1,r2
+JMP[GE] @nsy_d
+MOVI r3,#NFS_DISK_LBA+1
+ADD r1,r1,r3
+LA r2,#NFS_BASE
+LD r3,r0,#W_DK_I
+SHL r3,r3,7
+ADD r2,r2,r3
+CALL @ata_write28
+LD r1,r0,#W_DK_I
+ADD r1,r1,r13
+ST r1,r0,#W_DK_I
+JMP @nsy_l
+nsy_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+nfs_load:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @ata_present
+CMP r1,r0
+JMP[EQ] @nld_n
+MOVI r1,#NFS_DISK_LBA
+LA r2,#NFS_HDR
+CALL @ata_read28
+LA r1,#NFS_HDR
+LD r2,r1,0
+LA r3,0x4E465359
+CMP r2,r3
+JMP[NE] @nld_n
+LD r2,r1,1
+CMP r2,r0
+JMP[EQ] @nld_n
+LA r3,401032
+CMP r2,r3
+JMP[GT] @nld_n
+ADDI r2,r2,127
+SHR r2,r2,7
+ST r2,r0,#W_DK_N
+ST r0,r0,#W_DK_I
+nld_l:
+LD r1,r0,#W_DK_I
+LD r2,r0,#W_DK_N
+CMP r1,r2
+JMP[GE] @nld_y
+MOVI r3,#NFS_DISK_LBA+1
+ADD r1,r1,r3
+LA r2,#NFS_BASE
+LD r3,r0,#W_DK_I
+SHL r3,r3,7
+ADD r2,r2,r3
+CALL @ata_read28
+LD r1,r0,#W_DK_I
+ADD r1,r1,r13
+ST r1,r0,#W_DK_I
+JMP @nld_l
+nld_y:
+MOVI r1,1
+JMP @nld_d
+nld_n:
+MOVI r1,0
+nld_d:
 SUB r14,r14,r13
 LD r15,r14,0
 RET
