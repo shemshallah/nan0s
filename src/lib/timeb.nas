@@ -649,6 +649,27 @@ ADD r1,r4,r0
 CALL @ni_push
 JMP @nbi_d
 
+nbi_alarm:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @ni_pop
+ST r1,r0,#W_LLQ1
+; old seconds = W_ALARM / 100000
+LD r1,r0,#W_ALARM
+LA r2,100000
+DIV r1,r1,r2
+ST r1,r0,#W_LLQ0
+; new steps = sec * 100000
+LD r1,r0,#W_LLQ1
+LA r2,100000
+MUL r1,r1,r2
+ST r1,r0,#W_ALARM
+LD r1,r0,#W_LLQ0
+CALL @ni_push
+SUB r14,r14,r13
+LD r15,r14,0
+JMP @nbi_d
+
 nbi_raise:
 ST r15,r14,0
 ADD r14,r14,r13

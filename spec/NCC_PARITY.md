@@ -98,8 +98,9 @@ Not implemented (honest list):
   (`setjmp`/`longjmp`), `strftime`, `tmpnam`/`tmpfile`, and the wide-string
   helpers `wcslen`/`wcscmp`/`wcscpy`/`wcscat` are implemented. Only the C
   locale is provided, and wide stdio (`wprintf`/`wscanf`) is still missing
-- signal handlers are installed and delivered synchronously by `raise`;
-  asynchronous/timer-driven delivery (`alarm`, `SIGALRM`) is not implemented
+- signal handlers are installed and delivered by `raise`; `alarm()` performs
+  asynchronous `SIGALRM` delivery at IR-instruction boundaries. POSIX timers
+  (`setitimer`) are not implemented
 - the path filesystem is RAM-backed (it resets on reboot); no disk
   persistence yet
 - x86 BIOS boot images remain capped at 1.44 MB (Android/NaN0S images are
@@ -219,6 +220,7 @@ tools/ncc_m27.sh    strftime, tmpnam/tmpfile, wide-string helpers
 tools/ncc_m28.sh    const enforcement (locals/globals/params) and const pointers
 tools/ncc_m29.sh    signal handlers delivered by raise()
 tools/ncc_m30.sh    explicit function-returning-function-pointer prototypes
+tools/ncc_m31.sh    alarm()/SIGALRM asynchronous delivery
 tools/ncc_donut.sh  original C donut (one frame) in raw NaN16
 tools/nfs2.sh       path-addressed RAM filesystem API
 tools/ncc_gui.sh    boot image, open terminal, .demo runs C in the vbuf

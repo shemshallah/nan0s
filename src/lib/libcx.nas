@@ -649,3 +649,8 @@ CALL @ni_pop
 SUB r14,r14,r13
 LD r15,r14,0
 RET
+
+ncc_s_c_SIGALRM:
+.str "SIGALRM"
+ncc_s_alarm:
+.str "alarm"

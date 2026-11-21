@@ -424,6 +424,7 @@
 .equ B_WCSCMP   96
 .equ B_WCSCPY   97
 .equ B_WCSCAT   98
+.equ B_ALARM    99
 
 ; ------------------------------------------------------------------ compiler state
 ; Kept below word 65536 so ST/LD can use the 16-bit immediate form directly.
@@ -510,6 +511,7 @@
 .equ W_CN_N       61639
 .equ NCTAB        2300000
 .equ W_IRYSTOP 61601
+.equ W_ALARM   61649
 .equ W_CMPFP   61602
 .equ W_CMPA    61603
 .equ W_CMPB    61604
@@ -1454,6 +1456,7 @@ ST r0,r0,#W_SNPOS
 LA r1,#NCC_ESB
 ST r1,r0,#R_SP
 ST r0,r0,#W_IRYSTOP
+ST r0,r0,#W_ALARM
 LA r1,#C_STACK
 ST r1,r0,#R_FP
 LA r1,#NCC_IRB
@@ -5547,6 +5550,11 @@ LA r2,@ncc_s_c_SIGABRT
 MOVI r3,7
 LA r4,0x6
 CALL @ncc_add_enum_const
+LA r1,0xD2ED7A7E
+LA r2,@ncc_s_c_SIGALRM
+MOVI r3,7
+LA r4,0xE
+CALL @ncc_add_enum_const
 LA r1,0xAC6FFF43
 LA r2,@ncc_s_c_SIGFPE
 MOVI r3,6
@@ -6326,6 +6334,13 @@ MOVI r3,6
 MOVI r4,#B_WCSCAT
 MOVI r5,2
 LD r6,r0,#W_PTRV
+CALL @ncc_add_builtin
+LA r1,0x19EBECDA
+LA r2,@ncc_s_alarm
+MOVI r3,5
+MOVI r4,#B_ALARM
+MOVI r5,1
+MOVI r6,#T_UINT
 CALL @ncc_add_builtin
 SUB r14,r14,r13
 LD r15,r14,0
@@ -15373,6 +15388,9 @@ JMP[EQ] @nbi_wcscpy
 MOVI r2,#B_WCSCAT
 CMP r1,r2
 JMP[EQ] @nbi_wcscat
+MOVI r2,#B_ALARM
+CMP r1,r2
+JMP[EQ] @nbi_alarm
 JMP @nbi_zero
 nbi_putc:
 CALL @ni_pop
@@ -16283,6 +16301,27 @@ ncc_ir_loop:
 ST r15,r14,0
 ADD r14,r14,r13
 nil_again:
+LD r1,r0,#W_ALARM
+CMP r1,r0
+JMP[EQ] @nil_noalarm
+SUB r1,r1,r13
+ST r1,r0,#W_ALARM
+CMP r1,r0
+JMP[NE] @nil_noalarm
+MOVI r1,14
+ST r1,r0,#W_LLQ0
+SHL r2,r1,2
+LA r3,11020300
+ADD r3,r3,r2
+LD r4,r3,0
+CMP r4,r0
+JMP[EQ] @nil_noalarm
+CMP r4,r13
+JMP[EQ] @nil_noalarm
+ADD r1,r4,r0
+LD r2,r0,#W_LLQ0
+CALL @nbi_call1
+nil_noalarm:
 LD r2,r0,#R_IP
 LD r1,r2,0
 LD r3,r2,1
