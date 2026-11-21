@@ -84,20 +84,22 @@ Not implemented (honest list):
 - the explicit function-returning-function-pointer declarator is parsed for
   prototypes (`int (*f(void))(int,int);`); defining such a function still
   requires a typedef'd function-pointer return type
-- packed bit-field ABI: fields are laid out one per declared storage unit
-  (valid implementation-defined C, but not ABI-compatible with GCC/Clang)
+- bit-field layout is implementation-defined and non-packed: each named field
+  occupies its declared type's storage. This is valid C but not ABI-compatible
+  with GCC/Clang
 - `const` is enforced for scalar objects, globals, and function parameters
-  (assignment/compound assignment/`++`/`--` are rejected); `volatile` and
-  `register` are accepted but not enforced
+  (assignment/compound assignment/`++`/`--` are rejected). `volatile` accesses
+  are always emitted because there is no optimiser; `register` is ignored as a
+  hint, which C permits
 - `#include <...>` system headers are skipped; the libc and standard types are
   built in
 - the standard library is a practical subset. Sorting/searching
   (`qsort`/`bsearch`, including guest and builtin callbacks), non-local jumps
   (`setjmp`/`longjmp`), `strftime`, `tmpnam`/`tmpfile`, and the wide-string
-  helpers `wcslen`/`wcscmp`/`wcscpy`/`wcscat` are implemented. Full locale
-  data and wide stdio (`wprintf`/`wscanf`) are still missing
+  helpers `wcslen`/`wcscmp`/`wcscpy`/`wcscat` are implemented. Only the C
+  locale is provided, and wide stdio (`wprintf`/`wscanf`) is still missing
 - signal handlers are installed and delivered synchronously by `raise`;
-  asynchronous/timer-driven delivery is not implemented
+  asynchronous/timer-driven delivery (`alarm`, `SIGALRM`) is not implemented
 - the path filesystem is RAM-backed (it resets on reboot); no disk
   persistence yet
 - x86 BIOS boot images remain capped at 1.44 MB (Android/NaN0S images are

@@ -357,13 +357,13 @@ LD r15,r14,0
 RET
 
 cx_sf_abday:
-.str "Sun\x00Mon\x00Tue\x00Wed\x00Thu\x00Fri\x00Sat\x00"
+.str "Sun\0Mon\0Tue\0Wed\0Thu\0Fri\0Sat\0"
 cx_sf_day:
-.str "Sunday\x00Monday\x00Tuesday\x00Wednesday\x00Thursday\x00Friday\x00Saturday\x00"
+.str "Sunday\0Monday\0Tuesday\0Wednesday\0Thursday\0Friday\0Saturday\0"
 cx_sf_abmon:
-.str "Jan\x00Feb\x00Mar\x00Apr\x00May\x00Jun\x00Jul\x00Aug\x00Sep\x00Oct\x00Nov\x00Dec\x00"
+.str "Jan\0Feb\0Mar\0Apr\0May\0Jun\0Jul\0Aug\0Sep\0Oct\0Nov\0Dec\0"
 cx_sf_mon:
-.str "January\x00February\x00March\x00April\x00May\x00June\x00July\x00August\x00September\x00October\x00November\x00December\x00"
+.str "January\0February\0March\0April\0May\0June\0July\0August\0September\0October\0November\0December\0"
 cx_sf_am:
 .str "AM"
 cx_sf_pmstr:
