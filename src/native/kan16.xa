@@ -46,10 +46,9 @@ _start:
   XOR %EAX,%EAX
   MOV $0x800000,%ECX
   REPSTOSD
-  MOV $0x12000,%ESI
-  MOV $G,%EDI
-  MOV $0x20000,%ECX
-  REPMOVSD
+  ; r27: full guest image from the IDE primary master at kernel+16B0.
+  ; Falls back to the floppy-staged 512 KiB copy when no disk answers.
+  CALL @ata_load_guest
   CALL @hw_init
   XOR %ESI,%ESI
 loop:
@@ -1173,3 +1172,84 @@ tbl:
   .long @h_mul,@h_mulh,@h_mulhu,@h_div,@h_mod,@h_divu,@h_modu,@h_sar,@h_cmps,@h_addi,@h_ldb,@h_stb,@h_callr,@h_bcopy,@h_bfill,@h_nop
   .long @h_fadd,@h_fsub,@h_fmul,@h_fdiv,@h_fsqrt,@h_fcmp,@h_cvtif,@h_cvtfi,@h_jmpf,@h_callf
   .long @h_fbinfo,@h_vsync,@h_fbcopy,@h_fbfill,@h_outb,@h_inb,@h_inw,@h_outw,@h_outsw,@h_outl,@h_cpuid,@h_rdtsc
+
+
+; ---- r27: ATA guest loader (gold at kernel+16B0, 174 bytes) --------
+; The gold bytes are authoritative. The routine selects the primary master,
+; reads ceil(LMAX/64) sectors from LBA 17 into flat guest memory G, and
+; falls back to the floppy-staged 512 KiB copy when no IDE disk answers.
+.org 0x16B0
+ata_load_guest:
+  MOV $0x1F6,%DX
+  MOV $0xA0,%AL
+  OUT %AL,%DX
+  MOV $0x1F7,%DX
+  IN %DX,%AL
+  IN %DX,%AL
+  IN %DX,%AL
+  IN %DX,%AL
+  IN %DX,%AL
+  CMP $0,%AL
+  JZ @alg_fallback
+  CMP $0xFF,%AL
+  JZ @alg_fallback
+  MOV [0x7DF8],%EAX
+  TEST %EAX,%EAX
+  JZ @alg_fallback
+  ADD $63,%EAX
+  SHR $6,%EAX
+  MOV %EAX,[ALG_SEC]
+  MOV $17,%EBX
+  MOV $G,%EDI
+alg_loop:
+  MOV %EBX,%EAX
+  SHR $24,%EAX
+  AND $0x0F,%AL
+  OR $0xE0,%AL
+  MOV $0x1F6,%DX
+  OUT %AL,%DX
+  MOV $0x1F7,%DX
+  IN %DX,%AL
+  IN %DX,%AL
+  IN %DX,%AL
+  IN %DX,%AL
+  MOV $0x1F2,%DX
+  MOV $1,%AL
+  OUT %AL,%DX
+  MOV $0x1F3,%DX
+  MOV %EBX,%EAX
+  OUT %AL,%DX
+  MOV $0x1F4,%DX
+  MOV %EBX,%EAX
+  SHR $8,%EAX
+  OUT %AL,%DX
+  MOV $0x1F5,%DX
+  MOV %EBX,%EAX
+  SHR $16,%EAX
+  OUT %AL,%DX
+  MOV $0x1F7,%DX
+  MOV $0x20,%AL
+  OUT %AL,%DX
+alg_bsy:
+  IN %DX,%AL
+  TEST $0x80,%AL
+  JNZ @alg_bsy
+alg_drq:
+  IN %DX,%AL
+  TEST $0x08,%AL
+  JZ @alg_drq
+  MOV $0x1F0,%DX
+  MOV $128,%ECX
+  REP INSD
+  INC %EBX
+  DEC [ALG_SEC]
+  JNZ @alg_loop
+  RET
+alg_fallback:
+  MOV $0x12000,%ESI
+  MOV $G,%EDI
+  MOV $0x20000,%ECX
+  REPMOVSD
+  RET
+ALG_SEC:
+  .long 0

@@ -21,7 +21,7 @@ BEGIN {
     if (hx != "") for (j = 1; j <= length(hx); j += 2) GBY[NGB++] = hexv(substr(hx,j,2))
   }
   close(GOLD)
-  if (NGB != 6320) die("gold stream is " NGB " bytes, expected 6320 (512 boot + 5808 kernel)")
+  if (NGB < 6320 || NGB > 8704) die("gold stream is " NGB " bytes, expected 6320..8704")
   # ---- guest program words ----
   LMAX = loadguest(GUEST)
   if (LMAX == 0) die("no guest words in " GUEST)

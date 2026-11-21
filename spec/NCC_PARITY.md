@@ -22,12 +22,13 @@ ASCII wide formatter/scanner (`wprintf`/`wscanf`) is present.
 The remaining documented limitations are platform or optional-scope items:
 
 - the C locale is the only locale (the ISO C minimum);
-- x86 BIOS boot media: qemu-system-i386 is installed and `tools/qgate.sh`
-  passes. The floppy image is 1.44 MB, but the current kernel copies only the
-  first 512 KiB of guest data, and the real-mode loader cannot stage past the
-  EBDA/VGA window at about 0xA0000. The 0.67 MB image's GUI-cart tail is
-  therefore truncated on x86; the fix is the two-stage/ATA loader described
-  in `spec/IMAGE_SCALE_PLAN.md`. The nan_cli GUI gates load the whole image;
+- x86 BIOS boot media: qemu-system-i386 is installed. `tools/qgate.sh` passes
+  the floppy fallback, and `tools/qgate_gui.sh` passes the full GUI by
+  attaching the image as the primary IDE master: the kernel's ATA loader
+  reads `ceil(LMAX/64)` sectors from LBA 17 into guest memory, so the whole
+  0.67 MB image loads even though the real-mode floppy staging is only
+  512 KiB. A floppy-only machine still gets the 512 KiB fallback; the full
+  image must be attached as (or dd'ed to) the primary master.
 - the POSIX-free machine-interface table is implemented in
   `src/lib/bare.nas`; console, block, and NPAF-backed filesystem adapters are
   wired (see `spec/BARE_METAL_INTERFACES.md`);
@@ -36,6 +37,63 @@ The remaining documented limitations are platform or optional-scope items:
 
 None of these blocks the Python port; the Py-M1 subset now runs in-guest
 (`spec/PYTHON_PORT.md`).
+
+
+## What NaN16 is (and is not)
+
+NaN16 is the **guest ISA / VM**, not a 16-bit target. Every machine word is
+64 bits wide:
+
+```
+far NaN head (16) | payload (32) | near NaN head (16)
+```
+
+Each head is one of four legal NaN encodings, so the two ends carry a 4-bit
+**class nibble**: 16 Boolean functions / 16 predicate masks. The "16" is that
+nibble, not 16-bit words.
+
+The C runtime uses the 32-bit payload as the value and a byte-addressed memory
+model on top of the 64-bit words (four C bytes per word). It is ILP32:
+`char` 1, `short` 2, `int`/`long`/pointers 4, `long long` 8 (two words),
+`float`/`double` 4 (32-bit IEEE bits in the payload). Pointers are 32-bit byte
+addresses into the C globals/stack/heap; function pointers are 32-bit entry
+addresses. Structs use the normal alignment/padding rules (`long long` is
+4-aligned here). The C ABI is **internal**: arguments and results travel on the
+IR evaluation stack, `long long` is a low/high pair, and struct/union returns
+are heap copies. There is no external ELF/COFF ABI to match.
+
+## What kind of parity
+
+- **Compile/runtime parity** for the documented C subset: every feature and
+  library gate compares stdout exactly (`M1`-`M62`).
+- **Differential torture parity**: `tools/ncc_torture.sh` compiles the same C
+  source with clang and ncc; the saved clang output is the expected file.
+  The current case covers integer promotions, signed division/remainder, shifts,
+  pointer arithmetic, multidimensional arrays, struct/union layout, function
+  pointers, recursion, varargs, `for(;;)`, `switch`, `goto`,
+  `setjmp`/`longjmp`, strings and `long long`.
+- **Visual parity** for the classic a1k0n donut:
+  `tools/ncc_donut_exact.sh` runs the ported source and checks the first frame
+  byte-for-byte against a saved ncc frame. Against a host clang build of the
+  same float-trig algorithm, 1757 of 1761 characters match; the four
+  luminance-boundary characters differ because ncc has its own 32-bit
+  `sin`/`cos` approximations.
+- **Self-hosting**: `tools/mkproof.sh` proves nasm0 reproduces the ncc words.
+- **Not** ABI parity with an external object format, full ISO C, or
+  performance parity. There is no optimizer; `volatile` is effectively
+  always-accessed.
+
+## What ran, and what still diverges
+
+Run in this tree: `M1`-`M62`, the GUI gates, `py_m1`, `ncc_torture`,
+`ncc_donut_exact`, `mkproof`, `qgate`, and `qgate_gui` (x86 + ATA IDE loader).
+Not yet run: Csmith, the GCC torture tests, or the c-testsuite as a whole.
+Known divergences: the preprocessor is a line-based subset and `<...>` headers
+are skipped; `double` is 32-bit storage; the in-guest `sin`/`cos` are not
+bit-compatible with glibc; wide `f`/`s`/`v` stdio and C11
+complex/fenv/threads/atomic/uchar are excluded; a floppy-only x86 boot falls
+back to the first 512 KiB (the full GUI needs the image as an IDE primary
+master, which the kernel ATA loader reads).
 
 ## Memory model
 
@@ -325,6 +383,9 @@ tools/ncc_m59.sh    div/ldiv/lldiv aggregate returns
 tools/ncc_m60.sh    setitimer/getitimer (SIGALRM delivery)
 tools/ncc_m61.sh    strtof/strtold, llabs, strncat, remquo, restartable mbs
 tools/ncc_m62.sh    inttypes, wide ctype, errno, assert, fwide
+tools/ncc_torture.sh differential C torture case (clang vs ncc)
+tools/ncc_donut_exact.sh a1k0n donut first-frame parity
+tools/qgate_gui.sh  x86 GUI + kernel ATA guest loader
 tools/py_m1.sh      Python-subset interpreter (Py-M1) on NaN16
 tools/bare_fs.sh    NPAF-backed bare fs_open/read/write/seek/close/rename/remove
 tools/ncc_m31.sh    alarm()/SIGALRM asynchronous delivery

@@ -1,5 +1,4 @@
-; gold bytes r26: boot 512 + kernel 5808 (nasm1 output of kboot0.xa and kan16.xa)
-; INCLUDES: SSE init, FB, raw DMA window F000..FFFF -> 0x01000000, PCI/NIC ports
+; NaN16 gold: boot 512 + kernel 5808 + ATA guest loader at kernel+16B0
 fa 31 c0 8e d8 8e d0 bc 00 7c fb 88 16 b5 7c 8e   ; boot+0000
 c0 66 31 db bf 00 06 31 f6 66 b8 20 e8 00 00 66   ; boot+0010
 ba 50 41 4d 53 66 b9 18 00 00 00 cd 15 72 16 66   ; boot+0020
@@ -36,8 +35,8 @@ fc e8 c3 0a 00 00 c7 05 48 80 00 00 ff ff ff 7f   ; kernel+0000
 c7 05 40 80 00 00 01 00 00 00 c7 05 44 80 00 00   ; kernel+0010
 00 00 00 00 c7 05 90 80 00 00 00 00 0a 00 c7 05   ; kernel+0020
 94 80 00 00 00 fa 00 00 c6 05 9c 80 00 00 00 bf   ; kernel+0030
-00 00 20 00 31 c0 b9 00 00 80 00 f3 ab be 00 20   ; kernel+0040
-01 00 bf 00 00 20 00 b9 00 00 02 00 f3 a5 e8 93   ; kernel+0050
+00 00 20 00 31 c0 b9 00 00 80 00 f3 ab e8 5e 16   ; kernel+0040
+00 00 90 90 90 90 90 90 90 90 90 90 90 90 e8 93   ; kernel+0050
 0a 00 00 31 f6 a1 44 80 00 00 3b 05 48 80 00 00   ; kernel+0060
 0f 83 4f 0a 00 00 40 a3 44 80 00 00 89 f1 81 e1   ; kernel+0070
 ff ff 3f 00 e8 85 00 00 00 0f 82 df 09 00 00 46   ; kernel+0080
@@ -395,3 +394,14 @@ bb 09 01 00 c9 09 01 00 02 0a 01 00 16 0a 01 00   ; kernel+1660
 26 06 01 00 3b 06 01 00 5e 06 01 00 90 06 01 00   ; kernel+1680
 0a 07 01 00 1e 07 01 00 4a 07 01 00 30 07 01 00   ; kernel+1690
 5e 07 01 00 8a 07 01 00 c7 06 01 00 f7 06 01 00   ; kernel+16a0
+66 ba f6 01 b0 a0 ee 66 ba f7 01 ec ec ec ec ec   ; kernel+16b0
+3c 00 0f 84 80 00 00 00 3c ff 74 7c a1 f8 7d 00   ; kernel+16c0
+00 85 c0 74 73 83 c0 3f c1 e8 06 a3 5a 17 01 00   ; kernel+16d0
+bb 11 00 00 00 bf 00 00 20 00 89 d8 c1 e8 18 24   ; kernel+16e0
+0f 0c e0 66 ba f6 01 ee 66 ba f7 01 ec ec ec ec   ; kernel+16f0
+66 ba f2 01 b0 01 ee 66 ba f3 01 89 d8 ee 66 ba   ; kernel+1700
+f4 01 89 d8 c1 e8 08 ee 66 ba f5 01 89 d8 c1 e8   ; kernel+1710
+10 ee 66 ba f7 01 b0 20 ee ec a8 80 75 fb ec a8   ; kernel+1720
+08 74 fb 66 ba f0 01 b9 80 00 00 00 f3 6d 43 ff   ; kernel+1730
+0d 5a 17 01 00 75 a3 c3 be 00 20 01 00 bf 00 00   ; kernel+1740
+20 00 b9 00 00 02 00 f3 a5 c3 00 00 00 00         ; kernel+1750

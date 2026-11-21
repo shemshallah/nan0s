@@ -14230,7 +14230,11 @@ CALL @loop_enter
 MOVI r1,#P_SEMI
 CALL @p_at_p
 CMP r1,r0
-JMP[NE] @pf_cond
+JMP[EQ] @pf_init
+; empty init clause: consume its semicolon
+CALL @p_adv
+JMP @pf_cond
+pf_init:
 CALL @p_is_type
 CMP r1,r0
 JMP[EQ] @pf_expinit
@@ -14276,10 +14280,16 @@ MOVI r1,6
 CALL @loop_set
 MOVI r1,4
 CALL @loop_set_here
+; an empty post clause is legal: for(;;) and for(;cond;)
+MOVI r1,#P_RPAREN
+CALL @p_at_p
+CMP r1,r0
+JMP[NE] @pf_nopost
 CALL @p_expr
 CALL @p_emit_rv
 LA r1,#I_POP
 CALL @ir_op
+pf_nopost:
 MOVI r1,#P_RPAREN
 MOVI r2,10
 CALL @p_expect_p
