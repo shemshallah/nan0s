@@ -521,6 +521,9 @@
 .equ B_VSCANF   193
 .equ B_VFSCANF  194
 .equ B_VSSCANF  195
+.equ B_FGETPOS  196
+.equ B_FSETPOS  197
+.equ B_FREOPEN  198
 
 ; ------------------------------------------------------------------ compiler state
 ; Kept below word 65536 so ST/LD can use the 16-bit immediate form directly.
@@ -6592,6 +6595,27 @@ LA r1,0xD391E587
 LA r2,@ncc_s_vsscanf
 MOVI r3,7
 MOVI r4,#B_VSSCANF
+MOVI r5,3
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0x98FFAC6B
+LA r2,@ncc_s_fgetpos
+MOVI r3,7
+MOVI r4,#B_FGETPOS
+MOVI r5,2
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0x84EBA0CF
+LA r2,@ncc_s_fsetpos
+MOVI r3,7
+MOVI r4,#B_FSETPOS
+MOVI r5,2
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0xFD13491C
+LA r2,@ncc_s_freopen
+MOVI r3,7
+MOVI r4,#B_FREOPEN
 MOVI r5,3
 MOVI r6,#T_INT
 CALL @ncc_add_builtin
@@ -17521,6 +17545,15 @@ JMP[EQ] @nbi_vfscanf
 MOVI r2,#B_VSSCANF
 CMP r1,r2
 JMP[EQ] @nbi_vsscanf
+MOVI r2,#B_FGETPOS
+CMP r1,r2
+JMP[EQ] @nbi_fgetpos
+MOVI r2,#B_FSETPOS
+CMP r1,r2
+JMP[EQ] @nbi_fsetpos
+MOVI r2,#B_FREOPEN
+CMP r1,r2
+JMP[EQ] @nbi_freopen
 
 
 MOVI r2,#B_FPUTS

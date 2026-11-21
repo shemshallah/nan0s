@@ -197,3 +197,59 @@ ncc_s_vfscanf:
 .str "vfscanf"
 ncc_s_vsscanf:
 .str "vsscanf"
+nbi_fgetpos:
+CALL @ni_pop
+ST r1,r0,#W_VS_TMP
+CALL @ni_pop
+MOVI r2,4
+CMP r1,r2
+JMP[LT] @fgp_e
+CALL @st_entry
+CMP r1,r0
+JMP[EQ] @fgp_e
+LD r2,r1,5
+LD r1,r0,#W_VS_TMP
+MOVI r3,#SZ_32
+CALL @ni_storev
+MOVI r1,0
+CALL @ni_push
+JMP @nbi_d
+fgp_e:
+LA r1,0xFFFFFFFF
+CALL @ni_push
+JMP @nbi_d
+
+nbi_fsetpos:
+CALL @ni_pop
+ST r1,r0,#W_VS_TMP
+CALL @ni_pop
+MOVI r2,4
+CMP r1,r2
+JMP[LT] @fsp_e
+CALL @st_entry
+CMP r1,r0
+JMP[EQ] @fsp_e
+ST r1,r0,#W_VS_AP
+LD r1,r0,#W_VS_TMP
+MOVI r2,#SZ_32
+CALL @ni_loadv
+LD r2,r0,#W_VS_AP
+ST r1,r2,5
+MOVI r1,0
+CALL @ni_push
+JMP @nbi_d
+fsp_e:
+LA r1,0xFFFFFFFF
+CALL @ni_push
+JMP @nbi_d
+
+nbi_freopen:
+CALL @ni_pop
+JMP @nbi_fopen
+
+ncc_s_fgetpos:
+.str "fgetpos"
+ncc_s_fsetpos:
+.str "fsetpos"
+ncc_s_freopen:
+.str "freopen"
