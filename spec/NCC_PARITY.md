@@ -69,6 +69,8 @@ Implemented:
 - aggregate brace initializers for structs, unions, and arrays, including
   nested struct/array members and partial brace elision (unions initialise
   the first member)
+- C99 designated initializers: `.member =`, `[index] =`, `[index].member =`,
+  and nested braced designators (`.s = {.b = 2}`)
 - bit-fields (named, anonymous, signed/unsigned, comma declarators,
   initializers); the layout is implementation-defined and non-packed: each
   named field occupies its declared type's storage, and values are masked /
@@ -81,6 +83,8 @@ Implemented:
 
 Not implemented (honest list):
 
+- brace elision across an array of aggregates (`struct S a[2] = {1,2,3,4};`)
+  is not implemented; use inner braces for each element
 - the explicit function-returning-function-pointer declarator is parsed for
   prototypes (`int (*f(void))(int,int);`); defining such a function still
   requires a typedef'd function-pointer return type
@@ -221,6 +225,7 @@ tools/ncc_m28.sh    const enforcement (locals/globals/params) and const pointers
 tools/ncc_m29.sh    signal handlers delivered by raise()
 tools/ncc_m30.sh    explicit function-returning-function-pointer prototypes
 tools/ncc_m31.sh    alarm()/SIGALRM asynchronous delivery
+tools/ncc_m32.sh    C99 designated initializers (.member, [index], nested)
 tools/ncc_donut.sh  original C donut (one frame) in raw NaN16
 tools/nfs2.sh       path-addressed RAM filesystem API
 tools/ncc_gui.sh    boot image, open terminal, .demo runs C in the vbuf

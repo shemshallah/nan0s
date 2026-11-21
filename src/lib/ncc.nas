@@ -505,6 +505,11 @@
 .equ W_TCONST     61640
 .equ W_MARK_CONST 61641
 .equ W_CONSTSYM 61642
+.equ W_MEMIDX  61650
+.equ W_DESIDX  61651
+.equ W_DESOFF  61652
+.equ W_DESTYPE 61653
+.equ W_ELEMSZ  61654
 .equ W_FPOFF   61643
 .equ W_FPNP1   61644
 .equ W_OUTER   61645
@@ -4581,6 +4586,8 @@ LD r3,r0,#W_TKA+3
 CALL @sym_name_eq
 CMP r1,r0
 JMP[EQ] @pml_next
+LD r5,r0,#W_TY_BASE
+ST r5,r0,#W_MEMIDX
 LD r1,r0,#W_TY_RET
 LD r2,r0,#W_TY_KIND
 ST r1,r0,#W_TY_TMP
@@ -10354,6 +10361,10 @@ ST r2,r0,#W_SNMEM
 ST r0,r0,#W_SALIGN
 CALL @p_adv
 psi_l:
+MOVI r1,#P_DOT
+CALL @p_at_p
+CMP r1,r0
+JMP[NE] @psi_desig
 LD r1,r0,#W_SALIGN
 LD r2,r0,#W_SNMEM
 CMP r1,r2
@@ -10362,6 +10373,17 @@ MOVI r1,#P_RBRACE
 CALL @p_at_p
 CMP r1,r0
 JMP[NE] @psi_done
+JMP @psi_load
+psi_desig:
+CALL @p_adv
+LD r1,r0,#W_STRUCTID
+CALL @p_member_lookup
+LD r1,r0,#W_MEMIDX
+ST r1,r0,#W_SALIGN
+MOVI r1,#P_ASSIGN
+MOVI r2,21
+CALL @p_expect_p
+psi_load:
 ; member entry: [symidx, offset, type, 0]
 LD r2,r0,#W_SMEM
 LD r1,r0,#W_SALIGN
@@ -10534,6 +10556,10 @@ ST r2,r0,#W_INNMEM
 MOVI r1,0
 ST r1,r0,#W_II
 pib_s_l:
+MOVI r1,#P_DOT
+CALL @p_at_p
+CMP r1,r0
+JMP[NE] @pib_s_desig
 LD r1,r0,#W_II
 LD r2,r0,#W_INNMEM
 CMP r1,r2
@@ -10542,6 +10568,17 @@ MOVI r1,#P_RBRACE
 CALL @p_at_p
 CMP r1,r0
 JMP[NE] @pib_close
+JMP @pib_s_load
+pib_s_desig:
+CALL @p_adv
+LD r1,r0,#W_ITYPE
+CALL @p_member_lookup
+LD r1,r0,#W_MEMIDX
+ST r1,r0,#W_II
+MOVI r1,#P_ASSIGN
+MOVI r2,21
+CALL @p_expect_p
+pib_s_load:
 LD r2,r0,#W_INMEM
 LD r1,r0,#W_II
 SHL r1,r1,2
@@ -11272,6 +11309,8 @@ MOVI r1,0
 CALL @p_str_init
 JMP @pd_afterinit
 pd_not_str:
+LD r1,r0,#W_TY_ID
+CALL @ty_kind
 MOVI r2,#TY_STRUCT
 CMP r1,r2
 JMP[EQ] @pd_struct_init
@@ -11308,10 +11347,48 @@ MOVI r1,0
 ST r1,r14,0
 ADD r14,r14,r13
 pd_ai_l:
+ST r0,r0,#W_DESOFF
+LA r1,0xFFFFFFFF
+ST r1,r0,#W_DESTYPE
+MOVI r1,#P_LBRACK
+CALL @p_at_p
+CMP r1,r0
+JMP[NE] @pd_ai_desig
 MOVI r1,#P_RBRACE
 CALL @p_at_p
 CMP r1,r0
 JMP[NE] @pd_ai_done
+JMP @pd_ai_elem
+pd_ai_desig:
+CALL @p_adv
+CALL @p_cexpr
+ST r1,r0,#W_DESIDX
+MOVI r1,#P_RBRACK
+MOVI r2,33
+CALL @p_expect_p
+MOVI r1,#P_DOT
+CALL @p_at_p
+CMP r1,r0
+JMP[NE] @pd_ai_member
+JMP @pd_ai_setidx
+pd_ai_member:
+CALL @p_adv
+ADDI r3,r14,-2
+LD r1,r3,0
+CALL @sym_entry
+LD r1,r1,#SY_TYPE
+CALL @ty_base
+CALL @p_member_lookup
+ST r1,r0,#W_DESOFF
+ST r2,r0,#W_DESTYPE
+pd_ai_setidx:
+MOVI r1,#P_ASSIGN
+MOVI r2,21
+CALL @p_expect_p
+ADDI r3,r14,-1
+LD r4,r0,#W_DESIDX
+ST r4,r3,0
+pd_ai_elem:
 ; element type and size from the array symbol
 ADDI r3,r14,-2
 LD r1,r3,0
@@ -11319,10 +11396,21 @@ CALL @sym_entry
 LD r1,r1,#SY_TYPE
 CALL @ty_base
 ST r1,r0,#W_TY_RET
+LD r1,r0,#W_TY_RET
 CALL @ty_size
+ST r1,r0,#W_ELEMSZ
+LD r1,r0,#W_DESTYPE
+LA r2,0xFFFFFFFF
+CMP r1,r2
+JMP[EQ] @pd_ai_tyok
+ST r1,r0,#W_TY_RET
+pd_ai_tyok:
+LD r1,r0,#W_ELEMSZ
 ADDI r3,r14,-1
 LD r4,r3,0
 MUL r4,r4,r1
+LD r1,r0,#W_DESOFF
+ADD r4,r4,r1
 ADDI r3,r14,-2
 LD r1,r3,0
 CALL @sym_entry
@@ -11368,12 +11456,21 @@ CALL @sym_entry
 LD r1,r1,#SY_TYPE
 CALL @ty_base
 ST r1,r0,#W_TY_RET
+LD r1,r0,#W_DESTYPE
+LA r2,0xFFFFFFFF
+CMP r1,r2
+JMP[EQ] @pd_ai_pv
+ST r1,r0,#W_TY_RET
+pd_ai_pv:
 LD r1,r0,#W_TY_RET
 CALL @px_cast_stack
 LD r1,r0,#W_TY_RET
 MOVI r2,0
 CALL @px_emit_store
 pd_ai_next:
+ST r0,r0,#W_DESOFF
+LA r1,0xFFFFFFFF
+ST r1,r0,#W_DESTYPE
 ADDI r3,r14,-1
 LD r4,r3,0
 ADD r4,r4,r13
@@ -12549,6 +12646,8 @@ MOVI r1,1
 CALL @p_str_init
 JMP @pde_after
 pde_not_str:
+LD r1,r0,#W_TY_ID
+CALL @ty_kind
 MOVI r2,#TY_STRUCT
 CMP r1,r2
 JMP[EQ] @pde_struct_init
@@ -12575,20 +12674,69 @@ MOVI r1,0
 ST r1,r14,0
 ADD r14,r14,r13
 pde_ai_l:
+ST r0,r0,#W_DESOFF
+LA r1,0xFFFFFFFF
+ST r1,r0,#W_DESTYPE
+MOVI r1,#P_LBRACK
+CALL @p_at_p
+CMP r1,r0
+JMP[NE] @pde_ai_desig
 MOVI r1,#P_RBRACE
 CALL @p_at_p
 CMP r1,r0
 JMP[NE] @pde_ai_done
+JMP @pde_ai_elem
+pde_ai_desig:
+CALL @p_adv
+CALL @p_cexpr
+ST r1,r0,#W_DESIDX
+MOVI r1,#P_RBRACK
+MOVI r2,33
+CALL @p_expect_p
+MOVI r1,#P_DOT
+CALL @p_at_p
+CMP r1,r0
+JMP[NE] @pde_ai_member
+JMP @pde_ai_setidx
+pde_ai_member:
+CALL @p_adv
+ADDI r3,r14,-2
+LD r1,r3,0
+CALL @sym_entry
+LD r1,r1,#SY_TYPE
+CALL @ty_base
+CALL @p_member_lookup
+ST r1,r0,#W_DESOFF
+ST r2,r0,#W_DESTYPE
+pde_ai_setidx:
+MOVI r1,#P_ASSIGN
+MOVI r2,21
+CALL @p_expect_p
+ADDI r3,r14,-1
+LD r4,r0,#W_DESIDX
+ST r4,r3,0
+pde_ai_elem:
 ADDI r3,r14,-2
 LD r1,r3,0
 CALL @sym_entry
 LD r1,r1,#SY_TYPE
 CALL @ty_base
 ST r1,r0,#W_TY_COUNT
+LD r1,r0,#W_TY_COUNT
 CALL @ty_size
+ST r1,r0,#W_ELEMSZ
+LD r1,r0,#W_DESTYPE
+LA r2,0xFFFFFFFF
+CMP r1,r2
+JMP[EQ] @pde_ai_tyok
+ST r1,r0,#W_TY_COUNT
+pde_ai_tyok:
+LD r1,r0,#W_ELEMSZ
 ADDI r3,r14,-1
 LD r4,r3,0
 MUL r4,r4,r1
+LD r1,r0,#W_DESOFF
+ADD r4,r4,r1
 ADDI r3,r14,-2
 LD r1,r3,0
 CALL @sym_entry
@@ -12625,12 +12773,21 @@ CALL @sym_entry
 LD r1,r1,#SY_TYPE
 CALL @ty_base
 ST r1,r0,#W_TY_COUNT
+LD r1,r0,#W_DESTYPE
+LA r2,0xFFFFFFFF
+CMP r1,r2
+JMP[EQ] @pde_ai_pv
+ST r1,r0,#W_TY_COUNT
+pde_ai_pv:
 LD r1,r0,#W_TY_COUNT
 CALL @px_cast_stack
 LD r1,r0,#W_TY_COUNT
 MOVI r2,0
 CALL @px_emit_store
 pde_ai_next:
+ST r0,r0,#W_DESOFF
+LA r1,0xFFFFFFFF
+ST r1,r0,#W_DESTYPE
 ADDI r3,r14,-1
 LD r4,r3,0
 ST r4,r0,#W_NLOC
