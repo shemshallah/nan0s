@@ -21,9 +21,18 @@ JMP[EQ] @mbl_zero
 CMP r8,r0
 JMP[EQ] @mbl_minus2
 LDB r2,r1,0
+MOVI r3,128
+CMP r2,r3
+JMP[GE] @mbl_err
 CMP r2,r0
 JMP[EQ] @mbl_zero
 MOVI r1,1
+CALL @ni_push
+JMP @nbi_d
+mbl_err:
+MOVI r1,84
+CALL @ex_seterr
+LA r1,0xFFFFFFFF
 CALL @ni_push
 JMP @nbi_d
 mbl_zero:
@@ -48,6 +57,9 @@ JMP[EQ] @mbw_zero
 CMP r8,r0
 JMP[EQ] @mbw_minus2
 LDB r2,r7,0
+MOVI r3,128
+CMP r2,r3
+JMP[GE] @mbw_err
 CMP r2,r0
 JMP[EQ] @mbw_zero
 CMP r6,r0
@@ -62,6 +74,12 @@ CALL @ni_push
 JMP @nbi_d
 mbw_zero:
 MOVI r1,0
+CALL @ni_push
+JMP @nbi_d
+mbw_err:
+MOVI r1,84
+CALL @ex_seterr
+LA r1,0xFFFFFFFF
 CALL @ni_push
 JMP @nbi_d
 mbw_minus2:
@@ -79,7 +97,7 @@ CMP r7,r0
 JMP[EQ] @wcm_one
 CMPS r8,r0
 JMP[LT] @wcm_err
-MOVI r2,255
+MOVI r2,127
 CMP r8,r2
 JMP[GT] @wcm_err
 STB r8,r7,0
@@ -91,6 +109,8 @@ MOVI r1,1
 CALL @ni_push
 JMP @nbi_d
 wcm_err:
+MOVI r1,84
+CALL @ex_seterr
 LA r1,0xFFFFFFFF
 CALL @ni_push
 JMP @nbi_d
@@ -120,6 +140,9 @@ JMP[GE] @mrw_stop
 mrw_dstnull:
 LD r1,r0,#W_W2E
 LDB r2,r1,0
+MOVI r3,128
+CMP r2,r3
+JMP[GE] @mrw_err
 CMP r2,r0
 JMP[EQ] @mrw_nul
 LD r3,r0,#W_W2B
@@ -157,6 +180,13 @@ LD r1,r0,#W_W2A
 LD r2,r0,#W_W2E
 MOVI r3,#SZ_32
 CALL @ni_storev
+JMP @mrw_ret
+mrw_err:
+MOVI r1,84
+CALL @ex_seterr
+LA r1,0xFFFFFFFF
+CALL @ni_push
+JMP @nbi_d
 mrw_ret:
 LD r1,r0,#W_W2D
 CALL @ni_push
@@ -191,7 +221,7 @@ CMPS r1,r0
 JMP[LT] @wsm_err
 CMP r1,r0
 JMP[EQ] @wsm_nul
-MOVI r2,255
+MOVI r2,127
 CMP r1,r2
 JMP[GT] @wsm_err
 LD r3,r0,#W_W2B
@@ -230,6 +260,8 @@ LD r1,r0,#W_W2D
 CALL @ni_push
 JMP @nbi_d
 wsm_err:
+MOVI r1,84
+CALL @ex_seterr
 LA r1,0xFFFFFFFF
 CALL @ni_push
 JMP @nbi_d

@@ -12,9 +12,13 @@ All tracked C language/library blockers are closed: the explicit
 function-returning-function-pointer definitions, nested/mixed brace elision,
 packed bit-fields, `wprintf`/`wscanf`, the `getchar`/`getc`/`putc`/`ungetc`
 family, and persistent files over ATA are implemented and gated by `M40`-`M46`.
-The complete standard C library name set is now present; the last names
-(`strtof`/`strtold`, `llabs`, `strncat`, `remquo`, and the restartable
-multibyte conversions) are gated by `M61`.
+The C89/C99 hosted library name set used by the port is now present: the
+last core names (`strtof`/`strtold`, `llabs`, `strncat`, `remquo`, and the
+restartable multibyte conversions) are gated by `M61`, and the `<inttypes.h>`,
+wide-ctype, `errno`, `assert`, and `fwide` additions are gated by `M62`.
+The explicit exclusions are C11 `<complex.h>`, `<fenv.h>`, `<threads.h>`,
+`<stdatomic.h>`, `<uchar.h>`, and the `f`/`s`/`v` wide-stdio variants; the
+ASCII wide formatter/scanner (`wprintf`/`wscanf`) is present.
 The remaining documented limitations are platform or optional-scope items:
 
 - the C locale is the only locale (the ISO C minimum);
@@ -190,6 +194,9 @@ atol(s)            atoll(s)           div/ldiv/lldiv
 strtof(s,e)        strtold(s,e)       llabs(x)       strncat(d,s,n)
 remquo(x,y,q)      mbsinit(p)         mbrlen(s,n,p)  mbrtowc(w,s,n,p)
 wcrtomb(s,w,p)     mbsrtowcs(d,s,n,p) wcsrtombs(d,s,n,p)
+imaxabs/imaxdiv    strtoimax/strtoumax  wcstoimax/wcstoumax
+iswalnum..iswxdigit towlower/towupper   wctype/iswctype/wctrans/towctrans
+errno/EDOM/ERANGE/EILSEQ  assert(e)     fwide(stream,mode)
 setitimer/getitimer (ITIMER_REAL)
 sin(x)             cos(x)
 sqrt(x)            fabs(x)           pow(x,y)
@@ -315,6 +322,7 @@ tools/ncc_m58.sh    tgamma/lgamma/signgam, interface version
 tools/ncc_m59.sh    div/ldiv/lldiv aggregate returns
 tools/ncc_m60.sh    setitimer/getitimer (SIGALRM delivery)
 tools/ncc_m61.sh    strtof/strtold, llabs, strncat, remquo, restartable mbs
+tools/ncc_m62.sh    inttypes, wide ctype, errno, assert, fwide
 tools/bare_fs.sh    NPAF-backed bare fs_open/read/write/seek/close/rename/remove
 tools/ncc_m31.sh    alarm()/SIGALRM asynchronous delivery
 tools/ncc_m32.sh    C99 designated initializers (.member, [index], nested)

@@ -75,7 +75,7 @@ pm:
   MOV %AX,%SS
   MOV %AX,%FS
   MOV %AX,%GS
-  MOV $0x90000,%ESP
+  MOV $0x1F0000,%ESP
   MOV $0x10000,%EAX
   JMP %EAX
 .code16

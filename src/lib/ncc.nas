@@ -556,6 +556,12 @@
 .equ B_WCRTOMB  228
 .equ B_MBSRTOWCS 229
 .equ B_WCSRTOMBS 230
+.equ B_WCTYPE   231
+.equ B_ISWCTYPE 232
+.equ B_WCTRANS  233
+.equ B_TOWCTRANS 234
+.equ B_ASSERT   235
+.equ B_FWIDE    236
 
 ; ------------------------------------------------------------------ compiler state
 ; Kept below word 65536 so ST/LD can use the 16-bit immediate form directly.
@@ -753,6 +759,10 @@
 .equ W_BITS_W    61811
 .equ W_STBIT     61812
 .equ W_ELT_BIT   61813
+.equ W_EX_A      61814
+.equ W_EX_B      61815
+.equ W_ERRNO     61795
+.equ W_FWIDE_STD 61796
 .equ W_STDPB     61820
 .equ W_DK_I      61830
 .equ W_DK_N      61831
@@ -949,6 +959,7 @@
 .include "wcsto.nas"
 .include "strtox.nas"
 .include "mbs.nas"
+.include "extra.nas"
 
 ; q2_skipsp: consume spaces and tabs
 q2_skipsp:
@@ -5835,6 +5846,12 @@ LA r2,@ncc_s_lldiv_t
 MOVI r3,7
 LD r4,r0,#W_LLDIVTYPE
 CALL @ncc_add_typedef
+; imaxdiv_t = lldiv_t
+LA r1,0xCF8B962E
+LA r2,@ncc_s_imaxdiv_t
+MOVI r3,9
+LD r4,r0,#W_LLDIVTYPE
+CALL @ncc_add_typedef
 LA r1,0x396FDE24
 LA r2,@ncc_s_c_NULL
 MOVI r3,4
@@ -7671,6 +7688,8 @@ MOVI r4,#B_MEMCCPY
 MOVI r5,4
 LD r6,r0,#W_PTRV
 CALL @ncc_add_builtin
+CALL @ncc_extra_types
+CALL @ncc_extra_builtins
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -18035,6 +18054,24 @@ JMP[EQ] @nbi_mbsrtowcs
 MOVI r2,#B_WCSRTOMBS
 CMP r1,r2
 JMP[EQ] @nbi_wcsrtombs
+MOVI r2,#B_WCTYPE
+CMP r1,r2
+JMP[EQ] @nbi_wctype
+MOVI r2,#B_ISWCTYPE
+CMP r1,r2
+JMP[EQ] @nbi_iswctype
+MOVI r2,#B_WCTRANS
+CMP r1,r2
+JMP[EQ] @nbi_wctrans
+MOVI r2,#B_TOWCTRANS
+CMP r1,r2
+JMP[EQ] @nbi_towctrans
+MOVI r2,#B_ASSERT
+CMP r1,r2
+JMP[EQ] @nbi_assert
+MOVI r2,#B_FWIDE
+CMP r1,r2
+JMP[EQ] @nbi_fwide
 
 
 MOVI r2,#B_FPUTS
