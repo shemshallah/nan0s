@@ -545,6 +545,17 @@
 .equ B_LLDIV    217
 .equ B_SETITIMER 218
 .equ B_GETITIMER 219
+.equ B_STRTOF   220
+.equ B_STRTOLD  221
+.equ B_LLABS    222
+.equ B_STRNCAT  223
+.equ B_REMQUO   224
+.equ B_MBSINIT  225
+.equ B_MBRLEN   226
+.equ B_MBRTOWC  227
+.equ B_WCRTOMB  228
+.equ B_MBSRTOWCS 229
+.equ B_WCSRTOMBS 230
 
 ; ------------------------------------------------------------------ compiler state
 ; Kept below word 65536 so ST/LD can use the 16-bit immediate form directly.
@@ -937,6 +948,7 @@
 .include "mathx.nas"
 .include "wcsto.nas"
 .include "strtox.nas"
+.include "mbs.nas"
 
 ; q2_skipsp: consume spaces and tabs
 q2_skipsp:
@@ -5690,6 +5702,16 @@ LA r2,@ncc_s_wchar_t
 MOVI r3,7
 MOVI r4,#T_INT
 CALL @ncc_add_typedef
+LA r1,0xCE53BB04
+LA r2,@ncc_s_wint_t
+MOVI r3,6
+MOVI r4,#T_UINT
+CALL @ncc_add_typedef
+LA r1,0x18172F90
+LA r2,@ncc_s_mbstate_t
+MOVI r3,9
+MOVI r4,#T_INT
+CALL @ncc_add_typedef
 CALL @ncc_add_tm
 CALL @ncc_add_lconv
 ; stdio handles as FILE* globals
@@ -6900,6 +6922,84 @@ MOVI r4,#B_GETITIMER
 MOVI r5,2
 MOVI r6,#T_INT
 CALL @ncc_add_builtin
+; remaining standard C library names
+LA r1,0x49CCF08D
+LA r2,@ncc_s_strtof
+MOVI r3,6
+MOVI r4,#B_STRTOF
+MOVI r5,2
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+LA r1,0x1A85AD31
+LA r2,@ncc_s_strtold
+MOVI r3,7
+MOVI r4,#B_STRTOLD
+MOVI r5,2
+MOVI r6,#T_DOUBLE
+CALL @ncc_add_builtin
+LA r1,0x818E7D1B
+LA r2,@ncc_s_llabs
+MOVI r3,5
+MOVI r4,#B_LLABS
+MOVI r5,1
+MOVI r6,#T_LONGLONG
+CALL @ncc_add_builtin
+LA r1,0xB1EE6F2E
+LA r2,@ncc_s_strncat
+MOVI r3,7
+MOVI r4,#B_STRNCAT
+MOVI r5,3
+LD r6,r0,#W_PTRC
+CALL @ncc_add_builtin
+LA r1,0xE5DEE60E
+LA r2,@ncc_s_remquo
+MOVI r3,6
+MOVI r4,#B_REMQUO
+MOVI r5,3
+MOVI r6,#T_DOUBLE
+CALL @ncc_add_builtin
+LA r1,0x38BD9BF1
+LA r2,@ncc_s_mbsinit
+MOVI r3,7
+MOVI r4,#B_MBSINIT
+MOVI r5,1
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0xFB5DD55B
+LA r2,@ncc_s_mbrlen
+MOVI r3,6
+MOVI r4,#B_MBRLEN
+MOVI r5,3
+MOVI r6,#T_UINT
+CALL @ncc_add_builtin
+LA r1,0x3558C047
+LA r2,@ncc_s_mbrtowc
+MOVI r3,7
+MOVI r4,#B_MBRTOWC
+MOVI r5,4
+MOVI r6,#T_UINT
+CALL @ncc_add_builtin
+LA r1,0x7801D91D
+LA r2,@ncc_s_wcrtomb
+MOVI r3,7
+MOVI r4,#B_WCRTOMB
+MOVI r5,3
+MOVI r6,#T_UINT
+CALL @ncc_add_builtin
+LA r1,0x4138EC8D
+LA r2,@ncc_s_mbsrtowcs
+MOVI r3,9
+MOVI r4,#B_MBSRTOWCS
+MOVI r5,4
+MOVI r6,#T_UINT
+CALL @ncc_add_builtin
+LA r1,0x42583425
+LA r2,@ncc_s_wcsrtombs
+MOVI r3,9
+MOVI r4,#B_WCSRTOMBS
+MOVI r5,4
+MOVI r6,#T_UINT
+CALL @ncc_add_builtin
 
 
 LA r1,0x854B1879
@@ -7734,6 +7834,10 @@ ncc_s_sig_atomic_t:
 .str "sig_atomic_t"
 ncc_s_wchar_t:
 .str "wchar_t"
+ncc_s_wint_t:
+.str "wint_t"
+ncc_s_mbstate_t:
+.str "mbstate_t"
 ncc_s_stdin:
 .str "stdin"
 ncc_s_stdout:
@@ -17898,6 +18002,39 @@ JMP[EQ] @nbi_setitimer
 MOVI r2,#B_GETITIMER
 CMP r1,r2
 JMP[EQ] @nbi_getitimer
+MOVI r2,#B_STRTOF
+CMP r1,r2
+JMP[EQ] @nbi_strtod
+MOVI r2,#B_STRTOLD
+CMP r1,r2
+JMP[EQ] @nbi_strtod
+MOVI r2,#B_LLABS
+CMP r1,r2
+JMP[EQ] @nbi_llabs
+MOVI r2,#B_STRNCAT
+CMP r1,r2
+JMP[EQ] @nbi_strncat
+MOVI r2,#B_REMQUO
+CMP r1,r2
+JMP[EQ] @nbi_remquo
+MOVI r2,#B_MBSINIT
+CMP r1,r2
+JMP[EQ] @nbi_mbsinit
+MOVI r2,#B_MBRLEN
+CMP r1,r2
+JMP[EQ] @nbi_mbrlen
+MOVI r2,#B_MBRTOWC
+CMP r1,r2
+JMP[EQ] @nbi_mbrtowc
+MOVI r2,#B_WCRTOMB
+CMP r1,r2
+JMP[EQ] @nbi_wcrtomb
+MOVI r2,#B_MBSRTOWCS
+CMP r1,r2
+JMP[EQ] @nbi_mbsrtowcs
+MOVI r2,#B_WCSRTOMBS
+CMP r1,r2
+JMP[EQ] @nbi_wcsrtombs
 
 
 MOVI r2,#B_FPUTS
@@ -18461,6 +18598,40 @@ SUB r2,r2,r13
 CVTIF r1,r2
 RET
 
+; ni_round_even_bits: round to nearest, ties to even (the default IEEE mode).
+ni_round_even_bits:
+CVTFI r2,r1
+CVTIF r3,r2
+FSUB r4,r1,r3
+LA r5,0x3F000000
+FCMP r4,r5
+JMP[GT] @nre_up
+LA r5,0xBF000000
+FCMP r4,r5
+JMP[LT] @nre_dn
+LA r7,0x7FFFFFFF
+BOOL.8 r6,r4,r7
+LA r5,0x3F000000
+FCMP r6,r5
+JMP[LT] @nre_trunc
+MOVI r7,1
+BOOL.8 r6,r2,r7
+CMP r6,r0
+JMP[EQ] @nre_trunc
+LA r7,0x80000000
+BOOL.8 r6,r4,r7
+CMP r6,r0
+JMP[EQ] @nre_up
+JMP @nre_dn
+nre_up:
+ADD r2,r2,r13
+JMP @nre_trunc
+nre_dn:
+SUB r2,r2,r13
+nre_trunc:
+CVTIF r1,r2
+RET
+
 nbi_exp2:
 CALL @ni_pop
 LA r2,0x3F317218
@@ -18598,12 +18769,12 @@ CALL @ni_push
 JMP @nbi_d
 nbi_rint:
 CALL @ni_pop
-CALL @ni_round_bits
+CALL @ni_round_even_bits
 CALL @ni_push
 JMP @nbi_d
 nbi_nearbyint:
 CALL @ni_pop
-CALL @ni_round_bits
+CALL @ni_round_even_bits
 CALL @ni_push
 JMP @nbi_d
 nbi_copysign:
@@ -18688,7 +18859,7 @@ ST r1,r0,#W_F2V
 LD r2,r0,#W_F2P
 FDIV r3,r1,r2
 ADD r1,r3,r0
-CALL @ni_round_bits
+CALL @ni_round_even_bits
 LD r2,r0,#W_F2P
 FMUL r1,r1,r2
 LD r2,r0,#W_F2V

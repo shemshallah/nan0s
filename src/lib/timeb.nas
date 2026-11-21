@@ -861,7 +861,7 @@ JMP @nsc_fd
 nsc_fd2:
 LD r3,r0,#W_TD
 LD r4,r0,#W_TC
-CMP r4,r0
+CMPS r4,r0
 JMP[LT] @nsc_powd
 nsc_powm:
 CMP r3,r0
@@ -877,7 +877,7 @@ SUB r3,r3,r13
 JMP @nsc_powd
 nsc_done:
 LD r2,r0,#W_TA
-CMP r2,r0
+CMPS r2,r0
 JMP[GE] @nsc_ret
 LA r2,0x80000000
 ADD r1,r1,r2
