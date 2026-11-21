@@ -18,7 +18,10 @@ multibyte conversions) are gated by `M61`.
 The remaining documented limitations are platform or optional-scope items:
 
 - the C locale is the only locale (the ISO C minimum);
-- x86 BIOS boot media is capped at 1.44 MB by the floppy format;
+- x86 BIOS boot media is capped at 1.44 MB by the floppy CHS loader; the
+  current unified payload is about 0.67 MB, so the cap is not yet binding.
+  Enlarging the loader is deferred until qemu-system-i386 is available to
+  verify the new boot path;
 - the POSIX-free machine-interface table is implemented in
   `src/lib/bare.nas`; console, block, and NPAF-backed filesystem adapters are
   wired (see `spec/BARE_METAL_INTERFACES.md`);
