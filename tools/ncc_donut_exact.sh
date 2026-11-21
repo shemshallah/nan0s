@@ -1,8 +1,8 @@
 #!/bin/sh
 # ncc_donut_exact: the a1k0n donut source ported to ncc. The program is an
 # infinite animation; run one frame and compare it byte-for-byte with the
-# saved frame. The first frame is also 1757/1761 chars identical to clang's
-# float-trig build (4 luminance-boundary chars differ).
+# saved frame. The first frame is also byte-identical to clang's float-trig
+# build (all 1761 cells; the x^9/x^11 sine terms close the old 4-cell gap).
 set -e; cd "$(dirname "$0")/.."
 T="${TMPDIR:-/tmp}/nccdonx.$$"; mkdir -p "$T"; trap 'rm -rf "$T"' EXIT
 awk -f tools/nmk.awk -v CMD=emit src/tests/donut_exact_test.nas > "$T/d.nan"

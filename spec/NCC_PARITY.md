@@ -76,10 +76,10 @@ are heap copies. There is no external ELF/COFF ABI to match.
   `for(;;)`, `switch`, `goto`, `setjmp`/`longjmp`, strings and `long long`.
 - **Visual parity** for the classic a1k0n donut:
   `tools/ncc_donut_exact.sh` runs the ported source and checks the first frame
-  byte-for-byte against a saved ncc frame. Against a host clang build of the
-  same float-trig algorithm, 1757 of 1761 characters match; the four
-  luminance-boundary characters differ because ncc has its own 32-bit
-  `sin`/`cos` approximations.
+  byte-for-byte against a saved frame. The saved frame is also byte-identical
+  to a host clang build of the same float-trig algorithm (1761/1761 cells);
+  the x^9 and x^11 sine terms close the four luminance-boundary differences
+  left by the old degree-7 polynomial.
 - **Self-hosting**: `tools/mkproof.sh` proves nasm0 reproduces the ncc words.
 - **Not** ABI parity with an external object format, full ISO C, or
   performance parity. There is no optimizer; `volatile` is effectively
