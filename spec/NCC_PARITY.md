@@ -43,7 +43,8 @@ Implemented:
   typedefs, parameters (explicit and typedef), typedef'd returns, arrays,
   function-designator values, assignment, indirect calls through variables,
   array elements, struct members, and `(*fp)(...)`, comparison
-- global and local arrays, multidimensions, pointer arithmetic/indexing
+- global and local arrays, multidimensions, pointer arithmetic/indexing,
+  including `[]` size inference from brace initializers
 - `char`/`short`/`int`/`long`, signed and unsigned, `sizeof` in bytes
 - 64-bit `long long`/`unsigned long long`: two-word stack representation,
   literals (including values above 2^32 in decimal/hex/octal), add/sub/mul/
@@ -105,8 +106,9 @@ Not implemented (honest list):
   (`setjmp`/`longjmp`), `strftime`, `tmpnam`/`tmpfile`, and the wide-string
   helpers `wcslen`/`wcscmp`/`wcscpy`/`wcscat`, plus `strspn`/`strcspn`/
   `strpbrk`/`strtok`/`memchr`/`strcoll`/`strxfrm`, plus `strerror`/`perror`
-  and `getenv`/`system` stubs are implemented. Only the C
-  locale is provided, and wide stdio (`wprintf`/`wscanf`) is still missing
+  and `getenv`/`system` stubs are implemented. A `wprintf` subset (`%d`, `%s`,
+  `%ls`, `%x`, `%X`, `%c`, `%%`, literal wide text) is implemented; `wscanf`
+  is currently a stub returning EOF. Only the C locale is provided
 - signal handlers are installed and delivered by `raise`; `alarm()` performs
   asynchronous `SIGALRM` delivery at IR-instruction boundaries. POSIX timers
   (`setitimer`) are not implemented
@@ -234,6 +236,8 @@ tools/ncc_m32.sh    C99 designated initializers (.member, [index], nested)
 tools/ncc_m33.sh    brace elision across arrays of flat aggregates
 tools/ncc_m34.sh    strspn/strcspn/strpbrk/strtok, getenv/system
 tools/ncc_m35.sh    memchr/strcoll/strxfrm/strerror/perror
+tools/ncc_m36.sh    [] array size inference from brace lists
+tools/ncc_m37.sh    wprintf subset
 tools/ncc_donut.sh  original C donut (one frame) in raw NaN16
 tools/nfs2.sh       path-addressed RAM filesystem API
 tools/ncc_gui.sh    boot image, open terminal, .demo runs C in the vbuf

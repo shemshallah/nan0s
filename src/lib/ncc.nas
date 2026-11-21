@@ -436,6 +436,8 @@
 .equ B_STRXFRM  108
 .equ B_STRERROR 109
 .equ B_PERROR   110
+.equ B_WPRINTF  111
+.equ B_WSCANF   112
 
 ; ------------------------------------------------------------------ compiler state
 ; Kept below word 65536 so ST/LD can use the 16-bit immediate form directly.
@@ -533,6 +535,7 @@
 .equ W_EL_NMEM 61664
 .equ W_EL_OFF 61665
 .equ W_EL_MTYPE 61666
+.equ W_ARRMAX 61688
 .equ W_FPOFF   61643
 .equ W_FPNP1   61644
 .equ W_FPDEF   61646
@@ -772,6 +775,7 @@
 .include "setjmp.nas"
 .include "libcx.nas"
 .include "strx.nas"
+.include "wide.nas"
 
 ; q2_skipsp: consume spaces and tabs
 q2_skipsp:
@@ -6452,6 +6456,20 @@ MOVI r4,#B_PERROR
 MOVI r5,1
 MOVI r6,#T_VOID
 CALL @ncc_add_builtin
+LA r1,0x9C5BBF15
+LA r2,@ncc_s_wprintf
+MOVI r3,7
+MOVI r4,#B_WPRINTF
+MOVI r5,0xFFFF
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0xF240C78F
+LA r2,@ncc_s_wscanf
+MOVI r3,6
+MOVI r4,#B_WSCANF
+MOVI r5,0xFFFF
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -10406,6 +10424,75 @@ SUB r14,r14,r13
 LD r15,r14,0
 RET
 
+; p_arr_pre: r1=array type; give an unsized array a provisional capacity
+p_arr_pre:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_EL_ELEM
+CALL @ty_kind
+MOVI r2,#TY_ARRAY
+CMP r1,r2
+JMP[NE] @pap_d
+LD r1,r0,#W_EL_ELEM
+CALL @ty_count
+CMP r1,r0
+JMP[NE] @pap_d
+LD r1,r0,#W_EL_ELEM
+CALL @ty_base
+ST r1,r0,#W_EL_OFF
+CALL @ty_size
+ST r1,r0,#W_EL_ESIZE
+MOVI r2,256
+MUL r1,r1,r2
+ST r1,r0,#W_EL_COUNT
+LD r1,r0,#W_EL_ELEM
+CALL @ty_addr
+MOVI r2,256
+ST r2,r1,#TY_COUNT
+LD r2,r0,#W_EL_COUNT
+ST r2,r1,#TY_SIZE
+pap_d:
+LD r1,r0,#W_EL_ELEM
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; p_arr_fix: r1=symbol index r2=actual element count; shrink an inferred array
+p_arr_fix:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_EL_BASE
+ST r2,r0,#W_EL_COUNT
+CALL @sym_entry
+LD r1,r1,#SY_TYPE
+ST r1,r0,#W_EL_ELEM
+CALL @ty_kind
+MOVI r2,#TY_ARRAY
+CMP r1,r2
+JMP[NE] @paf_d
+LD r1,r0,#W_EL_ELEM
+CALL @ty_base
+CALL @ty_size
+ST r1,r0,#W_EL_ESIZE
+LD r1,r0,#W_EL_ELEM
+CALL @ty_addr
+ST r1,r0,#W_EL_MEM
+LD r2,r0,#W_EL_COUNT
+ST r2,r1,#TY_COUNT
+LD r1,r0,#W_EL_ESIZE
+MUL r1,r1,r2
+ST r1,r0,#W_EL_OFF
+LD r2,r0,#W_EL_MEM
+ST r1,r2,#TY_SIZE
+LD r2,r0,#W_EL_BASE
+CALL @sym_entry
+LD r2,r0,#W_EL_OFF
+ST r2,r1,#SY_SIZE
+paf_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
 ; p_decl: local declarations (one or more declarators)
 ; px_align_up: r1=value r2=align(1|2|4) -> r1 aligned up
 px_align_up:
@@ -11498,6 +11585,7 @@ CALL @p_array_suffix
 ST r1,r0,#W_TY_ID
 CALL @p_infer_str_array
 ST r1,r0,#W_TY_ID
+CALL @p_arr_pre
 ST r1,r0,#W_TY_BASE
 CALL @ty_size
 ST r1,r0,#W_TY_TMP
@@ -11669,6 +11757,7 @@ MOVI r1,0
 ST r1,r14,0
 ADD r14,r14,r13
 pd_ai_l:
+ST r0,r0,#W_ARRMAX
 ST r0,r0,#W_DESOFF
 LA r1,0xFFFFFFFF
 ST r1,r0,#W_DESTYPE
@@ -11790,6 +11879,14 @@ LD r1,r0,#W_TY_RET
 MOVI r2,0
 CALL @px_emit_store
 pd_ai_next:
+ADDI r3,r14,-1
+LD r4,r3,0
+ADD r4,r4,r13
+LD r5,r0,#W_ARRMAX
+CMPS r4,r5
+JMP[LE] @pd_ai_mx
+ST r4,r0,#W_ARRMAX
+pd_ai_mx:
 ST r0,r0,#W_DESOFF
 LA r1,0xFFFFFFFF
 ST r1,r0,#W_DESTYPE
@@ -11802,6 +11899,10 @@ CALL @p_take_p
 CMP r1,r0
 JMP[NE] @pd_ai_l
 pd_ai_done:
+ADDI r3,r14,-2
+LD r1,r3,0
+LD r2,r0,#W_ARRMAX
+CALL @p_arr_fix
 MOVI r1,#P_RBRACE
 MOVI r2,35
 CALL @p_expect_p
@@ -12898,6 +12999,7 @@ CALL @p_array_suffix
 ST r1,r0,#W_TY_ID
 CALL @p_infer_str_array
 ST r1,r0,#W_TY_ID
+CALL @p_arr_pre
 CALL @ty_size
 ST r1,r0,#W_TY_TMP
 LD r1,r0,#W_TY_ID
@@ -13037,6 +13139,7 @@ MOVI r1,0
 ST r1,r14,0
 ADD r14,r14,r13
 pde_ai_l:
+ST r0,r0,#W_ARRMAX
 ST r0,r0,#W_DESOFF
 LA r1,0xFFFFFFFF
 ST r1,r0,#W_DESTYPE
@@ -13148,6 +13251,14 @@ LD r1,r0,#W_TY_COUNT
 MOVI r2,0
 CALL @px_emit_store
 pde_ai_next:
+ADDI r3,r14,-1
+LD r4,r3,0
+ADD r4,r4,r13
+LD r5,r0,#W_ARRMAX
+CMPS r4,r5
+JMP[LE] @pde_ai_mx
+ST r4,r0,#W_ARRMAX
+pde_ai_mx:
 ST r0,r0,#W_DESOFF
 LA r1,0xFFFFFFFF
 ST r1,r0,#W_DESTYPE
@@ -13161,6 +13272,10 @@ CALL @p_take_p
 CMP r1,r0
 JMP[NE] @pde_ai_l
 pde_ai_done:
+ADDI r3,r14,-2
+LD r1,r3,0
+LD r2,r0,#W_ARRMAX
+CALL @p_arr_fix
 MOVI r1,#P_RBRACE
 MOVI r2,35
 CALL @p_expect_p
@@ -15944,6 +16059,12 @@ JMP[EQ] @nbi_strerror
 MOVI r2,#B_PERROR
 CMP r1,r2
 JMP[EQ] @nbi_perror
+MOVI r2,#B_WPRINTF
+CMP r1,r2
+JMP[EQ] @nbi_wprintf
+MOVI r2,#B_WSCANF
+CMP r1,r2
+JMP[EQ] @nbi_wscanf
 JMP @nbi_zero
 nbi_putc:
 CALL @ni_pop
