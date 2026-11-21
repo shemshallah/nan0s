@@ -1498,88 +1498,16 @@ q2dir_if:
 LD r1,r0,#W_Q2SKIP
 CMP r1,r0
 JMP[EQ] @q2dif_eval
-; still track nesting
+; still track nesting, but do not evaluate the expression
 MOVI r1,0
 CALL @q2_cond_push
 JMP @q2dir_eat
 q2dif_eval:
-CALL @q2_skipsp
-CALL @lx_peek
-MOVI r2,100
-CMP r1,r2
-JMP[NE] @q2dif_num
-; skip "defined"
-CALL @lx_get
-CALL @lx_get
-CALL @lx_get
-CALL @lx_get
-CALL @lx_get
-CALL @lx_get
-CALL @lx_get
-CALL @q2_defined
-JMP @q2dif_push
-q2dif_num:
-MOVI r2,48
-CMP r1,r2
-JMP[EQ] @q2dif_zero
-MOVI r2,49
-CMP r1,r2
-JMP[EQ] @q2dif_one
-; #if NAME -> defined(NAME)
-CALL @q2_word
-CALL @q2_find
-CMP r1,r0
-JMP[EQ] @q2dif_zero
-LD r2,r1,3
-CMP r2,r0
-JMP[EQ] @q2dif_zero
-MOVI r1,1
-JMP @q2dif_push
-q2dif_zero:
-MOVI r1,0
-JMP @q2dif_push
-q2dif_one:
-MOVI r1,1
-q2dif_push:
+CALL @ppe_expr_eval
 CALL @q2_cond_push
 JMP @q2dir_eat
 q2dir_elif:
-CALL @q2_skipsp
-CALL @lx_peek
-MOVI r2,100
-CMP r1,r2
-JMP[NE] @q2del_num
-CALL @lx_get
-CALL @lx_get
-CALL @lx_get
-CALL @lx_get
-CALL @lx_get
-CALL @lx_get
-CALL @lx_get
-CALL @q2_defined
-JMP @q2del_go
-q2del_num:
-MOVI r2,48
-CMP r1,r2
-JMP[EQ] @q2del_zero
-MOVI r2,49
-CMP r1,r2
-JMP[EQ] @q2del_one
-CALL @q2_word
-CALL @q2_find
-CMP r1,r0
-JMP[EQ] @q2del_zero
-LD r2,r1,3
-CMP r2,r0
-JMP[EQ] @q2del_zero
-MOVI r1,1
-JMP @q2del_go
-q2del_zero:
-MOVI r1,0
-JMP @q2del_go
-q2del_one:
-MOVI r1,1
-q2del_go:
+CALL @ppe_expr_eval
 CALL @q2_cond_elif
 JMP @q2dir_eat
 q2dir_else:
@@ -1610,6 +1538,7 @@ q2s_else:
 q2s_endif:
 .str "endif"
 
+.include "ppexpr.nas"
 
 ; ------------------------------------------------------------------ entry points
 ncc_compile:
@@ -2689,7 +2618,7 @@ ADD r14,r14,r13
 sw_l:
 LD r1,r0,#W_Q2SKIP
 CMP r1,r0
-JMP[NE] @sw_skip
+JMP[NE] @sw_skip_ws
 CALL @lx_peek
 CMP r1,r0
 JMP[EQ] @sw_d

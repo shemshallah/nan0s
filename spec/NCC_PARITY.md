@@ -90,8 +90,11 @@ are heap copies. There is no external ELF/COFF ABI to match.
 Run in this tree: `M1`-`M62`, `ncc_alloc`, `ncc_headers`, the GUI gates,
 `py_m1`, `ncc_torture`, `ncc_donut_exact`, `mkproof`, `qgate`, and
 `qgate_gui` (x86 + ATA IDE loader). Not yet run: Csmith, the GCC torture
-tests, or the c-testsuite as a whole. Known divergences: the preprocessor is a
-line-based subset; `#include <...>` system headers are skipped, but
+tests, or the c-testsuite as a whole. Known divergences: the preprocessor is
+line-based; `#if`/`#elif` evaluate the full integer/character constant
+operator set, `defined()`, macro values, parentheses, and `?:`, but
+object-like macros carry a single numeric value rather than arbitrary token
+text; `#include <...>` system headers are skipped, but
 `src/lib/headers.nas` installs the C89/C99 limits, stdint, float, stdio,
 locale, signal, math, and wchar constants plus the `int8_t`..`uint64_t`
 typedefs; `double` is 32-bit storage; the in-guest `sin`/`cos` are float32 and
@@ -401,6 +404,7 @@ tools/ncc_m61.sh    strtof/strtold, llabs, strncat, remquo, restartable mbs
 tools/ncc_m62.sh    inttypes, wide ctype, errno, assert, fwide
 tools/ncc_alloc.sh  S0 free-list heap: 10,000 malloc/free/realloc operations
 tools/ncc_headers.sh limits/stdint/float/stdio/locale/signal/math macros and fixed-width typedefs
+tools/ncc_ppexpr.sh #if/#elif arithmetic/bitwise/logical/defined/ternary expressions
 tools/ncc_torture.sh differential C torture case (clang vs ncc)
 tools/ncc_donut_exact.sh a1k0n donut first-frame parity
 tools/qgate_gui.sh  x86 GUI + kernel ATA guest loader
