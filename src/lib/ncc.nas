@@ -431,6 +431,11 @@
 .equ B_STRTOK   103
 .equ B_GETENV   104
 .equ B_SYSTEM   105
+.equ B_MEMCHR   106
+.equ B_STRCOLL  107
+.equ B_STRXFRM  108
+.equ B_STRERROR 109
+.equ B_PERROR   110
 
 ; ------------------------------------------------------------------ compiler state
 ; Kept below word 65536 so ST/LD can use the 16-bit immediate form directly.
@@ -6411,6 +6416,41 @@ MOVI r3,6
 MOVI r4,#B_SYSTEM
 MOVI r5,1
 MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0xAF4975FD
+LA r2,@ncc_s_memchr
+MOVI r3,6
+MOVI r4,#B_MEMCHR
+MOVI r5,3
+LD r6,r0,#W_PTRV
+CALL @ncc_add_builtin
+LA r1,0x54524C02
+LA r2,@ncc_s_strcoll
+MOVI r3,7
+MOVI r4,#B_STRCOLL
+MOVI r5,2
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0xE9B5B52F
+LA r2,@ncc_s_strxfrm
+MOVI r3,7
+MOVI r4,#B_STRXFRM
+MOVI r5,3
+MOVI r6,#T_UINT
+CALL @ncc_add_builtin
+LA r1,0x76A5D196
+LA r2,@ncc_s_strerror
+MOVI r3,8
+MOVI r4,#B_STRERROR
+MOVI r5,1
+LD r6,r0,#W_PTRC
+CALL @ncc_add_builtin
+LA r1,0x74BFD75F
+LA r2,@ncc_s_perror
+MOVI r3,6
+MOVI r4,#B_PERROR
+MOVI r5,1
+MOVI r6,#T_VOID
 CALL @ncc_add_builtin
 SUB r14,r14,r13
 LD r15,r14,0
@@ -15889,6 +15929,21 @@ JMP[EQ] @nbi_getenv
 MOVI r2,#B_SYSTEM
 CMP r1,r2
 JMP[EQ] @nbi_system
+MOVI r2,#B_MEMCHR
+CMP r1,r2
+JMP[EQ] @nbi_memchr
+MOVI r2,#B_STRCOLL
+CMP r1,r2
+JMP[EQ] @nbi_strcoll
+MOVI r2,#B_STRXFRM
+CMP r1,r2
+JMP[EQ] @nbi_strxfrm
+MOVI r2,#B_STRERROR
+CMP r1,r2
+JMP[EQ] @nbi_strerror
+MOVI r2,#B_PERROR
+CMP r1,r2
+JMP[EQ] @nbi_perror
 JMP @nbi_zero
 nbi_putc:
 CALL @ni_pop
