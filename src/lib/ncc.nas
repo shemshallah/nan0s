@@ -761,6 +761,7 @@
 .equ W_ELT_BIT   61813
 .equ W_EX_A      61814
 .equ W_EX_B      61815
+.equ W_RAND_INIT 61816
 .equ W_ERRNO     61795
 .equ W_FWIDE_STD 61796
 .equ W_STDPB     61820
@@ -19219,6 +19220,20 @@ CALL @ni_push
 JMP @nbi_d
 
 nbi_rand:
+LD r2,r0,#W_RAND_INIT
+CMP r2,r0
+JMP[NE] @nbr_go
+ST r15,r14,0
+ADD r14,r14,r13
+LA r4,@bare_table
+LD r4,r4,15
+CALLR r4
+SUB r14,r14,r13
+LD r15,r14,0
+ST r1,r0,#W_RAND
+MOVI r2,1
+ST r2,r0,#W_RAND_INIT
+nbr_go:
 LD r1,r0,#W_RAND
 LA r2,1103515245
 MUL r1,r1,r2
@@ -19232,6 +19247,8 @@ JMP @nbi_d
 nbi_srand:
 CALL @ni_pop
 ST r1,r0,#W_RAND
+MOVI r2,1
+ST r2,r0,#W_RAND_INIT
 MOVI r1,0
 CALL @ni_push
 JMP @nbi_d

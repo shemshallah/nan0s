@@ -6,8 +6,10 @@ input pass through slots 1 and 3; block slots wrap the ATA driver; the
 filesystem slots now wrap the NPAF path store (open/read/write/seek/close/
 remove/rename) and work without a prior `ncc_compile` call by lazily
 initializing the C heap. The C stdio layer still calls NPAF directly, so both
-paths share one store. Time/entropy/halt defaults use the NaN16 primitives.
-Hosted adapters can patch table words at boot without changing the C ABI.
+paths share one store. `time`/`clock` call `tick_ms` through slot 4; `rand`
+takes its first seed from `entropy_u32` through slot 15 (an explicit `srand`
+keeps the PRNG deterministic); `rtc_get` remains an adapter hook. Hosted
+adapters can patch table words at boot without changing the C ABI.
 
 ## Principles
 
@@ -48,11 +50,13 @@ interface itself does not deliver signals.
 
 - `ncc_putc`, stdio output → `con_putc`
 - stdin/`getchar`/`scanf` input → `con_getc`/`key_poll`
-- `time`, `clock`, `gmtime`, `localtime` → `tick_ms` + `rtc_get`
+- `time`, `clock`, `gmtime`, `localtime` → `tick_ms` (slot 4); `rtc_get`
+  remains an adapter hook for wall-clock fields
 - path filesystem (`nfs2`, stdio files) → `fs_*` (bare adapter wraps NPAF;
   stdio still calls NPAF directly)
 - `tmpfile`/`tmpnam` → `fs_*` plus a guest counter
-- `rand`/`srand` → `entropy_u32` (or a guest PRNG seeded once)
+- `rand`/`srand` → `entropy_u32` for the first seed; `srand` remains the
+  deterministic guest PRNG
 - `exit`/`abort`/`main` return → `halt`
 - block-backed persistence → `block_read`/`block_write`; the current ATA
   adapter already snapshots NPAF to LBA 2048 and reloads it at startup

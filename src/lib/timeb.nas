@@ -5,7 +5,8 @@
 nbi_time:
 CALL @ni_pop
 ST r1,r0,#W_F2P
-TICK r2
+CALL @ni_bare_tick
+ADD r2,r1,r0
 MOVI r3,1000
 DIVU r2,r2,r3
 LA r3,1700000000
@@ -23,7 +24,7 @@ CALL @ni_push
 JMP @nbi_d
 
 nbi_clock:
-TICK r1
+CALL @ni_bare_tick
 CALL @ni_push
 JMP @nbi_d
 
@@ -363,7 +364,7 @@ nbi_localtime:
 CALL @ni_pop
 CMP r1,r0
 JMP[NE] @nbl_ptr
-TICK r1
+CALL @ni_bare_tick
 MOVI r2,1000
 DIVU r1,r1,r2
 LA r2,1700000000

@@ -48,6 +48,17 @@ bare_tick_ms:
 TICK r1
 RET
 
+; ni_bare_tick: call the machine-interface millisecond tick (slot 4)
+ni_bare_tick:
+ST r15,r14,0
+ADD r14,r14,r13
+LA r2,@bare_table
+LD r2,r2,4
+CALLR r2
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
 bare_rtc_get:
 ; the clock adapter owns the real-time clock; the guest time code currently
 ; reads CMOS directly. Return 0 until an adapter supplies fields.
