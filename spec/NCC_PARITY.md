@@ -91,9 +91,11 @@ Not implemented (honest list):
 - the explicit function-returning-function-pointer declarator is parsed for
   prototypes and for definitions with any parameters
   (`int (*f(int k))(int,int){...}`)
-- bit-field layout is implementation-defined and non-packed: each named field
-  occupies its declared type's storage. This is valid C but not ABI-compatible
-  with GCC/Clang
+- bit-fields pack into 32-bit storage units (`unsigned a:3; unsigned b:5;`
+  share one word, matching GCC for `int`-based fields), with zero-width fields
+  starting a new unit. `char`/`short` bit-fields also use 32-bit units rather
+  than GCC's 1/2-byte units; layout is implementation-defined and the field
+  access rules follow C
 - `const` is enforced for scalar objects, globals, and function parameters
   (assignment/compound assignment/`++`/`--` are rejected). `volatile` accesses
   are always emitted because there is no optimiser; `register` is ignored as a
@@ -238,6 +240,7 @@ tools/ncc_m40.sh    FP-returning definitions with parameters
 tools/ncc_m41.sh    nested/mixed brace elision
 tools/ncc_m42.sh    wprintf flags/width/precision
 tools/ncc_m43.sh    wscanf (console input, %ls widening)
+tools/ncc_m44.sh    packed bit-fields, sizeof, neighbors, arrays
 tools/ncc_m31.sh    alarm()/SIGALRM asynchronous delivery
 tools/ncc_m32.sh    C99 designated initializers (.member, [index], nested)
 tools/ncc_m33.sh    brace elision across arrays of flat aggregates

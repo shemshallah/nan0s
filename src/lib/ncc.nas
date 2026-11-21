@@ -231,6 +231,7 @@
 .equ I_LLI2F   77
 .equ I_LLBOOL  78
 .equ I_LLNEG   79
+.equ I_BITSTORE 80
 .equ CALB_SCRATCH 2700000
 
 ; symbol entry: 16 words
@@ -629,6 +630,20 @@
 .equ W_F2L      61006
 .equ W_F2BIG    61007
 .equ W_PF_LSTR   61008
+.equ W_BITUNIT   61800
+.equ W_BITUSED   61801
+.equ W_MEMBIT    61802
+.equ W_LBIT      61803
+.equ W_BF_ADDR   61804
+.equ W_BF_VAL    61805
+.equ W_BF_MASK   61806
+.equ W_BF_FIELD  61807
+.equ W_BF_UNIT   61808
+.equ W_BF_BITS   61809
+.equ W_BF_OFF    61810
+.equ W_BITS_W    61811
+.equ W_STBIT     61812
+.equ W_ELT_BIT   61813
 .equ W_VARNP    61390
 .equ W_VARFLAG  61391
 .equ W_VARCNT   61393
@@ -4402,6 +4417,9 @@ ST r2,r0,#W_SALIGN
 LD r1,r0,#W_MEMBP
 ST r1,r0,#W_SMEM
 ST r0,r0,#W_SNMEM
+LA r1,0xFFFFFFFF
+ST r1,r0,#W_BITUNIT
+ST r0,r0,#W_BITUSED
 CALL @p_adv
 pss_mem_l:
 MOVI r1,#P_RBRACE
@@ -4434,21 +4452,12 @@ CALL @p_adv
 CALL @p_cexpr
 ST r1,r0,#W_BITW
 CMP r1,r0
-JMP[EQ] @pss_anon_done
-; reserve a full base slot (non-packed layout)
-LD r1,r0,#W_STYPE
-CALL @ty_size
-ST r1,r0,#W_STMP
-LD r1,r0,#W_STYPE
-CALL @ty_align
-ST r1,r0,#W_SOFF
-LD r1,r0,#W_SSIZE
-LD r2,r0,#W_SOFF
-CALL @px_align_up
-ST r1,r0,#W_SSIZE
-LD r2,r0,#W_STMP
-ADD r2,r1,r2
-ST r2,r0,#W_SSIZE
+JMP[EQ] @pss_anon_zero
+LD r1,r0,#W_BITW
+CALL @p_ss_bits
+JMP @pss_anon_done
+pss_anon_zero:
+CALL @p_ss_bits_zero
 pss_anon_done:
 MOVI r1,#P_COMMA
 CALL @p_take_p
@@ -4490,6 +4499,25 @@ CALL @p_array_suffix
 ST r1,r0,#W_STYPE
 pss_mem_sized:
 LD r1,r0,#W_STYPE
+CALL @ty_bitwidth
+CMP r2,r0
+JMP[EQ] @pss_mem_plain
+LD r1,r0,#W_STYPE
+CALL @ty_bitwidth
+CMP r2,r0
+JMP[EQ] @pss_named_zero
+ST r2,r0,#W_BITS_W
+LD r1,r0,#W_BITS_W
+CALL @p_ss_bits
+ST r1,r0,#W_STMP
+ST r2,r0,#W_STBIT
+JMP @pss_mem_entry
+pss_named_zero:
+CALL @p_ss_bits_zero
+JMP @pss_anon_done
+pss_mem_plain:
+ST r0,r0,#W_STBIT
+LD r1,r0,#W_STYPE
 CALL @ty_size
 ST r1,r0,#W_STMP
 LD r1,r0,#W_STYPE
@@ -4524,6 +4552,9 @@ CMP r1,r2
 JMP[LE] @pss_mem_off
 ST r1,r0,#W_SSIZE
 pss_mem_off:
+LA r1,0xFFFFFFFF
+ST r1,r0,#W_BITUNIT
+ST r0,r0,#W_BITUSED
 ; max alignment
 LD r1,r0,#W_SOFF
 LD r2,r0,#W_SALIGN
@@ -4531,7 +4562,8 @@ CMP r1,r2
 JMP[LE] @pss_align_ok
 ST r1,r0,#W_SALIGN
 pss_align_ok:
-; table entry [symidx, offset, type, 0]
+pss_mem_entry:
+; table entry [symidx, offset, type, bit offset]
 LD r2,r0,#W_MEMBP
 SUB r14,r14,r13
 LD r1,r14,0
@@ -4540,7 +4572,8 @@ LD r1,r0,#W_STMP
 ST r1,r2,1
 LD r1,r0,#W_STYPE
 ST r1,r2,2
-ST r0,r2,3
+LD r1,r0,#W_STBIT
+ST r1,r2,3
 ADDI r2,r2,4
 ST r2,r0,#W_MEMBP
 LD r1,r0,#W_SNMEM
@@ -4598,6 +4631,68 @@ SUB r14,r14,r13
 LD r15,r14,0
 RET
 
+; p_ss_bits_zero: start a fresh 32-bit bit-field unit
+p_ss_bits_zero:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_SSIZE
+MOVI r2,4
+CALL @px_align_up
+ST r1,r0,#W_SSIZE
+LA r2,0xFFFFFFFF
+ST r2,r0,#W_BITUNIT
+ST r0,r0,#W_BITUSED
+LD r2,r0,#W_SALIGN
+MOVI r3,4
+CMP r2,r3
+JMP[GE] @psbz_d
+ST r3,r0,#W_SALIGN
+psbz_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; p_ss_bits: r1=width -> r1=unit offset r2=bit offset (packs into 32-bit units)
+p_ss_bits:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_BITS_W
+LD r2,r0,#W_BITUNIT
+LA r3,0xFFFFFFFF
+CMP r2,r3
+JMP[EQ] @psb_new
+LD r4,r0,#W_BITUSED
+LD r5,r0,#W_BITS_W
+ADD r4,r4,r5
+MOVI r5,32
+CMP r4,r5
+JMP[GT] @psb_new
+JMP @psb_use
+psb_new:
+LD r1,r0,#W_SSIZE
+MOVI r2,4
+CALL @px_align_up
+ST r1,r0,#W_BITUNIT
+ADDI r2,r1,4
+ST r2,r0,#W_SSIZE
+ST r0,r0,#W_BITUSED
+psb_use:
+LD r1,r0,#W_BITUNIT
+LD r2,r0,#W_BITUSED
+LD r3,r0,#W_BITUSED
+LD r4,r0,#W_BITS_W
+ADD r3,r3,r4
+ST r3,r0,#W_BITUSED
+LD r3,r0,#W_SALIGN
+MOVI r4,4
+CMP r3,r4
+JMP[GE] @psb_ok
+ST r4,r0,#W_SALIGN
+psb_ok:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
 p_member_lookup:
 ST r15,r14,0
 ADD r14,r14,r13
@@ -4639,6 +4734,12 @@ CMP r1,r0
 JMP[EQ] @pml_next
 LD r5,r0,#W_TY_BASE
 ST r5,r0,#W_MEMIDX
+LD r1,r0,#W_TY_MEM
+LD r2,r0,#W_TY_BASE
+SHL r2,r2,2
+ADD r1,r1,r2
+LD r1,r1,3
+ST r1,r0,#W_MEMBIT
 LD r1,r0,#W_TY_RET
 LD r2,r0,#W_TY_KIND
 ST r1,r0,#W_TY_TMP
@@ -7340,6 +7441,16 @@ CALL @ty_bitwidth
 CMP r2,r0
 JMP[EQ] @pxl_d
 ST r2,r0,#W_BITW
+LD r1,r0,#W_LBIT
+CMP r1,r0
+JMP[EQ] @pxl_noshift
+LA r1,#I_PUSH
+LD r2,r0,#W_LBIT
+CALL @ir_emit
+LA r1,#I_SHR
+CALL @ir_op
+pxl_noshift:
+LD r2,r0,#W_BITW
 MOVI r1,1
 CALL @ni_shl
 ADDI r1,r1,-1
@@ -7396,6 +7507,15 @@ LD r1,r0,#W_TY_ID
 CALL @ty_bitwidth
 CMP r2,r0
 JMP[EQ] @pxs_nomask
+ST r2,r0,#W_BITW
+LD r2,r0,#W_BITW
+SHL r2,r2,8
+LD r3,r0,#W_LBIT
+BOOL.14 r2,r2,r3
+LA r1,#I_BITSTORE
+CALL @ir_emit
+JMP @pxs_d
+pxs_plainmask:
 MOVI r1,1
 CALL @ni_shl
 ADDI r1,r1,-1
@@ -7452,11 +7572,13 @@ LD r15,r14,0
 RET
 ; px_addr_g: r1=absolute byte address
 px_addr_g:
+ST r0,r0,#W_LBIT
 ADD r2,r1,r0
 LA r1,#I_GADDR
 JMP @ir_emit
 ; px_addr_l: r1=byte offset from fp
 px_addr_l:
+ST r0,r0,#W_LBIT
 ADD r2,r1,r0
 LA r1,#I_LADDR
 JMP @ir_emit
@@ -8266,6 +8388,10 @@ LA r1,#I_PUSH
 CALL @ir_emit
 LA r1,#I_ADD
 CALL @ir_op
+LD r1,r0,#W_MEMBIT
+ST r1,r0,#W_LBIT
+LD r1,r0,#W_MEMBIT
+ST r1,r0,#W_LBIT
 LD r1,r0,#W_TY_ID
 ST r1,r0,#W_LTYPE
 ST r1,r0,#W_ETYPE
@@ -8294,6 +8420,8 @@ LA r1,#I_PUSH
 CALL @ir_emit
 LA r1,#I_ADD
 CALL @ir_op
+LD r1,r0,#W_MEMBIT
+ST r1,r0,#W_LBIT
 LD r1,r0,#W_TY_ID
 ST r1,r0,#W_LTYPE
 ST r1,r0,#W_ETYPE
@@ -9962,8 +10090,11 @@ ADD r14,r14,r13
 LD r1,r0,#W_TKA+1
 ST r1,r14,0
 ADD r14,r14,r13
+LD r1,r0,#W_LBIT
+ST r1,r14,0
+ADD r14,r14,r13
 CALL @p_adv
-ADDI r3,r14,-1
+ADDI r3,r14,-2
 LD r1,r3,0
 MOVI r2,#P_ASSIGN
 CMP r1,r2
@@ -9971,26 +10102,32 @@ JMP[EQ] @pas_simple
 ; compound: duplicate address, load old, RHS, binop, cast, store-keep
 LA r1,#I_DUP
 CALL @ir_op
-ADDI r3,r14,-2
+ADDI r3,r14,-1
+LD r1,r3,0
+ST r1,r0,#W_LBIT
+ADDI r3,r14,-3
 LD r1,r3,0
 CALL @px_emit_load
 CALL @p_assign
 CALL @p_emit_rv
-ADDI r3,r14,-1
+ADDI r3,r14,-2
 LD r1,r3,0
 CALL @p_compop
-ADDI r3,r14,-2
+ADDI r3,r14,-3
 LD r2,r3,0
 LD r3,r0,#W_ETYPE
 CALL @p_binop
-ADDI r3,r14,-2
+ADDI r3,r14,-3
 LD r1,r3,0
 CALL @px_cast_stack
-ADDI r3,r14,-2
+ADDI r3,r14,-1
+LD r1,r3,0
+ST r1,r0,#W_LBIT
+ADDI r3,r14,-3
 LD r1,r3,0
 MOVI r2,1
 CALL @px_emit_store
-ADDI r14,r14,-2
+ADDI r14,r14,-3
 ADDI r3,r14,-1
 LD r1,r3,0
 ST r1,r0,#W_ETYPE
@@ -10008,21 +10145,25 @@ CMP r1,r2
 JMP[EQ] @pas_struct
 CALL @p_assign
 CALL @p_emit_rv
-ADDI r3,r14,-2
+ADDI r3,r14,-3
 LD r1,r3,0
 CALL @px_cast_stack
-ADDI r3,r14,-2
+ADDI r3,r14,-1
+LD r1,r3,0
+ST r1,r0,#W_LBIT
+ADDI r3,r14,-3
 LD r1,r3,0
 MOVI r2,1
 CALL @px_emit_store
-ADDI r14,r14,-2
+ADDI r14,r14,-3
 ADDI r3,r14,-1
 LD r1,r3,0
 ST r1,r0,#W_ETYPE
 ST r0,r0,#W_LVAL
 JMP @pas_d
 pas_struct:
-ADDI r14,r14,-2
+ADDI r14,r14,-3
+ST r0,r0,#W_LBIT
 LD r1,r0,#W_TY_ID
 CALL @ty_size
 ST r1,r0,#W_TY_TMP
@@ -10393,6 +10534,11 @@ LD r2,r0,#W_EL_MEM
 SHL r3,r1,2
 ADD r2,r2,r3
 LD r1,r2,2
+ST r1,r0,#W_EL_MTYPE
+CALL @ty_bitwidth
+CMP r2,r0
+JMP[NE] @pfa_no
+LD r1,r0,#W_EL_MTYPE
 CALL @ty_kind
 MOVI r2,#TY_ARRAY
 CMP r1,r2
@@ -10477,6 +10623,12 @@ CALL @p_assign
 CALL @p_emit_rv
 LD r1,r0,#W_EL_MTYPE
 CALL @px_cast_stack
+LD r2,r0,#W_EL_MEM
+LD r1,r0,#W_EL_M
+SHL r1,r1,2
+ADD r2,r2,r1
+LD r2,r2,3
+ST r2,r0,#W_LBIT
 LD r1,r0,#W_EL_MTYPE
 MOVI r2,0
 CALL @px_emit_store
@@ -10848,6 +11000,25 @@ CALL @p_init_braced
 JMP @psi_mem_next
 psi_mem_plain:
 LD r1,r0,#W_STYPE
+CALL @ty_bitwidth
+CMP r2,r0
+JMP[EQ] @psi_mem_norm
+CALL @p_assign
+CALL @p_emit_rv
+LD r1,r0,#W_STYPE
+CALL @px_cast_stack
+LD r2,r0,#W_SMEM
+LD r1,r0,#W_SALIGN
+SHL r1,r1,2
+ADD r2,r2,r1
+LD r2,r2,3
+ST r2,r0,#W_LBIT
+LD r1,r0,#W_STYPE
+MOVI r2,0
+CALL @px_emit_store
+JMP @psi_mem_next
+psi_mem_norm:
+LD r1,r0,#W_STYPE
 CALL @p_init_value
 psi_mem_next:
 ; union: stop after one member
@@ -10995,6 +11166,8 @@ CALL @p_assign
 CALL @p_emit_rv
 LD r1,r0,#W_ELT_TYPE
 CALL @px_cast_stack
+LD r1,r0,#W_ELT_BIT
+ST r1,r0,#W_LBIT
 LD r1,r0,#W_ELT_TYPE
 MOVI r2,0
 CALL @px_emit_store
@@ -11026,6 +11199,7 @@ CALL @p_at_p
 CMP r1,r0
 JMP[NE] @elt_pop
 elt_a_first:
+ST r0,r0,#W_ELT_BIT
 LA r1,#I_DUP
 CALL @ir_op
 LA r1,#I_PUSH
@@ -11104,6 +11278,8 @@ LD r3,r2,1
 ST r3,r0,#W_ELT_OFF
 LD r3,r2,2
 ST r3,r0,#W_ELT_MT
+LD r3,r2,3
+ST r3,r0,#W_ELT_BIT
 LA r1,#I_DUP
 CALL @ir_op
 LA r1,#I_PUSH
@@ -11340,7 +11516,27 @@ LD r1,r0,#W_II
 ST r1,r14,0
 ADD r14,r14,r13
 LD r1,r0,#W_INTYPE
+CALL @ty_bitwidth
+CMP r2,r0
+JMP[EQ] @pib_s_norm
+CALL @p_assign
+CALL @p_emit_rv
+LD r1,r0,#W_INTYPE
+CALL @px_cast_stack
+LD r2,r0,#W_INMEM
+LD r1,r0,#W_II
+SHL r1,r1,2
+ADD r2,r2,r1
+LD r2,r2,3
+ST r2,r0,#W_LBIT
+LD r1,r0,#W_INTYPE
+MOVI r2,0
+CALL @px_emit_store
+JMP @pib_s_norm2
+pib_s_norm:
+LD r1,r0,#W_INTYPE
 CALL @p_init_value
+pib_s_norm2:
 SUB r14,r14,r13
 LD r1,r14,0
 ST r1,r0,#W_II
@@ -17560,6 +17756,9 @@ JMP[EQ] @nil_load
 MOVI r2,#I_STORE
 CMP r1,r2
 JMP[EQ] @nil_store
+MOVI r2,#I_BITSTORE
+CMP r1,r2
+JMP[EQ] @nil_bitstore
 MOVI r2,#I_ADD
 CMP r1,r2
 JMP[EQ] @nil_add
@@ -17945,6 +18144,49 @@ LD r3,r0,#R_T0
 CALL @ni_storev
 LD r1,r0,#R_T1
 CALL @ni_push
+JMP @nil_again
+nil_bitstore:
+CALL @ni_pop
+ST r1,r0,#W_BF_VAL
+CALL @ni_pop
+ST r1,r0,#W_BF_ADDR
+LD r2,r0,#R_T0
+MOVI r3,255
+BOOL.8 r2,r2,r3
+ST r2,r0,#W_BF_OFF
+LD r2,r0,#R_T0
+SHR r2,r2,8
+MOVI r3,255
+BOOL.8 r2,r2,r3
+ST r2,r0,#W_BF_BITS
+MOVI r1,1
+LD r2,r0,#W_BF_BITS
+CALL @ni_shl
+ADDI r1,r1,-1
+ST r1,r0,#W_BF_MASK
+LD r1,r0,#W_BF_VAL
+LD r2,r0,#W_BF_MASK
+BOOL.8 r1,r1,r2
+LD r2,r0,#W_BF_OFF
+CALL @ni_shl
+ST r1,r0,#W_BF_FIELD
+LD r1,r0,#W_BF_MASK
+LD r2,r0,#W_BF_OFF
+CALL @ni_shl
+ST r1,r0,#W_BF_MASK
+SUB r2,r0,r1
+ADDI r2,r2,-1
+LD r1,r0,#W_BF_ADDR
+MOVI r3,#SZ_32
+CALL @ni_loadv
+BOOL.8 r1,r1,r2
+LD r2,r0,#W_BF_FIELD
+BOOL.14 r1,r1,r2
+ST r1,r0,#W_BF_UNIT
+LD r1,r0,#W_BF_ADDR
+LD r2,r0,#W_BF_UNIT
+MOVI r3,#SZ_32
+CALL @ni_storev
 JMP @nil_again
 nil_add:
 CALL @ni_pop
