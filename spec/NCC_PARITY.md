@@ -19,7 +19,7 @@ The remaining documented limitations are platform or optional-scope items:
 - the POSIX-free machine-interface table is implemented in
   `src/lib/bare.nas`; console and block adapters are wired, filesystem slots
   are still adapter stubs (see `spec/BARE_METAL_INTERFACES.md`);
-- the library is the practical subset documented below (`erf`/gamma,
+- the library is the practical subset documented below (`tgamma`/`lgamma`,
   `div`/`ldiv` struct returns, and some POSIX extensions are still outside
   it).
 
@@ -194,7 +194,7 @@ asinh(x)           acosh(x)         atanh(x)       trunc(x)
 round(x)           rint(x)          nearbyint(x)   copysign(x,y)
 nan(s)             fdim(x,y)        fma(x,y,z)     modf(x,p)
 ldexp(x,n)         scalbn(x,n)      remainder(x,y) atan(x)
-frexp(x,p)         nextafter(x,y)
+frexp(x,p)         nextafter(x,y)   erf(x)         erfc(x)
 atan2(y,x)         asin(x)          acos(x)
 strchr(s,c)        strstr(s,t)       strdup(s)
 isdigit(c)         isalpha(c)        isspace(c)
@@ -300,6 +300,7 @@ tools/ncc_m53.sh    fgetpos/fsetpos/freopen
 tools/ncc_m54.sh    frexp/nextafter
 tools/ncc_m55.sh    wcstol/wcstoul/wcstoll/wcstoull/wcstod
 tools/ncc_m56.sh    wcscoll/wcsxfrm
+tools/ncc_m57.sh    erf/erfc
 tools/ncc_m31.sh    alarm()/SIGALRM asynchronous delivery
 tools/ncc_m32.sh    C99 designated initializers (.member, [index], nested)
 tools/ncc_m33.sh    brace elision across arrays of flat aggregates

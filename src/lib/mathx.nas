@@ -166,6 +166,105 @@ nxa_pp:
 CALL @ni_push
 JMP @nbi_d
 
+
+nbi_erf:
+CALL @ni_pop
+ST r1,r0,#W_F2S
+LA r2,0x7FFFFFFF
+BOOL.8 r1,r1,r2
+ST r1,r0,#W_F2V
+LA r2,0x3EA7BA05
+FMUL r1,r1,r2
+LA r2,0x3F800000
+FADD r1,r1,r2
+LA r2,0x3F800000
+FDIV r1,r2,r1
+ST r1,r0,#W_F2P
+LA r4,0x3F87DC22
+LD r1,r0,#W_F2P
+FMUL r4,r4,r1
+LA r2,0xBFBA00E3
+FADD r4,r4,r2
+LD r1,r0,#W_F2P
+FMUL r4,r4,r1
+LA r2,0x3FB5F0E3
+FADD r4,r4,r2
+LD r1,r0,#W_F2P
+FMUL r4,r4,r1
+LA r2,0xBE91A98E
+FADD r4,r4,r2
+LD r1,r0,#W_F2P
+FMUL r4,r4,r1
+LA r2,0x3E827906
+FADD r4,r4,r2
+LD r1,r0,#W_F2P
+FMUL r4,r4,r1
+LD r1,r0,#W_F2V
+FMUL r1,r1,r1
+LA r2,0x80000000
+BOOL.6 r1,r1,r2
+FEXP r1,r1
+FMUL r4,r4,r1
+LA r2,0x3F800000
+FSUB r1,r2,r4
+LD r2,r0,#W_F2S
+LA r3,0x80000000
+BOOL.8 r2,r2,r3
+BOOL.14 r1,r1,r2
+CALL @ni_push
+JMP @nbi_d
+
+nbi_erfc:
+CALL @ni_pop
+ST r1,r0,#W_F2S
+LA r2,0x7FFFFFFF
+BOOL.8 r1,r1,r2
+ST r1,r0,#W_F2V
+LA r2,0x3EA7BA05
+FMUL r1,r1,r2
+LA r2,0x3F800000
+FADD r1,r1,r2
+LA r2,0x3F800000
+FDIV r1,r2,r1
+ST r1,r0,#W_F2P
+LA r4,0x3F87DC22
+LD r1,r0,#W_F2P
+FMUL r4,r4,r1
+LA r2,0xBFBA00E3
+FADD r4,r4,r2
+LD r1,r0,#W_F2P
+FMUL r4,r4,r1
+LA r2,0x3FB5F0E3
+FADD r4,r4,r2
+LD r1,r0,#W_F2P
+FMUL r4,r4,r1
+LA r2,0xBE91A98E
+FADD r4,r4,r2
+LD r1,r0,#W_F2P
+FMUL r4,r4,r1
+LA r2,0x3E827906
+FADD r4,r4,r2
+LD r1,r0,#W_F2P
+FMUL r4,r4,r1
+LD r1,r0,#W_F2V
+FMUL r1,r1,r1
+LA r2,0x80000000
+BOOL.6 r1,r1,r2
+FEXP r1,r1
+FMUL r4,r4,r1
+LD r2,r0,#W_F2S
+MOVI r3,0
+FCMP r2,r3
+JMP[GE] @erfc_pos
+LA r2,0x40000000
+FSUB r1,r2,r4
+JMP @erfc_p
+erfc_pos:
+ADD r1,r4,r0
+erfc_p:
+CALL @ni_push
+JMP @nbi_d
+
 nbi_atan:
 CALL @ni_pop
 CALL @ni_atan_core

@@ -262,3 +262,7 @@ ncc_s_wcscoll:
 .str "wcscoll"
 ncc_s_wcsxfrm:
 .str "wcsxfrm"
+ncc_s_erf:
+.str "erf"
+ncc_s_erfc:
+.str "erfc"

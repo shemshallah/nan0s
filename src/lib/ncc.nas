@@ -535,6 +535,8 @@
 .equ B_WCSTOLD  207
 .equ B_WCSCOLL  208
 .equ B_WCSXFRM  209
+.equ B_ERF      210
+.equ B_ERFC     211
 
 ; ------------------------------------------------------------------ compiler state
 ; Kept below word 65536 so ST/LD can use the 16-bit immediate form directly.
@@ -6707,6 +6709,20 @@ MOVI r3,7
 MOVI r4,#B_WCSXFRM
 MOVI r5,3
 MOVI r6,#T_UINT
+CALL @ncc_add_builtin
+LA r1,0x78978610
+LA r2,@ncc_s_erf
+MOVI r3,3
+MOVI r4,#B_ERF
+MOVI r5,1
+MOVI r6,#T_FLOAT
+CALL @ncc_add_builtin
+LA r1,0x4988A709
+LA r2,@ncc_s_erfc
+MOVI r3,4
+MOVI r4,#B_ERFC
+MOVI r5,1
+MOVI r6,#T_FLOAT
 CALL @ncc_add_builtin
 
 
@@ -17676,6 +17692,12 @@ JMP[EQ] @nbi_wcscoll
 MOVI r2,#B_WCSXFRM
 CMP r1,r2
 JMP[EQ] @nbi_wcsxfrm
+MOVI r2,#B_ERF
+CMP r1,r2
+JMP[EQ] @nbi_erf
+MOVI r2,#B_ERFC
+CMP r1,r2
+JMP[EQ] @nbi_erfc
 
 
 MOVI r2,#B_FPUTS
