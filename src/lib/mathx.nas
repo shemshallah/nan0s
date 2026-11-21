@@ -592,3 +592,206 @@ ncc_s_signgam:
 .str "signgam"
 ncc_s_iface_version:
 .str "iface_version"
+
+nbi_div:
+CALL @ni_pop
+ST r1,r0,#W_GM_S
+CALL @ni_pop
+ST r1,r0,#W_GM_X
+ST r0,r0,#W_GM_SIGN
+ST r0,r0,#W_GM_P
+; abs dividend
+LD r1,r0,#W_GM_X
+CMPS r1,r0
+JMP[GE] @ndv_a
+SUB r1,r0,r1
+ST r1,r0,#W_GM_X
+MOVI r2,1
+ST r2,r0,#W_GM_SIGN
+ST r2,r0,#W_GM_P
+ndv_a:
+; abs divisor
+LD r2,r0,#W_GM_S
+CMPS r2,r0
+JMP[GE] @ndv_b
+SUB r2,r0,r2
+ST r2,r0,#W_GM_S
+LD r3,r0,#W_GM_SIGN
+MOVI r4,1
+BOOL.6 r3,r3,r4
+ST r3,r0,#W_GM_SIGN
+ndv_b:
+; quotient/remainder
+LD r1,r0,#W_GM_X
+LD r2,r0,#W_GM_S
+DIVU r3,r1,r2
+MUL r4,r3,r2
+SUB r5,r1,r4
+; apply signs
+LD r6,r0,#W_GM_SIGN
+CMP r6,r0
+JMP[EQ] @ndv_qpos
+SUB r3,r0,r3
+ndv_qpos:
+LD r6,r0,#W_GM_P
+CMP r6,r0
+JMP[EQ] @ndv_rpos
+SUB r5,r0,r5
+ndv_rpos:
+ST r3,r0,#W_GM_X
+ST r5,r0,#W_GM_S
+MOVI r1,8
+CALL @ni_malloc
+ST r1,r0,#W_GM_A
+LD r2,r0,#W_GM_X
+MOVI r3,#SZ_32
+CALL @ni_storev
+LD r1,r0,#W_GM_A
+ADDI r1,r1,4
+LD r2,r0,#W_GM_S
+MOVI r3,#SZ_32
+CALL @ni_storev
+LD r1,r0,#W_GM_A
+CALL @ni_push
+JMP @nbi_d
+
+ncc_s_div:
+.str "div"
+ncc_s_div_t:
+.str "div_t"
+ncc_s_quot:
+.str "quot"
+ncc_s_rem:
+.str "rem"
+
+nbi_lldiv:
+LD r1,r0,#W_CALLWORDS
+MOVI r2,4
+CMP r1,r2
+JMP[EQ] @nld4
+MOVI r2,3
+CMP r1,r2
+JMP[EQ] @nld3
+; both arguments passed as one word each
+CALL @ni_pop
+ADD r7,r1,r0
+ST r7,r0,#W_LLB0
+ST r0,r0,#W_LLB1
+CMPS r7,r0
+JMP[GE] @nld2b
+LA r8,0xFFFFFFFF
+ST r8,r0,#W_LLB1
+nld2b:
+CALL @ni_pop
+ADD r7,r1,r0
+ST r7,r0,#W_LLD0
+ST r0,r0,#W_LLD1
+CMPS r7,r0
+JMP[GE] @nld_go
+LA r8,0xFFFFFFFF
+ST r8,r0,#W_LLD1
+JMP @nld_go
+nld3:
+CALL @ni_pop
+ADD r7,r1,r0
+ST r7,r0,#W_LLB0
+ST r0,r0,#W_LLB1
+CMPS r7,r0
+JMP[GE] @nld3b
+LA r8,0xFFFFFFFF
+ST r8,r0,#W_LLB1
+nld3b:
+CALL @ni_pop
+ST r1,r0,#W_LLD1
+CALL @ni_pop
+ST r1,r0,#W_LLD0
+JMP @nld_go
+nld4:
+CALL @ni_pop
+ST r1,r0,#W_LLB1
+CALL @ni_pop
+ST r1,r0,#W_LLB0
+CALL @ni_pop
+ST r1,r0,#W_LLD1
+CALL @ni_pop
+ST r1,r0,#W_LLD0
+nld_go:
+ST r0,r0,#W_GM_SIGN
+ST r0,r0,#W_GM_P
+; signs and absolute values
+LD r2,r0,#W_LLD1
+CMPS r2,r0
+JMP[GE] @nld_a
+LD r1,r0,#W_LLD0
+CALL @ll_neg_pair
+ST r1,r0,#W_LLD0
+ST r2,r0,#W_LLD1
+MOVI r3,1
+ST r3,r0,#W_GM_SIGN
+ST r3,r0,#W_GM_P
+nld_a:
+LD r2,r0,#W_LLB1
+CMPS r2,r0
+JMP[GE] @nld_b
+LD r1,r0,#W_LLB0
+CALL @ll_neg_pair
+ST r1,r0,#W_LLB0
+ST r2,r0,#W_LLB1
+LD r3,r0,#W_GM_SIGN
+MOVI r4,1
+BOOL.6 r3,r3,r4
+ST r3,r0,#W_GM_SIGN
+nld_b:
+CALL @ll_udiv
+; quotient sign
+LD r3,r0,#W_GM_SIGN
+CMP r3,r0
+JMP[EQ] @nld_q
+LD r1,r0,#W_LLQ0
+LD r2,r0,#W_LLQ1
+CALL @ll_neg_pair
+ST r1,r0,#W_LLQ0
+ST r2,r0,#W_LLQ1
+nld_q:
+MOVI r1,16
+CALL @ni_malloc
+ST r1,r0,#W_GM_A
+LD r2,r0,#W_LLQ0
+MOVI r3,#SZ_32
+CALL @ni_storev
+LD r1,r0,#W_GM_A
+ADDI r1,r1,4
+LD r2,r0,#W_LLQ1
+MOVI r3,#SZ_32
+CALL @ni_storev
+LD r3,r0,#W_GM_P
+CMP r3,r0
+JMP[EQ] @nld_r
+LD r1,r0,#W_LLR0
+LD r2,r0,#W_LLR1
+CALL @ll_neg_pair
+ST r1,r0,#W_LLR0
+ST r2,r0,#W_LLR1
+nld_r:
+LD r1,r0,#W_GM_A
+ADDI r1,r1,8
+LD r2,r0,#W_LLR0
+MOVI r3,#SZ_32
+CALL @ni_storev
+LD r1,r0,#W_GM_A
+ADDI r1,r1,12
+LD r2,r0,#W_LLR1
+MOVI r3,#SZ_32
+CALL @ni_storev
+LD r1,r0,#W_GM_A
+CALL @ni_push
+JMP @nbi_d
+
+ncc_s_ldiv:
+.str "ldiv"
+ncc_s_lldiv:
+.str "lldiv"
+ncc_s_ldiv_t:
+.str "ldiv_t"
+ncc_s_lldiv_t:
+.str "lldiv_t"
