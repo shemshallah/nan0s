@@ -771,6 +771,7 @@
 .equ W_ALLOC_B   61824
 .equ W_ALLOC_OLD 61825
 .equ W_ALLOC_NEW 61826
+.equ W_AGHI     61827
 .equ W_ERRNO     61795
 .equ W_FWIDE_STD 61796
 .equ W_STDPB     61820
@@ -970,6 +971,7 @@
 .include "strtox.nas"
 .include "mbs.nas"
 .include "extra.nas"
+.include "headers.nas"
 
 ; q2_skipsp: consume spaces and tabs
 q2_skipsp:
@@ -7183,6 +7185,23 @@ SUB r14,r14,r13
 LD r15,r14,0
 RET
 
+; ncc_add_global64: r1=hash r2=name r3=len r4=type r5=lo r6=hi
+ncc_add_global64:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r6,r0,#W_AGHI
+CALL @ncc_add_global
+LD r6,r0,#W_AGHI
+LD r1,r0,#W_AGSYM
+LD r1,r1,#SY_AUX
+ADDI r1,r1,4
+ADD r2,r6,r0
+MOVI r3,4
+CALL @ni_storev
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
 ; ncc_add_member: r1=struct type r2=offset r3=hash r4=name r5=len
 ncc_add_member:
 ST r15,r14,0
@@ -7704,6 +7723,7 @@ LD r6,r0,#W_PTRV
 CALL @ncc_add_builtin
 CALL @ncc_extra_types
 CALL @ncc_extra_builtins
+CALL @ncc_headers_init
 SUB r14,r14,r13
 LD r15,r14,0
 RET

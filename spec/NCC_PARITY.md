@@ -87,12 +87,16 @@ are heap copies. There is no external ELF/COFF ABI to match.
 
 ## What ran, and what still diverges
 
-Run in this tree: `M1`-`M62`, the GUI gates, `py_m1`, `ncc_torture`,
-`ncc_donut_exact`, `mkproof`, `qgate`, and `qgate_gui` (x86 + ATA IDE loader).
-Not yet run: Csmith, the GCC torture tests, or the c-testsuite as a whole.
-Known divergences: the preprocessor is a line-based subset and `<...>` headers
-are skipped; `double` is 32-bit storage; the in-guest `sin`/`cos` are not
-bit-compatible with glibc; wide `f`/`s`/`v` stdio and C11
+Run in this tree: `M1`-`M62`, `ncc_alloc`, `ncc_headers`, the GUI gates,
+`py_m1`, `ncc_torture`, `ncc_donut_exact`, `mkproof`, `qgate`, and
+`qgate_gui` (x86 + ATA IDE loader). Not yet run: Csmith, the GCC torture
+tests, or the c-testsuite as a whole. Known divergences: the preprocessor is a
+line-based subset; `#include <...>` system headers are skipped, but
+`src/lib/headers.nas` installs the C89/C99 limits, stdint, float, stdio,
+locale, signal, math, and wchar constants plus the `int8_t`..`uint64_t`
+typedefs; `double` is 32-bit storage; the in-guest `sin`/`cos` are float32 and
+not correctly rounded for every input, although the a1k0n donut first frame is
+now byte-identical to clang's double-trig build; wide `f`/`s`/`v` stdio and C11
 complex/fenv/threads/atomic/uchar are excluded; a floppy-only x86 boot falls
 back to the first 512 KiB (the full GUI needs the image as an IDE primary
 master, which the kernel ATA loader reads).
@@ -396,6 +400,7 @@ tools/ncc_m60.sh    setitimer/getitimer (SIGALRM delivery)
 tools/ncc_m61.sh    strtof/strtold, llabs, strncat, remquo, restartable mbs
 tools/ncc_m62.sh    inttypes, wide ctype, errno, assert, fwide
 tools/ncc_alloc.sh  S0 free-list heap: 10,000 malloc/free/realloc operations
+tools/ncc_headers.sh limits/stdint/float/stdio/locale/signal/math macros and fixed-width typedefs
 tools/ncc_torture.sh differential C torture case (clang vs ncc)
 tools/ncc_donut_exact.sh a1k0n donut first-frame parity
 tools/qgate_gui.sh  x86 GUI + kernel ATA guest loader
