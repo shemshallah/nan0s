@@ -1,8 +1,8 @@
 #!/bin/sh
 # tools/xlate_x86.sh - NaN-native block translator -> packed x86 -> EXECN.
-# The NaN translator emits MOVI/ADD/SUB as x86 bytes; the native shim unpacks
-# them and executes them.  Success requires exact emitted length (71) and
-# r1=80 after the native block runs.
+# Covers MOVI/MOVHI/ADD/SUB/ADDI/SHL/SHR/LD/ST/LDB/STB, guest flags,
+# CMP/CMPS and JMP[GT]/JMP[LT] taken and fallthrough.  Success means the
+# translated x86 leaves the exact same state the interpreter would.
 set -e; cd "$(dirname "$0")/.."; export LC_ALL=C
 command -v qemu-system-i386 >/dev/null 2>&1 || { echo "xlate_x86: SKIP (no qemu)"; exit 0; }
 T="${TMPDIR:-/tmp}/xlate.$$"; mkdir -p "$T"; trap 'rm -rf "$T"' EXIT
@@ -15,4 +15,4 @@ timeout 30 qemu-system-i386 -m 512 -drive format=raw,if=floppy,file="$T/t.img" \
   -display none -serial "file:$T/com" -no-reboot >/dev/null 2>&1 || true
 sed -e 's/^\[nan_cli\].*$//' -e '/^$/d' "$T/com" > "$T/got"
 cmp -s "$T/got" src/tests/xlate_x86.expected || { echo "xlate_x86: FAIL"; diff -u src/tests/xlate_x86.expected "$T/got" | head -20; exit 1; }
-echo "xlate_x86: PASS (NaN translator emits MOVI/ADD/SUB x86; EXECN runs it, r1=80)"
+echo "xlate_x86: PASS (NaN translator emits ALU/memory/flags/branches; EXECN runs them exactly)"

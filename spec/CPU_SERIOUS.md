@@ -81,10 +81,13 @@ new x86 line unless a new *primitive* is missing.
 - [x] Native vector handlers for the full 0x50-0x5F family; VDP4B uses SSE2.
 - [ ] AVX2/AVX-512/NEON/RVV lowerings and CPUID feature steer.
 - [ ] Native block chaining for loop back-edges; step budget exact.
-- [x] Baseline NaN->x86 translator for straight-line blocks: NaN-native
-      encoders in `src/translate/x86.nas`, MOVI/ADD/SUB driver in
-      `src/translate/block.nas`, native `CODELEN`/`EXECN` shim. Gate
-      `tools/xlate_x86.sh` translates, executes and checks r1=80.
+- [x] Baseline NaN->x86 translator for basic blocks: NaN-native encoders
+      in `src/translate/x86.nas`, driver in `src/translate/block.nas`,
+      native `CODELEN`/`EXECN` shim. Covers MOVI/MOVHI/ADD/SUB/ADDI/SHL/
+      SHR/SAR/CMP/CMPS/LD/ST/LDB/STB and JMP/JMPR/RET block terminators.
+      Guest flags live in `FLAGM`; JMP[cond] tests the predicate mask and
+      selects target/fallthrough with cmov. Gate `tools/xlate_x86.sh`
+      runs ALU, memory, unsigned and signed branch blocks exactly.
 - [ ] AArch64 backend for the same translator IR.
 - [ ] RISC-V backend for the same translator IR.
 - [ ] CPU/feature steer: CPUID-driven choice of scalar, SSE2, AVX2, NEON,

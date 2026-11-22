@@ -197,6 +197,12 @@ function parse_item(t,  ii,jj,s1,b1,n4,s4,k4,v4,rest,wi,w,mmla,prd,mm){
     }
     return
   }
+  if (substr(t,1,4)==".raw"){
+    rest = strip1(t,5); split(rest, ra, "_")
+    if (length(ra)!=3) die("bad .raw: " t)
+    IK[NI+1]="raw"; IVE[NI+1]=ra[2]; IHC[NI+1]=ra[1]; IHC2[NI+1]=ra[3]; IVC[NI+1]="raw"; NI++
+    return
+  }
   if (substr(t,1,5)==".word"){
     rest = strip1(t,5)
     split(rest, wa, ",")
@@ -270,6 +276,11 @@ function resolve(   i,t,v,mn,bn,predn,rest,args,na,ci,ch,x,f,d,a,imm0,imm2,p,tj2
       if (IVN[j]==-2) v=ev(IVE[j]); else v=IVN[j]
       v=v%4294967296; if (v<0) v+=4294967296
       EMIT[j-1]=wline(10,v)"   ; "sprintf("%03d",j-1)" "IVC[j]
+      continue
+    }
+    if (IK[j]=="raw"){
+      v=hexv(IVE[j]); v=v%4294967296; if (v<0) v+=4294967296
+      EMIT[j-1]=sprintf("%s_%08X_%s   ; %03d raw", IHC[j], v, IHC2[j], j-1)
       continue
     }
     t=IT[j]
