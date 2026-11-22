@@ -61,8 +61,10 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done and gated.
       RET, SIB absolute addressing into the 64-bit register file.
 - [x] Native 64-bit substrate executes the NaN-emitted block and reads back
       r1 (`qgate64core`, r1=84). The substrate does not decode instructions.
-- [ ] Full NaN-coded 64-bit block core: MOVHI/ADDI/shifts/CMP/CMOV, memory,
-      branches, traps; then the full dispatcher and self-hosting core.
+- [x] NaN-coded 64-bit ALU/flags: MOVHI, ADDI, SHL/SHR/SAR, CMP/CMPS,
+      FLAGM; `qgate64alu` (r1=0x2000).
+- [ ] Full NaN-coded 64-bit core: conditional branches/CMOV, memory,
+      traps; then the full dispatcher and self-hosting core.
 - [ ] Port the native NaN16 execution core to 64-bit (`kan64`) only where the
       bootstrap/EXECN substrate requires it; core policy stays NaN.
 - [ ] 64-bit native shims for ports, CPUID, RDTSC, MSRs, page tables.

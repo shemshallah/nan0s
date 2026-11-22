@@ -39,9 +39,11 @@ The emitted x86-64 uses SIB absolute `disp32` addressing, e.g.
    register file, calls it, and prints r1;
 5. requires `NAN64 CORE 00000054 OK` (42+42=84).
 
-Current NaN encoder coverage: MOVI, ADD, set-XPC, RET. The next stages extend
-the NaN block driver with MOVHI/ADDI/shifts/CMP/CMOV, memory, branches and
-traps, then replace the per-block test with the full translated core.
+Current NaN encoder coverage: MOVI, MOVHI, ADD, SUB, ADDI, SHL, SHR, SAR,
+CMP/CMPS, flags (FLAGM), set-XPC and RET.  Gates: `qgate64core` (42+42),
+`qgate64block` (MOVI/ADD/MOVI/SUB -> 80), `qgate64alu`
+(MOVI/MOVHI/ADDI/shifts/CMP -> 0x2000).  Next: CMOV/conditional branches,
+memory, traps, then the full dispatcher.
 
 ## Bootstrap / self-hosting
 
