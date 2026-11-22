@@ -38,7 +38,7 @@ while [ "$m" -le 62 ]; do
   m=$((m+1))
 done
 VEC="nan_simd nan_vec nan_vec_native nan_vec_avx2 nan_q4 nan_q4lm nan_bench xlate_x86"
-IMAGES="mkall qgate qgate_gui xmemgate mkproof"
+IMAGES="mkall qgate64 qgate qgate_gui xmemgate mkproof"
 NATIVE="$VEC narena narena64 nten nmatmul nmat64 nmat64x64"
 
 GATES=""
@@ -54,6 +54,8 @@ for f in $FILES; do
       add "c_core_test ncc_m1 ncc_ctests ncc_iso_c nan_vec nan_q4 nan_q4lm nan_bench" ;;
     src/native/kan16.xa|src/native/nan16_x86.nan|x86/native/*|x86/boot/*)
       add "$NATIVE $IMAGES" ;;
+    src/native64/*|tools/qgate64.sh)
+      add "mkall qgate64" ;;
     src/translate/*|src/tests/xlate*|tools/xlate_x86.sh)
       add "xlate_x86" ;;
     src/lib/narena*.nas|src/lib/nten.nas|src/lib/nmat.nas|src/lib/n64.nas)
@@ -97,7 +99,7 @@ gate_files() {
       echo "src/lib/*.nas src/prog/nasm0_tables.nas src/tools/disasm.nas src/tests/ncc_*.nas src/tests/ctests/* aarch64/android/core/*.c aarch64/android/core/*.h aarch64/android/tests/*.c aarch64/android/tools/nan_cli.c aarch64/android/Makefile tools/nmk.awk tools/ncc_*.sh"
       ;;
     *)
-      echo "src/native/*.xa src/native/*.nan x86/native/* x86/boot/* src/translate/*.nas src/tests/*.nas tools/mkimg.awk tools/nmk.awk tools/mkall.sh tools/xgold.sh tools/nan_*.sh tools/xlate_x86.sh tools/qgate*.sh tools/mkproof.sh"
+      echo "src/native/*.xa src/native/*.nan src/native64/* x86/native/* x86/boot/* src/translate/*.nas src/tests/*.nas tools/mkimg.awk tools/nmk.awk tools/mkall.sh tools/xgold.sh tools/nan_*.sh tools/xlate_x86.sh tools/qgate*.sh tools/mkproof.sh"
       ;;
   esac
 }
@@ -159,7 +161,7 @@ esac
 
 # Image gates are sequential and ordered: build once, then boot the image.
 SEQ=""
-for g in mkall mkproof qgate qgate_gui xmemgate; do
+for g in mkall qgate64 mkproof qgate qgate_gui xmemgate; do
   case " $RUN " in *" $g "*) SEQ="$SEQ $g" ;; esac
 done
 PAR=""

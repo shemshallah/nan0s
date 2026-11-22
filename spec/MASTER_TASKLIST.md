@@ -46,9 +46,10 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done and gated.
 ## P0.4 64-bit memory system (x86-64)
 
 ### P0.4.1 CPU and boot
-- [ ] Long-mode boot path: PAE, PML4/PDPT/PD/PT, EFER.LME, CR0.PG, GDT,
-      64-bit code/data segments, 64-bit IDT, per-CPU GDT/TSS.
-- [ ] qemu-system-x86_64 gate that prints a banner from 64-bit code.
+- [x] Long-mode boot path: PAE, PML4/PDPT/PD identity map, EFER.LME,
+      CR0.PG, 64-bit GDT/code/data, 64-bit stack. `src/native64/longmode.S`.
+- [x] qemu-system-x86_64 gate (`tools/qgate64.sh`) prints a COM1 banner from
+      64-bit code. 64-bit IDT/per-CPU TSS follow with the kernel port.
 - [ ] Port the NaN16 execution core to 64-bit (`kan64.xa`), preserving exact
       NaN/DP4B/vector semantics.
 - [ ] 64-bit native shims for ports, CPUID, RDTSC, MSRs, page tables.

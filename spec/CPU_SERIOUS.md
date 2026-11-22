@@ -73,6 +73,12 @@ new x86 line unless a new *primitive* is missing.
 
 ### 3.1 Native core (allowed to be x86)
 
+The x86-64 bring-up lives in `src/native64/`: a 32-bit boot-sector entry builds
+identity page tables for the first 1 GiB, enables PAE/LME/paging, loads a 64-bit
+GDT and prints a COM1 banner from 64-bit code (`tools/qgate64.sh`).  The NaN16
+execution core is still the 32-bit `kan16.xa`; porting it to `kan64.xa` is the
+next step and keeps the same guest ISA.
+
 The boot loader reserves a **128-sector (64 KiB) kernel window**; the guest
 image starts at LBA 129 and is staged at 0x20000.  The kernel can grow to
 64 KiB without moving the guest ABI again.

@@ -70,6 +70,7 @@ if [ -f tools/mkall.sh ]; then
   [ -f tools/qgate.sh ] && run qgate sh tools/qgate.sh
   [ -f tools/qgate_gui.sh ] && run qgate_gui sh tools/qgate_gui.sh
   [ -f tools/xmemgate.sh ] && run xmemgate sh tools/xmemgate.sh
+  [ -f tools/qgate64.sh ] && run qgate64 sh tools/qgate64.sh
 fi
 
 printf '\npresqlite_gate: %d gate(s), %d failure(s)\n' "$n" "$fail"

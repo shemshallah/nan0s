@@ -13,7 +13,7 @@ sh tools/gate_targeted.sh
 # explicit files
 sh tools/gate_targeted.sh src/lib/ncc.nas src/tests/foo.c
 
-# complete 95-gate battery
+# complete 96-gate battery
 sh tools/gate_targeted.sh --full
 
 # bypass/clear the cache
@@ -31,6 +31,7 @@ per-gate limits.
 | `src/lib/ncc.nas`, preprocessor/ISO libs, `src/tests/ctests`, `src/tests/ncc_*`, nmk tables | all compiler gates: M1-M62, alloc/heap/aligned, headers/ppexpr/torture/donut, macro/include/libm/ISO, ctests, dp4b |
 | `aarch64/android/core`, C tests, Makefile | `make test`, compiler smoke, C-reference vector/Q4/bench gates |
 | native kernel/gold, boot, `x86/native` | vector/Q4/translator gates, arena/tensor/matmul, `mkall`, `qgate`, `qgate_gui`, `xmemgate` |
+| `src/native64`, qgate64 | `mkall`, `qgate64` (long-mode boot + 64-bit COM1 banner) |
 | translator sources | `xlate_x86` |
 | arena/tensor/matmul libs | `narena`, `narena64`, `nten`, `nmatmul`, `nmat64`, `nmat64x64` |
 | vector/Q4/bench sources | `nan_simd`, `nan_vec*`, `nan_q4*`, `nan_bench`, `xlate_x86` |
