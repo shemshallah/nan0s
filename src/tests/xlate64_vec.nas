@@ -1,0 +1,56 @@
+; xlate64_vec.nas - NaN 64-bit vector register file.
+; VBCAST, VADD32/VADD8/VSUB32/VMUL32, VGET/VSET, VZERO.
+.org 0
+JMP @main
+.include "../translate/x64_block.nas"
+main:
+MOVI r13,1
+MOVI r14,0x7000
+LA r1,@src
+MOVI r2,41
+LA r3,0x10000
+MOVI r4,0
+CALL @x64_block
+HALT
+src:
+MOVI r1,0x0304
+MOVHI r1,0x0102
+MOVI r2,0x0708
+MOVHI r2,0x0506
+VBCAST r1,r1
+VBCAST r2,r2
+VADD32 r3,r1,r2
+VGET r3,r3,0
+VADD8 r4,r1,r2
+VGET r4,r4,0
+VSUB32 r5,r1,r2
+VGET r5,r5,0
+MOVI r6,2
+VBCAST r6,r6
+VMUL32 r7,r1,r6
+VGET r7,r7,0
+VSET r8,r6,1
+VGET r8,r8,1
+VZERO r8
+VGET r9,r8,1
+MOVI r10,0x0A0C
+MOVHI r10,0x0608
+SUB r3,r3,r10
+MOVI r11,0x0A0C
+MOVHI r11,0x0608
+SUB r4,r4,r11
+MOVI r12,0xFBFC
+MOVHI r12,0xFBFB
+SUB r5,r5,r12
+MOVI r13,0x0608
+MOVHI r13,0x0204
+SUB r7,r7,r13
+MOVI r14,2
+SUB r8,r8,r14
+ADD r1,r3,r4
+ADD r1,r1,r5
+ADD r1,r1,r7
+ADD r1,r1,r8
+ADD r1,r1,r9
+ADDI r1,r1,45
+HALT

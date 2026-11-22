@@ -84,8 +84,11 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done and gated.
       `qgate64blockops`.
 - [x] Trap path: unsupported opcodes emit a halt + trap code (0x4F);
       `qgate64trap`.
-- [ ] Full NaN-coded 64-bit core: vector families, guest loader that
-      preserves header predicates, and self-hosting.
+- [x] Full vector family: VZERO/VBCAST/VLOAD/VSTORE, byte/dword
+      add/sub, VMUL32, VDP4B, VDP4B4, VGET/VSET; five vector gates.
+- [ ] Full NaN-coded 64-bit core: guest loader that preserves header
+      predicates, and self-hosting.  Remaining non-vector opcodes:
+      JMPF/CALLF, FEXP/FTANH/FLOG, and platform I/O (PUTC/ports/fb).
 - [ ] Port the native NaN16 execution core to 64-bit (`kan64`) only where the
       bootstrap/EXECN substrate requires it; core policy stays NaN.
 - [ ] 64-bit native shims for ports, CPUID, RDTSC, MSRs, page tables.

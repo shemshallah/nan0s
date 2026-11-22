@@ -85,6 +85,10 @@ if [ -f tools/mkall.sh ]; then
   [ -f tools/qgate64mem2.sh ] && run qgate64mem2 sh tools/qgate64mem2.sh
   [ -f tools/qgate64blockops.sh ] && run qgate64blockops sh tools/qgate64blockops.sh
   [ -f tools/qgate64trap.sh ] && run qgate64trap sh tools/qgate64trap.sh
+  [ -f tools/qgate64vec.sh ] && run qgate64vec sh tools/qgate64vec.sh
+  [ -f tools/qgate64vldst.sh ] && run qgate64vldst sh tools/qgate64vldst.sh
+  [ -f tools/qgate64vdp4b.sh ] && run qgate64vdp4b sh tools/qgate64vdp4b.sh
+  [ -f tools/qgate64vdp4b4.sh ] && run qgate64vdp4b4 sh tools/qgate64vdp4b4.sh
   [ -f tools/qgate64call.sh ] && run qgate64call sh tools/qgate64call.sh
 fi
 

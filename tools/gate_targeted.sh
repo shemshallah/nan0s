@@ -38,7 +38,7 @@ while [ "$m" -le 62 ]; do
   m=$((m+1))
 done
 VEC="nan_simd nan_vec nan_vec_native nan_vec_avx2 nan_q4 nan_q4lm nan_bench xlate_x86"
-IMAGES="mkall qgate64 qgate64core qgate64block qgate64alu qgate64branch qgate64mem qgate64byte qgate64prog qgate64call qgate64mul qgate64div qgate64fp qgate64fpe qgate64mem2 qgate64blockops qgate64trap qgate qgate_gui xmemgate mkproof"
+IMAGES="mkall qgate64 qgate64core qgate64block qgate64alu qgate64branch qgate64mem qgate64byte qgate64prog qgate64call qgate64mul qgate64div qgate64fp qgate64fpe qgate64mem2 qgate64blockops qgate64trap qgate64vec qgate64vldst qgate64vdp4b qgate64vdp4b4 qgate qgate_gui xmemgate mkproof"
 NATIVE="$VEC narena narena64 nten nmatmul nmat64 nmat64x64"
 
 GATES=""
@@ -55,9 +55,9 @@ for f in $FILES; do
     src/native/kan16.xa|src/native/nan16_x86.nan|x86/native/*|x86/boot/*)
       add "$NATIVE $IMAGES" ;;
     src/native64/*|tools/qgate64.sh)
-      add "mkall qgate64 qgate64core qgate64block qgate64alu qgate64branch qgate64mem qgate64byte qgate64prog qgate64call qgate64mul qgate64div qgate64fp qgate64fpe qgate64mem2 qgate64blockops qgate64trap" ;;
+      add "mkall qgate64 qgate64core qgate64block qgate64alu qgate64branch qgate64mem qgate64byte qgate64prog qgate64call qgate64mul qgate64div qgate64fp qgate64fpe qgate64mem2 qgate64blockops qgate64trap qgate64vec qgate64vldst qgate64vdp4b qgate64vdp4b4" ;;
     src/translate/x86_64.nas|src/translate/x64_block.nas)
-      add "mkall qgate64core qgate64block qgate64alu qgate64branch qgate64mem qgate64byte qgate64prog qgate64call qgate64mul qgate64div qgate64fp qgate64fpe qgate64mem2 qgate64blockops qgate64trap" ;;
+      add "mkall qgate64core qgate64block qgate64alu qgate64branch qgate64mem qgate64byte qgate64prog qgate64call qgate64mul qgate64div qgate64fp qgate64fpe qgate64mem2 qgate64blockops qgate64trap qgate64vec qgate64vldst qgate64vdp4b qgate64vdp4b4" ;;
     src/tests/xlate64_test.nas|tools/qgate64core.sh)
       add "mkall qgate64core" ;;
     src/tests/xlate64_block.nas|tools/qgate64block.sh)
@@ -88,6 +88,14 @@ for f in $FILES; do
       add "mkall qgate64blockops" ;;
     src/tests/xlate64_trap.nas|tools/qgate64trap.sh)
       add "mkall qgate64trap" ;;
+    src/tests/xlate64_vec.nas|tools/qgate64vec.sh)
+      add "mkall qgate64vec" ;;
+    src/tests/xlate64_vldst.nas|tools/qgate64vldst.sh)
+      add "mkall qgate64vldst" ;;
+    src/tests/xlate64_vdp4b.nas|tools/qgate64vdp4b.sh)
+      add "mkall qgate64vdp4b" ;;
+    src/tests/xlate64_vdp4b4.nas|tools/qgate64vdp4b4.sh)
+      add "mkall qgate64vdp4b4" ;;
     src/translate/*|src/tests/xlate*|tools/xlate_x86.sh)
       add "xlate_x86" ;;
     src/lib/narena*.nas|src/lib/nten.nas|src/lib/nmat.nas|src/lib/n64.nas)
@@ -193,7 +201,7 @@ esac
 
 # Image gates are sequential and ordered: build once, then boot the image.
 SEQ=""
-for g in mkall qgate64 qgate64core qgate64block qgate64alu qgate64branch qgate64mem qgate64byte qgate64prog qgate64call qgate64mul qgate64div qgate64fp qgate64fpe qgate64mem2 qgate64blockops qgate64trap mkproof qgate qgate_gui xmemgate; do
+for g in mkall qgate64 qgate64core qgate64block qgate64alu qgate64branch qgate64mem qgate64byte qgate64prog qgate64call qgate64mul qgate64div qgate64fp qgate64fpe qgate64mem2 qgate64blockops qgate64trap qgate64vec qgate64vldst qgate64vdp4b qgate64vdp4b4 mkproof qgate qgate_gui xmemgate; do
   case " $RUN " in *" $g "*) SEQ="$SEQ $g" ;; esac
 done
 PAR=""

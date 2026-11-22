@@ -64,6 +64,45 @@ xb_loop:
   MOVI r11,0x2E
   CMP r7,r11
   JMP[EQ] @xb_bfill
+  MOVI r11,0x50
+  CMP r7,r11
+  JMP[EQ] @xb_vzero
+  MOVI r11,0x51
+  CMP r7,r11
+  JMP[EQ] @xb_vbcast
+  MOVI r11,0x54
+  CMP r7,r11
+  JMP[EQ] @xb_vadd8
+  MOVI r11,0x55
+  CMP r7,r11
+  JMP[EQ] @xb_vsub8
+  MOVI r11,0x56
+  CMP r7,r11
+  JMP[EQ] @xb_vadd32
+  MOVI r11,0x57
+  CMP r7,r11
+  JMP[EQ] @xb_vsub32
+  MOVI r11,0x58
+  CMP r7,r11
+  JMP[EQ] @xb_vmul32
+  MOVI r11,0x5e
+  CMP r7,r11
+  JMP[EQ] @xb_vget
+  MOVI r11,0x5f
+  CMP r7,r11
+  JMP[EQ] @xb_vset
+  MOVI r11,0x4C
+  CMP r7,r11
+  JMP[EQ] @xb_vdp4b4
+  MOVI r11,0x59
+  CMP r7,r11
+  JMP[EQ] @xb_vdp4b
+  MOVI r11,0x52
+  CMP r7,r11
+  JMP[EQ] @xb_vload
+  MOVI r11,0x53
+  CMP r7,r11
+  JMP[EQ] @xb_vstore
   MOVI r11,0x14
   CMP r7,r11
   JMP[EQ] @xb_bswapm
@@ -468,6 +507,118 @@ xb_bfill:
   ADD r6,r9,r0
   ADD r8,r12,r0
   CALL @x64_bfill
+  ST r1,r0,@xb_out
+  JMP @xb_adv
+
+xb_vzero:
+  LD r1,r0,@xb_out
+  ADD r5,r8,r0
+  CALL @x64_vzero
+  ST r1,r0,@xb_out
+  JMP @xb_adv
+
+xb_vbcast:
+  LD r1,r0,@xb_out
+  ADD r5,r8,r0
+  ADD r6,r9,r0
+  CALL @x64_vbcast
+  ST r1,r0,@xb_out
+  JMP @xb_adv
+
+xb_vadd8:
+  LD r1,r0,@xb_out
+  ADD r5,r8,r0
+  ADD r6,r9,r0
+  ADD r8,r12,r0
+  CALL @x64_vadd8
+  ST r1,r0,@xb_out
+  JMP @xb_adv
+
+xb_vsub8:
+  LD r1,r0,@xb_out
+  ADD r5,r8,r0
+  ADD r6,r9,r0
+  ADD r8,r12,r0
+  CALL @x64_vsub8
+  ST r1,r0,@xb_out
+  JMP @xb_adv
+
+xb_vadd32:
+  LD r1,r0,@xb_out
+  ADD r5,r8,r0
+  ADD r6,r9,r0
+  ADD r8,r12,r0
+  CALL @x64_vadd32
+  ST r1,r0,@xb_out
+  JMP @xb_adv
+
+xb_vsub32:
+  LD r1,r0,@xb_out
+  ADD r5,r8,r0
+  ADD r6,r9,r0
+  ADD r8,r12,r0
+  CALL @x64_vsub32
+  ST r1,r0,@xb_out
+  JMP @xb_adv
+
+xb_vmul32:
+  LD r1,r0,@xb_out
+  ADD r5,r8,r0
+  ADD r6,r9,r0
+  ADD r8,r12,r0
+  CALL @x64_vmul32
+  ST r1,r0,@xb_out
+  JMP @xb_adv
+
+xb_vget:
+  LD r1,r0,@xb_out
+  ADD r5,r8,r0
+  ADD r6,r9,r0
+  ADD r7,r10,r0
+  CALL @x64_vget
+  ST r1,r0,@xb_out
+  JMP @xb_adv
+
+xb_vset:
+  LD r1,r0,@xb_out
+  ADD r5,r8,r0
+  ADD r6,r9,r0
+  ADD r7,r10,r0
+  CALL @x64_vset
+  ST r1,r0,@xb_out
+  JMP @xb_adv
+
+xb_vdp4b4:
+  LD r1,r0,@xb_out
+  ADD r5,r8,r0
+  ADD r6,r9,r0
+  ADD r8,r12,r0
+  CALL @x64_vdp4b4
+  ST r1,r0,@xb_out
+  JMP @xb_adv
+
+xb_vdp4b:
+  LD r1,r0,@xb_out
+  ADD r5,r8,r0
+  ADD r6,r9,r0
+  ADD r8,r12,r0
+  CALL @x64_vdp4b
+  ST r1,r0,@xb_out
+  JMP @xb_adv
+
+xb_vload:
+  LD r1,r0,@xb_out
+  ADD r5,r8,r0
+  ADD r6,r9,r0
+  CALL @x64_vload
+  ST r1,r0,@xb_out
+  JMP @xb_adv
+
+xb_vstore:
+  LD r1,r0,@xb_out
+  ADD r5,r8,r0
+  ADD r6,r9,r0
+  CALL @x64_vstore
   ST r1,r0,@xb_out
   JMP @xb_adv
 
