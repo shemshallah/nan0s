@@ -92,9 +92,10 @@ Run in this tree: `M1`-`M62`, `ncc_alloc`, `ncc_headers`, the GUI gates,
 `qgate_gui` (x86 + ATA IDE loader). Not yet run: Csmith, the GCC torture
 tests, or the c-testsuite as a whole. Known divergences: the preprocessor is
 line-based; `#if`/`#elif` evaluate the full integer/character constant
-operator set, `defined()`, macro values, parentheses, and `?:`, but
-object-like macros carry a single numeric value rather than arbitrary token
-text; `#include <...>` system headers are skipped, but
+operator set, `defined()`, macro values, parentheses, and `?:`; object-like
+macros carry arbitrary replacement text (types, storage classes,
+expressions, declarations, empty bodies) and are expanded recursively with
+the C blue-paint rule; `#include <...>` system headers are skipped, but
 `src/lib/headers.nas` installs the C89/C99 limits, stdint, float, stdio,
 locale, signal, math, and wchar constants plus the `int8_t`..`uint64_t`
 typedefs; `double` is 32-bit storage; the in-guest `sin`/`cos` are float32 and
@@ -233,11 +234,31 @@ Not implemented (honest list):
 
 ## Preprocessor subset
 
-Lexer-integrated, line based:
+A text pass (`src/lib/mpp.nas`) runs before the lexer when the source
+contains any `#define`. It removes directive lines and rewrites the
+remaining text; `tools/ncc_macro_text.sh` gates the object-macro path.
 
-- `#define NAME integer` (object-like, integer replacement)
+- `#define NAME replacement-text` (object-like): types, storage classes,
+  expressions, declarations, and empty replacements, including
+  backslash-newline continuations. Replacement text is tokenized and
+  rescanned recursively; a macro is disabled while its own replacement is
+  being expanded, so self-reference and mutual recursion terminate without
+  looping. Later definitions take effect only after their line, and
+  `#undef`/redefinition work in source order.
+- `#define NAME(params) body` (function-like): parameters, nesting, `#`
+  stringification, `##` pasting, `__VA_ARGS__`, GNU `, ##__VA_ARGS__`, and
+  zero-argument macros. Object-like and function-like macros compose in
+  either direction.
+- Replacement text is not expanded inside string literals, character
+  constants, line comments, or block comments.
 - `#undef NAME`
-- `#ifdef`, `#ifndef`, `#if 0|1|defined(NAME)`, `#elif`, `#else`, `#endif`
+- `#ifdef`, `#ifndef`, `#if`, `#elif`, `#else`, `#endif`; `defined(NAME)`
+  and macro values inside `#if`/`#elif` are resolved by the text pass, then
+  the lexer-side evaluator handles the full integer constant-expression
+  operator set. A small conditional stack suppresses definitions in
+  obvious inactive regions (`#if 0`, `#ifdef` of an undefined name);
+  elaborate `#if` expressions are conservatively treated as active while
+  the lexer still selects the correct branch.
 - `#include "path"` is expanded from the runtime path filesystem (nested
   includes up to 8 levels); `#include <...>` is skipped
 - nesting up to 16 levels; inactive branches are skipped without tokenizing
@@ -367,6 +388,8 @@ tools/ncc_m17.sh    sprintf/snprintf into guest buffers
 tools/ncc_m18.sh    printf %e/%E
 tools/ncc_m19.sh    _Bool/bool, inline/restrict
 tools/ncc_m20.sh    function-like + variadic macros, #/##, nesting, #undef
+tools/ncc_macro_text.sh  object replacement-text macros: types/storage,
+                    nesting, blue paint, #undef/redefine, #if/defined
 tools/ncc_m21.sh    printf %g/%G, # flag, float exponent literals
 tools/ncc_m22.sh    time/locale/signal, struct tm/lconv, atof/strtod, limits
 tools/ncc_m23.sh    stdio FILE streams over the path filesystem
