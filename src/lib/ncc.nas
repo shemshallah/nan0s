@@ -795,6 +795,28 @@
 .equ W_SALIGN   60961
 .equ W_SMEM     60962
 .equ W_SNMEM    60963
+.equ W_MEMTOP   61009
+.equ W_SSDEPTH  61010
+.equ W_SDOWN    61011
+.equ W_SANON    61012
+.equ W_ML_SOFT  61013
+.equ W_ANON_TY  61014
+.equ W_ANON_OFF 61015
+.equ W_FL_TY    61016
+.equ W_FL_OFF   61017
+.equ W_FL_MEM   61018
+.equ W_FL_N     61019
+.equ W_FL_I     61020
+.equ W_AM_SYM   61021
+.equ W_AM_OFF   61022
+.equ W_AM_TY    61023
+.equ W_AM_BIT   61024
+.equ W_SSPKIND  61025
+.equ W_PC_TY    61026
+.equ W_PC_TAB   61027
+.equ W_PC_N     61028
+.equ W_PC_BASE  61029
+.equ W_PC_I     61030
 .equ W_STAG     60964
 .equ W_SOFF     60965
 .equ W_STYPE    60966
@@ -1732,6 +1754,11 @@ LA r1,#NCC_PARM
 ST r1,r0,#W_PARAMP
 LA r1,#NCC_MEMB
 ST r1,r0,#W_MEMBP
+LA r2,#NCC_MEMBMAX
+ADD r1,r1,r2
+ST r1,r0,#W_MEMTOP
+ST r0,r0,#W_SSDEPTH
+ST r0,r0,#W_SDOWN
 MOVI r1,16
 ST r1,r0,#W_LOCALB
 ST r1,r0,#W_FRAMEB
@@ -4870,7 +4897,23 @@ CALL @sym_entry
 LD r2,r0,#W_STRUCTID
 ST r2,r1,#SY_TYPE
 pss_type_ok:
-; save this definition's type/kind across nested member specifiers
+; save the parent table state, then this definition's type/kind/class.
+; Parent state is pushed first so pss_final can pop type/kind/class first.
+LD r1,r0,#W_SSPKIND
+ST r1,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_MEMBP
+ST r1,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_SMEM
+ST r1,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_SNMEM
+ST r1,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_SDOWN
+ST r1,r14,0
+ADD r14,r14,r13
 LD r1,r0,#W_STRUCTID
 ST r1,r14,0
 ADD r14,r14,r13
@@ -4882,6 +4925,8 @@ ADD r14,r14,r13
 LD r1,r0,#W_SCLASS
 ST r1,r14,0
 ADD r14,r14,r13
+LD r1,r0,#W_STRUCTKIND
+ST r1,r0,#W_SSPKIND
 LD r1,r0,#W_STRUCTID
 CALL @ty_addr
 ST r0,r1,#TY_SIZE
@@ -4893,14 +4938,38 @@ ST r0,r1,#TY_NMEM
 ST r0,r0,#W_SSIZE
 MOVI r2,1
 ST r2,r0,#W_SALIGN
+; outermost definitions grow up from NCC_MEMB; nested definitions grow
+; down from W_MEMTOP so the parent table stays contiguous.
+LD r1,r0,#W_SSDEPTH
+CMP r1,r0
+JMP[NE] @pss_nested_arena
+MOVI r1,0
+ST r1,r0,#W_SDOWN
 LD r1,r0,#W_MEMBP
 ST r1,r0,#W_SMEM
 ST r0,r0,#W_SNMEM
+JMP @pss_arena_ready
+pss_nested_arena:
+MOVI r1,1
+ST r1,r0,#W_SDOWN
+LD r1,r0,#W_MEMTOP
+ST r1,r0,#W_MEMBP
+ST r0,r0,#W_SMEM
+ST r0,r0,#W_SNMEM
+LD r1,r0,#W_STRUCTID
+CALL @ty_addr
+ST r0,r1,#TY_MEM
+ST r0,r1,#TY_NMEM
+pss_arena_ready:
+LD r1,r0,#W_SSDEPTH
+ADD r1,r1,r13
+ST r1,r0,#W_SSDEPTH
 LA r1,0xFFFFFFFF
 ST r1,r0,#W_BITUNIT
 ST r0,r0,#W_BITUSED
 CALL @p_adv
 pss_mem_l:
+ST r0,r0,#W_SANON
 MOVI r1,#P_RBRACE
 CALL @p_at_p
 CMP r1,r0
@@ -5032,11 +5101,16 @@ LD r1,r0,#W_TKA
 MOVI r2,#K_IDENT
 CMP r1,r2
 JMP[EQ] @pss_mem_name
-; anonymous bit-field: type ':' width
+; anonymous struct/union member: type ';'
 LD r1,r0,#W_TKA
 MOVI r2,#K_PUNCT
 CMP r1,r2
 JMP[NE] @pss_bad_name
+LD r1,r0,#W_TKA+1
+MOVI r2,#P_SEMI
+CMP r1,r2
+JMP[EQ] @pss_mem_anon
+; anonymous bit-field: type ':' width
 LD r1,r0,#W_TKA+1
 MOVI r2,#P_COLON
 CMP r1,r2
@@ -5060,6 +5134,23 @@ MOVI r1,#P_SEMI
 MOVI r2,24
 CALL @p_expect_p
 JMP @pss_mem_l
+pss_mem_anon:
+LD r1,r0,#W_STYPE
+CALL @ty_kind
+MOVI r2,#TY_STRUCT
+CMP r1,r2
+JMP[EQ] @pss_anon_ok
+MOVI r2,#TY_UNION
+CMP r1,r2
+JMP[EQ] @pss_anon_ok
+MOVI r1,23
+CALL @p_err
+pss_anon_ok:
+MOVI r1,1
+ST r1,r0,#W_SANON
+LA r1,0x80000000
+ST r1,r0,#W_STBIT
+JMP @pss_mem_plain
 pss_bad_name:
 MOVI r1,23
 CALL @p_err
@@ -5109,14 +5200,18 @@ pss_named_zero:
 CALL @p_ss_bits_zero
 JMP @pss_anon_done
 pss_mem_plain:
+LD r1,r0,#W_SANON
+CMP r1,r0
+JMP[NE] @pss_mem_plain_go
 ST r0,r0,#W_STBIT
+pss_mem_plain_go:
 LD r1,r0,#W_STYPE
 CALL @ty_size
 ST r1,r0,#W_STMP
 LD r1,r0,#W_STYPE
 CALL @ty_align
 ST r1,r0,#W_SOFF
-LD r1,r0,#W_STRUCTKIND
+LD r1,r0,#W_SSPKIND
 MOVI r2,#TY_UNION
 CMP r1,r2
 JMP[EQ] @pss_union_mem
@@ -5156,10 +5251,27 @@ JMP[LE] @pss_align_ok
 ST r1,r0,#W_SALIGN
 pss_align_ok:
 pss_mem_entry:
-; table entry [symidx, offset, type, bit offset]
+; anonymous members get a marker entry [0, offset, type, 0x80000000];
+; the outermost type promotes them after its table is complete.
 LD r2,r0,#W_MEMBP
+LD r3,r0,#W_SDOWN
+CMP r3,r0
+JMP[EQ] @pme_up
+ADDI r2,r2,-4
+ST r2,r0,#W_MEMBP
+JMP @pme_store
+pme_up:
+;pme_up keeps r2 as the append slot
+pme_store:
+LD r4,r0,#W_SANON
+CMP r4,r0
+JMP[EQ] @pme_pop_sym
+MOVI r1,0
+JMP @pme_have_sym
+pme_pop_sym:
 SUB r14,r14,r13
 LD r1,r14,0
+pme_have_sym:
 ST r1,r2,0
 LD r1,r0,#W_STMP
 ST r1,r2,1
@@ -5167,11 +5279,16 @@ LD r1,r0,#W_STYPE
 ST r1,r2,2
 LD r1,r0,#W_STBIT
 ST r1,r2,3
+LD r3,r0,#W_SDOWN
+CMP r3,r0
+JMP[NE] @pme_noinc
 ADDI r2,r2,4
 ST r2,r0,#W_MEMBP
+pme_noinc:
 LD r1,r0,#W_SNMEM
 ADD r1,r1,r13
 ST r1,r0,#W_SNMEM
+pme_after:
 MOVI r1,#P_COMMA
 CALL @p_take_p
 CMP r1,r0
@@ -5201,12 +5318,75 @@ LD r2,r0,#W_SSIZE
 ST r2,r1,#TY_SIZE
 LD r2,r0,#W_SALIGN
 ST r2,r1,#TY_ALIGN
+; down-arena table: entries were written from high to low, so reverse them
+LD r3,r0,#W_SDOWN
+CMP r3,r0
+JMP[EQ] @pssf_up
+LD r1,r0,#W_MEMBP
+LD r2,r0,#W_SNMEM
+CALL @mem_rev
+LD r1,r0,#W_STRUCTID
+CALL @ty_addr
+LD r2,r0,#W_MEMBP
+ST r2,r1,#TY_MEM
+ST r2,r0,#W_MEMTOP
+pssf_up:
+LD r1,r0,#W_STRUCTID
+CALL @ty_addr
 LD r2,r0,#W_SNMEM
 ST r2,r1,#TY_NMEM
+; Anonymous-member promotion is not run here: the marker entries remain
+; and 00046 stays a documented skip until the promotion pass is rebuilt.
+LD r1,r0,#W_SSDEPTH
+SUB r1,r1,r13
+ST r1,r0,#W_SSDEPTH
+; nested scopes restore the parent table state; outermost scopes keep
+; their end pointer so later top-level structs append after them.
+; The three type/kind/class words are on top; drop them first.
+LD r3,r0,#W_SDOWN
+CMP r3,r0
+JMP[EQ] @pssf_drop_all
+SUB r14,r14,r13
+SUB r14,r14,r13
+SUB r14,r14,r13
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_SDOWN
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_SNMEM
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_SMEM
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_ANON_OFF
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_SSPKIND
+; an up-arena parent resumes at its saved pointer; a down-arena parent
+; must resume below the nested table just allocated.
+LD r2,r0,#W_SDOWN
+CMP r2,r0
+JMP[NE] @pssf_parent_down
+LD r1,r0,#W_ANON_OFF
+ST r1,r0,#W_MEMBP
+JMP @pssf_done
+pssf_parent_down:
+LD r1,r0,#W_MEMTOP
+ST r1,r0,#W_MEMBP
+JMP @pssf_done
+pssf_drop_all:
+SUB r14,r14,r13
+SUB r14,r14,r13
+SUB r14,r14,r13
+SUB r14,r14,r13
+SUB r14,r14,r13
+SUB r14,r14,r13
+SUB r14,r14,r13
+SUB r14,r14,r13
+pssf_done:
 LD r1,r0,#W_STRUCTID
-SUB r14,r14,r13
-SUB r14,r14,r13
-SUB r14,r14,r13
 JMP @pss_d
 pss_no_body:
 LD r1,r0,#W_STRUCTID
@@ -5290,6 +5470,283 @@ SUB r14,r14,r13
 LD r15,r14,0
 RET
 
+
+; mem_rev: r1=base r2=count; reverse count 4-word member entries in place.
+mem_rev:
+MOVI r3,0
+SUB r4,r2,r13
+mr_l:
+CMP r3,r4
+JMP[GE] @mr_d
+SHL r5,r3,2
+ADD r5,r1,r5
+SHL r6,r4,2
+ADD r6,r1,r6
+LD r7,r5,0
+LD r8,r6,0
+ST r8,r5,0
+ST r7,r6,0
+LD r7,r5,1
+LD r8,r6,1
+ST r8,r5,1
+ST r7,r6,1
+LD r7,r5,2
+LD r8,r6,2
+ST r8,r5,2
+ST r7,r6,2
+LD r7,r5,3
+LD r8,r6,3
+ST r8,r5,3
+ST r7,r6,3
+ADDI r3,r3,1
+SUB r4,r4,r13
+JMP @mr_l
+mr_d:
+RET
+
+
+; p_append_member: r1=sym r2=offset r3=type r4=bit -> append to the
+; current parent table (up or down arena) and increment its member count.
+p_append_member:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_AM_SYM
+ST r2,r0,#W_AM_OFF
+ST r3,r0,#W_AM_TY
+ST r4,r0,#W_AM_BIT
+LD r2,r0,#W_MEMBP
+LD r3,r0,#W_SDOWN
+CMP r3,r0
+JMP[EQ] @pam_up
+ADDI r2,r2,-4
+ST r2,r0,#W_MEMBP
+JMP @pam_store
+pam_up:
+pam_store:
+LD r1,r0,#W_AM_SYM
+ST r1,r2,0
+LD r1,r0,#W_AM_OFF
+ST r1,r2,1
+LD r1,r0,#W_AM_TY
+ST r1,r2,2
+LD r1,r0,#W_AM_BIT
+ST r1,r2,3
+LD r3,r0,#W_SDOWN
+CMP r3,r0
+JMP[NE] @pam_noinc
+ADDI r2,r2,4
+ST r2,r0,#W_MEMBP
+pam_noinc:
+LD r1,r0,#W_SNMEM
+ADD r1,r1,r13
+ST r1,r0,#W_SNMEM
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; p_flatten_members: r1=nested type r2=base offset.  Copies named members
+; into the parent table and recurses through anonymous markers.
+p_flatten_members:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_FL_TY
+ST r2,r0,#W_FL_OFF
+LD r1,r0,#W_FL_TY
+CALL @ty_addr
+LD r3,r1,#TY_MEM
+ST r3,r0,#W_FL_MEM
+LD r4,r1,#TY_NMEM
+ST r4,r0,#W_FL_N
+ST r0,r0,#W_FL_I
+fl_l:
+LD r5,r0,#W_FL_I
+LD r4,r0,#W_FL_N
+CMP r5,r4
+JMP[GE] @fl_d
+LD r3,r0,#W_FL_MEM
+SHL r4,r5,2
+ADD r3,r3,r4
+LD r6,r3,0
+LD r7,r3,1
+LD r8,r3,2
+LD r9,r3,3
+LA r10,0x80000000
+CMP r9,r10
+JMP[NE] @fl_add
+; nested anonymous member: preserve this loop's state, then recurse
+LD r1,r0,#W_FL_MEM
+ST r1,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_FL_N
+ST r1,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_FL_I
+ST r1,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_FL_OFF
+ST r1,r14,0
+ADD r14,r14,r13
+LD r1,r8
+LD r2,r0,#W_FL_OFF
+ADD r2,r2,r7
+CALL @p_flatten_members
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_FL_OFF
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_FL_I
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_FL_N
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_FL_MEM
+JMP @fl_next
+fl_add:
+LD r1,r6
+LD r2,r0,#W_FL_OFF
+ADD r2,r2,r7
+LD r3,r8
+LD r4,r9
+CALL @p_append_member
+fl_next:
+LD r5,r0,#W_FL_I
+ADD r5,r5,r13
+ST r5,r0,#W_FL_I
+JMP @fl_l
+fl_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+
+; p_copy_members: r1=source table r2=count r3=base offset. Appends named
+; members to the current (promotion) table and recurses through markers.
+p_copy_members:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_PC_TAB
+ST r2,r0,#W_PC_N
+ST r3,r0,#W_PC_BASE
+ST r0,r0,#W_PC_I
+pcm_l:
+LD r5,r0,#W_PC_I
+LD r4,r0,#W_PC_N
+CMP r5,r4
+JMP[GE] @pcm_d
+LD r3,r0,#W_PC_TAB
+SHL r4,r5,2
+ADD r3,r3,r4
+LD r6,r3,0
+LD r7,r3,1
+LD r8,r3,2
+LD r9,r3,3
+LA r10,0x80000000
+CMP r9,r10
+JMP[NE] @pcm_add
+; marker: recurse into the nested type's table
+LD r1,r0,#W_PC_TAB
+ST r1,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_PC_N
+ST r1,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_PC_I
+ST r1,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_PC_BASE
+ST r1,r14,0
+ADD r14,r14,r13
+LD r1,r8
+CALL @ty_addr
+LD r11,r1,#TY_MEM
+LD r2,r1,#TY_NMEM
+LD r1,r11
+LD r3,r0,#W_PC_BASE
+ADD r3,r3,r7
+CALL @p_copy_members
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_PC_BASE
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_PC_I
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_PC_N
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_PC_TAB
+JMP @pcm_next
+pcm_add:
+LD r1,r6
+LD r2,r0,#W_PC_BASE
+ADD r2,r2,r7
+LD r3,r8
+LD r4,r9
+CALL @p_append_member
+pcm_next:
+LD r5,r0,#W_PC_I
+ADD r5,r5,r13
+ST r5,r0,#W_PC_I
+JMP @pcm_l
+pcm_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; p_promote_outer: r1=outermost type. Rebuilds its member table in the
+; down arena with anonymous markers flattened, then restores parser state.
+p_promote_outer:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_PC_TY
+LD r1,r0,#W_MEMBP
+ST r1,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_SDOWN
+ST r1,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_SNMEM
+ST r1,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_MEMTOP
+ST r1,r0,#W_MEMBP
+MOVI r1,1
+ST r1,r0,#W_SDOWN
+ST r0,r0,#W_SNMEM
+LD r1,r0,#W_PC_TY
+CALL @ty_addr
+LD r11,r1,#TY_MEM
+LD r5,r1,#TY_NMEM
+ADD r1,r11,r0
+ADD r2,r5,r0
+MOVI r3,0
+CALL @p_copy_members
+LD r1,r0,#W_MEMBP
+LD r2,r0,#W_SNMEM
+CALL @mem_rev
+LD r1,r0,#W_PC_TY
+CALL @ty_addr
+LD r2,r0,#W_MEMBP
+ST r2,r1,#TY_MEM
+LD r3,r0,#W_SNMEM
+ST r3,r1,#TY_NMEM
+ST r2,r0,#W_MEMTOP
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_SNMEM
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_SDOWN
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_MEMBP
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
 p_member_lookup:
 ST r15,r14,0
 ADD r14,r14,r13
@@ -5314,6 +5771,45 @@ LD r5,r3,1
 ST r5,r0,#W_TY_RET
 LD r5,r3,2
 ST r5,r0,#W_TY_KIND
+LD r6,r3,3
+LA r7,0x80000000
+CMP r6,r7
+JMP[NE] @pml_named
+; anonymous member: recursively search its type and add its offset
+LD r1,r3,2
+ST r1,r0,#W_ANON_TY
+LD r1,r3,1
+ST r1,r0,#W_ANON_OFF
+LD r1,r0,#W_TY_MEM
+ST r1,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_TY_COUNT
+ST r1,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_TY_BASE
+ST r1,r14,0
+ADD r14,r14,r13
+MOVI r1,1
+ST r1,r0,#W_ML_SOFT
+LD r1,r0,#W_ANON_TY
+CALL @p_member_lookup
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_TY_BASE
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_TY_COUNT
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_TY_MEM
+MOVI r1,0
+ST r1,r0,#W_ML_SOFT
+CMP r2,r0
+JMP[EQ] @pml_next
+LD r3,r0,#W_ANON_OFF
+ADD r1,r1,r3
+JMP @pml_d
+pml_named:
 LD r1,r0,#W_TY_TMP
 CALL @sym_entry
 LD r2,r1,#SY_HASH
@@ -5351,8 +5847,14 @@ ADD r1,r1,r13
 ST r1,r0,#W_TY_BASE
 JMP @pml_l
 pml_nf:
+LD r1,r0,#W_ML_SOFT
+CMP r1,r0
+JMP[NE] @pml_soft_nf
 MOVI r1,72
 CALL @p_err
+pml_soft_nf:
+MOVI r1,0
+MOVI r2,0
 pml_d:
 SUB r14,r14,r13
 LD r15,r14,0
@@ -14461,6 +14963,21 @@ SUB r14,r14,r13
 LD r15,r14,0
 RET
 pd_one:
+; "(*name)[" is a pointer-to-array declarator, not a function pointer
+MOVI r1,#P_LPAREN
+CALL @p_at_p
+CMP r1,r0
+JMP[EQ] @pd_one_plain
+CALL @p_peek
+LD r1,r0,#W_TKB
+MOVI r2,#K_PUNCT
+CMP r1,r2
+JMP[NE] @pd_one_plain
+LD r1,r0,#W_TKB+1
+MOVI r2,#P_STAR
+CMP r1,r2
+JMP[EQ] @pd_paren_ptr
+pd_one_plain:
 LD r1,r0,#W_TY_RET
 CALL @p_ptr_suffix
 ST r1,r0,#W_TY_ID
@@ -14472,6 +14989,17 @@ JMP[EQ] @pd_ident
 MOVI r1,23
 CALL @p_err
 pd_ident:
+; block-scope function prototype: name followed by '('
+CALL @p_peek
+LD r1,r0,#W_TKB
+MOVI r2,#K_PUNCT
+CMP r1,r2
+JMP[NE] @pd_not_proto
+LD r1,r0,#W_TKB+1
+MOVI r2,#P_LPAREN
+CMP r1,r2
+JMP[EQ] @pd_func_proto
+pd_not_proto:
 LD r1,r0,#W_SCLASS
 MOVI r2,3
 CMP r1,r2
@@ -14485,6 +15013,7 @@ CALL @p_adv
 LD r1,r0,#W_TY_ID
 CALL @p_array_suffix
 ST r1,r0,#W_TY_ID
+pd_after_suffix:
 CALL @p_infer_str_array
 ST r1,r0,#W_TY_ID
 CALL @p_arr_pre
@@ -14889,6 +15418,92 @@ CALL @p_expect_p
 SUB r14,r14,r13
 LD r15,r14,0
 RET
+pd_func_proto:
+; Lightweight block-scope prototype: consume "name(params);" without
+; creating a function body, locals, or a new scope.  The definition or a
+; file-scope declaration supplies the callable symbol.
+CALL @p_adv
+MOVI r1,#P_LPAREN
+MOVI r2,9
+CALL @p_expect_p
+MOVI r1,#P_RPAREN
+CALL @p_at_p
+CMP r1,r0
+JMP[NE] @pdp_done
+MOVI r1,#KW_VOID
+CALL @p_at_k
+CMP r1,r0
+JMP[EQ] @pdp_param
+CALL @p_adv
+MOVI r1,#P_RPAREN
+CALL @p_at_p
+CMP r1,r0
+JMP[NE] @pdp_done
+pdp_param:
+CALL @p_typespec
+ST r1,r0,#W_TY_ID
+CALL @p_ptr_suffix
+ST r1,r0,#W_TY_ID
+LD r1,r0,#W_TKA
+MOVI r2,#K_IDENT
+CMP r1,r2
+JMP[NE] @pdp_noname
+CALL @p_adv
+pdp_noname:
+LD r1,r0,#W_TY_ID
+CALL @p_array_suffix
+MOVI r1,#P_COMMA
+CALL @p_take_p
+CMP r1,r0
+JMP[NE] @pdp_param
+pdp_done:
+MOVI r1,#P_RPAREN
+MOVI r2,10
+CALL @p_expect_p
+MOVI r1,#P_SEMI
+MOVI r2,24
+CALL @p_expect_p
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+pd_paren_ptr:
+; current '('; parse ( * name ) then [N] and build pointer-to-array
+CALL @p_adv
+MOVI r1,#P_STAR
+MOVI r2,36
+CALL @p_expect_p
+LD r1,r0,#W_TKA
+MOVI r2,#K_IDENT
+CMP r1,r2
+JMP[EQ] @pp_name
+MOVI r1,23
+CALL @p_err
+pp_name:
+MOVI r1,#SK_LOCAL
+CALL @sym_new_cur
+CALL @px_const_sym
+ST r1,r14,0
+ADD r14,r14,r13
+CALL @p_adv
+MOVI r1,#P_RPAREN
+MOVI r2,10
+CALL @p_expect_p
+MOVI r1,#P_LBRACK
+CALL @p_at_p
+CMP r1,r0
+JMP[EQ] @pp_not_array
+LD r1,r0,#W_TY_RET
+CALL @p_array_suffix
+CALL @ty_ptr
+ST r1,r0,#W_TY_ID
+JMP @pd_after_suffix
+pp_not_array:
+LD r1,r0,#W_TY_RET
+CALL @ty_ptr
+ST r1,r0,#W_TY_ID
+JMP @pd_after_suffix
+
 pd_typedef:
 MOVI r1,#SK_TYPE
 CALL @sym_get_cur

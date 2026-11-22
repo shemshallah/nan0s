@@ -53,9 +53,9 @@
 00164 run 0 30000000 operator precedence
 00168 run 0 30000000 recursion
 00170 run 0 40000000 enums and function pointer member
-00043 skip 0 0 nested anonymous struct definitions need disjoint member tables
-00046 skip 0 0 anonymous union/struct members hit the same member-table limitation
+00043 run 0 20000000 nested member tables fixed
+00046 skip 0 0 anonymous member promotion still open
 00064 run 0 30000000 object-like replacement-text macro
-00078 skip 0 0 block-scope function prototype; local prototype support not implemented
-00130 skip 0 0 pointer-to-array declarator (*p)[4]
+00078 run 0 20000000 local prototype supported
+00130 run 0 20000000 pointer-to-array supported
 00149 run 0 30000000 compound literals (C11)
