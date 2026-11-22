@@ -58,6 +58,21 @@ xb_loop:
   MOVI r11,0x26
   CMP r7,r11
   JMP[EQ] @xb_modu
+  MOVI r11,0x2D
+  CMP r7,r11
+  JMP[EQ] @xb_bcopy
+  MOVI r11,0x2E
+  CMP r7,r11
+  JMP[EQ] @xb_bfill
+  MOVI r11,0x14
+  CMP r7,r11
+  JMP[EQ] @xb_bswapm
+  MOVI r11,0x16
+  CMP r7,r11
+  JMP[EQ] @xb_stw
+  MOVI r11,0x17
+  CMP r7,r11
+  JMP[EQ] @xb_ldn
   MOVI r11,0x30
   CMP r7,r11
   JMP[EQ] @xb_fadd
@@ -408,6 +423,51 @@ xb_fcmp:
   ADD r8,r12,r0
   MOVI r9,0x35
   CALL @x64_fp
+  ST r1,r0,@xb_out
+  JMP @xb_adv
+
+xb_bswapm:
+  LD r1,r0,@xb_out
+  ADD r6,r9,r0
+  ADD r7,r10,r0
+  CALL @x64_bswapm
+  ST r1,r0,@xb_out
+  JMP @xb_adv
+
+xb_stw:
+  LD r1,r0,@xb_out
+  ADD r5,r8,r0
+  ADD r6,r9,r0
+  ADD r8,r12,r0
+  MOVI r7,0
+  CALL @x64_stw
+  ST r1,r0,@xb_out
+  JMP @xb_adv
+
+xb_ldn:
+  LD r1,r0,@xb_out
+  ADD r5,r8,r0
+  ADD r6,r9,r0
+  ADD r7,r10,r0
+  CALL @x64_ldn
+  ST r1,r0,@xb_out
+  JMP @xb_adv
+
+xb_bcopy:
+  LD r1,r0,@xb_out
+  ADD r5,r8,r0
+  ADD r6,r9,r0
+  ADD r8,r12,r0
+  CALL @x64_bcopy
+  ST r1,r0,@xb_out
+  JMP @xb_adv
+
+xb_bfill:
+  LD r1,r0,@xb_out
+  ADD r5,r8,r0
+  ADD r6,r9,r0
+  ADD r8,r12,r0
+  CALL @x64_bfill
   ST r1,r0,@xb_out
   JMP @xb_adv
 

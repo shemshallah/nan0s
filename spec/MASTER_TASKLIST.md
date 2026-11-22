@@ -79,8 +79,11 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done and gated.
 - [x] Scalar FP: FADD/FSUB/FMUL/FDIV/FSQRT/FCMP/CVTIF/CVTFI with exact
       NaN, zero-divisor, clamp and unordered-compare semantics;
       `qgate64fp`, `qgate64fpe`.  SSE enabled in the substrate.
-- [ ] Full NaN-coded 64-bit core: LDN/STW/BSWAPM, BCOPY/BFILL, traps,
-      vector families, guest loader and self-hosting.
+- [x] LDN/STW/BSWAPM (header classes and byte-swap) and BCOPY/BFILL
+      (memmove-safe copy, class-10 fill); `qgate64mem2`,
+      `qgate64blockops`.
+- [ ] Full NaN-coded 64-bit core: trap paths, vector families, guest
+      loader that preserves header predicates, and self-hosting.
 - [ ] Port the native NaN16 execution core to 64-bit (`kan64`) only where the
       bootstrap/EXECN substrate requires it; core policy stays NaN.
 - [ ] 64-bit native shims for ports, CPUID, RDTSC, MSRs, page tables.
