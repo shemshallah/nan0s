@@ -24,7 +24,7 @@ run() {
 for m in $(seq 1 62); do
   [ -f "tools/ncc_m$m.sh" ] && run "ncc_m$m" sh "tools/ncc_m$m.sh"
 done
-for g in ncc_alloc ncc_heap narena nan_simd ncc_dp4b ncc_headers ncc_ppexpr ncc_torture ncc_donut_exact; do
+for g in ncc_alloc ncc_heap ncc_aligned narena narena64 nan_simd ncc_dp4b nmatmul nmat64 ncc_headers ncc_ppexpr ncc_torture ncc_donut_exact; do
   [ -f "tools/$g.sh" ] && run "$g" sh "tools/$g.sh"
 done
 for g in ncc_macro_text ncc_include ncc_libm_exact ncc_iso_c ncc_ctests; do

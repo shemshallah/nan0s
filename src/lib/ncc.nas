@@ -519,6 +519,7 @@
 .equ B_FDIM 181
 .equ B_FMA 182
 .equ B_DP4B 274
+.equ B_ALIGNED_ALLOC 275
 .equ B_MODF 183
 .equ B_LDEXP 184
 .equ B_SCALBN 185
@@ -887,6 +888,7 @@
 .equ W_C_STACK    61845
 .equ W_C_STACK_END 61846
 .equ W_HEAP_END   61847
+.equ W_ALIGN      61848
 .equ W_ERRNO     61795
 .equ W_FWIDE_STD 61796
 .equ W_STDPB     61820
@@ -5949,6 +5951,14 @@ MOVI r4,#B_DP4B
 MOVI r5,2
 MOVI r6,#T_INT
 CALL @ncc_add_builtin
+; aligned_alloc: S0 heap block whose payload is alignment-aligned
+LA r1,0x4F171A15
+LA r2,@ncc_s_aligned_alloc
+MOVI r3,13
+MOVI r4,#B_ALIGNED_ALLOC
+MOVI r5,2
+LD r6,r0,#W_PTRV
+CALL @ncc_add_builtin
 ; tan
 LA r1,0x9CF73498
 LA r2,@ncc_s_tan
@@ -8700,6 +8710,8 @@ ncc_s_fmax:
 .str "fmax"
 ncc_s_dp4b:
 .str "dp4b"
+ncc_s_aligned_alloc:
+.str "aligned_alloc"
 ncc_s_tan:
 .str "tan"
 ncc_s_strchr:
@@ -19418,11 +19430,70 @@ SUB r14,r14,r13
 LD r15,r14,0
 RET
 
+; ni_malloc_aligned: r1=size bytes, r2=alignment bytes -> r1=aligned payload or 0
+; Reserves size+align+8, then stores the raw pointer at p-4 and a magic at
+; p-8 so ni_free can recover the real block. ncc's realloc always moves.
+ni_malloc_aligned:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r2,r0,#W_ALIGN
+MOVI r3,4
+CMP r2,r3
+JMP[GE] @nma_min
+ADD r2,r3,r0
+nma_min:
+; power-of-two check: align & (align-1) == 0
+SUB r3,r2,r13
+BOOL.8 r3,r2,r3
+CMP r3,r0
+JMP[NE] @nma_bad
+LA r3,0xFFFFFF00
+CMP r1,r3
+JMP[GT] @nma_bad
+ADD r1,r1,r2
+ADDI r1,r1,8
+CALL @ni_malloc
+CMP r1,r0
+JMP[EQ] @nma_bad
+LD r2,r0,#W_ALIGN
+ADD r3,r1,r2
+ADDI r3,r3,7
+SUB r4,r0,r2
+BOOL.8 r3,r3,r4
+ADDI r4,r1,8
+CMP r3,r4
+JMP[GE] @nma_ok
+ADD r3,r4,r0
+nma_ok:
+SHR r5,r3,2
+ST r1,r5,-1
+LA r6,0xA11C0DE5
+ST r6,r5,-2
+ADD r1,r3,r0
+JMP @nma_d
+nma_bad:
+MOVI r1,0
+nma_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
 ni_free:
 ST r15,r14,0
 ADD r14,r14,r13
 CMP r1,r0
 JMP[EQ] @nf_d
+SHR r4,r1,2
+ADDI r5,r4,-2
+LD r6,r5,0
+LA r7,0xA11C0DE5
+CMP r6,r7
+JMP[NE] @nf_plain
+ADDI r5,r4,-1
+LD r1,r5,0
+CMP r1,r0
+JMP[EQ] @nf_d
+nf_plain:
 SHR r1,r1,2
 ADDI r1,r1,-1
 LD r2,r1,0
@@ -20161,6 +20232,9 @@ JMP[EQ] @nbi_fma
 MOVI r2,#B_DP4B
 CMP r1,r2
 JMP[EQ] @nbi_dp4b
+MOVI r2,#B_ALIGNED_ALLOC
+CMP r1,r2
+JMP[EQ] @nbi_aligned_alloc
 MOVI r2,#B_MODF
 CMP r1,r2
 JMP[EQ] @nbi_modf
@@ -21499,6 +21573,16 @@ JMP @nbi_fdim_p
 nbi_fdim_z:
 MOVI r1,0
 nbi_fdim_p:
+CALL @ni_push
+JMP @nbi_d
+nbi_aligned_alloc:
+CALL @ni_pop
+ST r1,r0,#W_ALLOC_A
+CALL @ni_pop
+ST r1,r0,#W_ALLOC_B
+LD r1,r0,#W_ALLOC_A
+LD r2,r0,#W_ALLOC_B
+CALL @ni_malloc_aligned
 CALL @ni_push
 JMP @nbi_d
 nbi_dp4b:

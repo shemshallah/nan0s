@@ -559,6 +559,8 @@ tools/ncc_headers.sh limits/stdint/float/stdio/locale/signal/math macros and fix
 tools/ncc_include.sh #include: quoted/nested/guarded headers, std headers, diagnostics
 tools/ncc_heap.sh   one image on 16/64/128/512 MiB VMs (100 MB heap and reuse)
 tools/ncc_dp4b.sh   C-level dp4b builtin (ISA 0x4A, exact i8 dot)
+tools/ncc_aligned.sh aligned_alloc on the S0 heap (16/32/64-byte)
+tools/nmatmul.sh    packed-i8 8x8x8 matmul on DP4B, C core + native x86
 tools/nan_simd.sh   DP4B vectors on C core and native x86
 tools/narena.sh     NaN-native bump arena: alignment/mark/release/reset
 tools/ncc_iso_c.sh  C11 language (_Static_assert/_Alignof/_Alignas/_Generic/

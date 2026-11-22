@@ -91,7 +91,7 @@ the JIT from becoming a second hidden operating system.
 
 ### 3.2 New SIMD/AI primitives (native core, specified first)
 
-- [ ] `DP4B d,a,b`: four signed i8 lanes in each payload, dot product to
+- [x] `DP4B d,a,b`: four signed i8 lanes in each payload, dot product to
       int32, exact integer, Z/L flags.
 - [ ] `FMA d,a,b`: fused f32 `d = a*b + d`, one rounding, explicitly gated
       against the libm/donut vectors.
@@ -103,12 +103,16 @@ them stays NaN.
 
 ### 3.3 NaN-native runtime
 
-- [ ] `src/lib/narena.nas`: aligned bump arena, mark/release/reset, no
+- [x] `src/lib/narena.nas`: aligned bump arena, mark/release/reset, no
       freelist, for inference activations and KV blocks.
-- [ ] `src/lib/nmat.nas`: packed-i8 matmul built on `DP4B`, with tiling and
+- [x] `src/lib/nmat.nas`: packed-i8 matmul built on `DP4B`, with tiling and
       a scalar reference in the same file.
-- [ ] Aligned C allocation (`aligned_alloc`/`posix_memalign`) in ncc, backed
-      by the arena or the S0 allocator.
+- [x] Aligned C allocation (`aligned_alloc`) in ncc, backed
+      by the S0 allocator.
+- [x] `src/lib/narena64.nas`: 64-bit `(lo,hi)` arena, 64-bit mark/release,
+      4 GiB-crossing pointer test.
+- [x] `src/lib/nmat.nas` `nmat_dot64`: DP4B into a signed 64-bit accumulator,
+      proven past 2^32 and on negative vectors.
 - [ ] NaN task scheduler: contexts, run queue, yield via a primitive. One
       core first; SMP only when the native APIC/startup shim is real.
 - [ ] Huge-page hint and zero-copy model load (`mmap` equivalent) once a
@@ -116,11 +120,16 @@ them stays NaN.
 
 ### 3.4 Proof/bench gates
 
-- `tools/nan_simd.sh`: DP4B vectors, scalar reference, exact output.
-- `tools/narena.sh`: alignment, overlap, mark/release, reset, exhaustion.
+- `tools/nan_simd.sh`: DP4B vectors, exact output on C and native x86. Done.
+- `tools/ncc_dp4b.sh`: C `dp4b(a,b)` builtin emits 0x4A. Done.
+- `tools/nmatmul.sh`: 8x8x8 packed-i8 matmul on DP4B, both cores. Done.
+- `tools/narena.sh`: alignment, overlap, mark/release, reset, exhaustion. Done.
+- `tools/narena64.sh`: 64-bit arena, high-half base, 4 GiB crossing. Done.
+- `tools/nmat64.sh`: DP4B into a 64-bit accumulator past 2^32. Done.
+- `tools/ncc_aligned.sh`: `aligned_alloc` 16/32/64, writes, free, realloc. Done.
 - `tools/cpu_bench.sh`: one NaN program, measured on the C core and the
   native x86 core; prints guest steps and wall time. Thresholds are recorded,
-  not guessed.
+  not guessed. Next.
 - Existing bit-exact gates must stay green after every step.
 
 ## 4. Why this order
@@ -131,7 +140,46 @@ AI-shaped work fast without moving policy into x86. The translator is last in
 this phase because a bad translator is worse than a good interpreter; it is
 built behind the same exact gates.
 
-## 5. Non-goals for this phase
+## 5. 64-bit sizing law
+
+Frontier inference makes 32-bit sizes a dead end: 7B Q4 weights are about
+3.5 GB, 70B Q4 about 35 GB, and KV caches are larger than the weights at long
+context. The VM word count may be 2^31+ and a tensor offset can cross 4 GiB.
+
+Rules for every new library/API:
+
+1. A pointer or size is a `(lo,hi)` pair of 32-bit words, low first. Never add
+   a new API that takes a bare 32-bit pointer/size as its only form.
+2. Dimensions that are structurally small (heads, tiles, kernel K) may be
+   32-bit, but **strides, offsets, byte counts and accumulator totals are
+   64-bit**.
+3. Alignment is in words; 16 words = 64 bytes is the SIMD tile alignment.
+4. DP4B returns int32, but reductions accumulate in signed 64-bit. `nmat_dot64`
+   is the reference; a 32-bit fast path is allowed only when K is bounded and
+   the bound is checked.
+5. The C ABI is still 32-bit pointers. That is a declared transition limit,
+   not a design choice: `ADDRH`/64-bit indices (NaNVM1 §4.1) must land before
+   a C object can exceed the 1 GiB payload window. No new NaN library may
+   assume it will stay 32-bit.
+6. Weight/KV/activation buffers are 64-byte aligned and tiled. The tile
+   descriptors use 64-bit strides.
+
+Sizing sanity (single token, Q4, 4-bit weights, 8-bit activations):
+
+| model | weights | MACs/token | 32-bit-only? |
+| --- | --- | --- | --- |
+| 1B | ~0.6 GB | ~1e9 | no |
+| 7B | ~3.5 GB | ~7e9 | no |
+| 70B | ~35 GB | ~7e10 | no |
+| 405B | ~200 GB | ~4e11 | no |
+
+DP4B is one four-lane primitive. It is not sufficient by itself for frontier
+throughput; the next ISA step is a packed-dot form that consumes more than one
+32-bit payload per operand (or a vector register file), and the native core
+must execute it as one host SIMD sequence. The 64-bit descriptors and 64-bit
+accumulators above are sized for that step now.
+
+## 6. Non-goals for this phase
 
 - No Python/JS in the runtime.
 - No second VM document.
