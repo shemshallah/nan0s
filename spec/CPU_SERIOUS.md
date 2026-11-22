@@ -141,6 +141,8 @@ them stays NaN.
 - `tools/nan_simd.sh`: DP4B vectors, exact output on C and native x86. Done.
 - `tools/nan_vec.sh`: full 512-bit vector family, C reference + native x86. Done.
 - `tools/nan_vec_native.sh`: native VZERO/VBCAST/VDP4B/VGET/VSET. Done.
+- `tools/nan_bench.sh`: VDP4B vs DP4B packed-i8 throughput, exact
+  checksums on both cores. Done.
 - `tools/ncc_dp4b.sh`: C `dp4b(a,b)` builtin emits 0x4A. Done.
 - `tools/nmatmul.sh`: 8x8x8 packed-i8 matmul on DP4B, both cores. Done.
 - `tools/narena.sh`: alignment, overlap, mark/release, reset, exhaustion. Done.

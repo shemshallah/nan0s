@@ -40,6 +40,19 @@ The gap is not the allocator; it is the execution model.
 
 ## 3. The block-packed primitive and the 512-bit vector family
 
+### 3.0 First measured packed-i8 number
+
+`tools/nan_bench.sh` runs identical 1M-iteration loops: `VDP4B` (64 MACs
+per instruction, 16 lanes x 4-byte dot) against scalar `DP4B` (4 MACs).
+Checksums are exact on the C reference and bare x86. On the qemu guest
+clock the native x86 ratio is **7x MAC throughput** (about 13.7M vs
+1.7M MAC/s in TCG). This is a relative gate, not a hardware claim: qemu
+emulates SSE2 and every guest instruction first goes through the NaN
+dispatcher. It does establish the key point numerically: the packed
+primitive buys roughly an order of magnitude in MACs per dispatched
+instruction before any AVX2/AVX-512 widening. Real-hardware and
+AVX2 numbers remain to be measured.
+
 `DP4B` is the scalar seed. `spec/NANVM_SPEC.md` now defines a 512-bit
 abstract vector family (0x50-0x5F) with 16 vector registers. `VDP4B` is the
 block-packed primitive: each of 16 32-bit lanes holds four i8 values, so one
