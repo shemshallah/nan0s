@@ -2,9 +2,9 @@
 
 Updated 2026-11-22. Coq 8.18.0 kernel verification on GitHub Actions.
 
-## Kernel-certified R4 foundation
+## Kernel-certified R5 theorem package
 
-The full four-module package and all four Python exhaustive regressions passed in [run 45049105148](https://github.com/shemshallah/nan0s/actions/runs/45049105148) at commit `ad03dd196f07c56ef51074d29b49be7476546b1d`.
+The complete five-module package and all five Python regressions passed in [run 45049242569](https://github.com/shemshallah/nan0s/actions/runs/45049242569) at commit `1f691922f467eb38bf7ffce30530aec51dea4e36`. The R4 foundation was independently certified by [run 45049105148](https://github.com/shemshallah/nan0s/actions/runs/45049105148).
 
 | Claim | Source | Kernel result |
 | --- | --- | --- |
@@ -18,11 +18,14 @@ The full four-module package and all four Python exhaustive regressions passed i
 
 The Python tests are independent finite regressions, not replacements for kernel certification.
 
-## R5 candidate (pending CI)
+| Disjoint-address writes commute pointwise | `NaN16MemoryAlgebra.v` | PASS |
+| Signed pair write order is independent off diagonal | `NaN16MemoryAlgebra.v` | PASS |
+| Mirror-equivariant update and involutive reflection | `NaN16MemoryAlgebra.v` | PASS |
+| Diagonal S+/S- orientations coincide | `NaN16MemoryAlgebra.v` | PASS |
 
-`NaN16MemoryAlgebra.v` proposes kernel proofs of pointwise commutativity for disjoint writes, S+/S- write-order independence, mirror-equivariance of a memory write, reflection involutivity and diagonal channel aliasing. `check_memory_algebra.py` exhaustively checks order independence on 32,640 strict pairs and samples mirror equivariance over all 65,536 possible write keys.
+## Certification limits
 
-**R5 is not certified until its own CI succeeds.**
+R5 is a completed kernel-verified abstract theorem package. It is **not** a proof of machine-code correctness, physical update atomicity, or a newly solved open problem. The executable Python regressions independently support the finite checks but do not substitute for proofs.
 
 ## Remaining open obligations
 
