@@ -262,7 +262,7 @@ int nan_run(nan_vm *v, uint32_t max_steps) {
     uint32_t p = (uint32_t)(w >> 16), op = p >> 24;
     int n = (int)((nan_hcls(nh) << 2) | nan_hcls(fh));
     if (op == 0xFF) { v->halted = 1; LEAVE(NAN_HALTED); }
-    if (op > 0x48) { trap(v, 'O', pc); pc = v->pc; LEAVE(NAN_HALTED); }
+    if (op > 0x4A) { trap(v, 'O', pc); pc = v->pc; LEAVE(NAN_HALTED); }
     if (op != 0 && !((n >> v->k) & 1)) continue;
     if (v->trace) v->trace(v->trace_ctx, at, p, n, v->k);
     uint32_t d = (p >> 20) & 15, a = (p >> 16) & 15, imm = p & 0xFFFF;
@@ -372,6 +372,14 @@ int nan_run(nan_vm *v, uint32_t max_steps) {
       case 0x80000004u: break; }
       r[d] = reg[B & 3]; break; }
     case 0x45: r[d] = A == 0 ? (uint32_t)v->steps : (uint32_t)(v->steps >> 32); break;
+    case 0x4A: { /* DP4B: four signed i8 lanes, dot product */
+      int32_t acc = 0;
+      for (int i = 0; i < 4; i++) {
+        int32_t av = (int32_t)(int8_t)((A >> (8*i)) & 0xFF);
+        int32_t bv = (int32_t)(int8_t)((B >> (8*i)) & 0xFF);
+        acc += av * bv;
+      }
+      r[d] = (uint32_t)acc; SETK(acc == 0, 0); break; }
     default: trap(v, 'O', pc); pc = v->pc; LEAVE(NAN_HALTED);
     }
   }

@@ -512,6 +512,8 @@ t_ops:
 .str "CPUID  "
 .word 69,33
 .str "RDTSC  "
+.word 74,801
+.str "DP4B   "
 .word 255,0
 .str "HALT   "
 .word 4096,0

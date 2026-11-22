@@ -46,6 +46,7 @@ Trap text: "!" + 'G'|'O' + uppercase hex of (pc after the fetch increment), min 
 3A FBINFO r[d]=FBW<<16|FBH  3B VSYNC  3C FBCOPY(count r[d], dst A, src B)  3D FBFILL(count r[d], start A, colour B&255)
 3E OUTB(port A&0xFFFF, val r[d])  3F INB  40 INW  41 OUTW  42 OUTSW(port A, src word index B, count r[d]; low16 of each payload, B not masked in x86)  43 OUTL (no INL exists)
 44 CPUID(leaf A, subleaf 0; r[d] = reg B&3 of EAX,EBX,ECX,EDX)  45 RDTSC (r[d] = A==0 ? low32 : high32)
+4A DP4B (four signed i8 lanes in A and B; r[d] = exact int32 dot; k Z=result==0, L=0)
 46 FEXP d,a = expf(A)  47 FTANH d,a = tanhf(A)  48 FLOG d,a = logf(A)
 Plain ops leave flags alone: MOVI MOVHI LD ST LDN STW KEY KEYQ TICK VPEEK VPOKE BSWAPM PUTC DISPQ FBINFO INB... BOOL/ADD/SUB/shifts/CMP*/MUL*/DIV*/ADDI set flags.
 [FIX] VPEEK with an out-of-range index leaves r[d] UNCHANGED (kernel jumps to loop without storing). VPOKE out of range is ignored.

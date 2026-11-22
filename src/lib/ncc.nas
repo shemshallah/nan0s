@@ -518,6 +518,7 @@
 .equ B_NAN 180
 .equ B_FDIM 181
 .equ B_FMA 182
+.equ B_DP4B 274
 .equ B_MODF 183
 .equ B_LDEXP 184
 .equ B_SCALBN 185
@@ -5940,6 +5941,14 @@ MOVI r4,#B_FMAX
 MOVI r5,2
 MOVI r6,#T_FLOAT
 CALL @ncc_add_builtin
+; dp4b: four signed i8 lanes in each u32, dot product
+LA r1,0x9601018F
+LA r2,@ncc_s_dp4b
+MOVI r3,4
+MOVI r4,#B_DP4B
+MOVI r5,2
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
 ; tan
 LA r1,0x9CF73498
 LA r2,@ncc_s_tan
@@ -8689,6 +8698,8 @@ ncc_s_fmin:
 .str "fmin"
 ncc_s_fmax:
 .str "fmax"
+ncc_s_dp4b:
+.str "dp4b"
 ncc_s_tan:
 .str "tan"
 ncc_s_strchr:
@@ -20147,6 +20158,9 @@ JMP[EQ] @nbi_fdim
 MOVI r2,#B_FMA
 CMP r1,r2
 JMP[EQ] @nbi_fma
+MOVI r2,#B_DP4B
+CMP r1,r2
+JMP[EQ] @nbi_dp4b
 MOVI r2,#B_MODF
 CMP r1,r2
 JMP[EQ] @nbi_modf
@@ -21485,6 +21499,14 @@ JMP @nbi_fdim_p
 nbi_fdim_z:
 MOVI r1,0
 nbi_fdim_p:
+CALL @ni_push
+JMP @nbi_d
+nbi_dp4b:
+CALL @ni_pop
+ST r1,r0,#W_F2P
+CALL @ni_pop
+LD r2,r0,#W_F2P
+DP4B r1,r1,r2
 CALL @ni_push
 JMP @nbi_d
 nbi_fma:

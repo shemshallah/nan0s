@@ -68,6 +68,7 @@ mnem:
 .word 2089408041,67,33   ; OUTL da
 .word 216578938,68,801   ; CPUID dab
 .word 233935749,69,33   ; RDTSC da
+.word 2089006223,74,801   ; DP4B dab
 .word 2089134446,255,0   ; HALT 
 .word 0,0,0
 preds:

@@ -7,7 +7,7 @@
 .equ MBYTES 0x80C8
 .equ RAW 0x01000000
 .equ RAWG 0xF000
-.equ MAXOP 0x45
+.equ MAXOP 0x4A
 .equ G 0x200000
 .equ R 0x8000
 .equ VGA 0xB8000
@@ -838,6 +838,34 @@ bf1:
   INC %EAX
   DEC %EDI
   JMP @bf1
+; DP4B: four signed i8 lanes in each payload, exact int32 dot product.
+h_dp4b:
+  PUSH %ESI
+  XOR %EBX,%EBX
+  MOVSX %CL,%EAX
+  MOVSX %DL,%ESI
+  IMUL %ESI,%EAX
+  ADD %EAX,%EBX
+  SHR $8,%ECX
+  SHR $8,%EDX
+  MOVSX %CL,%EAX
+  MOVSX %DL,%ESI
+  IMUL %ESI,%EAX
+  ADD %EAX,%EBX
+  SHR $8,%ECX
+  SHR $8,%EDX
+  MOVSX %CL,%EAX
+  MOVSX %DL,%ESI
+  IMUL %ESI,%EAX
+  ADD %EAX,%EBX
+  SHR $8,%ECX
+  SHR $8,%EDX
+  MOVSX %CL,%EAX
+  MOVSX %DL,%ESI
+  IMUL %ESI,%EAX
+  ADD %EAX,%EBX
+  POP %ESI
+  JMP @wf
 h_fadd:
   MOVD %ECX,%XMM0
   MOVD %EDX,%XMM1
@@ -1216,6 +1244,7 @@ tbl:
   .long @h_mul,@h_mulh,@h_mulhu,@h_div,@h_mod,@h_divu,@h_modu,@h_sar,@h_cmps,@h_addi,@h_ldb,@h_stb,@h_callr,@h_bcopy,@h_bfill,@h_nop
   .long @h_fadd,@h_fsub,@h_fmul,@h_fdiv,@h_fsqrt,@h_fcmp,@h_cvtif,@h_cvtfi,@h_jmpf,@h_callf
   .long @h_fbinfo,@h_vsync,@h_fbcopy,@h_fbfill,@h_outb,@h_inb,@h_inw,@h_outw,@h_outsw,@h_outl,@h_cpuid,@h_rdtsc
+  .long @badop,@badop,@badop,@badop,@h_dp4b
 
 
 ; ---- memory discovery: E820 -> runtime word mask --------------------

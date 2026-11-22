@@ -319,17 +319,14 @@ model that is explicit rather than accidental.
     3A INB d,a | 3B OUTB a,b | 3C INW d,a | 3D OUTW a,b   port I/O
     3E DISKW (optional)        write sealed block range
     3F reserved                IRQ control stays in the kernel via port I/O
-    40-4F scale + AI family (candidate encodings, frozen when coded):
-      40 ADDRH a                 address high half (64-bit ea; §4.1)
-      41 CAS d,a,b               atomic compare-exchange on ea(d) payload
-      42 XADD d,a,b              atomic fetch-add, d = old
-      43 XCHG d,a,b              atomic swap, d = old
-      44 FENCE                   full memory barrier
-      45 FMA d,a,b               fused float32 multiply-add
-      46 DP2H d,a,b              dot 2 x f16 (packed payload lanes)
-      47 DP4B d,a,b              dot 4 x i8 (packed payload lanes)
-      48 CVTPK d,a               convert f32 <-> 2 x f16 (packed)
-      49-4F reserved             bf16 variants and lane select when coded
+    40-4A implemented device/AI family:
+      40 INW d,a | 41 OUTW a,b | 42 OUTSW a,b | 43 OUTL a,d
+      44 CPUID d,a,b             machine/leaf query (0x4E4D00FF = memory)
+      45 RDTSC d,a
+      46 FEXP d,a | 47 FTANH d,a | 48 FLOG d,a
+      4A DP4B d,a,b              exact dot product of four signed i8 lanes;
+                                 r[d]=int32, k=(Z,0)
+      49,4B-4F reserved          FMA/DP2H/CVTPK land only with exact gates
 
 All atomics operate on the 32-bit payload of one aligned word and are
 sequentially consistent with FENCE; they are the only shared-memory
@@ -385,7 +382,7 @@ existing op/ABI or its op is added here with a version.
 | NaNVM1 op set 0x20-0x48 (32-bit mul/div, bytes, BCOPY, float32, FEXP/FTANH/FLOG) | DONE in the C core (`aarch64/android/core/nan16.c`, `tests/test_core.c`); native implementation PLAN (§4) |
 | 64-bit effective addresses (ADDRH, 0x40) | PLAN (§4.1) |
 | SMP cores, atomics, fences (0x41-0x44) | PLAN (§9.2, §9.3) |
-| AI packed math: FMA, DP2H, DP4B, CVTPK (0x49-0x4C) | PLAN (§11) |
+| AI packed math: DP4B (0x4A) | DONE in C core and native x86 (`nan_simd`, `ncc_dp4b`); FMA/DP2H/CVTPK PLAN |
 | 16 GB RAM configuration (NAN_WORDS, 64-bit indices, demand-mapped host memory) | PLAN — C core revision |
 | nalloc64 (heaps > 2^31 words, 64-bit pointers/sizes) | PLAN (§11) |
 | NaNVM1 native flat memory + 32-bit pc | PLAN (§4.1-4.2) |
