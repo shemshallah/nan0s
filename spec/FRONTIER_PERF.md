@@ -62,11 +62,14 @@ VDP4B d,a,b
 
 That is 16 dot products = **64 MACs per guest instruction**, with no NaN
 control flow inside the tile. A memory-tile form (`VLOAD` four rows, `VDP4B`,
-`VSTORE`) is built from the same primitive. The native core now implements `VDP4B` with SSE2:
+`VSTORE`) is built from the same primitive. The native core implements `VDP4B` with SSE2:
 `pcmpgtb` for the sign mask, `punpcklbw/hbw` to sign-extend bytes to words,
 `pmaddwd` for pair sums, and `pshufd`/`paddd` to form the 16 int32 lane
-results. AVX2/AVX-512 can widen the same lowering; NEON/RVV use their own
-dot instructions. The C core remains the exact reference.
+results. The packed `VADD8/VSUB8` (`paddb/psubb`), `VADD32/VSUB32`
+(`paddd/psubd`) and `VMUL32` (SSE2 `pmuludq` + shuffle) paths are also
+SSE2, four 128-bit chunks per 512-bit register. AVX2/AVX-512 can widen the
+same lowerings; NEON/RVV use their own dot instructions. The C core remains
+the exact reference.
 
 On a host with AVX2 a second form, `DP8X4`, can use 256-bit registers for
 128 MACs per instruction. On AArch64 the same IR lowers to `smull`/`sadalp`

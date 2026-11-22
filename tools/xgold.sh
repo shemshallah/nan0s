@@ -28,6 +28,7 @@ asm_one() { # src out.bin
 asm_one x86/boot/kboot0.xa "$T/boot.bin"
 asm_one src/native/kan16.xa "$T/kern.bin"
 [ "$(wc -c < "$T/boot.bin")" -eq 512 ] || { echo "xgold: boot is not 512 bytes"; exit 1; }
+[ "$(wc -c < "$T/kern.bin")" -le 8192 ] || { echo "xgold: kernel exceeds 16 boot sectors"; exit 1; }
 python3 - "$T" <<'PY'
 import sys
 T=sys.argv[1]

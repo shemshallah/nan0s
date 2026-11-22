@@ -1,4 +1,4 @@
-; NaN16 gold: boot 512 + kernel 6574 bytes (runtime E820 memory sizing)
+; NaN16 gold: boot 512 + kernel 7076 bytes (runtime E820 memory sizing)
 fa 31 c0 8e d8 8e d0 bc 00 7c fb 88 16 b5 7c 8e   ; boot+0000
 c0 66 31 db bf 00 06 31 f6 66 b8 20 e8 00 00 66   ; boot+0010
 ba 50 41 4d 53 66 b9 18 00 00 00 cd 15 72 16 66   ; boot+0020
@@ -413,8 +413,8 @@ dd 07 01 00 09 08 01 00 03 07 01 00 76 07 01 00   ; kernel+17A0
 46 0f 01 00 46 0f 01 00 46 0f 01 00 46 0f 01 00   ; kernel+17B0
 25 0a 01 00 46 0f 01 00 46 0f 01 00 46 0f 01 00   ; kernel+17C0
 46 0f 01 00 46 0f 01 00 b1 0a 01 00 d4 0a 01 00   ; kernel+17D0
-bc 0d 01 00 0a 0e 01 00 15 0c 01 00 67 0c 01 00   ; kernel+17E0
-b9 0c 01 00 0f 0d 01 00 65 0d 01 00 f5 0a 01 00   ; kernel+17F0
+bc 0d 01 00 0a 0e 01 00 ae 19 01 00 0c 1a 01 00   ; kernel+17E0
+6a 1a 01 00 c8 1a 01 00 26 1b 01 00 f5 0a 01 00   ; kernel+17F0
 46 0f 01 00 46 0f 01 00 46 0f 01 00 46 0f 01 00   ; kernel+1800
 c7 0b 01 00 f0 0b 01 00 6c 0a 01 00 77 0a 01 00   ; kernel+1810
 53 51 52 56 57 0f b7 0d fc 05 00 00 85 c9 74 32   ; kernel+1820
@@ -441,4 +441,36 @@ f4 01 89 d8 c1 e8 08 ee 66 ba f5 01 89 d8 c1 e8   ; kernel+1960
 10 ee 66 ba f7 01 b0 20 ee ec a8 80 75 fb ec a8   ; kernel+1970
 08 74 fb 66 ba f0 01 b9 80 00 00 00 f3 6d 43 ff   ; kernel+1980
 0d 5a 17 01 00 75 a3 c3 be 00 20 01 00 bf 00 00   ; kernel+1990
-20 00 b9 00 00 02 00 f3 a5 c3 00 00 00 00   ; kernel+19A0
+20 00 b9 00 00 02 00 f3 a5 c3 00 00 00 00 56 57   ; kernel+19A0
+53 55 89 c6 c1 ee 10 83 e6 0f c1 e6 06 81 c6 00   ; kernel+19B0
+20 00 00 89 c3 83 e3 0f c1 e3 06 81 c3 00 20 00   ; kernel+19C0
+00 89 c7 c1 ef 14 83 e7 0f c1 e7 06 81 c7 00 20   ; kernel+19D0
+00 00 b9 04 00 00 00 f3 0f 6f 06 f3 0f 6f 0b 66   ; kernel+19E0
+0f fc c1 f3 0f 7f 07 83 c6 10 83 c3 10 83 c7 10   ; kernel+19F0
+49 75 e4 5d 5b 5f 5e e9 90 e6 ff ff 56 57 53 55   ; kernel+1A00
+89 c6 c1 ee 10 83 e6 0f c1 e6 06 81 c6 00 20 00   ; kernel+1A10
+00 89 c3 83 e3 0f c1 e3 06 81 c3 00 20 00 00 89   ; kernel+1A20
+c7 c1 ef 14 83 e7 0f c1 e7 06 81 c7 00 20 00 00   ; kernel+1A30
+b9 04 00 00 00 f3 0f 6f 06 f3 0f 6f 0b 66 0f f8   ; kernel+1A40
+c1 f3 0f 7f 07 83 c6 10 83 c3 10 83 c7 10 49 75   ; kernel+1A50
+e4 5d 5b 5f 5e e9 32 e6 ff ff 56 57 53 55 89 c6   ; kernel+1A60
+c1 ee 10 83 e6 0f c1 e6 06 81 c6 00 20 00 00 89   ; kernel+1A70
+c3 83 e3 0f c1 e3 06 81 c3 00 20 00 00 89 c7 c1   ; kernel+1A80
+ef 14 83 e7 0f c1 e7 06 81 c7 00 20 00 00 b9 04   ; kernel+1A90
+00 00 00 f3 0f 6f 06 f3 0f 6f 0b 66 0f fe c1 f3   ; kernel+1AA0
+0f 7f 07 83 c6 10 83 c3 10 83 c7 10 49 75 e4 5d   ; kernel+1AB0
+5b 5f 5e e9 d4 e5 ff ff 56 57 53 55 89 c6 c1 ee   ; kernel+1AC0
+10 83 e6 0f c1 e6 06 81 c6 00 20 00 00 89 c3 83   ; kernel+1AD0
+e3 0f c1 e3 06 81 c3 00 20 00 00 89 c7 c1 ef 14   ; kernel+1AE0
+83 e7 0f c1 e7 06 81 c7 00 20 00 00 b9 04 00 00   ; kernel+1AF0
+00 f3 0f 6f 06 f3 0f 6f 0b 66 0f fa c1 f3 0f 7f   ; kernel+1B00
+07 83 c6 10 83 c3 10 83 c7 10 49 75 e4 5d 5b 5f   ; kernel+1B10
+5e e9 76 e5 ff ff 56 57 53 55 89 c6 c1 ee 10 83   ; kernel+1B20
+e6 0f c1 e6 06 81 c6 00 20 00 00 89 c3 83 e3 0f   ; kernel+1B30
+c1 e3 06 81 c3 00 20 00 00 89 c7 c1 ef 14 83 e7   ; kernel+1B40
+0f c1 e7 06 81 c7 00 20 00 00 b9 04 00 00 00 f3   ; kernel+1B50
+0f 6f 06 f3 0f 6f 1b 66 0f 6f d0 66 0f f4 c3 66   ; kernel+1B60
+0f 73 d2 20 66 0f 73 d3 20 66 0f f4 d3 66 0f 70   ; kernel+1B70
+c0 08 66 0f 70 d2 08 66 0f 62 c2 f3 0f 7f 07 83   ; kernel+1B80
+c6 10 83 c3 10 83 c7 10 49 75 c4 5d 5b 5f 5e e9   ; kernel+1B90
+f8 e4 ff ff   ; kernel+1BA0

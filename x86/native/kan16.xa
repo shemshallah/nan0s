@@ -1658,7 +1658,7 @@ tbl:
   .long @h_fbinfo,@h_vsync,@h_fbcopy,@h_fbfill,@h_outb,@h_inb,@h_inw,@h_outw,@h_outsw,@h_outl,@h_cpuid,@h_rdtsc
   .long @badop,@badop,@badop,@badop,@h_dp4b
   .long @badop,@badop,@badop,@badop,@badop
-  .long @h_vzero,@h_vbcast,@h_vload,@h_vstore,@h_vadd8,@h_vsub8,@h_vadd32,@h_vsub32,@h_vmul32,@h_vdp4b,@badop,@badop,@badop,@badop,@h_vget,@h_vset
+  .long @h_vzero,@h_vbcast,@h_vload,@h_vstore,@h_vadd8_sse2,@h_vsub8_sse2,@h_vadd32_sse2,@h_vsub32_sse2,@h_vmul32_sse2,@h_vdp4b,@badop,@badop,@badop,@badop,@h_vget,@h_vset
   .long @h_codelen,@h_execn
 
 
@@ -1748,3 +1748,188 @@ ata_load_guest:
   .byte 0x08,0x74,0xFB,0x66,0xBA,0xF0,0x01,0xB9,0x80,0x00,0x00,0x00,0xF3,0x6D,0x43,0xFF
   .byte 0x0D,0x5A,0x17,0x01,0x00,0x75,0xA3,0xC3,0xBE,0x00,0x20,0x01,0x00,0xBF,0x00,0x00
   .byte 0x20,0x00,0xB9,0x00,0x00,0x02,0x00,0xF3,0xA5,0xC3,0x00,0x00,0x00,0x00
+
+; ---- SSE2 tier for the packed vector arithmetic (appended after the
+; fixed .org regions so the kernel code window stays intact) ----
+h_vadd8_sse2:
+  PUSH %ESI
+  PUSH %EDI
+  PUSH %EBX
+  PUSH %EBP
+  MOV %EAX,%ESI
+  SHR $16,%ESI
+  AND $15,%ESI
+  SHL $6,%ESI
+  ADD $VREG,%ESI
+  MOV %EAX,%EBX
+  AND $15,%EBX
+  SHL $6,%EBX
+  ADD $VREG,%EBX
+  MOV %EAX,%EDI
+  SHR $20,%EDI
+  AND $15,%EDI
+  SHL $6,%EDI
+  ADD $VREG,%EDI
+  MOV $4,%ECX
+va8s_l:
+  .byte 0xF3,0x0F,0x6F,0x06
+  .byte 0xF3,0x0F,0x6F,0x0B
+  .byte 0x66,0x0F,0xFC,0xC1
+  .byte 0xF3,0x0F,0x7F,0x07
+  ADD $16,%ESI
+  ADD $16,%EBX
+  ADD $16,%EDI
+  DEC %ECX
+  JNZ @va8s_l
+  POP %EBP
+  POP %EBX
+  POP %EDI
+  POP %ESI
+  JMP @loop
+h_vsub8_sse2:
+  PUSH %ESI
+  PUSH %EDI
+  PUSH %EBX
+  PUSH %EBP
+  MOV %EAX,%ESI
+  SHR $16,%ESI
+  AND $15,%ESI
+  SHL $6,%ESI
+  ADD $VREG,%ESI
+  MOV %EAX,%EBX
+  AND $15,%EBX
+  SHL $6,%EBX
+  ADD $VREG,%EBX
+  MOV %EAX,%EDI
+  SHR $20,%EDI
+  AND $15,%EDI
+  SHL $6,%EDI
+  ADD $VREG,%EDI
+  MOV $4,%ECX
+vs8s_l:
+  .byte 0xF3,0x0F,0x6F,0x06
+  .byte 0xF3,0x0F,0x6F,0x0B
+  .byte 0x66,0x0F,0xF8,0xC1
+  .byte 0xF3,0x0F,0x7F,0x07
+  ADD $16,%ESI
+  ADD $16,%EBX
+  ADD $16,%EDI
+  DEC %ECX
+  JNZ @vs8s_l
+  POP %EBP
+  POP %EBX
+  POP %EDI
+  POP %ESI
+  JMP @loop
+h_vadd32_sse2:
+  PUSH %ESI
+  PUSH %EDI
+  PUSH %EBX
+  PUSH %EBP
+  MOV %EAX,%ESI
+  SHR $16,%ESI
+  AND $15,%ESI
+  SHL $6,%ESI
+  ADD $VREG,%ESI
+  MOV %EAX,%EBX
+  AND $15,%EBX
+  SHL $6,%EBX
+  ADD $VREG,%EBX
+  MOV %EAX,%EDI
+  SHR $20,%EDI
+  AND $15,%EDI
+  SHL $6,%EDI
+  ADD $VREG,%EDI
+  MOV $4,%ECX
+va32s_l:
+  .byte 0xF3,0x0F,0x6F,0x06
+  .byte 0xF3,0x0F,0x6F,0x0B
+  .byte 0x66,0x0F,0xFE,0xC1
+  .byte 0xF3,0x0F,0x7F,0x07
+  ADD $16,%ESI
+  ADD $16,%EBX
+  ADD $16,%EDI
+  DEC %ECX
+  JNZ @va32s_l
+  POP %EBP
+  POP %EBX
+  POP %EDI
+  POP %ESI
+  JMP @loop
+h_vsub32_sse2:
+  PUSH %ESI
+  PUSH %EDI
+  PUSH %EBX
+  PUSH %EBP
+  MOV %EAX,%ESI
+  SHR $16,%ESI
+  AND $15,%ESI
+  SHL $6,%ESI
+  ADD $VREG,%ESI
+  MOV %EAX,%EBX
+  AND $15,%EBX
+  SHL $6,%EBX
+  ADD $VREG,%EBX
+  MOV %EAX,%EDI
+  SHR $20,%EDI
+  AND $15,%EDI
+  SHL $6,%EDI
+  ADD $VREG,%EDI
+  MOV $4,%ECX
+vs32s_l:
+  .byte 0xF3,0x0F,0x6F,0x06
+  .byte 0xF3,0x0F,0x6F,0x0B
+  .byte 0x66,0x0F,0xFA,0xC1
+  .byte 0xF3,0x0F,0x7F,0x07
+  ADD $16,%ESI
+  ADD $16,%EBX
+  ADD $16,%EDI
+  DEC %ECX
+  JNZ @vs32s_l
+  POP %EBP
+  POP %EBX
+  POP %EDI
+  POP %ESI
+  JMP @loop
+h_vmul32_sse2:
+  PUSH %ESI
+  PUSH %EDI
+  PUSH %EBX
+  PUSH %EBP
+  MOV %EAX,%ESI
+  SHR $16,%ESI
+  AND $15,%ESI
+  SHL $6,%ESI
+  ADD $VREG,%ESI
+  MOV %EAX,%EBX
+  AND $15,%EBX
+  SHL $6,%EBX
+  ADD $VREG,%EBX
+  MOV %EAX,%EDI
+  SHR $20,%EDI
+  AND $15,%EDI
+  SHL $6,%EDI
+  ADD $VREG,%EDI
+  MOV $4,%ECX
+vm32s_l:
+  .byte 0xF3,0x0F,0x6F,0x06
+  .byte 0xF3,0x0F,0x6F,0x1B
+  .byte 0x66,0x0F,0x6F,0xD0
+  .byte 0x66,0x0F,0xF4,0xC3
+  .byte 0x66,0x0F,0x73,0xD2,0x20
+  .byte 0x66,0x0F,0x73,0xD3,0x20
+  .byte 0x66,0x0F,0xF4,0xD3
+  .byte 0x66,0x0F,0x70,0xC0,0x08
+  .byte 0x66,0x0F,0x70,0xD2,0x08
+  .byte 0x66,0x0F,0x62,0xC2
+  .byte 0xF3,0x0F,0x7F,0x07
+  ADD $16,%ESI
+  ADD $16,%EBX
+  ADD $16,%EDI
+  DEC %ECX
+  JNZ @vm32s_l
+  POP %EBP
+  POP %EBX
+  POP %EDI
+  POP %ESI
+  JMP @loop
