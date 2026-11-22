@@ -5,7 +5,7 @@
 .include "x86_64.nas"
 
 x64_block:
-  ST r15,r0,@xb_ret
+  ST r15,r0,@xb_retaddr
   ST r1,r0,@xb_src
   ST r2,r0,@xb_n
   ST r3,r0,@xb_out
@@ -34,6 +34,21 @@ xb_loop:
   MOVI r11,0xFF
   CMP r7,r11
   JMP[EQ] @xb_halt
+  MOVI r11,0x0B
+  CMP r7,r11
+  JMP[EQ] @xb_call
+  MOVI r11,0x2C
+  CMP r7,r11
+  JMP[EQ] @xb_callr
+  MOVI r11,0x0C
+  CMP r7,r11
+  JMP[EQ] @xb_ret
+  MOVI r11,0x0D
+  CMP r7,r11
+  JMP[EQ] @xb_jmpr
+  MOVI r11,0x0F
+  CMP r7,r11
+  JMP[EQ] @xb_adv
   MOVI r11,0x0A
   CMP r7,r11
   JMP[EQ] @xb_jmp
@@ -159,6 +174,39 @@ xb_cmps:
   CALL @x64_cmp
   ST r1,r0,@xb_out
   JMP @xb_adv
+xb_call:
+  LD r1,r0,@xb_out
+  ADD r7,r10,r0
+  LD r8,r0,@xb_next
+  CALL @x64_call
+  ST r1,r0,@xb_out
+  JMP @xb_ended
+
+xb_callr:
+  LD r1,r0,@xb_out
+  MOVI r5,15
+  LD r7,r0,@xb_next
+  CALL @x64_movi
+  ST r1,r0,@xb_out
+  ADD r9,r9,r0
+  CALL @x64_jump_reg
+  ST r1,r0,@xb_out
+  JMP @xb_ended
+
+xb_ret:
+  LD r1,r0,@xb_out
+  MOVI r9,15
+  CALL @x64_jump_reg
+  ST r1,r0,@xb_out
+  JMP @xb_ended
+
+xb_jmpr:
+  LD r1,r0,@xb_out
+  ADD r9,r9,r0
+  CALL @x64_jump_reg
+  ST r1,r0,@xb_out
+  JMP @xb_ended
+
 xb_halt:
   LD r1,r0,@xb_out
   CALL @x64_halt
@@ -245,14 +293,14 @@ xb_done:
   LD r1,r0,@xb_out
   LD r2,r0,@xb_start
   SUB r1,r1,r2
-  LD r15,r0,@xb_ret
+  LD r15,r0,@xb_retaddr
   RET
 xb_fail:
   MOVI r1,0
-  LD r15,r0,@xb_ret
+  LD r15,r0,@xb_retaddr
   RET
 
-xb_ret:
+xb_retaddr:
   .word 0
 xb_src:
   .word 0

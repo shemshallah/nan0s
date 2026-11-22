@@ -81,15 +81,15 @@ long_mode:
     /* copy the three NaN-emitted blocks to executable pages */
     lea block0(%rip), %rsi
     mov $0x51000, %rdi
-    mov $512, %rcx
+    mov $2048, %rcx
     rep movsb
     lea block1(%rip), %rsi
     mov $0x52000, %rdi
-    mov $512, %rcx
+    mov $2048, %rcx
     rep movsb
     lea block2(%rip), %rsi
     mov $0x53000, %rdi
-    mov $512, %rcx
+    mov $2048, %rcx
     rep movsb
 
     /* zero the 16 guest registers, FLAGM, XPC, mask and halt flag */
@@ -116,6 +116,8 @@ dispatch:
     call *%rdx
     cmpl $0, 0x50C00
     jne done
+    /* a block may set XPC backwards (RET); rescan from the table base */
+    lea block_table(%rip), %rbx
     jmp dispatch
 next:
     add $16, %rbx

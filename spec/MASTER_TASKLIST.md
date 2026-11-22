@@ -71,7 +71,10 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done and gated.
       model; `qgate64byte` (r1=0xAB, XPC=0x200).
 - [x] HALT and the mechanical multi-block `(pc, code)` dispatcher;
       `qgate64prog` runs a three-block loop (r1=3, XPC=5).
-- [ ] Full NaN-coded 64-bit core: LDN, CALL/RET/JMPR, MUL/DIV, BOOL,
+- [x] Guest control flow: CALL, CALLR, RET, JMPR and NOP; `qgate64call`
+      calls across blocks and returns to an earlier PC (r1=16, XPC=2).
+      The native dispatcher now rescans its table after each block.
+- [ ] Full NaN-coded 64-bit core: LDN/STW/BSWAPM, MUL/DIV/MOD, BOOL,
       traps, vector/FP families, guest loader and self-hosting.
 - [ ] Port the native NaN16 execution core to 64-bit (`kan64`) only where the
       bootstrap/EXECN substrate requires it; core policy stays NaN.

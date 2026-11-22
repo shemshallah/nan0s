@@ -25,7 +25,7 @@ assert b0[:3]==b'\xc7\x04\x25', ('bad block0 prefix', b0[:8].hex())
 assert b1[:3]==b'\x8b\x04\x25', ('bad block1 prefix', b1[:8].hex())
 assert b2[:3]==b'\xc7\x04\x25', ('bad block2 prefix', b2[:8].hex())
 for name,b in (('b0.bin',b0),('b1.bin',b1),('b2.bin',b2)):
-    open(sys.argv[2]+'/'+name,'wb').write(b + b'\0'*(512-len(b)))
+    open(sys.argv[2]+'/'+name,'wb').write(b + b'\0'*(2048-len(b)))
 print('blocks',len(b0),len(b1),len(b2))
 PY
 

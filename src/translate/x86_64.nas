@@ -9,6 +9,7 @@
 .equ X64_FLAGM 0x50400
 .equ X64_MASK 0x50404
 .equ X64_G 0x200000
+.equ X64_HALT 0x50C00
 
 ; x64_8: r1=out r2=byte -> r1=out+1
 x64_8:
@@ -670,6 +671,70 @@ x64_stb:
   CALL @x64_8
   MOVI r2,0x7F
   CALL @x64_8
+  SUB r14,r14,r13
+  LD r15,r14,0
+  RET
+
+
+; HALT: set the native stop flag at 0x50C00 and return
+x64_halt:
+  ST r15,r14,0
+  ADD r14,r14,r13
+  MOVI r2,0xC7
+  CALL @x64_8
+  MOVI r2,0x04
+  CALL @x64_8
+  MOVI r2,0x25
+  CALL @x64_8
+  LA r2,#X64_HALT
+  CALL @x64_32
+  MOVI r2,1
+  CALL @x64_32
+  MOVI r2,0xC3
+  CALL @x64_8
+  SUB r14,r14,r13
+  LD r15,r14,0
+  RET
+
+
+; jump to guest register R[a]; r9 = a.  Emits:
+;   8B 04 25 R[a] ; 89 04 25 XPC ; C3
+x64_jump_reg:
+  ST r15,r14,0
+  ADD r14,r14,r13
+  MOVI r2,0x8B
+  CALL @x64_8
+  MOVI r2,0x04
+  CALL @x64_8
+  MOVI r2,0x25
+  CALL @x64_8
+  ADD r6,r9,r0
+  CALL @x64_addr
+  MOVI r2,0x89
+  CALL @x64_8
+  MOVI r2,0x04
+  CALL @x64_8
+  MOVI r2,0x25
+  CALL @x64_8
+  LA r2,#X64_XPC
+  CALL @x64_32
+  MOVI r2,0xC3
+  CALL @x64_8
+  SUB r14,r14,r13
+  LD r15,r14,0
+  RET
+
+; CALL: R15 = next; XPC = target; RET
+; r7 = target, r8 = next
+x64_call:
+  ST r15,r14,0
+  ADD r14,r14,r13
+  MOVI r5,15
+  ADD r7,r8,r0
+  CALL @x64_movi
+  ADD r7,r10,r0
+  CALL @x64_set_xpc
+  CALL @x64_ret
   SUB r14,r14,r13
   LD r15,r14,0
   RET

@@ -41,9 +41,10 @@ The emitted x86-64 uses SIB absolute `disp32` addressing, e.g.
 
 Current NaN encoder coverage: MOVI, MOVHI, ADD, SUB, ADDI, SHL, SHR, SAR,
 CMP/CMPS, FLAGM, JMP[cond], LD/ST, LDB/STB (word/byte guest memory at
-G=0x200000 with the mask at 0x50404), set-XPC, HALT and RET.  Gates:
-`qgate64core`, `qgate64block`, `qgate64alu`, `qgate64branch`,
-`qgate64mem` (0x12345678), `qgate64byte` (0xAB).
+G=0x200000 with the mask at 0x50404), set-XPC, HALT, RET, JMPR, CALL,
+CALLR and NOP.  Gates: `qgate64core`, `qgate64block`, `qgate64alu`,
+`qgate64branch`, `qgate64mem` (0x12345678), `qgate64byte` (0xAB),
+`qgate64call` (CALL/RET across blocks, r1=16).
 
 ## Multi-block dispatch
 
@@ -68,6 +69,11 @@ Two bugs found by the multi-block gate and fixed in the NaN driver:
   `xb_endflag`.
 - a conditional branch's fallthrough used the translator's source pointer + 1
   instead of the guest's declared next PC; it now uses `@xb_next`.
+
+`qgate64call` adds a second lesson: a block may set XPC *backwards* (RET), so
+the native dispatcher must rescan the table from its base after every block
+rather than continuing from the matched entry.  Block images are copied in
+2 KiB pages, so a block is no longer limited to 512 bytes.
 
 Next: LDN/LDW/STW, CALL/RET/JMPR, multiply/divide and BOOL, traps, the
 vector/FP families, a guest loader that preserves NaN header predicates,
