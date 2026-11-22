@@ -538,6 +538,10 @@ t_ops:
 .str "VGET   "
 .word 95,1057
 .str "VSET   "
+.word 96,2
+.str "CODELEN"
+.word 97,2
+.str "EXECN  "
 .word 255,0
 .str "HALT   "
 .word 4096,0

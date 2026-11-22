@@ -79,6 +79,8 @@ mnem:
 .word 238674053,89,801   ; VDP4B dab
 .word 2089643867,94,1057   ; VGET dai
 .word 2089656935,95,1057   ; VSET dai
+.word 3866800767,96,2   ; CODELEN a
+.word 219220664,97,2   ; EXECN a
 .word 233935749,69,33   ; RDTSC da
 .word 2089006223,74,801   ; DP4B dab
 .word 2089134446,255,0   ; HALT 
