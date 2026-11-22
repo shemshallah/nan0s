@@ -88,8 +88,10 @@ first honest "respectable" target: **7B Q4 at <=1 s/token on 8 cores**, then
   64-bit sizes. Never realloc per token; reset/mark at request boundaries.
 - Activations: per-request arena; one reset per token.
 - Quantization: store Q4 weights as two 4-bit values per byte, Q8
-  activations. `DP4X4` consumes i8; a `DP4B4` (4-bit weights, 8-bit
-  activations) is the next variant after the i8 tile is exact.
+  activations. `VDP4B` consumes i8 pairs exactly; `VDP4B4` (4-bit weights,
+  8-bit activations, 128 MACs/op) is reserved under the `VOP` space and
+  lands only after its nibble order and accumulation rules are specified.
+  fp8 e4m3/e5m2, f16 and bf16 lane formats are reserved the same way.
 - Tensor descriptors: `nten` 64-bit base/strides, 64-byte-aligned tiles.
 
 ## 5. Threading

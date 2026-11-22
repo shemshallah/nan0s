@@ -132,11 +132,28 @@ not change flags except where a future saturating/compare form defines it.
 the fast path; unaligned is allowed and byte-exact. `VSTORE` rewrites each
 touched word with the +q/+q class, like `ST`/`STB`.
 
+Future packed formats (reserved until gated):
+
+| format | lanes / 512 bits | packing | planned op |
+| --- | --- | --- | --- |
+| i4 | 128 | two values per byte, low nibble first | `VDP4B4` (8 weights x 8 i8 per 32-bit lane = 128 MACs/op) |
+| fp8 e4m3 | 64 | one byte per value | `VDP4F8` (16 dots of 4 fp8 pairs) |
+| fp8 e5m2 | 64 | one byte per value | as above, separate sub-op |
+| f16 | 32 | little-endian half per 16 bits | `VDP2H` |
+| bf16 | 32 | little-endian half per 16 bits | `VDP2B` |
+
+An fp8/int4 op is not frozen until its rounding and saturation rules are in
+this document and pass the same exact-lane gate as VDP4B. The format bits
+are reserved now so cartridges can be written against the eventual encoding.
+
 Reserved widening space:
 
 - `0x4B` is the `VOP` prefix: `imm[15:4]` is a 12-bit sub-op, `imm[3:0]` is a
-  vector-source selector. It is reserved for 1024/2048-bit forms, fp8/int4
-  tensor ops and lane-select variants.
+  vector-source selector. Sub-op layout:
+  `subop[11:8] = width code` (0 = 512, 1 = 1024, 2 = 2048, 3 = 4096 bits),
+  `subop[7:0] = operation` (e.g. 0x01 VDP4B, 0x10 VDP4B4, 0x20 VDP4F8,
+  0x30 VDP2H). A 1024/2048-bit op consumes explicit register pairs/quads;
+  it is a new sub-op, never a silent widening of 0x50-0x5F.
 - `0x4C-0x4F` and `0x60-0x7F` are reserved. A future width bump must use
   these or `VOP`; it may not redefine `0x50-0x5F`, so old cartridges keep
   their meaning forever.
