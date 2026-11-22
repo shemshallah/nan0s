@@ -17,37 +17,37 @@
 .include "mpp.nas"
 
 ; ------------------------------------------------------------------ memory map
-.equ NCC_IRB    3000000      ; IR: 2 words per instruction (byte 12 MB)
+.equ NCC_IRB    1000000      ; IR: 2 words per instruction (byte 4 MB)
 .equ NCC_IRMAX  400000
-.equ NCC_IREND  3400000
-.equ NCC_NAME   1600000      ; identifier spelling pool (4 chars/word)
+.equ NCC_IREND  1400000
+.equ NCC_NAME   1760000      ; identifier spelling pool (4 chars/word)
 .equ NCC_NAMEMAX 50000
-.equ NCC_STRB   1650000      ; scratch / preprocessor text
+.equ NCC_STRB   1780000      ; scratch / preprocessor text
 .equ NCC_STRMAX 50000
-.equ NCC_SYMB   1750000      ; 4096 entries x 16 words
+.equ NCC_SYMB   1800000      ; 4096 entries x 16 words
 .equ NCC_SYMMAX 65536
 .equ NCC_SYMENTRIES 4096
-.equ NCC_TYPEB  1820000      ; 4096 type entries x 8 words
+.equ NCC_TYPEB  1870000      ; 4096 type entries x 8 words
 .equ NCC_TYPEMAX 32768
-.equ NCC_PARM   1860000      ; function parameter descriptor tables
+.equ NCC_PARM   1910000      ; function parameter descriptor tables
 .equ NCC_PARMMAX 32768
-.equ NCC_MEMB   1900000      ; struct/union member tables
+.equ NCC_MEMB   1950000      ; struct/union member tables
 .equ NCC_MEMBMAX 32768
-.equ NCC_CASEB  1940000      ; switch case table: 2048 x (value,target)
+.equ NCC_CASEB  1990000      ; switch case table: 2048 x (value,target)
 .equ NCC_CASEMAX 4096
-.equ NCC_GOTOB  1950000      ; pending goto patches: 2048 x (label-sym,jmp-index)
+.equ NCC_GOTOB  2000000      ; pending goto patches: 2048 x (label-sym,jmp-index)
 .equ NCC_GOTOMAX 4096
-.equ NCC_ESB    3400000      ; expression stack (words; byte 13.6 MB)
+.equ NCC_ESB    1400000      ; expression stack (words; byte 5.6 MB)
 .equ NCC_ESMAX  200000
-.equ NCC_ESEND  3600000
-.equ NCC_PS     3600000      ; compiler/interpreter call stack (words; byte 14.4 MB)
+.equ NCC_ESEND  1600000
+.equ NCC_PS     1600000      ; compiler/interpreter call stack (words; byte 6.4 MB)
 ; C program memory is byte-addressed: 4 payload bytes per NaN word.
-.equ C_RODATA   1000000      ; string literals and const data
-.equ C_ROEND    1500000
-.equ C_GLOB     1500000      ; globals and static locals
-.equ C_GLOBEND  2000000
-.equ C_HEAP     2000000      ; growable malloc arena
-.equ C_HEAP_END 12000000
+.equ C_RODATA   500000       ; string literals and const data
+.equ C_ROEND    1000000
+.equ C_GLOB     1000000      ; globals and static locals
+.equ C_GLOBEND  1500000
+.equ C_HEAP     8100000      ; growable malloc arena
+.equ C_HEAP_END 15000000
 .equ C_STACK    15000000     ; C call stack (bytes, grows up)
 .equ C_STACK_END 16000000
 
@@ -790,7 +790,7 @@
 .equ W_ALLOC_OLD 61825
 .equ W_ALLOC_NEW 61826
 .equ W_AGHI     61827
-.equ W_HEAP_LIMIT 61836
+.equ W_HEAP_LIMIT 61840
 .equ W_ERRNO     61795
 .equ W_FWIDE_STD 61796
 .equ W_STDPB     61820
@@ -17748,7 +17748,7 @@ LD r2,r0,#W_HEAP_LIMIT
 CMP r2,r0
 JMP[NE] @nhi_have
 ; start with 256 KiB and grow on demand up to C_HEAP_END
-LA r2,0x228480
+LA r2,0x7F98A0
 ST r2,r0,#W_HEAP_LIMIT
 nhi_have:
 LA r3,#C_HEAP_END
