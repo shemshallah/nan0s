@@ -27,8 +27,12 @@ Already closed before this round:
   using an in-guest double-float path (`ncc_libm_exact`, 20,981 comparisons).
 - Object-like replacement-text macros with the C blue-paint rule, plus real
   quoted/system `#include` resolution (`ncc_macro_text`, `ncc_include`).
-- The C heap is no longer a fixed 2 MB arena: it starts at 256 KiB and grows
-  on demand to 6.9 MB across 8.1-15 MB, with the whole-heap allocation gate.
+- The C heap is no longer a fixed arena: it starts at 256 KiB and grows on
+  demand to the runtime stack guard.  The VM word count is runtime-sized
+  (default 32M words = 128 MiB payload), discovered by the guest through
+  CPUID 0x4E4D00FF, so the same image yields a 111.9 MB heap on the default
+  VM and 6.9 MB on a 16M-word VM.  `ncc_alloc` allocates 100,000,000 bytes;
+  `ncc_heap` checks 16/64/128/512 MiB VMs.
 
 Coordination notes live in `~/presql_coord/`. Integration order is macros,
 include, libm, iso, ctest; each merge must keep `presqlite_gate` green.

@@ -16,7 +16,7 @@ DARG=""
 T="$TMPDIR/nan0s_qgate"
 rm -rf "$T"; mkdir -p "$T"
 [ -f x86/build/nan0s.img ] || { echo "qgate: x86/build/nan0s.img missing (run sh x86/tools/mkall.sh)"; exit 1; }
-timeout "$SECS" qemu-system-i386 -m 32 \
+timeout "$SECS" qemu-system-i386 -m 512 \
   -drive format=raw,if=floppy,file=x86/build/nan0s.img \
   $DARG \
   -display none -serial "file:$T/com1.txt" -no-reboot >/dev/null 2>&1 || true

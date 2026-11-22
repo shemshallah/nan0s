@@ -3,8 +3,10 @@
    Semantics ref: OPS.md (verified against kan16.xa r28d). */
 #include "nan16_int.h"
 #include <math.h>
-
-#define M NAN_MASK
+#if defined(__linux__) && defined(MADV_DONTNEED)
+#include <sys/mman.h>
+#define NAN_MMAP_MEM 1
+#endif
 
 static inline int is_nan32(uint32_t x) { return (x & 0x7F800000u) == 0x7F800000u && (x & 0x007FFFFFu); }
 static inline float f32(uint32_t x) { float f; memcpy(&f, &x, 4); return f; }
@@ -52,22 +54,61 @@ static uint32_t fp_unary(uint32_t A, int op) {
   return is_nan32(x) ? 0x7FC00000u : x;
 }
 
-nan_vm *nan_create(void) {
+static void *nan_mem_alloc(size_t bytes, uint8_t *is_mmap) {
+  *is_mmap = 0;
+#ifdef NAN_MMAP_MEM
+  /* Demand-mapped zero pages: a 128 MiB payload VM must not commit its full
+     256 MiB word array just because it exists. */
+  void *p = mmap(NULL, bytes, PROT_READ | PROT_WRITE,
+                 MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+  if (p != MAP_FAILED) { *is_mmap = 1; return p; }
+#endif
+  return calloc(1, bytes);
+}
+static void nan_mem_free(nan_vm *v) {
+  if (!v->mem) return;
+#ifdef NAN_MMAP_MEM
+  if (v->mem_mmap) { munmap(v->mem, (size_t)v->mem_words * 8u); return; }
+#endif
+  free(v->mem);
+}
+static void nan_mem_clear(nan_vm *v) {
+  size_t bytes = (size_t)v->mem_words * 8u;
+#ifdef NAN_MMAP_MEM
+  if (v->mem_mmap) { madvise(v->mem, bytes, MADV_DONTNEED); return; }
+#endif
+  memset(v->mem, 0, bytes);
+}
+/* nan_create_words() takes a power-of-two word count (rounded up if needed).
+   Words are 8 bytes; guest C programs see four payload bytes per word. */
+nan_vm *nan_create_words(uint32_t words) {
+  if (words < NAN_MIN_WORDS) words = NAN_MIN_WORDS;
+  if (words & (words - 1u)) {
+    uint32_t p = NAN_MIN_WORDS;
+    while (p < words) { if (p > 0x8000000u) return NULL; p <<= 1; }
+    words = p;
+  }
+  if (words > 0x10000000u) return NULL;
   nan_vm *v = (nan_vm *)calloc(1, sizeof *v);
   if (!v) return NULL;
-  v->mem = (uint64_t *)calloc(NAN_WORDS, 8);
+  v->mem_words = words;
+  v->mem_mask = words - 1u;
+  v->mem = (uint64_t *)nan_mem_alloc((size_t)words * 8u, &v->mem_mmap);
   v->vram = (uint8_t *)calloc(NAN_VRAM, 1);
   v->ser = (char *)calloc(NAN_SER_CAP, 1);
   if (!v->mem || !v->vram || !v->ser) { nan_destroy(v); return NULL; }
   nan_reset(v);
   return v;
 }
+nan_vm *nan_create(void) { return nan_create_words(NAN_WORDS); }
 void nan_destroy(nan_vm *v) {
   if (!v) return;
-  free(v->mem); free(v->vram); free(v->ser); free(v);
+  nan_mem_free(v);
+  free(v->vram); free(v->ser); free(v);
 }
+uint32_t nan_mem_words(const nan_vm *v) { return v ? v->mem_words : 0; }
 void nan_reset(nan_vm *v) {
-  memset(v->mem, 0, (size_t)NAN_WORDS * 8);
+  nan_mem_clear(v);
   memset(v->vram, 0, NAN_VRAM);
   memset(v->r, 0, sizeof v->r);
   v->pc = 0; v->k = 0; v->halted = 0; v->steps = 0; v->ms = 0;
@@ -85,13 +126,13 @@ const char *nan_trap_text(const nan_vm *v) { return v->trap; }
 void nan_set_time_ms(nan_vm *v, uint32_t ms) { v->ms = ms; }
 uint32_t nan_reg(const nan_vm *v, int i) { return v->r[i & 15]; }
 uint32_t nan_pc(const nan_vm *v) { return v->pc; }
-uint64_t nan_word(const nan_vm *v, uint32_t i) { return v->mem[i & M]; }
-void nan_set_word(nan_vm *v, uint32_t i, uint64_t raw) { v->mem[i & M] = raw; }
+uint64_t nan_word(const nan_vm *v, uint32_t i) { return v->mem[i & v->mem_mask]; }
+void nan_set_word(nan_vm *v, uint32_t i, uint64_t raw) { v->mem[i & v->mem_mask] = raw; }
 /* Host boundary: pack external bytes into NaN16 data words for guest LDB.
    Corpus interpretation and all training decisions remain in the guest. */
 int nan_write_bytes(nan_vm *v, uint32_t byte_address, const uint8_t *data, size_t len) {
   if (!v || (!data && len)) return -1;
-  const uint64_t cap = (uint64_t)NAN_WORDS * 4u;
+  const uint64_t cap = (uint64_t)v->mem_words * 4u;
   if ((uint64_t)byte_address > cap || (uint64_t)len > cap - byte_address) return -1;
   for (size_t i = 0; i < len; ++i) {
     uint64_t at = (uint64_t)byte_address + i;
@@ -105,7 +146,7 @@ int nan_write_bytes(nan_vm *v, uint32_t byte_address, const uint8_t *data, size_
 }
 int nan_read_bytes(const nan_vm *v, uint32_t byte_address, uint8_t *out, size_t len) {
   if (!v || (!out && len)) return -1;
-  const uint64_t cap = (uint64_t)NAN_WORDS * 4u;
+  const uint64_t cap = (uint64_t)v->mem_words * 4u;
   if ((uint64_t)byte_address > cap || (uint64_t)len > cap - byte_address) return -1;
   for (size_t i = 0; i < len; ++i) {
     uint64_t at = (uint64_t)byte_address + i;
@@ -124,7 +165,7 @@ int nan_read_bytes(const nan_vm *v, uint32_t byte_address, uint8_t *out, size_t 
 static int nan_raw_words_bounds(const nan_vm *v, uint32_t first_word,
                                 size_t word_count, const void *buffer) {
   if (!v || (!buffer && word_count)) return -1;
-  if (first_word > NAN_WORDS || word_count > NAN_WORDS - (size_t)first_word) return -1;
+  if ((uint64_t)first_word > v->mem_words || word_count > (size_t)(v->mem_words - first_word)) return -1;
   /* Canonical NaN16 raw words are little-endian, supported by ARM/x86. */
   const uint16_t one = 1;
   if (*(const uint8_t *)&one != 1) return -1;
@@ -206,6 +247,7 @@ static void dispset(nan_vm *v, uint32_t x) {
 
 int nan_run(nan_vm *v, uint32_t max_steps) {
   uint32_t *r = v->r; uint64_t *mem = v->mem;
+  const uint32_t M = v->mem_mask;
   uint32_t pc = v->pc; uint32_t done = 0;
   int rc = NAN_BUDGET;
 #define SETK(z, l) (v->k = 2 * (int)(z) + (int)(l))
@@ -315,7 +357,12 @@ int nan_run(nan_vm *v, uint32_t max_steps) {
       for (uint32_t i = 0; i < cnt; i++, idx++) nan_port_out(v, A & 0xFFFF, (uint32_t)(mem[idx & M] >> 16) & 0xFFFF, 2); break; }
     case 0x43: nan_port_out(v, A & 0xFFFF, r[d], 4); break;
     case 0x44: { uint32_t reg[4] = {0, 0, 0, 0};
-      switch (A) {
+      if (A == 0x4E4D00FFu) {              /* machine-memory discovery */
+        reg[0] = v->mem_mask;
+        reg[1] = v->mem_words;
+        reg[2] = 0x4E160001u;              /* "N16" + dynamic-size flag */
+        reg[3] = v->mem_words * 4u;        /* guest C payload bytes */
+      } else switch (A) {
       case 0: reg[0] = 0x16; reg[1] = 0x314E614Eu /* "NaN1" */; reg[3] = 0x726F4336u /* "6Cor" */; reg[2] = 0x4D565F65u /* "e_VM" */; break;
       case 1: reg[0] = 0x00000F10; reg[3] = 0x00000001; break;
       case 0x80000000u: reg[0] = 0x80000004u; break;

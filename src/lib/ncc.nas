@@ -46,10 +46,11 @@
 .equ C_ROEND    1000000
 .equ C_GLOB     1000000      ; globals and static locals
 .equ C_GLOBEND  1500000
-.equ C_HEAP     8100000      ; growable malloc arena
-.equ C_HEAP_END 15000000
-.equ C_STACK    15000000     ; C call stack (bytes, grows up)
-.equ C_STACK_END 16000000
+.equ C_HEAP     8100000      ; growable malloc arena (base)
+; The heap ceiling and the C call stack are runtime values: ncc_mem_setup
+; asks the VM (CPUID leaf 0x4E4D00FF) for its word count, places an 8 MiB
+; stack at the top of the guest C payload (1 MiB on a 16 MiB VM), and makes
+; the heap fill everything between C_HEAP and the stack guard.
 
 ; ------------------------------------------------------------------ token kinds
 .equ K_EOF      1
@@ -791,6 +792,10 @@
 .equ W_ALLOC_NEW 61826
 .equ W_AGHI     61827
 .equ W_HEAP_LIMIT 61840
+.equ W_MEM_WORDS  61844
+.equ W_C_STACK    61845
+.equ W_C_STACK_END 61846
+.equ W_HEAP_END   61847
 .equ W_ERRNO     61795
 .equ W_FWIDE_STD 61796
 .equ W_STDPB     61820
@@ -1636,11 +1641,69 @@ LD r15,r14,0
 LD r14,r0,#W_PSAVE
 RET
 
+; ncc_mem_setup: size the C heap and stack from the VM's actual memory.
+; CPUID 0x4E4D00FF: 0=mask 1=words 2=flags 3=payload bytes.  An older VM
+; (or unrelated CPUID) leaves the historical 4M-word/16 MiB layout.
+ncc_mem_setup:
+ST r15,r14,0
+ADD r14,r14,r13
+LA r1,0x4E4D00FF
+MOVI r2,2
+CPUID r3,r1,r2
+LA r4,0xFFFF0000
+BOOL.8 r5,r3,r4
+LA r4,0x4E160000
+CMP r5,r4
+JMP[NE] @nms_default
+MOVI r2,1
+CPUID r3,r1,r2
+CMP r3,r0
+JMP[NE] @nms_have
+nms_default:
+LA r3,0x400000      ; 4M words = 16 MiB payload
+nms_have:
+LA r4,0x10000000    ; cap at the 2^28-word flat-memory limit
+CMP r3,r4
+JMP[LE] @nms_words
+ADD r3,r4,r0
+nms_words:
+ST r3,r0,#W_MEM_WORDS
+SHL r4,r3,2         ; payload bytes
+SHR r5,r4,4         ; stack = 1/16 of payload
+LA r6,0x100000      ; at least 1 MiB
+CMP r5,r6
+JMP[GE] @nms_stk_lo
+ADD r5,r6,r0
+nms_stk_lo:
+LA r6,0x800000      ; at most 8 MiB
+CMP r5,r6
+JMP[LE] @nms_stk_hi
+ADD r5,r6,r0
+nms_stk_hi:
+SHR r5,r5,2
+SHL r5,r5,2
+SUB r4,r4,r5        ; heap ceiling = payload - stack
+SHR r4,r4,2
+SHL r4,r4,2
+LA r6,#C_HEAP
+CMP r4,r6
+JMP[GE] @nms_heap
+ADD r4,r6,r0
+nms_heap:
+ST r4,r0,#W_HEAP_END
+ST r4,r0,#W_C_STACK
+SHL r5,r3,2
+ST r5,r0,#W_C_STACK_END
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
 ncc_run:
 ST r14,r0,#W_PSAVE2
 LA r14,#NCC_PS
 ST r15,r14,0
 ADD r14,r14,r13
+CALL @ncc_mem_setup
 ST r0,r0,#W_SNOUT
 ST r0,r0,#W_SNPOS
 ; fresh C heap for this run: discard compiler-side allocations and start
@@ -1654,11 +1717,11 @@ ST r0,r0,#W_IRYSTOP
 ST r0,r0,#W_ALARM
 ST r0,r0,#W_ATEXIT_RUN
 ST r0,r0,#W_ATEXIT_N
-LA r1,#C_STACK
+LD r1,r0,#W_C_STACK
 ST r1,r0,#R_FP
 LA r1,#NCC_IRB
 ST r1,r0,#R_IP
-LA r2,#C_STACK
+LD r2,r0,#W_C_STACK
 SHR r2,r2,2
 ADDI r2,r2,3
 ST r0,r2,0
@@ -17793,7 +17856,7 @@ JMP[NE] @nhi_have
 LA r2,0x7F98A0
 ST r2,r0,#W_HEAP_LIMIT
 nhi_have:
-LA r3,#C_HEAP_END
+LD r3,r0,#W_HEAP_END
 CMP r2,r3
 JMP[LE] @nhi_clamp
 ADD r2,r3,r0
@@ -17801,6 +17864,8 @@ ST r2,r0,#W_HEAP_LIMIT
 nhi_clamp:
 SHR r2,r2,2
 SUB r2,r2,r1
+CMP r2,r0
+JMP[EQ] @nhi_empty
 ST r2,r1,0
 ADD r3,r1,r2
 ADDI r3,r3,-1
@@ -17808,6 +17873,9 @@ ST r2,r3,0
 ST r0,r1,1
 ST r0,r1,2
 ST r1,r0,#W_FREELIST
+JMP @nhi_d
+nhi_empty:
+ST r0,r0,#W_FREELIST
 nhi_d:
 SUB r14,r14,r13
 LD r15,r14,0
@@ -17824,7 +17892,7 @@ ST r1,r0,#W_ALLOC_NEED
 LD r1,r0,#W_HEAP_LIMIT
 CMP r1,r0
 JMP[EQ] @nhg_no
-LA r2,#C_HEAP_END
+LD r2,r0,#W_HEAP_END
 CMP r1,r2
 JMP[GE] @nhg_no
 LA r3,0x40000
@@ -17836,7 +17904,7 @@ JMP[LE] @nhg_use
 ADD r3,r4,r0
 nhg_use:
 ADD r2,r1,r3
-LA r5,#C_HEAP_END
+LD r5,r0,#W_HEAP_END
 CMP r2,r5
 JMP[LE] @nhg_fit
 ADD r2,r5,r0
@@ -20480,7 +20548,7 @@ LD r10,r9,0
 ADD r10,r7,r10
 ; new fp = old fp + old frame size
 ST r10,r0,#W_TY_ID
-LA r9,#C_STACK_END
+LD r9,r0,#W_C_STACK_END
 ADD r11,r10,r5
 CMP r11,r9
 JMP[LE] @ncl_room
@@ -20695,7 +20763,7 @@ ADD r14,r14,r13
 LD r2,r0,#R_FP
 SHR r2,r2,2
 LD r3,r2,0
-LA r4,#C_STACK
+LD r4,r0,#W_C_STACK
 CMP r3,r4
 JMP[NE] @nrt_noexit
 LD r1,r0,#W_ATEXIT_RUN

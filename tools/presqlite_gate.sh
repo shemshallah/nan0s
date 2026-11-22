@@ -24,7 +24,7 @@ run() {
 for m in $(seq 1 62); do
   [ -f "tools/ncc_m$m.sh" ] && run "ncc_m$m" sh "tools/ncc_m$m.sh"
 done
-for g in ncc_alloc ncc_headers ncc_ppexpr ncc_torture ncc_donut_exact; do
+for g in ncc_alloc ncc_heap ncc_headers ncc_ppexpr ncc_torture ncc_donut_exact; do
   [ -f "tools/$g.sh" ] && run "$g" sh "tools/$g.sh"
 done
 for g in ncc_macro_text ncc_include ncc_libm_exact ncc_iso_c ncc_ctests; do
@@ -37,6 +37,7 @@ if [ -f tools/mkall.sh ]; then
   run mkall sh tools/mkall.sh
   [ -f tools/qgate.sh ] && run qgate sh tools/qgate.sh
   [ -f tools/qgate_gui.sh ] && run qgate_gui sh tools/qgate_gui.sh
+  [ -f tools/xmemgate.sh ] && run xmemgate sh tools/xmemgate.sh
 fi
 
 printf '\npresqlite_gate: %d gate(s), %d failure(s)\n' "$n" "$fail"

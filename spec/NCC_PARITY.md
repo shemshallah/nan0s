@@ -327,25 +327,46 @@ atoi(s)            abs(n)             exit(code)
 ```
 
 `malloc` is an S0 boundary-tag free-list allocator over
-`C_HEAP..C_HEAP_END` (6.9 MB of C address space): 4-byte alignment, a
-header/footer word per block, `next`/`prev` in the free payload, minimum
-4 words, and coalescing with the previous and next physical blocks on
-`free`. The heap starts with a 256 KiB tail and grows on demand
-(`ni_heap_grow`) by extending toward `C_HEAP_END`, merging the new tail with
-a free block that already ends at the old limit. `ncc_run` resets it.
-`realloc` always moves: it allocates, copies `min(old,new)` bytes and frees
-the old block, so shrinking cannot leave a stray split.
-`tools/ncc_alloc.sh` runs 10,000 random malloc/free/realloc operations and
-checks 4-byte alignment, overlap among live blocks, full-pattern preservation
-across realloc, leak-free reuse (including a whole-heap 6,899,992-byte
-allocation, then the same allocation again after `free`), `calloc`
-zeroing/overflow and `realloc(NULL,n)`.
+`C_HEAP..heap_ceiling`: 4-byte alignment, a header/footer word per block,
+`next`/`prev` in the free payload, minimum 4 words, and coalescing with the
+previous and next physical blocks on `free`. The heap starts with a 256 KiB
+tail and grows on demand (`ni_heap_grow`) by extending toward the stack
+guard, merging the new tail with a free block that already ends at the old
+limit. `ncc_run` resets it. `realloc` always moves: it allocates, copies
+`min(old,new)` bytes and frees the old block, so shrinking cannot leave a
+stray split.
 
-The C runtime buffers were moved above the heap to make that range
-contiguous: IR at 4 MB, expression stack at 5.6 MB, interpreter stack at
-6.4 MB, compiler tables at 7-8 MB, C call stack at 15 MB. The guest C address space is 16 MB (the
-4M-word VM); a larger heap needs a VM/memory-map expansion, not a bigger
-`realloc`.
+The ceiling is not a compile-time constant. At `ncc_run`, `ncc_mem_setup`
+queries CPUID leaf `0x4E4D00FF` (0 = word mask, 1 = word count, 2 = flags
+`0x4E160001`, 3 = payload bytes) and derives:
+
+```text
+payload_bytes = mem_words * 4
+stack_size    = clamp(payload_bytes / 16, 1 MiB, 8 MiB)
+C stack       = [payload_bytes - stack_size, payload_bytes)
+C heap        = [8.1 MB, payload_bytes - stack_size)
+```
+
+The default portable VM is 32M words = 128 MiB payload, giving a 111.9 MB
+heap and an 8 MiB C stack; a 16M-word VM falls back to the historical 15 MB
+stack guard and a 6.9 MB heap. The word count is rounded to a power of two
+and capped at 2^28 words (1 GiB payload), the flat-memory limit in
+`spec/NANVM_SPEC.md`.
+
+`tools/ncc_alloc.sh` runs 10,000 random malloc/free/realloc operations on a
+128 MiB-payload VM and checks 4-byte alignment, overlap among live blocks,
+full-pattern preservation across realloc, leak-free reuse (including a
+single 100,000,000-byte allocation, then the same allocation again after
+`free`), `calloc` zeroing/overflow and `realloc(NULL,n)`.
+`tools/ncc_heap.sh` runs one C program on 16, 64, 128 and 512 MiB VMs: the
+100 MB allocation fails cleanly on the small machines and succeeds, with
+edge bytes intact and pointer reuse, on the large ones.
+
+The C runtime buffers stay below the heap: IR at 4 MB, expression stack at
+5.6 MB, interpreter stack at 6.4 MB, compiler tables at 7-8 MB. The C heap
+begins at 8.1 MB. The host core allocates guest words on demand
+(`mmap(MAP_NORESERVE)` on Linux/Android, `calloc` elsewhere), so a 256 MiB
+word array does not commit resident memory until the guest touches it.
 
 ## Diagnostics and undefined behaviour
 

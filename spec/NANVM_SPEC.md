@@ -73,7 +73,14 @@ FMA, SIMD lanes, FB ops.
 
 ## 3. NaNVM1 — memory and pc
 
-Flat 2^k words, k<=28; LD/ST/STW/BSWAPM/LDB/STB/BCOPY use 32-bit register
+Flat 2^k words, k<=28, with k chosen when the VM is created (the portable
+core exposes `nan_create_words`, default 2^25 = 32M words = 128 MiB of guest
+C payload). The mask is held in the VM, not assembled into the core, and a
+guest discovers the actual size with CPUID leaf `0x4E4D00FF`:
+subleaf 0 = word mask, 1 = word count, 2 = flags (`0x4E160001`, bit 0 =
+runtime-sized), 3 = payload bytes. A core without the leaf is assumed to be
+the historical 4M-word machine, so old images stay compatible.
+LD/ST/STW/BSWAPM/LDB/STB/BCOPY use 32-bit register
 addresses; pc is 32 bits when nwords>65536 (JMPR/RET/CALLR reach everywhere,
 JMP/CALL imm stay 16 bits so hot code lives low; far = MOVI+MOVHI+JMPR).
 
@@ -203,9 +210,11 @@ A guest word is 8 bytes with a 32-bit payload. NaNVM1 addresses words with
 64 bits (§4.1): practical ceilings are host-bounded, not ISA-bounded.
 16 GB RAM = 2,147,483,648 words; 32 GB VRAM = 8,589,934,592 32-bit cells in
 DEV windows (64-bit cell addresses). The reference C core today has
-`NAN_WORDS 0x400000` (4M words, 32 MiB) and 32-bit word indices; the
-platform revision makes NAN_WORDS configurable, indices 64-bit and host
-memory demand-mapped. NaNVM0 stays an 8,192-word museum machine for a single
+`nan_create_words()` sizes guest memory at creation time (power of two,
+2^16..2^28 words), the default is 2^25 words (32M words, 256 MiB raw /
+128 MiB guest C payload), and host memory is demand-mapped. 32-bit word
+indices remain for this revision; the 64-bit index/ADDRH revision is still
+a plan. NaNVM0 stays an 8,192-word museum machine for a single
 job; it is not the platform.
 
 Quake trace (requirements -> words):

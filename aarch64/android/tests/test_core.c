@@ -182,8 +182,8 @@ static void t_memory_ops(void) {
   { uint32_t want[8] = {3, 4, 5, 6, 7, 8, 7, 8}; for (int i = 0; i < 8; i++) EQ(nan_word(V, 100 + i) >> 16 & 0xFFFFFFFFu, want[i]); }
   begin(); nan_set_reg(V, 1, 50); nan_set_reg(V, 2, 0xDEAD); nan_set_reg(V, 3, 4); I(0x2E, 1, 2, 3); halt(); go(100);
   for (int i = 0; i < 4; i++) EQ(nan_word(V, 50 + i) >> 16 & 0xFFFFFFFFu, 0xDEAD); EQ(nan_word(V, 54), 0);
-  begin(); nan_set_reg(V, 1, NAN_WORDS - 2u); nan_set_reg(V, 2, 7); nan_set_reg(V, 3, 4); I(0x2E, 1, 2, 3); halt(); go(100);    /* wraps with the configured word mask */
-  EQ(nan_word(V, NAN_WORDS - 1u) >> 16 & 0xFFFFFFFFu, 7); EQ(nan_word(V, 1) >> 16 & 0xFFFFFFFFu, 7);
+  begin(); nan_set_reg(V, 1, nan_mem_words(V) - 2u); nan_set_reg(V, 2, 7); nan_set_reg(V, 3, 4); I(0x2E, 1, 2, 3); halt(); go(100);    /* wraps with the configured word mask */
+  EQ(nan_word(V, nan_mem_words(V) - 1u) >> 16 & 0xFFFFFFFFu, 7); EQ(nan_word(V, 1) >> 16 & 0xFFFFFFFFu, 7);
   /* BSWAPM */
   begin(); nan_set_word(V, 200, 0x0102030405060708ull); nan_set_reg(V, 1, 200); I(0x14, 0, 1, 0); halt(); go(100); EQ(nan_word(V, 200), 0x0807060504030201ull);
   /* RDTSC counts executed instructions; CPUID leaf 0 */
@@ -396,12 +396,13 @@ static void t_raw_nan_head_transfer(void) {
     EQ(nan_word(V, base), nan_mkword(7u, 0));
     EQ(nan_word(V, base + (uint32_t)words - 1), nan_mkword((uint32_t)((words-1)*31u+7u), 13));
     /* The complete span must be rejected before touching the last word. */
-    uint64_t end = nan_word(V, 0x003FFFFFu);
-    CHECK(nan_write_words_raw(V, 0x003FFFFFu, seed, 2) == -1);
-    EQ(nan_word(V, 0x003FFFFFu), end);
-    CHECK(nan_read_words_raw(V, 0x003FFFFFu, saved, 2) == -1);
-    CHECK(nan_write_words_raw(V, 0x00400000u, seed, 1) == -1);
-    CHECK(nan_read_words_raw(V, 0x00400000u, saved, 1) == -1);
+    uint32_t last = nan_mem_words(V) - 1u;
+    uint64_t end = nan_word(V, last);
+    CHECK(nan_write_words_raw(V, last, seed, 2) == -1);
+    EQ(nan_word(V, last), end);
+    CHECK(nan_read_words_raw(V, last, saved, 2) == -1);
+    CHECK(nan_write_words_raw(V, nan_mem_words(V), seed, 1) == -1);
+    CHECK(nan_read_words_raw(V, nan_mem_words(V), saved, 1) == -1);
     CHECK(nan_write_words_raw(V, 0xFFFFFFFFu, seed, words) == -1);
     CHECK(nan_write_words_raw(V, base, NULL, 1) == -1);
     CHECK(nan_read_words_raw(V, base, NULL, 1) == -1);

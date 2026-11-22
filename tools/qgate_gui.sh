@@ -11,7 +11,7 @@ rm -rf "$T"; mkdir -p "$T"
 [ -f build/nan0s.img ] || { echo "qgate_gui: build/nan0s.img missing"; exit 1; }
 cp build/nan0s.img "$T/disk.img"
 { sleep 6; echo "screendump $T/gui.ppm"; sleep 1; echo quit; } | \
-  timeout 30 qemu-system-i386 -m 32 -boot order=a \
+  timeout 30 qemu-system-i386 -m 512 -boot order=a \
     -drive format=raw,if=floppy,file=build/nan0s.img \
     -drive format=raw,if=ide,file="$T/disk.img" \
     -display none -serial "file:$T/com1.txt" -monitor stdio \

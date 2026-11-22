@@ -3,8 +3,8 @@ Authority: kan16.xa (AT&T order: `MOV src,dst`). Every line below was re-read ag
 this round. Items marked [FIX] correct the first draft of this file.
 
 ## Image / memory
-- build/nan0s.img: boot sector 0-511, kernel 512-8703, guest words from byte 0x2200 (8704). The guest word count is a little-endian u32 at byte 504; images may be smaller or larger than 1,474,560 bytes (up to the 4M-word VM memory).
-  (524,288 B). The kernel copies them to guest word 0 after zero-filling 4M words (MASK 0x3FFFFF, 32 MB).
+- build/nan0s.img: boot sector 0-511, kernel 512-8703, guest words from byte 0x2200 (8704). The guest word count is a little-endian u32 at byte 504; images may be smaller or larger than 1,474,560 bytes (up to the VM's runtime word count; `nan_create_words` defaults to 32M words).
+  (524,288 B). The portable core copies them to guest word 0 with a runtime mask; the x86 kernel still has its own fixed map.
 - Word = 8 raw bytes: b0-1 FAR head (big-endian u16), b2-5 payload (LE u32), b6-7 NEAR head (LE u16).
   Heads: 0x7FF1,0xFFF1,0x7FF8,0xFFF8 = class 0..3. Valid iff (h&0x7FF0)==0x7FF0 and (h&15) is 1 or 8.
   class(h) = ((h>>2)&2) | (h>>15).  nibble n = class(NEAR)<<2 | class(FAR).   (nib: near first, then far)
@@ -91,7 +91,7 @@ bits0-1 of 0x61 = gate+enable; hz = 1193182/divisor); 0x3F8 COM1 data -> serial,
 PCI mech #1: OUTL 0xCF8 then INW 0xCFC/0xCFE (gui_cart pci_scan: bus 0, dev 0..31): dev0 8086:1237 class 060000, dev1 8086:7000 class 060100,
 dev2 1234:1111 class 030000 BAR0 0xFD000008; others 0xFFFFFFFF. ATA primary master 0x1F0-0x1F7/0x3F6 (ata.nas, gui ut_atas IDENTIFY x4 slots):
 PIO LBA28, commands 0xEC IDENTIFY, 0x20 READ, 0x30 WRITE, 0xE7 FLUSH; no drive attached => status reads 0xFF (floating bus). Secondary/slaves absent.
-CPUID leaf0: vendor in EBX,EDX,ECX; leaf 1 family/model/stepping in EAX; 0x80000000 max ext leaf; 0x80000001 EDX bit29 long mode; 0x80000002-4 brand string.
+CPUID leaf0: vendor in EBX,EDX,ECX; leaf 1 family/model/stepping in EAX; 0x80000000 max ext leaf; 0x80000001 EDX bit29 long mode; 0x80000002-4 brand string. Leaf 0x4E4D00FF is the machine-memory query: subleaf 0 mask, 1 words, 2 flags 0x4E160001, 3 guest C payload bytes.
 RDTSC: any monotonic counter (the C core uses the executed-instruction count; TICK is host milliseconds, so the GUI's "MHz" is real emulation speed).
 TICK: x86 programs the PIT to ~1000 Hz and counts ms from boot; the C core returns the host-supplied ms (nan_set_time_ms).
 

@@ -2,7 +2,9 @@
 ; The ONE host file; everything else is NaN16 guest code. Transcribed from src/native/nan16.s.
 .base 0x10000
 .code32
-.equ MASK 0x3FFFFF
+.equ MASKM 0x80C0
+.equ NWORDS 0x80C4
+.equ MBYTES 0x80C8
 .equ RAW 0x01000000
 .equ RAWG 0xF000
 .equ MAXOP 0x45
@@ -36,6 +38,7 @@
 _start:
   CLD
   CALL @sse_init
+  CALL @mem_size
   MOVL $0x7FFFFFFF,[MAXS]
   MOVL $1,[FLAGM]
   MOVL $0,[STEPS]
@@ -44,11 +47,31 @@ _start:
   MOVB $0,[RAWKB]
   MOV $G,%EDI
   XOR %EAX,%EAX
-  MOV $0x800000,%ECX
+  ; Zero the C globals/compiler-table window (first 8 MiB of payload).
+  ; Higher heap/stack pages are written before they are read and calloc
+  ; clears its own blocks, so a 256 MiB VM does not pay a full-RAM wipe.
+  MOV [NWORDS],%ECX
+  CMP $0x200000,%ECX
+  JBE @z_count
+  MOV $0x200000,%ECX
+z_count:
+  SHL $1,%ECX
   REPSTOSD
   ; r27: full guest image from the IDE primary master at kernel+16B0.
   ; Falls back to the floppy-staged 512 KiB copy when no disk answers.
   CALL @ata_load_guest
+  NOP
+  NOP
+  NOP
+  NOP
+  NOP
+  NOP
+  NOP
+  NOP
+  NOP
+  NOP
+  NOP
+  NOP
   CALL @hw_init
   XOR %ESI,%ESI
 loop:
@@ -58,7 +81,7 @@ loop:
   INC %EAX
   MOV %EAX,[STEPS]
   MOV %ESI,%ECX
-  AND $MASK,%ECX
+  AND [MASKM],%ECX
   CALL @nib
   JC @gate
   INC %ESI
@@ -231,20 +254,20 @@ h_cmps:
 h_ld:
   MOVZWL %AX,%EAX
   ADD %ECX,%EAX
-  AND $MASK,%EAX
+  AND [MASKM],%EAX
   MOV [G+2+EAX*8],%EBX
   JMP @st
 h_st:
   MOVZWL %AX,%EAX
   ADD %ECX,%EAX
-  AND $MASK,%EAX
+  AND [MASKM],%EAX
   MOV [R+EBP],%EBX
   MOV $10,%ECX
   CALL @putw
   JMP @loop
 h_stw:
   MOV %ECX,%EAX
-  AND $MASK,%EAX
+  AND [MASKM],%EAX
   MOV [R+EBP],%EBX
   MOV %EDX,%ECX
   AND $15,%ECX
@@ -253,7 +276,7 @@ h_stw:
 h_ldn:
   MOVZWL %AX,%EAX
   ADD %ECX,%EAX
-  AND $MASK,%EAX
+  AND [MASKM],%EAX
   MOV %EAX,%ECX
   CALL @nib
   MOV %EDI,%EBX
@@ -323,7 +346,7 @@ vpk_gfx:
 h_bswapm:
   MOVZWL %AX,%EAX
   ADD %ECX,%EAX
-  AND $MASK,%EAX
+  AND [MASKM],%EAX
   MOV [G+EAX*8],%ECX
   MOV [G+4+EAX*8],%EDX
   BSWAP %ECX
@@ -552,6 +575,27 @@ h_cpuid:
   MOV %ECX,%EAX
   MOV %EDX,%EDI
   AND $3,%EDI
+  CMP $0x4E4D00FF,%EAX
+  JNE @hc_real
+  TEST %EDI,%EDI
+  JZ @hc_mask
+  CMP $1,%EDI
+  JE @hc_words
+  CMP $2,%EDI
+  JE @hc_flags
+  MOV [NWORDS],%EBX
+  SHL $2,%EBX
+  JMP @st
+hc_mask:
+  MOV [MASKM],%EBX
+  JMP @st
+hc_words:
+  MOV [NWORDS],%EBX
+  JMP @st
+hc_flags:
+  MOV $0x4E160001,%EBX
+  JMP @st
+hc_real:
   PUSH %ESI
   XOR %ECX,%ECX
   .byte 0x0F,0xA2
@@ -711,7 +755,7 @@ h_ldb:
 ldb_norm:
   MOV %EAX,%ECX
   SHR $2,%EAX
-  AND $MASK,%EAX
+  AND [MASKM],%EAX
   MOV [G+2+EAX*8],%EBX
   SHL $3,%ECX
   SHR %CL,%EBX
@@ -732,7 +776,7 @@ stb_norm:
   MOV %EAX,%ECX
   SHL $3,%ECX
   SHR $2,%EAX
-  AND $MASK,%EAX
+  AND [MASKM],%EAX
   MOV [G+2+EAX*8],%EBX
   MOV $255,%EDX
   SHL %CL,%EDX
@@ -746,38 +790,38 @@ stb_norm:
   JMP @loop
 h_bcopy:
   MOV %ECX,%EAX
-  AND $MASK,%EAX
+  AND [MASKM],%EAX
   MOV [R+EBP],%EBX
-  AND $MASK,%EBX
+  AND [MASKM],%EBX
   MOV %EDX,%ECX
   JECXZ @bc3
   MOV %EBX,%EDI
   SUB %EAX,%EDI
-  AND $MASK,%EDI
+  AND [MASKM],%EDI
   CMP %ECX,%EDI
   JB @bc2
 bc1:
   MOVQ [G+EAX*8],%XMM0
   MOVQ %XMM0,[G+EBX*8]
   INC %EAX
-  AND $MASK,%EAX
+  AND [MASKM],%EAX
   INC %EBX
-  AND $MASK,%EBX
+  AND [MASKM],%EBX
   LOOP @bc1
 bc3:
   JMP @loop
 bc2:
   LEA [-1+EAX+ECX],%EAX
-  AND $MASK,%EAX
+  AND [MASKM],%EAX
   LEA [-1+EBX+ECX],%EBX
-  AND $MASK,%EBX
+  AND [MASKM],%EBX
 bc4:
   MOVQ [G+EAX*8],%XMM0
   MOVQ %XMM0,[G+EBX*8]
   DEC %EAX
-  AND $MASK,%EAX
+  AND [MASKM],%EAX
   DEC %EBX
-  AND $MASK,%EBX
+  AND [MASKM],%EBX
   LOOP @bc4
   JMP @loop
 h_bfill:
@@ -787,7 +831,7 @@ h_bfill:
 bf1:
   TEST %EDI,%EDI
   JZ @loop
-  AND $MASK,%EAX
+  AND [MASKM],%EAX
   MOV [T0],%EBX
   MOV $10,%ECX
   CALL @putw
@@ -1136,7 +1180,7 @@ idtr:
   .long 0x9000
 ptab:
   .byte 0x20,0x11,0xA0,0x11,0x21,0x20,0xA1,0x28,0x21,4,0xA1,2,0x21,1,0xA1,1,0x43,0x36,0x40,0xA9,0x40,4,0x21,0xFC,0xA1,0xFF,0,0
-.org 0x1400
+.org 0x1500
 heads:
   .word 0x7FF1,0xFFF1,0x7FF8,0xFFF8
 hexd:
@@ -1174,82 +1218,89 @@ tbl:
   .long @h_fbinfo,@h_vsync,@h_fbcopy,@h_fbfill,@h_outb,@h_inb,@h_inw,@h_outw,@h_outsw,@h_outl,@h_cpuid,@h_rdtsc
 
 
-; ---- r27: ATA guest loader (gold at kernel+16B0, 174 bytes) --------
+; ---- memory discovery: E820 -> runtime word mask --------------------
+; Picks the largest power-of-two word count whose bytes fit above G in the
+; highest usable RAM region below 4 GiB.  Falls back to the BIOS KB count,
+; then to the historical 4M words.  CPUID 0x4E4D00FF exposes the result.
+mem_size:
+  PUSH %EBX
+  PUSH %ECX
+  PUSH %EDX
+  PUSH %ESI
+  PUSH %EDI
+  MOVZWL [0x5FC],%ECX
+  TEST %ECX,%ECX
+  JZ @ms_bios
+  MOV $0x600,%ESI
+  XOR %EBX,%EBX
+ms_loop:
+  MOV [ESI+16],%EAX
+  CMP $1,%EAX
+  JNE @ms_next
+  MOV [ESI+4],%EAX
+  TEST %EAX,%EAX
+  JNZ @ms_next
+  MOV [ESI],%EAX
+  ADD [ESI+8],%EAX
+  JC @ms_clamp
+  CMP %EBX,%EAX
+  JBE @ms_next
+  MOV %EAX,%EBX
+  JMP @ms_next
+ms_clamp:
+  MOV $0xFFFFFFFF,%EBX
+ms_next:
+  ADD $24,%ESI
+  DEC %ECX
+  JNZ @ms_loop
+  JMP @ms_have
+ms_bios:
+  MOVZWL [0x413],%EBX
+  SHL $10,%EBX
+ms_have:
+  CMP $0x400000,%EBX
+  JBE @ms_min
+  SUB $G,%EBX
+  SHR $3,%EBX
+  MOV $0x10000000,%EAX
+ms_pow:
+  CMP %EAX,%EBX
+  JAE @ms_done
+  SHR $1,%EAX
+  JMP @ms_pow
+ms_done:
+  CMP $0x400000,%EAX
+  JAE @ms_store
+ms_min:
+  MOV $0x400000,%EAX
+ms_store:
+  MOV %EAX,[NWORDS]
+  DEC %EAX
+  MOV %EAX,[MASKM]
+  POP %EDI
+  POP %ESI
+  POP %EDX
+  POP %ECX
+  POP %EBX
+  RET
+
+; ---- r27: ATA guest loader (kernel+0x1900, 174 bytes) --------
 ; The gold bytes are authoritative. The routine selects the primary master,
 ; reads ceil(LMAX/64) sectors from LBA 17 into flat guest memory G, and
 ; falls back to the floppy-staged 512 KiB copy when no IDE disk answers.
-.org 0x16B0
+.org 0x1900
+; ATA guest loader at kernel+0x1900: authoritative gold bytes (the source form did not
+; reproduce the branch-relaxed encoding; nasm1 output is verified by
+; tools/xgold.sh against this table.
 ata_load_guest:
-  MOV $0x1F6,%DX
-  MOV $0xA0,%AL
-  OUT %AL,%DX
-  MOV $0x1F7,%DX
-  IN %DX,%AL
-  IN %DX,%AL
-  IN %DX,%AL
-  IN %DX,%AL
-  IN %DX,%AL
-  CMP $0,%AL
-  JZ @alg_fallback
-  CMP $0xFF,%AL
-  JZ @alg_fallback
-  MOV [0x7DF8],%EAX
-  TEST %EAX,%EAX
-  JZ @alg_fallback
-  ADD $63,%EAX
-  SHR $6,%EAX
-  MOV %EAX,[ALG_SEC]
-  MOV $17,%EBX
-  MOV $G,%EDI
-alg_loop:
-  MOV %EBX,%EAX
-  SHR $24,%EAX
-  AND $0x0F,%AL
-  OR $0xE0,%AL
-  MOV $0x1F6,%DX
-  OUT %AL,%DX
-  MOV $0x1F7,%DX
-  IN %DX,%AL
-  IN %DX,%AL
-  IN %DX,%AL
-  IN %DX,%AL
-  MOV $0x1F2,%DX
-  MOV $1,%AL
-  OUT %AL,%DX
-  MOV $0x1F3,%DX
-  MOV %EBX,%EAX
-  OUT %AL,%DX
-  MOV $0x1F4,%DX
-  MOV %EBX,%EAX
-  SHR $8,%EAX
-  OUT %AL,%DX
-  MOV $0x1F5,%DX
-  MOV %EBX,%EAX
-  SHR $16,%EAX
-  OUT %AL,%DX
-  MOV $0x1F7,%DX
-  MOV $0x20,%AL
-  OUT %AL,%DX
-alg_bsy:
-  IN %DX,%AL
-  TEST $0x80,%AL
-  JNZ @alg_bsy
-alg_drq:
-  IN %DX,%AL
-  TEST $0x08,%AL
-  JZ @alg_drq
-  MOV $0x1F0,%DX
-  MOV $128,%ECX
-  REP INSD
-  INC %EBX
-  DEC [ALG_SEC]
-  JNZ @alg_loop
-  RET
-alg_fallback:
-  MOV $0x12000,%ESI
-  MOV $G,%EDI
-  MOV $0x20000,%ECX
-  REPMOVSD
-  RET
-ALG_SEC:
-  .long 0
+  .byte 0x66,0xBA,0xF6,0x01,0xB0,0xA0,0xEE,0x66,0xBA,0xF7,0x01,0xEC,0xEC,0xEC,0xEC,0xEC
+  .byte 0x3C,0x00,0x0F,0x84,0x80,0x00,0x00,0x00,0x3C,0xFF,0x74,0x7C,0xA1,0xF8,0x7D,0x00
+  .byte 0x00,0x85,0xC0,0x74,0x73,0x83,0xC0,0x3F,0xC1,0xE8,0x06,0xA3,0x5A,0x17,0x01,0x00
+  .byte 0xBB,0x11,0x00,0x00,0x00,0xBF,0x00,0x00,0x20,0x00,0x89,0xD8,0xC1,0xE8,0x18,0x24
+  .byte 0x0F,0x0C,0xE0,0x66,0xBA,0xF6,0x01,0xEE,0x66,0xBA,0xF7,0x01,0xEC,0xEC,0xEC,0xEC
+  .byte 0x66,0xBA,0xF2,0x01,0xB0,0x01,0xEE,0x66,0xBA,0xF3,0x01,0x89,0xD8,0xEE,0x66,0xBA
+  .byte 0xF4,0x01,0x89,0xD8,0xC1,0xE8,0x08,0xEE,0x66,0xBA,0xF5,0x01,0x89,0xD8,0xC1,0xE8
+  .byte 0x10,0xEE,0x66,0xBA,0xF7,0x01,0xB0,0x20,0xEE,0xEC,0xA8,0x80,0x75,0xFB,0xEC,0xA8
+  .byte 0x08,0x74,0xFB,0x66,0xBA,0xF0,0x01,0xB9,0x80,0x00,0x00,0x00,0xF3,0x6D,0x43,0xFF
+  .byte 0x0D,0x5A,0x17,0x01,0x00,0x75,0xA3,0xC3,0xBE,0x00,0x20,0x01,0x00,0xBF,0x00,0x00
+  .byte 0x20,0x00,0xB9,0x00,0x00,0x02,0x00,0xF3,0xA5,0xC3,0x00,0x00,0x00,0x00

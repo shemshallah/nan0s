@@ -2,8 +2,9 @@
  *
  * Behaviour mirrors src/native/kan16.xa (the x86 gold core) op for op:
  * 8-byte double-ended NaN words, both-face gate, predication by flags k=2Z+L,
- * 4M-word guest space (MASK 0x3FFFFF), text mode 80x25, mode 13h, VBE LFB,
- * VGA DAC, raw/cooked keyboard, PIT channel 2 speaker, PCI config mech #1.
+ * runtime-sized power-of-two guest word space (default 32M words = 128 MiB
+ * of guest C payload bytes), text mode 80x25, mode 13h, VBE LFB, VGA DAC,
+ * raw/cooked keyboard, PIT channel 2 speaker, PCI config mech #1.
  * No allocation after nan_create() except the display buffers.
  */
 #ifndef NAN16_H
@@ -36,6 +37,10 @@ enum {
 };
 
 nan_vm *nan_create(void);
+/* Power-of-two words; rounded up. 0/NAN_MIN_WORDS is the smallest VM.
+   The word count is exposed to guests through CPUID leaf 0x4E4D00FF. */
+nan_vm *nan_create_words(uint32_t words);
+uint32_t nan_mem_words(const nan_vm *v);
 void    nan_destroy(nan_vm *v);
 void    nan_reset(nan_vm *v);                       /* clear memory/state */
 

@@ -6,7 +6,7 @@ static uint64_t rd64le(const uint8_t *p) {
   uint64_t x = 0; for (int i = 7; i >= 0; i--) x = (x << 8) | p[i]; return x;
 }
 int nan_load_words(nan_vm *v, const uint8_t *w, size_t len) {
-  size_t n = len / 8; if (!n || n > NAN_WORDS) return -1;
+  size_t n = len / 8; if (!n || n > v->mem_words) return -1;
   nan_reset(v);
   for (size_t i = 0; i < n; i++) v->mem[i] = rd64le(w + i * 8);
   return 0;
@@ -21,9 +21,9 @@ int nan_load_image(nan_vm *v, const uint8_t *img, size_t len) {
   size_t n = 0;
   if (len >= 512 && img[510] == 0x55 && img[511] == 0xAA) {
     uint32_t hdr = rd32le(img + 504);
-    if (hdr && hdr <= NAN_WORDS && 0x2200 + (size_t)hdr * 8 <= len) n = hdr;
+    if (hdr && hdr <= v->mem_words && 0x2200 + (size_t)hdr * 8 <= len) n = hdr;
   }
-  if (!n) { n = (len - 0x2200) / 8; if (n > NAN_WORDS) n = NAN_WORDS; }
+  if (!n) { n = (len - 0x2200) / 8; if (n > v->mem_words) n = v->mem_words; }
   return nan_load_words(v, img + 0x2200, n * 8);
 }
 static int hexn(const char *s, int n, uint32_t *out) {
@@ -42,7 +42,7 @@ int nan_load_text(nan_vm *v, const char *t, size_t len) {
     if (!*s) continue;
     if (!strncmp(s, ".org", 4)) { idx = (size_t)strtoul(s + 4, NULL, 0); continue; }
     uint32_t f1, f2, f3;
-    if (strlen(s) < 18 || !hexn(s, 4, &f1) || s[4] != '_' || !hexn(s + 5, 8, &f2) || s[13] != '_' || !hexn(s + 14, 4, &f3) || idx >= NAN_WORDS) {
+    if (strlen(s) < 18 || !hexn(s, 4, &f1) || s[4] != '_' || !hexn(s + 5, 8, &f2) || s[13] != '_' || !hexn(s + 14, 4, &f3) || idx >= v->mem_words) {
       v->load_err = line; return -1; }
     v->mem[idx++] = ((uint64_t)f1 << 48) | ((uint64_t)f2 << 16) | f3;   /* NEAR | payload | FAR byte-swapped */
   }

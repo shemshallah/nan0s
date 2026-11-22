@@ -14,7 +14,7 @@ harness/   v86 JS harness (retired)  scaffold/  boot0.s, nanvm0.s
 sh x86/tools/mkall.sh          # build x86/build/nan0s.img
 sh x86/tools/qgate.sh          # headless boot gate (needs qemu-system-i386)
 sh x86/tools/netgate.sh        # NE2000 + QEMU user-net ARP gate
-qemu-system-i386 -m 32 -drive format=raw,if=floppy,file=x86/build/nan0s.img
+qemu-system-i386 -m 512 -drive format=raw,if=floppy,file=x86/build/nan0s.img
 ```
 
 ## Network

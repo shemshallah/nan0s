@@ -49,8 +49,16 @@ static uint8_t *build_training_guest(size_t *len) {
   *len = n;
   return b;
 }
+static uint32_t words_for_mb(unsigned long mb) {
+  unsigned long long bytes = (unsigned long long)mb * 1024ull * 1024ull;
+  unsigned long long want = (bytes + 3ull) / 4ull;
+  uint32_t p = 0x10000u;
+  while ((unsigned long long)p < want && p < 0x10000000u) p <<= 1;
+  return p;
+}
 int main(int argc, char **argv) {
   const char *vga = NULL, *img = NULL, *keys = NULL, *ppm = NULL, *disk = NULL, *peek = NULL, *corpus = NULL, *candidate_out = NULL; uint64_t steps = 50000000ull, per_ms = 1000;
+  unsigned long mem_mb = 0;
   int train_mode = 0;
   int dump_text = 0, serial = 0, trim = 1;
   for (int i = 1; i < argc; i++) {
@@ -58,6 +66,7 @@ int main(int argc, char **argv) {
     else if (!strcmp(argv[i], "--nannet-train")) { train_mode = 1; if (i + 1 < argc && argv[i + 1][0] != '-') corpus = argv[++i]; }
     else if (!strcmp(argv[i], "--corpus") && i + 1 < argc) { train_mode = 1; corpus = argv[++i]; }
     else if (!strcmp(argv[i], "--candidate-out") && i + 1 < argc) candidate_out = argv[++i];
+    else if (!strcmp(argv[i], "--mem") && i + 1 < argc) mem_mb = strtoul(argv[++i], NULL, 0);
     else if (!strcmp(argv[i], "--steps") && i + 1 < argc) steps = strtoull(argv[++i], 0, 0);
     else if (!strcmp(argv[i], "--keys") && i + 1 < argc) keys = argv[++i];
     else if (!strcmp(argv[i], "--dump-ppm") && i + 1 < argc) ppm = argv[++i];
@@ -68,13 +77,15 @@ int main(int argc, char **argv) {
     else if (!strcmp(argv[i], "--dump-text")) dump_text = 1;
     else if (!strcmp(argv[i], "--no-trim")) trim = 0;
     else if (!strcmp(argv[i], "--serial")) serial = 1;
-    else { fprintf(stderr, "usage: nan_cli [--img f] [--nannet-train [corpus.txt]] [--candidate-out state.nan1] [--steps N] [--keys \"1,ESC,~,@5000000\"] [--serial] [--dump-text] [--dump-ppm f] [--peek ADDR[:LEN]] [--disk f] [--clock steps:N]\n"); return 2; }
+    else { fprintf(stderr, "usage: nan_cli [--img f] [--mem MB] [--nannet-train [corpus.txt]] [--candidate-out state.nan1] [--steps N] [--keys \"1,ESC,~,@5000000\"] [--serial] [--dump-text] [--dump-ppm f] [--peek ADDR[:LEN]] [--disk f] [--clock steps:N]\n"); return 2; }
   }
   if (!img && !train_mode) { fprintf(stderr, "need --img or --nannet-train\n"); return 2; }
   size_t len = 0;
   uint8_t *data = (!img && train_mode) ? build_training_guest(&len) : slurp(img, &len);
   if (!data) { perror(img ? img : "NaN16 training guest"); return 1; }
-  nan_vm *v = nan_create(); if (!v) { fprintf(stderr, "out of memory\n"); return 1; }
+  if (mem_mb == 0) mem_mb = 128;          /* default: 128 MiB C payload (32M words) */
+  nan_vm *v = nan_create_words(words_for_mb(mem_mb));
+  if (!v) { fprintf(stderr, "out of memory (mem=%lu MB)\n", mem_mb); return 1; }
   const char *kind; if (nan_load_auto(v, data, len, &kind)) { fprintf(stderr, "cannot load %s (text error line %d)\n", img ? img : "<built trainer>", nan_load_error(v)); return 1; }
 
   if (train_mode && corpus) {

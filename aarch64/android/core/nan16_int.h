@@ -6,13 +6,14 @@
 #include <string.h>
 #include <stdio.h>
 
-#define NAN_MASK  (NAN_WORDS - 1u)
-/* NAN_WORDS must be a power of two. Default keeps the current machine; the
-   platform revision raises it toward 2^31 words (16 GB) and then widens the
-   index to 64 bits (spec/NANVM_SPEC.md §4.1, §8.1). */
+/* Default guest memory: 32M words = 256 MiB of raw 8-byte words, i.e. a
+   128 MiB byte address space for guest C programs.  A VM may be created with
+   any power-of-two word count from NAN_MIN_WORDS up to 2^28 words
+   (spec/NANVM_SPEC.md §3-§4); the mask is kept in nan_vm, not baked in. */
 #ifndef NAN_WORDS
-#define NAN_WORDS 0x400000u
+#define NAN_WORDS 0x2000000u
 #endif
+#define NAN_MIN_WORDS 0x10000u
 #define NAN_VRAM  (16u << 20)
 #define NAN_SER_CAP 262144u
 
@@ -36,7 +37,7 @@ typedef struct {
 
 struct nan_vm {
   uint32_t r[16], pc; int k, halted; uint64_t steps; uint32_t ms;
-  uint64_t *mem; uint8_t *vram;
+  uint64_t *mem; uint32_t mem_words, mem_mask; uint8_t mem_mmap; uint8_t *vram;
   uint16_t cells[2000];
   int vmode; uint32_t fbw, fbh, fbtot;
   uint8_t dac[256][3]; int dac_loaded, dac_wi, dac_wp, dac_ri, dac_rp;

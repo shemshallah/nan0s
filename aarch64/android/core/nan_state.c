@@ -9,7 +9,6 @@
 #include "nan16_int.h"
 
 #define PAGE 4096u
-#define MEM_PAGES ((uint32_t)(((uint64_t)NAN_WORDS * 8) / PAGE))
 #define VRAM_PAGES (NAN_VRAM / PAGE)
 #define STATE_VERSION 1u
 #define SCALAR_LEN 6144u   /* fixed size of the scalar block (about 5.5 KB used, rest reserved), see put_scalars() */
@@ -62,11 +61,12 @@ static size_t build(const nan_vm *v, uint8_t *buf, size_t cap) {
   wb(&w, "NAN1", 4); w32(&w, STATE_VERSION); w32(&w, SCALAR_LEN);
   put_scalars(&w, v);
   uint32_t nm = 0, nv = 0;
+  const uint32_t mem_pages = (uint32_t)(((uint64_t)v->mem_words * 8u) / PAGE);
   const uint8_t *m = (const uint8_t *)v->mem;
-  for (uint32_t i = 0; i < MEM_PAGES; i++) if (!page_zero(m + (size_t)i * PAGE)) nm++;
+  for (uint32_t i = 0; i < mem_pages; i++) if (!page_zero(m + (size_t)i * PAGE)) nm++;
   for (uint32_t i = 0; i < VRAM_PAGES; i++) if (!page_zero(v->vram + (size_t)i * PAGE)) nv++;
   w32(&w, nm); w32(&w, nv);
-  for (uint32_t i = 0; i < MEM_PAGES; i++) if (!page_zero(m + (size_t)i * PAGE)) { w32(&w, i); wb(&w, m + (size_t)i * PAGE, PAGE); }
+  for (uint32_t i = 0; i < mem_pages; i++) if (!page_zero(m + (size_t)i * PAGE)) { w32(&w, i); wb(&w, m + (size_t)i * PAGE, PAGE); }
   for (uint32_t i = 0; i < VRAM_PAGES; i++) if (!page_zero(v->vram + (size_t)i * PAGE)) { w32(&w, i); wb(&w, v->vram + (size_t)i * PAGE, PAGE); }
   return w.ok ? w.n : 0;
 }
@@ -85,12 +85,13 @@ int nan_restore_state(nan_vm *v, const uint8_t *buf, size_t len) {
   if (pages_at + 8 > len) return -1;
   rd pr = { buf, pages_at, len, 1 };
   uint32_t nm = r32(&pr), nv = r32(&pr);
-  if (nm > MEM_PAGES || nv > VRAM_PAGES) return -1;
+  const uint32_t mem_pages = (uint32_t)(((uint64_t)v->mem_words * 8u) / PAGE);
+  if (nm > mem_pages || nv > VRAM_PAGES) return -1;
   size_t need = pr.n + ((size_t)nm + nv) * (4 + (size_t)PAGE);
   if (need != len) return -1;
   /* validate page indices (strictly increasing, in range) before changing anything */
   { rd q = pr; int64_t last = -1;
-    for (uint32_t i = 0; i < nm; i++) { uint32_t ix = r32(&q); if (ix >= MEM_PAGES || (int64_t)ix <= last) return -1; last = ix; q.n += PAGE; }
+    for (uint32_t i = 0; i < nm; i++) { uint32_t ix = r32(&q); if (ix >= mem_pages || (int64_t)ix <= last) return -1; last = ix; q.n += PAGE; }
     last = -1;
     for (uint32_t i = 0; i < nv; i++) { uint32_t ix = r32(&q); if (ix >= VRAM_PAGES || (int64_t)ix <= last) return -1; last = ix; q.n += PAGE; } }
 
@@ -115,7 +116,7 @@ int nan_restore_state(nan_vm *v, const uint8_t *buf, size_t len) {
   if (dwi > 255 || dwp > 2 || dri > 255 || drp > 2 || rhead > 15 || rtail > 15 || rawkb > 255 || apos > 255 || amode > 2 || arem > 256) return -1;
 
   /* apply */
-  memset(v->mem, 0, (size_t)NAN_WORDS * 8); memset(v->vram, 0, NAN_VRAM);
+  memset(v->mem, 0, (size_t)v->mem_words * 8u); memset(v->vram, 0, NAN_VRAM);
   { rd q = pr;
     for (uint32_t i = 0; i < nm; i++) { uint32_t ix = r32(&q); uint64_t *dst = v->mem + (size_t)ix * (PAGE / 8);
       for (uint32_t j = 0; j < PAGE / 8; j++) dst[j] = le64(q.p + q.n + (size_t)j * 8);
