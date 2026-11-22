@@ -84,7 +84,11 @@ new x86 line unless a new *primitive* is missing.
       aligned, normal-G ranges; unaligned, RAW-window and wrapping ranges
       fall back to the exact byte loop. The scalar handlers remain as the
       fallback tier.
-- [ ] AVX2/AVX-512/NEON/RVV lowerings and CPUID feature steer.
+- [x] CPUID/XSAVE feature steer: XSAVE+AVX+AVX2 detection, CR4.OSXSAVE,
+      XCR0=7, feature bit 8 in the machine query, `vzeroupper` on exit.
+- [x] AVX2 VDP4B tier (two 256-bit chunks, 32 bytes each), selected at
+      runtime; SSE2 remains the fallback.
+- [ ] AVX2 for the remaining packed ops, AVX-512/NEON/RVV lowerings.
 - [ ] Native block chaining for loop back-edges; step budget exact.
 - [x] Baseline NaN->x86 translator for basic blocks: NaN-native encoders
       in `src/translate/x86.nas`, driver in `src/translate/block.nas`,
@@ -144,6 +148,8 @@ them stays NaN.
 - `tools/nan_simd.sh`: DP4B vectors, exact output on C and native x86. Done.
 - `tools/nan_vec.sh`: full 512-bit vector family, C reference + native x86. Done.
 - `tools/nan_vec_native.sh`: native VZERO/VBCAST/VDP4B/VGET/VSET. Done.
+- `tools/nan_vec_avx2.sh`: proves the AVX2 tier is active and exact under
+  qemu `-cpu max`. Done.
 - `tools/nan_bench.sh`: VDP4B vs DP4B packed-i8 throughput, exact
   checksums on both cores. Done.
 - `tools/ncc_dp4b.sh`: C `dp4b(a,b)` builtin emits 0x4A. Done.

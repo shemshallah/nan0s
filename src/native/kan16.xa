@@ -39,6 +39,7 @@
 .equ XCODE 0x30000
 .equ XLEN 0x80D0
 .equ XPC 0x80D4
+.equ AVX2F 0x80E4
 _start:
   CLD
   CALL @sse_init
@@ -605,6 +606,11 @@ hc_words:
   JMP @st
 hc_flags:
   MOV $0x4E160001,%EBX
+  MOVZXB [AVX2F],%EAX
+  TEST %EAX,%EAX
+  JZ @hc_flags_x
+  OR $0x100,%EBX
+hc_flags_x:
   JMP @st
 hc_real:
   PUSH %ESI
@@ -1394,6 +1400,27 @@ sse_init:
   .byte 0x0F,0x20,0xE0
   OR $0x600,%EAX
   .byte 0x0F,0x22,0xE0
+  ; AVX2 needs OSXSAVE+AVX (CPUID.1:ECX) and AVX2 (CPUID.7:EBX bit5)
+  MOV $1,%EAX
+  XOR %ECX,%ECX
+  .byte 0x0F,0xA2
+  MOV %ECX,%EAX
+  AND $0x14000000,%EAX       ; XSAVE + AVX
+  CMP $0x14000000,%EAX
+  JNE @sse_no
+  MOV $7,%EAX
+  XOR %ECX,%ECX
+  .byte 0x0F,0xA2
+  BT $5,%EBX
+  JNC @sse_no
+  .byte 0x0F,0x20,0xE0       ; mov eax,cr4
+  OR $0x40000,%EAX           ; OSXSAVE
+  .byte 0x0F,0x22,0xE0       ; mov cr4,eax
+  XOR %ECX,%ECX
+  MOV $7,%EAX                ; x87|SSE|AVX
+  XOR %EDX,%EDX
+  .byte 0x0F,0x01,0xD1       ; xsetbv
+  MOVB $1,[AVX2F]
 sse_no:
   RET
 hw_init:
@@ -1658,7 +1685,7 @@ tbl:
   .long @h_fbinfo,@h_vsync,@h_fbcopy,@h_fbfill,@h_outb,@h_inb,@h_inw,@h_outw,@h_outsw,@h_outl,@h_cpuid,@h_rdtsc
   .long @badop,@badop,@badop,@badop,@h_dp4b
   .long @badop,@badop,@badop,@badop,@badop
-  .long @h_vzero,@h_vbcast,@h_vload_sse2,@h_vstore_sse2,@h_vadd8_sse2,@h_vsub8_sse2,@h_vadd32_sse2,@h_vsub32_sse2,@h_vmul32_sse2,@h_vdp4b,@badop,@badop,@badop,@badop,@h_vget,@h_vset
+  .long @h_vzero,@h_vbcast,@h_vload_sse2,@h_vstore_sse2,@h_vadd8_sse2,@h_vsub8_sse2,@h_vadd32_sse2,@h_vsub32_sse2,@h_vmul32_sse2,@h_vdp4b_disp,@badop,@badop,@badop,@badop,@h_vget,@h_vset
   .long @h_codelen,@h_execn
 
 
@@ -2059,3 +2086,74 @@ vs_slow:
   POP %EDI
   POP %ESI
   JMP @h_vstore
+
+; ---- AVX2 tier: VDP4B 256-bit dispatch --------------------------------
+h_vdp4b_disp:
+  MOVZXB [AVX2F],%EDX
+  TEST %EDX,%EDX
+  JNZ @h_vdp4b_avx2
+  JMP @h_vdp4b
+
+h_vdp4b_avx2:
+  PUSH %ESI
+  PUSH %EDI
+  PUSH %EBX
+  PUSH %EBP
+  MOV %EAX,%ESI
+  SHR $16,%ESI
+  AND $15,%ESI
+  SHL $6,%ESI
+  ADD $VREG,%ESI
+  MOV %EAX,%EDI
+  AND $15,%EDI
+  SHL $6,%EDI
+  ADD $VREG,%EDI
+  MOV %EAX,%EBX
+  SHR $20,%EBX
+  AND $15,%EBX
+  SHL $6,%EBX
+  ADD $VREG,%EBX
+  MOV $2,%ECX
+vdp_a_l:
+  .byte 0xC5,0xFE,0x6F,0x06      ; vmovdqu ymm0,[esi]
+  .byte 0xC5,0xFE,0x6F,0x17      ; vmovdqu ymm2,[edi]
+  .byte 0xC5,0xDD,0xEF,0xE4      ; vpxor ymm4,ymm4,ymm4
+  .byte 0xC5,0xFD,0x6F,0xC8      ; vmovdqa ymm1,ymm0
+  .byte 0xC5,0xDD,0x64,0xE1      ; vpcmpgtb ymm4,ymm4,ymm1
+  .byte 0xC5,0xF5,0x60,0xCC      ; vpunpcklbw ymm1,ymm1,ymm4
+  .byte 0xC5,0xD5,0xEF,0xED      ; vpxor ymm5,ymm5,ymm5
+  .byte 0xC5,0xFD,0x6F,0xDA      ; vmovdqa ymm3,ymm2
+  .byte 0xC5,0xD5,0x64,0xEB      ; vpcmpgtb ymm5,ymm5,ymm3
+  .byte 0xC5,0xE5,0x60,0xDD      ; vpunpcklbw ymm3,ymm3,ymm5
+  .byte 0xC5,0xF5,0xF5,0xCB      ; vpmaddwd ymm1,ymm1,ymm3
+  .byte 0xC5,0xFD,0x6F,0xF1      ; vmovdqa ymm6,ymm1
+  .byte 0xC5,0xFD,0x70,0xF6,0xB1 ; vpshufd ymm6,ymm6,0xB1
+  .byte 0xC5,0xF5,0xFE,0xCE      ; vpaddd ymm1,ymm1,ymm6
+  .byte 0xC5,0xFD,0x70,0xC9,0x08 ; vpshufd ymm1,ymm1,0x08
+  .byte 0xC5,0xFD,0x6F,0xF1      ; vmovdqa ymm6,ymm1
+  .byte 0xC5,0xDD,0xEF,0xE4      ; vpxor ymm4,ymm4,ymm4
+  .byte 0xC5,0xFD,0x6F,0xC8      ; vmovdqa ymm1,ymm0
+  .byte 0xC5,0xDD,0x64,0xE1      ; vpcmpgtb ymm4,ymm4,ymm1
+  .byte 0xC5,0xF5,0x68,0xCC      ; vpunpckhbw ymm1,ymm1,ymm4
+  .byte 0xC5,0xD5,0xEF,0xED      ; vpxor ymm5,ymm5,ymm5
+  .byte 0xC5,0xFD,0x6F,0xDA      ; vmovdqa ymm3,ymm2
+  .byte 0xC5,0xD5,0x64,0xEB      ; vpcmpgtb ymm5,ymm5,ymm3
+  .byte 0xC5,0xE5,0x68,0xDD      ; vpunpckhbw ymm3,ymm3,ymm5
+  .byte 0xC5,0xF5,0xF5,0xCB      ; vpmaddwd ymm1,ymm1,ymm3
+  .byte 0xC5,0xFD,0x6F,0xF9      ; vmovdqa ymm7,ymm1
+  .byte 0xC5,0xFD,0x70,0xFF,0xB1 ; vpshufd ymm7,ymm7,0xB1
+  .byte 0xC5,0xF5,0xFE,0xCF      ; vpaddd ymm1,ymm1,ymm7
+  .byte 0xC5,0xFD,0x70,0xC9,0x08 ; vpshufd ymm1,ymm1,0x08
+  .byte 0xC5,0xCD,0x6C,0xF1      ; vpunpcklqdq ymm6,ymm6,ymm1
+  .byte 0xC5,0xFE,0x7F,0x33      ; vmovdqu [ebx],ymm6
+  ADD $32,%ESI
+  ADD $32,%EDI
+  ADD $32,%EBX
+  DEC %ECX
+  JNZ @vdp_a_l
+  .byte 0xC5,0xF8,0x77           ; vzeroupper
+  POP %EBP
+  POP %EBX
+  POP %EDI
+  POP %ESI
+  JMP @loop

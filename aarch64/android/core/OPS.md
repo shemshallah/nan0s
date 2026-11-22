@@ -51,9 +51,9 @@ Trap text: "!" + 'G'|'O' + uppercase hex of (pc after the fetch increment), min 
 54 VADD8 d,a,b | 55 VSUB8 | 56 VADD32 | 57 VSUB32 | 58 VMUL32
 59 VDP4B d,a,b (16 lanes, 64 MACs) | 5E VGET d,a,lane | 5F VSET d,a,lane
 The V family uses 16 x 512-bit vector registers.  The bare x86 core
-lowers VDP4B plus VADD8/VSUB8/VADD32/VSUB32/VMUL32 with SSE2, and
-VLOAD/VSTORE with an aligned SSE2 gather/scatter fast path plus an exact
-byte-loop fallback.  The scalar
+lowers VDP4B with a runtime-selected AVX2 (256-bit) or SSE2 path, the
+packed add/sub/mul family with SSE2, and VLOAD/VSTORE with an aligned
+SSE2 gather/scatter fast path plus an exact byte-loop fallback.  The scalar
 handlers remain as the fallback tier; AVX2/AVX-512/NEON/RVV are next.
 4B-4F and 60-7F are reserved for wider (1024/2048-bit) and fp8/int4 forms,
 so old cartridges do not move when the abstract width grows.
@@ -102,7 +102,7 @@ bits0-1 of 0x61 = gate+enable; hz = 1193182/divisor); 0x3F8 COM1 data -> serial,
 PCI mech #1: OUTL 0xCF8 then INW 0xCFC/0xCFE (gui_cart pci_scan: bus 0, dev 0..31): dev0 8086:1237 class 060000, dev1 8086:7000 class 060100,
 dev2 1234:1111 class 030000 BAR0 0xFD000008; others 0xFFFFFFFF. ATA primary master 0x1F0-0x1F7/0x3F6 (ata.nas, gui ut_atas IDENTIFY x4 slots):
 PIO LBA28, commands 0xEC IDENTIFY, 0x20 READ, 0x30 WRITE, 0xE7 FLUSH; no drive attached => status reads 0xFF (floating bus). Secondary/slaves absent.
-CPUID leaf0: vendor in EBX,EDX,ECX; leaf 1 family/model/stepping in EAX; 0x80000000 max ext leaf; 0x80000001 EDX bit29 long mode; 0x80000002-4 brand string. Leaf 0x4E4D00FF is the machine-memory query: subleaf 0 mask, 1 words, 2 flags 0x4E160001, 3 guest C payload bytes.
+CPUID leaf0: vendor in EBX,EDX,ECX; leaf 1 family/model/stepping in EAX; 0x80000000 max ext leaf; 0x80000001 EDX bit29 long mode; 0x80000002-4 brand string. Leaf 0x4E4D00FF is the machine-memory query: subleaf 0 mask, 1 words, 2 flags 0x4E160001 (bit 8 = AVX2 VDP4B tier active), 3 guest C payload bytes.
 RDTSC: any monotonic counter (the C core uses the executed-instruction count; TICK is host milliseconds, so the GUI's "MHz" is real emulation speed).
 TICK: x86 programs the PIT to ~1000 Hz and counts ms from boot; the C core returns the host-supplied ms (nan_set_time_ms).
 
