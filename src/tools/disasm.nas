@@ -514,6 +514,8 @@ t_ops:
 .str "RDTSC  "
 .word 74,801
 .str "DP4B   "
+.word 76,801
+.str "VDP4B4 "
 .word 80,1
 .str "VZERO  "
 .word 81,33

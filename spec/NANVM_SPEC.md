@@ -136,7 +136,7 @@ Future packed formats (reserved until gated):
 
 | format | lanes / 512 bits | packing | planned op |
 | --- | --- | --- | --- |
-| i4 | 128 | two values per byte, low nibble first | `VDP4B4` (8 weights x 8 i8 per 32-bit lane = 128 MACs/op) |
+| i4 | 128 | two values per byte, low nibble first | `VDP4B4` IMPLEMENTED (8 weights x 8 i8 per lane = 128 MACs/op) |
 | fp8 e4m3 | 64 | one byte per value | `VDP4F8` (16 dots of 4 fp8 pairs) |
 | fp8 e5m2 | 64 | one byte per value | as above, separate sub-op |
 | f16 | 32 | little-endian half per 16 bits | `VDP2H` |
@@ -479,7 +479,7 @@ existing op/ABI or its op is added here with a version.
 | NaNVM1 op set 0x20-0x48 (32-bit mul/div, bytes, BCOPY, float32, FEXP/FTANH/FLOG) | DONE in the C core (`aarch64/android/core/nan16.c`, `tests/test_core.c`); native implementation PLAN (§4) |
 | 64-bit effective addresses (ADDRH, 0x40) | PLAN (§4.1) |
 | SMP cores, atomics, fences (0x41-0x44) | PLAN (§9.2, §9.3) |
-| AI packed math: DP4B (0x4A), 512-bit V family/VDP4B (0x50-0x5F) | DP4B DONE both cores; 512-bit C reference DONE (`vec512`); native V lowering PLAN |
+| AI packed math: DP4B (0x4A), VDP4B4 (0x4C), 512-bit V family/VDP4B (0x50-0x5F) | DP4B/VDP4B4/512-bit family DONE both cores; AVX2 VDP4B + packed ALU DONE; AVX-512/NEON/RVV PLAN |
 | 16 GB RAM configuration (NAN_WORDS, 64-bit indices, demand-mapped host memory) | PLAN — C core revision |
 | nalloc64 (heaps > 2^31 words, 64-bit pointers/sizes) | PLAN (§11) |
 | NaNVM1 native flat memory + 32-bit pc | PLAN (§4.1-4.2) |

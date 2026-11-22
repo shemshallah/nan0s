@@ -23,6 +23,16 @@ LA r1,0xDEADBEEF
 VSET r7,r1,3
 VGET r3,r7,3
 CALL @ph
+; VDP4B4: Q4 weights 1,-1,2,-2,3,-3,4,-4 x activations 1..8 -> -10
+LA r1,0xC4D3E2F1
+VSET r1,r1,0
+LA r1,0x04030201
+VSET r2,r1,0
+LA r1,0x08070605
+VSET r3,r1,0
+VDP4B4 r4,r1,r2
+VGET r3,r4,0
+CALL @ph
 ; 16-word load/store roundtrip
 MOVI r10,0
 fill:

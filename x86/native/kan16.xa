@@ -1684,7 +1684,7 @@ tbl:
   .long @h_fadd,@h_fsub,@h_fmul,@h_fdiv,@h_fsqrt,@h_fcmp,@h_cvtif,@h_cvtfi,@h_jmpf,@h_callf
   .long @h_fbinfo,@h_vsync,@h_fbcopy,@h_fbfill,@h_outb,@h_inb,@h_inw,@h_outw,@h_outsw,@h_outl,@h_cpuid,@h_rdtsc
   .long @badop,@badop,@badop,@badop,@h_dp4b
-  .long @badop,@badop,@badop,@badop,@badop
+  .long @badop,@h_vdp4b4,@badop,@badop,@badop
   .long @h_vzero,@h_vbcast,@h_vload_sse2,@h_vstore_sse2,@h_vadd8_disp,@h_vsub8_disp,@h_vadd32_disp,@h_vsub32_disp,@h_vmul32_disp,@h_vdp4b_disp,@badop,@badop,@badop,@badop,@h_vget,@h_vset
   .long @h_codelen,@h_execn
 
@@ -2371,3 +2371,105 @@ vm32a_l:
   POP %EDI
   POP %ESI
   JMP @loop
+
+; ---- VDP4B4: 8 signed Q4 weights x 8 signed i8 activations per lane ----
+; Activations are Vb (low 4 bytes) plus V(b+1) (high 4 bytes).  Scalar
+; exact reference; SSE2/AVX2 lowering is a later tier.
+h_vdp4b4:
+  PUSH %ESI
+  PUSH %EDI
+  PUSH %EBX
+  PUSH %EBP
+  MOV %EAX,%ESI
+  SHR $16,%ESI
+  AND $15,%ESI
+  SHL $6,%ESI
+  ADD $VREG,%ESI
+  MOV %EAX,%EBX
+  AND $15,%EBX
+  SHL $6,%EBX
+  ADD $VREG,%EBX
+  MOV %EAX,%EDI
+  AND $15,%EDI
+  ADD $1,%EDI
+  AND $15,%EDI
+  SHL $6,%EDI
+  ADD $VREG,%EDI
+  MOV %EAX,%EBP
+  SHR $20,%EBP
+  AND $15,%EBP
+  SHL $6,%EBP
+  ADD $VREG,%EBP
+  MOV $16,%ECX
+vq4_l:
+  PUSH %ECX
+  MOV [ESI],%EAX
+  MOV [EBX],%EDX
+  MOV [EDI],%ECX
+  CALL @v_q4dot
+  MOV %EAX,[EBP]
+  POP %ECX
+  ADD $4,%ESI
+  ADD $4,%EBX
+  ADD $4,%EDI
+  ADD $4,%EBP
+  DEC %ECX
+  JNZ @vq4_l
+  POP %EBP
+  POP %EBX
+  POP %EDI
+  POP %ESI
+  JMP @loop
+
+; eax=weight dword, edx=act0 dword, ecx=act1 dword -> eax=dot
+v_q4dot:
+  PUSH %EBX
+  PUSH %ESI
+  PUSH %EDI
+  PUSH %EBP
+  MOV %EAX,%EBX
+  MOV %EDX,%ESI
+  MOV %ECX,%EDI
+  XOR %EBP,%EBP
+  MOV $4,%ECX
+q4a_l:
+  MOV %EBX,%EAX
+  AND $0xF,%EAX
+  TEST $8,%AL
+  JZ @q4a_p
+  SUB $16,%EAX
+q4a_p:
+  MOV %ESI,%EDX
+  AND $0xFF,%EDX
+  SHL $24,%EDX
+  SAR $24,%EDX
+  IMUL %EDX,%EAX
+  ADD %EAX,%EBP
+  SHR $4,%EBX
+  SHR $8,%ESI
+  DEC %ECX
+  JNZ @q4a_l
+  MOV $4,%ECX
+q4b_l:
+  MOV %EBX,%EAX
+  AND $0xF,%EAX
+  TEST $8,%AL
+  JZ @q4b_p
+  SUB $16,%EAX
+q4b_p:
+  MOV %EDI,%EDX
+  AND $0xFF,%EDX
+  SHL $24,%EDX
+  SAR $24,%EDX
+  IMUL %EDX,%EAX
+  ADD %EAX,%EBP
+  SHR $4,%EBX
+  SHR $8,%EDI
+  DEC %ECX
+  JNZ @q4b_l
+  MOV %EBP,%EAX
+  POP %EBP
+  POP %EDI
+  POP %ESI
+  POP %EBX
+  RET

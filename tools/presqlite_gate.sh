@@ -12,7 +12,8 @@ fail=0; n=0
 run() {
   name="$1"; shift
   n=$((n+1))
-  if "$@" >"$T/$name.log" 2>&1; then
+  printf 'RUN %s\n' "$name"
+  if timeout 600 "$@" >"$T/$name.log" 2>&1; then
     printf 'PASS %s\n' "$name"
   else
     printf 'FAIL %s\n' "$name"
@@ -24,7 +25,7 @@ run() {
 for m in $(seq 1 62); do
   [ -f "tools/ncc_m$m.sh" ] && run "ncc_m$m" sh "tools/ncc_m$m.sh"
 done
-for g in ncc_alloc ncc_heap ncc_aligned narena narena64 nten nan_simd nan_vec nan_vec_native nan_vec_avx2 nan_bench xlate_x86 ncc_dp4b nmatmul nmat64 nmat64x64 ncc_headers ncc_ppexpr ncc_torture ncc_donut_exact; do
+for g in ncc_alloc ncc_heap ncc_aligned narena narena64 nten nan_simd nan_vec nan_vec_native nan_vec_avx2 nan_q4 nan_q4lm nan_bench xlate_x86 ncc_dp4b nmatmul nmat64 nmat64x64 ncc_headers ncc_ppexpr ncc_torture ncc_donut_exact; do
   [ -f "tools/$g.sh" ] && run "$g" sh "tools/$g.sh"
 done
 for g in ncc_macro_text ncc_include ncc_libm_exact ncc_iso_c ncc_ctests; do

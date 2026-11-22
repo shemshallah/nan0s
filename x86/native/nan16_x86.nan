@@ -1,4 +1,4 @@
-; NaN16 gold: boot 512 + kernel 8281 bytes (runtime E820 memory sizing)
+; NaN16 gold: boot 512 + kernel 8507 bytes (runtime E820 memory sizing)
 fa 31 c0 8e d8 8e d0 bc 00 7c fb 88 16 b5 7c 8e   ; boot+0000
 c0 66 31 db bf 00 06 31 f6 66 b8 20 e8 00 00 66   ; boot+0010
 ba 50 41 4d 53 66 b9 18 00 00 00 cd 15 72 16 66   ; boot+0020
@@ -411,7 +411,7 @@ d7 08 01 00 1a 09 01 00 5a 03 01 00 7e 09 01 00   ; kernel+1740
 9a 07 01 00 ae 07 01 00 da 07 01 00 c0 07 01 00   ; kernel+1790
 ee 07 01 00 1a 08 01 00 03 07 01 00 87 07 01 00   ; kernel+17A0
 57 0f 01 00 57 0f 01 00 57 0f 01 00 57 0f 01 00   ; kernel+17B0
-36 0a 01 00 57 0f 01 00 57 0f 01 00 57 0f 01 00   ; kernel+17C0
+36 0a 01 00 57 0f 01 00 59 20 01 00 57 0f 01 00   ; kernel+17C0
 57 0f 01 00 57 0f 01 00 c2 0a 01 00 e5 0a 01 00   ; kernel+17D0
 a4 1b 01 00 3f 1c 01 00 f4 1d 01 00 04 1e 01 00   ; kernel+17E0
 18 1e 01 00 2c 1e 01 00 40 1e 01 00 0f 1d 01 00   ; kernel+17F0
@@ -548,4 +548,18 @@ e3 0f c1 e3 06 81 c3 00 20 00 00 89 c7 c1 ef 14   ; kernel+1FF0
 c3 c5 ed 73 d2 20 c5 e5 73 d3 20 c5 ed f4 d3 c5   ; kernel+2020
 fd 70 c0 08 c5 fd 70 d2 08 c5 fd 62 c2 c5 fe 7f   ; kernel+2030
 07 83 c6 20 83 c3 20 83 c7 20 49 75 c4 c5 f8 77   ; kernel+2040
-5d 5b 5f 5e e9 43 e0 ff ff   ; kernel+2050
+5d 5b 5f 5e e9 43 e0 ff ff 56 57 53 55 89 c6 c1   ; kernel+2050
+ee 10 83 e6 0f c1 e6 06 81 c6 00 20 00 00 89 c3   ; kernel+2060
+83 e3 0f c1 e3 06 81 c3 00 20 00 00 89 c7 83 e7   ; kernel+2070
+0f 83 c7 01 83 e7 0f c1 e7 06 81 c7 00 20 00 00   ; kernel+2080
+89 c5 c1 ed 14 83 e5 0f c1 e5 06 81 c5 00 20 00   ; kernel+2090
+00 b9 10 00 00 00 51 8b 06 8b 13 8b 0f e8 1c 00   ; kernel+20A0
+00 00 89 45 00 59 83 c6 04 83 c3 04 83 c7 04 83   ; kernel+20B0
+c5 04 49 75 e1 5d 5b 5f 5e e9 ce df ff ff 53 56   ; kernel+20C0
+57 55 89 c3 89 d6 89 cf 31 ed b9 04 00 00 00 89   ; kernel+20D0
+d8 83 e0 0f a8 08 74 03 83 e8 10 89 f2 81 e2 ff   ; kernel+20E0
+00 00 00 c1 e2 18 c1 fa 18 0f af c2 01 c5 c1 eb   ; kernel+20F0
+04 c1 ee 08 49 75 d8 b9 04 00 00 00 89 d8 83 e0   ; kernel+2100
+0f a8 08 74 03 83 e8 10 89 fa 81 e2 ff 00 00 00   ; kernel+2110
+c1 e2 18 c1 fa 18 0f af c2 01 c5 c1 eb 04 c1 ef   ; kernel+2120
+08 49 75 d8 89 e8 5d 5f 5e 5b c3   ; kernel+2130

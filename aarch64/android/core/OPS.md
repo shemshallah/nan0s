@@ -47,6 +47,9 @@ Trap text: "!" + 'G'|'O' + uppercase hex of (pc after the fetch increment), min 
 3E OUTB(port A&0xFFFF, val r[d])  3F INB  40 INW  41 OUTW  42 OUTSW(port A, src word index B, count r[d]; low16 of each payload, B not masked in x86)  43 OUTL (no INL exists)
 44 CPUID(leaf A, subleaf 0; r[d] = reg B&3 of EAX,EBX,ECX,EDX)  45 RDTSC (r[d] = A==0 ? low32 : high32)
 4A DP4B (four signed i8 lanes in A and B; r[d] = exact int32 dot; k Z=result==0, L=0)
+4C VDP4B4 d,a,b (Q4 x Q8: Va lane = 8 signed i4, low nibble first; activations
+   are Vb bytes 0..3 and V(b+1) bytes 0..3, b+1 wraps mod 16; Vd[i] =
+   sum of 8 products, 128 MACs/instruction, int32 exact, flags unchanged)
 50 VZERO d | 51 VBCAST d,a | 52 VLOAD d,a | 53 VSTORE d,a
 54 VADD8 d,a,b | 55 VSUB8 | 56 VADD32 | 57 VSUB32 | 58 VMUL32
 59 VDP4B d,a,b (16 lanes, 64 MACs) | 5E VGET d,a,lane | 5F VSET d,a,lane

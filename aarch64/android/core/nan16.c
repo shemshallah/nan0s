@@ -411,6 +411,28 @@ int nan_run(nan_vm *v, uint32_t max_steps) {
       break; }
     case 0x5E: r[d] = ((const uint32_t *)(const void *)v->vreg[a])[imm & 15]; break;
     case 0x5F: ((uint32_t *)(void *)v->vreg[d])[imm & 15] = A; break;
+    case 0x4C: { /* VDP4B4: 8 signed Q4 weights x 8 signed i8 activations
+                    per 32-bit lane.  Activations come from Vb and V(b+1). */
+      const uint32_t *ww = (const uint32_t *)(const void *)v->vreg[a];
+      const uint8_t *a0 = v->vreg[imm & 15];
+      const uint8_t *a1 = v->vreg[(imm + 1) & 15];
+      uint32_t *q = (uint32_t *)(void *)v->vreg[d];
+      for (int i = 0; i < 16; i++) {
+        uint32_t w = ww[i];
+        int32_t acc = 0;
+        for (int j = 0; j < 4; j++) {
+          int32_t wv = (int32_t)((w >> (4*j)) & 0xF);
+          if (wv & 8) wv -= 16;
+          acc += wv * (int32_t)(int8_t)a0[i*4+j];
+        }
+        for (int j = 0; j < 4; j++) {
+          int32_t wv = (int32_t)((w >> (4*(j+4))) & 0xF);
+          if (wv & 8) wv -= 16;
+          acc += wv * (int32_t)(int8_t)a1[i*4+j];
+        }
+        q[i] = (uint32_t)acc;
+      }
+      break; }
     case 0x4A: { /* DP4B: four signed i8 lanes, dot product */
       int32_t acc = 0;
       for (int i = 0; i < 4; i++) {

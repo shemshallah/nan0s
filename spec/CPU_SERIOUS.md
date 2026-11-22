@@ -119,6 +119,10 @@ the JIT from becoming a second hidden operating system.
       VZERO/VBCAST/VLOAD/VSTORE, packed-i8/i32 add/sub/mul, VDP4B (16 lanes,
       64 MACs), VGET/VSET. C reference exact; the full family is exact on
       bare x86, with VDP4B lowered to SSE2. Wider SIMD is the next step.
+- [x] `VDP4B4 d,a,b` (0x4C): Q4 weights x Q8 activations, 8 products per
+      32-bit lane = 128 MACs/instruction, exact int32, `b+1` wraps.  Native
+      scalar exact; C reference exact.  Gates: `nan_q4`, `nan_q4lm`.
+- [ ] SIMD (SSE2/AVX2) lowering for VDP4B4; scalar is correct but slow.
 - [ ] `FMA d,a,b`: fused f32 `d = a*b + d`, one rounding, explicitly gated
       against the libm/donut vectors.
 - [ ] `DP2H d,a,b`: two f16 lanes, dot to f32 (after DP4B is proven).
@@ -157,6 +161,9 @@ them stays NaN.
   qemu `-cpu max`. Done.
 - `tools/nan_bench.sh`: VDP4B vs DP4B packed-i8 throughput, exact
   checksums on both cores. Done.
+- `tools/nan_q4.sh`: VDP4B4 Q4xQ8 lanes, exact on both cores. Done.
+- `tools/nan_q4lm.sh`: 64-wide Q4 GEMV language-model token loop, exact
+  on both cores. Done.
 - `tools/ncc_dp4b.sh`: C `dp4b(a,b)` builtin emits 0x4A. Done.
 - `tools/nmatmul.sh`: 8x8x8 packed-i8 matmul on DP4B, both cores. Done.
 - `tools/narena.sh`: alignment, overlap, mark/release, reset, exhaustion. Done.

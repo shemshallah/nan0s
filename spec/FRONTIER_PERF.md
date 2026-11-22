@@ -40,6 +40,23 @@ The gap is not the allocator; it is the execution model.
 
 ## 3. The block-packed primitive and the 512-bit vector family
 
+### 3.0 Q4 weights x Q8 activations for language models
+
+`VDP4B4` is now the quantized inference primitive.  One 512-bit weight
+register holds 16 lanes x 8 signed 4-bit weights (low nibble first); the
+activation pair `Vb`/`V(b+1)` holds 16 lanes x 8 signed int8.  One
+instruction therefore performs **128 MACs** and returns 16 int32 lane
+dots with no overflow in the i8 range.  The production GEMV layout is
+blocked: `[k][g][lane]`, 64 bytes per weight vector, so 16 output rows
+share eight `VDP4B4` + seven `VADD32` per 64-element K chunk.
+
+`tools/nan_q4lm.sh` runs a 64-token, 64-wide Q4 language-model skeleton:
+one GEMV per token, 32 greedy argmax steps.  The weights are synthetic
+(an LCG), so the output is a deterministic cycle rather than useful text;
+the gate proves the exact inference path (embedding lookup, Q4 GEMV,
+argmax, token loop) on the C reference and bare x86.  A trained model
+exporter only has to emit the documented blocked Q4 layout.
+
 ### 3.0 First measured packed-i8 number
 
 `tools/nan_bench.sh` runs identical 1M-iteration loops: `VDP4B` (64 MACs

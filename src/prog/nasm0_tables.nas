@@ -83,6 +83,7 @@ mnem:
 .word 219220664,97,2   ; EXECN a
 .word 233935749,69,33   ; RDTSC da
 .word 2089006223,74,801   ; DP4B dab
+.word 3581276505,76,801   ; VDP4B4 dab
 .word 2089134446,255,0   ; HALT 
 .word 0,0,0
 preds:
