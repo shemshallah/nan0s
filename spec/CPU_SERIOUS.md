@@ -78,6 +78,8 @@ new x86 line unless a new *primitive* is missing.
 - [ ] Decoded block cache: decode once, validate once, execute tokens.
 - [ ] Superinstruction fusion in the decoded stream: common
       `LD/ST/LDB/STB` + `ADD/SUB/CMP/JMP` pairs, FMA-shaped float pairs.
+- [x] Native scalar vector handlers: VZERO/VBCAST/VDP4B/VGET/VSET.
+- [ ] SIMD vector lowering (SSE2/AVX2/AVX-512/NEON/RVV) with CPUID steer.
 - [ ] Native block chaining for loop back-edges; step budget exact.
 - [ ] Baseline NaN->x86 translator for hot blocks, driven by the NaN-native
       translator (`src/translate/x86.nas`) through a single `EXECN` shim.
@@ -94,6 +96,10 @@ the JIT from becoming a second hidden operating system.
 
 - [x] `DP4B d,a,b`: four signed i8 lanes in each payload, dot product to
       int32, exact integer, Z/L flags.
+- [x] 512-bit abstract vector family (0x50-0x5F): 16 vector registers,
+      VZERO/VBCAST/VLOAD/VSTORE, packed-i8/i32 add/sub/mul, VDP4B (16 lanes,
+      64 MACs), VGET/VSET. C reference exact; native scalar VZERO/VBCAST/
+      VDP4B/VGET/VSET exact on bare x86. SIMD lowering is the next step.
 - [ ] `FMA d,a,b`: fused f32 `d = a*b + d`, one rounding, explicitly gated
       against the libm/donut vectors.
 - [ ] `DP2H d,a,b`: two f16 lanes, dot to f32 (after DP4B is proven).
@@ -126,6 +132,8 @@ them stays NaN.
 ### 3.4 Proof/bench gates
 
 - `tools/nan_simd.sh`: DP4B vectors, exact output on C and native x86. Done.
+- `tools/nan_vec.sh`: full 512-bit vector family on the C reference. Done.
+- `tools/nan_vec_native.sh`: native VZERO/VBCAST/VDP4B/VGET/VSET. Done.
 - `tools/ncc_dp4b.sh`: C `dp4b(a,b)` builtin emits 0x4A. Done.
 - `tools/nmatmul.sh`: 8x8x8 packed-i8 matmul on DP4B, both cores. Done.
 - `tools/narena.sh`: alignment, overlap, mark/release, reset, exhaustion. Done.
