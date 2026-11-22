@@ -41,6 +41,7 @@ Lemma signed_orientation_injective : forall p q s t,
   oriented p s = oriented q t -> p = q /\ s = t.
 Proof.
   intros [a b] [c d] s t Hab Hcd Heq.
+  simpl in Hab, Hcd.
   destruct s; destruct t; unfold oriented, mirror in Heq; simpl in Heq.
   - inversion Heq; subst. split; reflexivity.
   - inversion Heq; subst. lia.
