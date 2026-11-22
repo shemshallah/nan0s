@@ -514,6 +514,30 @@ t_ops:
 .str "RDTSC  "
 .word 74,801
 .str "DP4B   "
+.word 80,1
+.str "VZERO  "
+.word 81,33
+.str "VBCAST "
+.word 82,33
+.str "VLOAD  "
+.word 83,33
+.str "VSTORE "
+.word 84,801
+.str "VADD8  "
+.word 85,801
+.str "VSUB8  "
+.word 86,801
+.str "VADD32 "
+.word 87,801
+.str "VSUB32 "
+.word 88,801
+.str "VMUL32 "
+.word 89,801
+.str "VDP4B  "
+.word 94,1057
+.str "VGET   "
+.word 95,1057
+.str "VSET   "
 .word 255,0
 .str "HALT   "
 .word 4096,0

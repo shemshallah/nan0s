@@ -37,6 +37,7 @@ typedef struct {
 
 struct nan_vm {
   uint32_t r[16], pc; int k, halted; uint64_t steps; uint32_t ms;
+  uint8_t vreg[16][64];        /* 512-bit abstract vectors, lane views below */
   uint64_t *mem; uint32_t mem_words, mem_mask; uint8_t mem_mmap; uint8_t *vram;
   uint16_t cells[2000];
   int vmode; uint32_t fbw, fbh, fbtot;

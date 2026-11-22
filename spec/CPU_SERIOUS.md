@@ -2,7 +2,8 @@
 
 Status: active. This document is the contract for speed work. It does not
 replace `spec/NANVM_SPEC.md`; it fixes *where* each layer lives and which
-gates must stay exact.
+gates must stay exact. The sizing/throughput arithmetic is in
+`spec/FRONTIER_PERF.md`.
 
 ## 1. The split
 
@@ -115,6 +116,8 @@ them stays NaN.
       64-bit strides and a 4 GiB crossing.
 - [x] `src/lib/nmat.nas` `nmat_dot64`: DP4B into a signed 64-bit accumulator,
       proven past 2^32 and on negative vectors.
+- [x] `nmat_i8_64`: 64-bit tensor descriptors, strides and result words for
+      the packed-i8 matmul.
 - [ ] NaN task scheduler: contexts, run queue, yield via a primitive. One
       core first; SMP only when the native APIC/startup shim is real.
 - [ ] Huge-page hint and zero-copy model load (`mmap` equivalent) once a
@@ -128,6 +131,8 @@ them stays NaN.
 - `tools/narena.sh`: alignment, overlap, mark/release, reset, exhaustion. Done.
 - `tools/narena64.sh`: 64-bit arena, high-half base, 4 GiB crossing. Done.
 - `tools/nmat64.sh`: DP4B into a 64-bit accumulator past 2^32. Done.
+- `tools/nmat64x64.sh`: 64-bit-descriptor matmul, both cores. Done.
+- `tools/nten.sh`: 64-bit tensor paths, 64-bit strides, 4 GiB crossing. Done.
 - `tools/nten.sh`: 64-bit tensor paths, 64-bit strides, 4 GiB crossing. Done.
 - `tools/ncc_aligned.sh`: `aligned_alloc` 16/32/64, writes, free, realloc. Done.
 - `tools/cpu_bench.sh`: one NaN program, measured on the C core and the

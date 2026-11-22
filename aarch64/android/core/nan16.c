@@ -111,6 +111,7 @@ void nan_reset(nan_vm *v) {
   nan_mem_clear(v);
   memset(v->vram, 0, NAN_VRAM);
   memset(v->r, 0, sizeof v->r);
+  memset(v->vreg, 0, sizeof v->vreg);
   v->pc = 0; v->k = 0; v->halted = 0; v->steps = 0; v->ms = 0;
   for (int i = 0; i < 2000; i++) v->cells[i] = 0x0720;
   v->vmode = 0; v->fbw = 0; v->fbh = 0; v->fbtot = 64000;
@@ -262,7 +263,7 @@ int nan_run(nan_vm *v, uint32_t max_steps) {
     uint32_t p = (uint32_t)(w >> 16), op = p >> 24;
     int n = (int)((nan_hcls(nh) << 2) | nan_hcls(fh));
     if (op == 0xFF) { v->halted = 1; LEAVE(NAN_HALTED); }
-    if (op > 0x4A) { trap(v, 'O', pc); pc = v->pc; LEAVE(NAN_HALTED); }
+    if (op > 0x5F) { trap(v, 'O', pc); pc = v->pc; LEAVE(NAN_HALTED); }
     if (op != 0 && !((n >> v->k) & 1)) continue;
     if (v->trace) v->trace(v->trace_ctx, at, p, n, v->k);
     uint32_t d = (p >> 20) & 15, a = (p >> 16) & 15, imm = p & 0xFFFF;
@@ -372,6 +373,41 @@ int nan_run(nan_vm *v, uint32_t max_steps) {
       case 0x80000004u: break; }
       r[d] = reg[B & 3]; break; }
     case 0x45: r[d] = A == 0 ? (uint32_t)v->steps : (uint32_t)(v->steps >> 32); break;
+    /* ---- 512-bit abstract vector family (0x50-0x5F) ---- */
+    case 0x50: memset(v->vreg[d], 0, 64); break;
+    case 0x51: { uint32_t *q = (uint32_t *)(void *)v->vreg[d];
+      for (int i = 0; i < 16; i++) q[i] = A; break; }
+    case 0x52: nan_read_bytes(v, A, v->vreg[d], 64); break;
+    case 0x53: nan_write_bytes(v, A, v->vreg[d], 64); break;
+    case 0x54: for (int i = 0; i < 64; i++) v->vreg[d][i] = (uint8_t)(v->vreg[a][i] + v->vreg[imm & 15][i]); break;
+    case 0x55: for (int i = 0; i < 64; i++) v->vreg[d][i] = (uint8_t)(v->vreg[a][i] - v->vreg[imm & 15][i]); break;
+    case 0x56: { uint32_t *q = (uint32_t *)(void *)v->vreg[d];
+      const uint32_t *x = (const uint32_t *)(const void *)v->vreg[a];
+      const uint32_t *y = (const uint32_t *)(const void *)v->vreg[imm & 15];
+      for (int i = 0; i < 16; i++) q[i] = x[i] + y[i]; break; }
+    case 0x57: { uint32_t *q = (uint32_t *)(void *)v->vreg[d];
+      const uint32_t *x = (const uint32_t *)(const void *)v->vreg[a];
+      const uint32_t *y = (const uint32_t *)(const void *)v->vreg[imm & 15];
+      for (int i = 0; i < 16; i++) q[i] = x[i] - y[i]; break; }
+    case 0x58: { uint32_t *q = (uint32_t *)(void *)v->vreg[d];
+      const uint32_t *x = (const uint32_t *)(const void *)v->vreg[a];
+      const uint32_t *y = (const uint32_t *)(const void *)v->vreg[imm & 15];
+      for (int i = 0; i < 16; i++) q[i] = x[i] * y[i]; break; }
+    case 0x59: { uint32_t *q = (uint32_t *)(void *)v->vreg[d];
+      const uint32_t *x = (const uint32_t *)(const void *)v->vreg[a];
+      const uint32_t *y = (const uint32_t *)(const void *)v->vreg[imm & 15];
+      for (int i = 0; i < 16; i++) {
+        int32_t acc = 0;
+        for (int k = 0; k < 4; k++) {
+          int32_t av = (int32_t)(int8_t)((x[i] >> (8*k)) & 0xFF);
+          int32_t bv = (int32_t)(int8_t)((y[i] >> (8*k)) & 0xFF);
+          acc += av * bv;
+        }
+        q[i] = (uint32_t)acc;
+      }
+      break; }
+    case 0x5E: r[d] = ((const uint32_t *)(const void *)v->vreg[a])[imm & 15]; break;
+    case 0x5F: ((uint32_t *)(void *)v->vreg[d])[imm & 15] = A; break;
     case 0x4A: { /* DP4B: four signed i8 lanes, dot product */
       int32_t acc = 0;
       for (int i = 0; i < 4; i++) {
