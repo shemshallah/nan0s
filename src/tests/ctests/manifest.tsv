@@ -1,0 +1,61 @@
+# c-testsuite subset manifest
+# columns: name  mode  expected_exit  steps  note
+# mode = run | skip.  steps is the guest instruction budget for the run.
+# Notes for skipped cases state the exact ncc limitation; they are not
+# harness failures and do not count as pass.
+00001 run 0 30000000
+00002 run 0 30000000
+00003 run 0 30000000
+00004 run 0 30000000
+00005 run 0 30000000
+00006 run 0 30000000
+00007 run 0 30000000
+00008 run 0 30000000
+00009 run 0 30000000
+00010 run 0 30000000
+00011 run 0 30000000
+00015 run 0 30000000
+00018 run 0 30000000
+00019 run 0 30000000
+00024 run 0 30000000 typedef of anonymous struct
+00025 run 0 30000000 prototype for builtin strlen
+00026 run 0 30000000 string literal indexing
+00030 run 0 30000000 relational operators
+00031 run 0 30000000 prefix ++/-- (swallowed-token fix)
+00032 run 0 30000000 postfix pointer inc/dec old-value fix
+00034 run 0 30000000 continue
+00042 run 0 30000000 union aliasing
+00045 run 0 30000000 globals and address-of
+00047 run 0 30000000 global struct initializer
+00048 run 0 30000000 designated struct initializer
+00049 run 0 30000000 designated pointer initializer
+00054 run 0 30000000 enum with trailing comma
+00055 run 0 30000000 enum explicit values
+00056 run 0 30000000 printf and mixed block declarations
+00057 run 0 30000000 sizeof arrays
+00058 run 0 30000000 adjacent string literal concatenation
+00059 run 0 30000000 character constants
+00072 run 0 30000000 pointer +=
+00076 run 0 30000000 ternary
+00077 run 0 30000000 array parameters and sizeof
+00081 run 0 30000000 long long
+00082 run 0 30000000 unsigned long long
+00086 run 0 30000000 short
+00087 run 0 30000000 function pointer struct member
+00089 run 0 30000000 function returning function pointer
+00090 run 0 30000000 global array initializer
+00091 run 0 30000000 typedef struct array initializer
+00092 run 0 30000000 designated array initializer
+00104 run 0 30000000 int32/int64 complement
+00125 run 0 30000000 printf hello world
+00143 run 0 40000000 Duff's device
+00158 run 0 30000000 switch in loop with break
+00164 run 0 30000000 operator precedence
+00168 run 0 30000000 recursion
+00170 run 0 40000000 enums and function pointer member
+00043 skip 0 0 nested anonymous struct definitions need disjoint member tables
+00046 skip 0 0 anonymous union/struct members hit the same member-table limitation
+00064 skip 0 0 object-like replacement-text macro (#define X 6 / 2); macros workstream
+00078 skip 0 0 block-scope function prototype; local prototype support not implemented
+00130 skip 0 0 pointer-to-array declarator (*p)[4]
+00149 skip 0 0 compound literals
