@@ -22,9 +22,40 @@ run() {
   fi
 }
 
+# Parallel batch for the independent ncc_m* gates. The image/vector gates
+# stay sequential because they share qemu/image resources.
+run_parallel() {
+  jobs="${PRESQLITE_JOBS:-4}"
+  active=0
+  names=""
+  for spec in "$@"; do
+    name=${spec%%=*}; cmd=${spec#*=}
+    names="$names $name"
+    ( timeout 300 sh "$cmd" >"$T/$name.log" 2>&1; echo $? >"$T/$name.rc" ) &
+    active=$((active+1))
+    if [ "$active" -ge "$jobs" ]; then wait; active=0; fi
+  done
+  wait
+  for name in $names; do
+    n=$((n+1))
+    rc=$(cat "$T/$name.rc" 2>/dev/null || echo 1)
+    if [ "$rc" -eq 0 ]; then
+      printf 'PASS %s\n' "$name"
+    else
+      printf 'FAIL %s\n' "$name"
+      tail -8 "$T/$name.log" | sed 's/^/  /'
+      fail=$((fail+1))
+    fi
+  done
+}
+
+[ -x aarch64/android/nan_cli ] || (cd aarch64/android && make -s nan_cli)
+mspecs=""
 for m in $(seq 1 62); do
-  [ -f "tools/ncc_m$m.sh" ] && run "ncc_m$m" sh "tools/ncc_m$m.sh"
+  [ -f "tools/ncc_m$m.sh" ] && mspecs="$mspecs ncc_m$m=tools/ncc_m$m.sh"
 done
+printf 'RUN ncc_m1..ncc_m62 (parallel=%s)\n' "${PRESQLITE_JOBS:-4}"
+run_parallel $mspecs
 for g in ncc_alloc ncc_heap ncc_aligned narena narena64 nten nan_simd nan_vec nan_vec_native nan_vec_avx2 nan_q4 nan_q4lm nan_bench xlate_x86 ncc_dp4b nmatmul nmat64 nmat64x64 ncc_headers ncc_ppexpr ncc_torture ncc_donut_exact; do
   [ -f "tools/$g.sh" ] && run "$g" sh "tools/$g.sh"
 done
