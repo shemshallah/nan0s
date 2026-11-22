@@ -14,7 +14,7 @@ on:
 jobs:
   coq:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
       - name: Install Coq
@@ -36,7 +36,14 @@ jobs:
             echo 'Signed module deferred: mirror foundation did not compile.'
             signed_status=1
           fi
-          if [ "$mirror_status" -ne 0 ] || [ "$bits_status" -ne 0 ] || [ "$signed_status" -ne 0 ]; then
+          if [ "$mirror_status" -eq 0 ] && [ "$signed_status" -eq 0 ]; then
+            coqc -q NaN16Memory.v
+            memory_status=$?
+          else
+            echo 'Memory module deferred: foundation did not compile.'
+            memory_status=1
+          fi
+          if [ "$mirror_status" -ne 0 ] || [ "$bits_status" -ne 0 ] || [ "$signed_status" -ne 0 ] || [ "$memory_status" -ne 0 ]; then
             exit 1
           fi
       - name: Run exhaustive arithmetic regression
@@ -45,3 +52,4 @@ jobs:
           python3 formal/nan16/check_counts.py
           python3 formal/nan16/check_bit_reverse.py
           python3 formal/nan16/check_signed.py
+          python3 formal/nan16/check_memory.py
