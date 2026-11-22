@@ -50,9 +50,9 @@ Trap text: "!" + 'G'|'O' + uppercase hex of (pc after the fetch increment), min 
 50 VZERO d | 51 VBCAST d,a | 52 VLOAD d,a | 53 VSTORE d,a
 54 VADD8 d,a,b | 55 VSUB8 | 56 VADD32 | 57 VSUB32 | 58 VMUL32
 59 VDP4B d,a,b (16 lanes, 64 MACs) | 5E VGET d,a,lane | 5F VSET d,a,lane
-The V family uses 16 x 512-bit vector registers.  The bare x86 core currently
-lowers VZERO/VBCAST/VADD8/VSUB8/VADD32/VSUB32/VMUL32/VDP4B/VGET/VSET with a
-scalar-but-exact lane loop; VLOAD/VSTORE and SIMD lowering are next.
+The V family uses 16 x 512-bit vector registers.  The bare x86 core
+currently lowers the full 0x50-0x5F family (including VLOAD/VSTORE) with
+scalar-but-exact lane loops; SIMD lowering is next.
 4B-4F and 60-7F are reserved for wider (1024/2048-bit) and fp8/int4 forms,
 so old cartridges do not move when the abstract width grows.
 46 FEXP d,a = expf(A)  47 FTANH d,a = tanhf(A)  48 FLOG d,a = logf(A)

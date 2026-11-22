@@ -1187,6 +1187,83 @@ vm32_l:
   POP %EDI
   POP %ESI
   JMP @loop
+
+h_vload:
+  PUSH %ESI
+  PUSH %EDI
+  PUSH %EBX
+  PUSH %EBP
+  MOV %ECX,%ESI
+  MOV %EAX,%EDI
+  SHR $20,%EDI
+  AND $15,%EDI
+  SHL $6,%EDI
+  ADD $VREG,%EDI
+  MOV $64,%EBP
+vl_l:
+  MOV %ESI,%ECX
+  CALL @v_ldb_byte
+  MOVB %BL,[EDI]
+  INC %ESI
+  INC %EDI
+  DEC %EBP
+  JNZ @vl_l
+  POP %EBP
+  POP %EBX
+  POP %EDI
+  POP %ESI
+  JMP @loop
+v_ldb_byte:
+  MOV %ECX,%EAX
+  SHR $2,%EAX
+  AND [MASKM],%EAX
+  MOV [G+2+EAX*8],%EBX
+  SHL $3,%ECX
+  SHR %CL,%EBX
+  MOVZX %BL,%EBX
+  RET
+h_vstore:
+  PUSH %ESI
+  PUSH %EDI
+  PUSH %EBX
+  PUSH %EBP
+  MOV %ECX,%ESI
+  MOV %EAX,%EDI
+  SHR $20,%EDI
+  AND $15,%EDI
+  SHL $6,%EDI
+  ADD $VREG,%EDI
+  MOV $64,%EBP
+vs_l:
+  MOVZXB [EDI],%EDX
+  MOV %ESI,%ECX
+  CALL @v_stb_byte
+  INC %ESI
+  INC %EDI
+  DEC %EBP
+  JNZ @vs_l
+  POP %EBP
+  POP %EBX
+  POP %EDI
+  POP %ESI
+  JMP @loop
+v_stb_byte:
+  MOV %ECX,%EAX
+  SHL $3,%ECX
+  SHR $2,%EAX
+  AND [MASKM],%EAX
+  MOV [G+2+EAX*8],%EBX
+  PUSH %EDX
+  MOV $255,%EDX
+  SHL %CL,%EDX
+  NOT %EDX
+  AND %EDX,%EBX
+  POP %EDX
+  SHL %CL,%EDX
+  OR %EDX,%EBX
+  MOV $10,%ECX
+  CALL @putw
+  RET
 h_fadd:
   MOVD %ECX,%XMM0
   MOVD %EDX,%XMM1
@@ -1567,7 +1644,7 @@ tbl:
   .long @h_fbinfo,@h_vsync,@h_fbcopy,@h_fbfill,@h_outb,@h_inb,@h_inw,@h_outw,@h_outsw,@h_outl,@h_cpuid,@h_rdtsc
   .long @badop,@badop,@badop,@badop,@h_dp4b
   .long @badop,@badop,@badop,@badop,@badop
-  .long @h_vzero,@h_vbcast,@badop,@badop,@h_vadd8,@h_vsub8,@h_vadd32,@h_vsub32,@h_vmul32,@h_vdp4b,@badop,@badop,@badop,@badop,@h_vget,@h_vset
+  .long @h_vzero,@h_vbcast,@h_vload,@h_vstore,@h_vadd8,@h_vsub8,@h_vadd32,@h_vsub32,@h_vmul32,@h_vdp4b,@badop,@badop,@badop,@badop,@h_vget,@h_vset
 
 
 ; ---- memory discovery: E820 -> runtime word mask --------------------

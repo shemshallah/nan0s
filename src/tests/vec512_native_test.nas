@@ -41,7 +41,42 @@ VBCAST r1,r1
 VMUL32 r2,r1,r1
 VGET r3,r2,0
 CALL @ph
+; VLOAD/VSTORE 16-word roundtrip
+MOVI r10,0
+fill:
+LA r1,0x4000
+ADD r1,r1,r10
+ADD r2,r10,r13
+LA r3,0x11223344
+MUL r3,r2,r3
+ST r3,r1,0
+ADD r10,r10,r13
+MOVI r2,16
+CMP r10,r2
+JMP[LT] @fill
+LA r1,0x10000
+VLOAD r7,r1
+LA r1,0x11000
+VSTORE r7,r1
+MOVI r10,0
+cmp:
+LA r1,0x4000
+ADD r1,r1,r10
+LD r2,r1,0
+LA r1,0x4400
+ADD r1,r1,r10
+LD r3,r1,0
+CMP r2,r3
+JMP[NE] @fail
+ADD r10,r10,r13
+MOVI r2,16
+CMP r10,r2
+JMP[LT] @cmp
 LA r1,@s_pass
+CALL @puts
+HALT
+fail:
+LA r1,@s_fail
 CALL @puts
 HALT
 ph:
@@ -74,3 +109,5 @@ pd:
 RET
 s_pass:
 .str "VECN PASS\n"
+s_fail:
+.str "VECN FAIL\n"
