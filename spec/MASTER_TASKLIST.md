@@ -152,6 +152,15 @@ for llama.cpp, not for tcc2.
 - [ ] Prefetching, cache blocking, NUMA awareness.
 - [ ] Tokens/s and MAC/s benchmark gates on real hardware.
 
+## P2. Testing and performance workflow
+- [x] Full aggregate is time-boxed per gate and parallelizes the 62 compiler
+      gates.
+- [x] `tools/gate_targeted.sh`: changed-file -> affected-gate mapping,
+      parallel execution, content-hash cache, `--full` battery.
+- [x] Compiler family measured at 239 s cold / 9 s cached (75 gates).
+- [ ] Combined multi-test VM harness to remove per-gate compiler startup.
+- [ ] CI matrix and coverage-guided gate selection.
+
 ## P2. System
 - [ ] Filesystem, network stack, GUI, apps, package/tooling.
 - [ ] APK/assets and bare-metal image pipeline.

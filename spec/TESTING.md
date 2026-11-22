@@ -1,0 +1,66 @@
+# Testing workflow
+
+The full gate battery is for cross-cutting changes and release commits. Day-to-day
+work uses the targeted runner: it maps changed files to affected gates, runs
+them in parallel, and caches successful results by input family.
+
+## Commands
+
+```sh
+# changed files from git (staged, unstaged and untracked)
+sh tools/gate_targeted.sh
+
+# explicit files
+sh tools/gate_targeted.sh src/lib/ncc.nas src/tests/foo.c
+
+# complete 95-gate battery
+sh tools/gate_targeted.sh --full
+
+# bypass/clear the cache
+NO_CACHE=1 sh tools/gate_targeted.sh src/lib/ncc.nas
+rm -rf .gate-cache
+```
+
+`JOBS` controls parallelism (default 4). `TIMEOUT`/`LONG_TIMEOUT` control the
+per-gate limits.
+
+## Gate families
+
+| changed input | gates |
+| --- | --- |
+| `src/lib/ncc.nas`, preprocessor/ISO libs, `src/tests/ctests`, `src/tests/ncc_*`, nmk tables | all compiler gates: M1-M62, alloc/heap/aligned, headers/ppexpr/torture/donut, macro/include/libm/ISO, ctests, dp4b |
+| `aarch64/android/core`, C tests, Makefile | `make test`, compiler smoke, C-reference vector/Q4/bench gates |
+| native kernel/gold, boot, `x86/native` | vector/Q4/translator gates, arena/tensor/matmul, `mkall`, `qgate`, `qgate_gui`, `xmemgate` |
+| translator sources | `xlate_x86` |
+| arena/tensor/matmul libs | `narena`, `narena64`, `nten`, `nmatmul`, `nmat64`, `nmat64x64` |
+| vector/Q4/bench sources | `nan_simd`, `nan_vec*`, `nan_q4*`, `nan_bench`, `xlate_x86` |
+| build tools (`nmk.awk`, `mkimg.awk`, `xgold.sh`, `mkall.sh`) | full battery |
+| `spec/`, docs | no gates |
+| unknown source path | full battery (safe default) |
+
+## Cache
+
+`.gate-cache/<gate>.sha` stores the content hash of the gate's input family
+(compiler family or native/image family). A gate is skipped with `CACHED` only
+when the family hash matches. A failed gate deletes its cache entry. `--full`
+and `NO_CACHE=1` bypass the cache.
+
+Measured on the compiler family (75 gates):
+
+- cold, parallel: **239 s**
+- cached: **9 s**
+
+## When the full battery is mandatory
+
+- ABI changes (pointers, `double`, varargs, struct layout)
+- ISA/opcode changes or translator changes
+- `nmk.awk`/image/toolchain changes
+- before a release or a push that touches multiple subsystems
+- whenever a targeted run hits an unmapped file (it escalates automatically)
+
+## Rules
+
+- A gate that hangs must fail within its timeout; never leave an unbounded gate.
+- New gates are added to `presqlite_gate.sh` and mapped in `gate_targeted.sh`.
+- Targeted mode is an optimization, not a substitute for the full run at
+  integration boundaries.
