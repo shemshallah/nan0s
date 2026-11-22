@@ -14,7 +14,7 @@ for a in range(N):
         assert after[plus]==a
         assert after[minus]==b
         assert after[(0,0)]==base[(0,0)]
-        assert (min(plus), max(plus)) == (plus,minus)
+        assert (min(plus, minus), max(plus, minus)) == (plus, minus)
         tested+=1
 assert tested==32640
 print("PASS: 32,640 strict mirror pairs have two independent writable channels")
