@@ -95,6 +95,33 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done and gated.
 - [ ] Syscall validation, pointer range checks, TOCTOU discipline.
 - [ ] Fuzzing gates for parsers and syscalls.
 
+## P0.7 TCC self-hosting and the verified compiler chain
+- [x] Vendor TCC at `third_party/tinycc` (commit 5cef7f3, LGPL-2.1).
+- [ ] `TCC_TARGET_NAN16`: `nan16-gen.c`, `nan16-link.c`, `nan16-asm.c`,
+      `nan16-tok.h`, `nan16-abi.h`.
+- [ ] NaN16 output: flat cartridge/executable writer, relocations, sections,
+      entry point, symbol table.
+- [ ] ABI parity with ncc: args/returns, stack frames, varargs, structs,
+      64-bit pairs, f32/f64; bidirectional call tests.
+- [ ] VFS and headers for `#include`, source and model/SQLite files.
+- [ ] NaN16 `libtcc1` runtime: 64-bit arithmetic, float helpers, alloca,
+      setjmp, mem/str primitives.
+- [ ] tcc0: host cross-build emits NaN16.
+- [ ] tcc1: tcc0 compiles TCC on the VM.
+- [ ] tcc2: tcc1 compiles TCC again; tcc1 == tcc2 byte-for-byte fixpoint.
+- [ ] SQLite: tcc2 compiles the amalgamation, links the shell, runs a query
+      suite (schema, insert, select, join, index, transaction, file reopen).
+- [ ] Verified chain: NaN16 binary -> Binary TM -> Minsky UTM -> Coq trace.
+- [ ] Compiler-correctness bridge: checked relation from TCC output to the
+      executed Binary TM, so "the C you compiled is the code that ran" is an
+      artifact.
+- [ ] Gates: `tools/tcc_build.sh`, `tools/tcc_selfhost.sh`,
+      `tools/tcc_sqlite.sh`, `tools/tcc_verified.sh`, all in presqlite.
+
+The TCC port contract, ABI, bootstrap stages and proof chain are detailed in
+`spec/TCC_NAN16.md`. TCC and SQLite are C; the C++17 track is only a dependency
+for llama.cpp, not for tcc2.
+
 ## P1. C++17
 - [ ] C++17 frontend: namespaces, classes, access control, references,
       overloading, constructors/destructors, operator overloading.
