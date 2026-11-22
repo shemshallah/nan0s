@@ -1,9 +1,9 @@
 # tools/mkproof_flat.awk - builds the proof image (awk implementation).
 #   awk -f tools/mkproof_flat.awk -v HARNESS=h.nan -v EXPECTE=t.nan -v SRCFILE=flat.nas -v OUTFILE=proof.nan -v BIG=1
 # BIG layout (1M words): nasm0+proof harness words at 0 (<= 6271 words, VARS live 6272..),
-# flattened source packed 4 bytes/word LE + NUL end (class 10) at SRC=0x40000, expected host-seed words
-# (nmk.awk, verbatim heads) at EXP=0x60000 + EXPC=0x70000 class table (8 low nibbles/word),
-# OUT=0x80000, LAB=0xA0000; V_EXPN/V_SRCB/V_OUTB/V_LABB/V_EXPB/V_EXPCB patched last.
+# flattened source packed 4 bytes/word LE + NUL end (class 10) at SRC=0x20000, expected host-seed words
+# (nmk.awk, verbatim heads) at EXP=0x80000 + EXPC=0x90000 class table (8 low nibbles/word),
+# OUT=0xA0000, LAB=0xC0000; V_EXPN/V_SRCB/V_OUTB/V_LABB/V_EXPB/V_EXPCB patched last.
 BEGIN {
   split("7FF1 FFF1 7FF8 FFF8", NE, " ")      # near head text per int(class/4)
   split("F17F F1FF F87F F8FF", FA, " ")      # far head text per class%4
@@ -11,7 +11,7 @@ BEGIN {
   NEX["7FF1"] = 0; NEX["FFF1"] = 1; NEX["7FF8"] = 2; NEX["FFF8"] = 3
   FEX["F17F"] = 0; FEX["F1FF"] = 1; FEX["F87F"] = 2; FEX["F8FF"] = 3
   PW16[0] = 1; for (i = 1; i <= 7; i++) PW16[i] = PW16[i - 1] * 16
-  if (BIG) { NW = 1048576; SRC = 262144; EXP = 393216; EXPC = 458752; OUT = 524288; LAB = 655360 }
+  if (BIG) { NW = 1048576; SRC = 131072; EXP = 524288; EXPC = 589824; OUT = 655360; LAB = 786432 }
   else     { NW = 8192;     SRC = 2048;     EXP = 5120;     EXPC = 6144;     OUT = 6400;   LAB = 7424 }
   V_EXPN = 6290; V_SRCB = 6293; V_OUTB = 6294; V_LABB = 6295; V_EXPB = 6296; V_EXPCB = 6297
   NEA = 0

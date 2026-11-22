@@ -43,6 +43,17 @@
 .equ W_WSC_TEMPB 2601000
 .equ W_WSC_TAB   2500000
 .equ W_WSC_C2    61781
+.equ W_WSC_IN    61754
+.equ W_WSC_SRC   61755
+.equ W_WSC_STREAM 61756
+.equ W_WSC_START 61757
+.equ W_WSC_CNT   61758
+.equ W_WSC_ARG0  61836
+.equ W_WSC_RUNN  61837
+.equ W_WIDE_OUT  61750
+.equ W_WIDE_BUF  61751
+.equ W_WIDE_LIM  61752
+.equ W_WIDE_POS  61753
 
 ; ------------------------------------------------------------------ helpers
 
@@ -559,9 +570,10 @@ LD r15,r14,0
 RET
 
 nbi_wprintf:
+ST r0,r0,#W_PF_OFF
+wprintf_body:
 ST r15,r14,0
 ADD r14,r14,r13
-ST r0,r0,#W_PF_OFF
 MOVI r1,0
 CALL @ni_arg
 ST r1,r0,#W_WPF_FMT
@@ -902,22 +914,36 @@ RET
 ; nbi_wscanf: translate the wide format to narrow scanf syntax, delegate to
 ; the narrow scanner, then widen %ls destinations.
 nbi_wscanf:
+ST r0,r0,#W_PF_OFF
+wscanf_body:
 ST r15,r14,0
 ADD r14,r14,r13
+ST r0,r0,#CS_PBF
+LD r1,r0,#W_WSC_IN
+CMP r1,r0
+JMP[EQ] @wsc_console
+MOVI r1,0
+ST r1,r0,#CS_MODE
+LD r1,r0,#W_WSC_SRC
+ST r1,r0,#CS_SRC
+JMP @wsc_src_done
+wsc_console:
 MOVI r1,1
 ST r1,r0,#CS_MODE
 MOVI r1,1
 ST r1,r0,#CS_SRC
-ST r0,r0,#CS_PBF
+wsc_src_done:
 LD r1,r0,#R_T1
 ST r1,r0,#W_PF_ARGC
-ST r0,r0,#W_PF_OFF
+MOVI r1,1
+ST r1,r0,#W_WSC_ARG0
+ST r1,r0,#W_WSC_RUNN
 MOVI r1,0
 CALL @ni_arg
 ST r1,r0,#W_WSC_FMT
 ST r0,r0,#W_WSC_POS
 ST r0,r0,#W_WSC_NPOS
-MOVI r1,1
+LD r1,r0,#W_WSC_ARG0
 ST r1,r0,#W_WSC_ARGIDX
 ST r0,r0,#W_WSC_NW
 wsc_l:
@@ -1135,8 +1161,29 @@ LA r3,#W_WSC_NFMT
 ADD r3,r3,r2
 STB r0,r3,0
 LA r1,#W_WSC_NFMT
-MOVI r2,1
+LD r2,r0,#W_WSC_RUNN
 CALL @cs_run
+ST r1,r0,#W_WSC_CNT
+; stream input: advance the FILE position by the bytes consumed
+LD r1,r0,#W_WSC_IN
+MOVI r2,2
+CMP r1,r2
+JMP[NE] @wsc_no_adv
+LD r1,r0,#CS_SRC
+LD r2,r0,#W_WSC_START
+SUB r1,r1,r2
+ST r1,r0,#W_ISO_TMP
+LD r2,r0,#W_WSC_STREAM
+LD r3,r2,5
+ADD r3,r3,r1
+LD r4,r2,3
+CMP r3,r4
+JMP[LE] @wsc_adv_ok
+ADD r3,r4,r0
+wsc_adv_ok:
+ST r3,r2,5
+wsc_no_adv:
+LD r1,r0,#W_WSC_CNT
 CALL @cs_finish
 ; widen %ls buffers
 ST r0,r0,#W_WSC_I
