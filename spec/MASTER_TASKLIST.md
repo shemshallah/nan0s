@@ -63,8 +63,12 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done and gated.
       r1 (`qgate64core`, r1=84). The substrate does not decode instructions.
 - [x] NaN-coded 64-bit ALU/flags: MOVHI, ADDI, SHL/SHR/SAR, CMP/CMPS,
       FLAGM; `qgate64alu` (r1=0x2000).
-- [ ] Full NaN-coded 64-bit core: conditional branches/CMOV, memory,
-      traps; then the full dispatcher and self-hosting core.
+- [x] Conditional branches: FLAGM-tested JMP[cond] selects target or
+      fallthrough in XPC; `qgate64branch` (XPC=0x200).
+- [x] 64-bit guest word memory: LD/ST with the mask at 0x50404 and
+      G=0x200000; `qgate64mem` (r1=0x12345678 exact).
+- [ ] Full NaN-coded 64-bit core: LDB/STB, traps, the full dispatcher and
+      self-hosting core.
 - [ ] Port the native NaN16 execution core to 64-bit (`kan64`) only where the
       bootstrap/EXECN substrate requires it; core policy stays NaN.
 - [ ] 64-bit native shims for ports, CPUID, RDTSC, MSRs, page tables.

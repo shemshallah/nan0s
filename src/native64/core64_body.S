@@ -84,17 +84,24 @@ long_mode:
     mov $(block64_end - block64), %rcx
     rep movsb
 
-    /* zero the 16 guest registers at 0x50000, then call the block */
+    /* zero the 16 guest registers, FLAGM and XPC, then call the block */
     mov $0x50000, %rdi
     xor %eax, %eax
     mov $16, %ecx
     rep stosl
+    movl $0, 0x50400
+    movl $0, 0x50800
+    movl $0x1FFFFF, 0x50404
     movq $0x51000, %rax
     call *%rax
 
     lea coremsg(%rip), %rsi
     call print
     mov 0x50004, %edi
+    call print_hex32
+    lea xpcmsg(%rip), %rsi
+    call print
+    mov 0x50800, %edi
     call print_hex32
     lea okmsg(%rip), %rsi
     call print
@@ -145,5 +152,7 @@ gdtr:
 .section .rodata
 coremsg:
     .asciz "NAN64 CORE "
+xpcmsg:
+    .asciz " XPC "
 okmsg:
     .asciz " OK\n"

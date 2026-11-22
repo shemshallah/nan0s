@@ -44,7 +44,7 @@ truncate -s 66048 "$T/img"; truncate -s 1474560 "$T/img"
 rm -f "$T/com"
 timeout 30 qemu-system-x86_64 -m 512 -drive format=raw,if=floppy,file="$T/img" \
   -display none -serial "file:$T/com" -no-reboot >/dev/null 2>&1 || true
-if grep -q 'NAN64 CORE 00000054 OK' "$T/com"; then
+if grep -q 'NAN64 CORE 00000054 XPC 00000000 OK' "$T/com"; then
   echo "qgate64core: PASS (NaN translator -> x86-64 block -> native execution, r1=84)"
 else
   echo "qgate64core: FAIL"; cat -v "$T/com"; echo

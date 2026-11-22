@@ -11,12 +11,16 @@ x64_block:
   ST r3,r0,@xb_out
   ST r3,r0,@xb_start
   ST r4,r0,@xb_next
+  MOVI r11,0
+  ST r11,r0,@xb_ended
 xb_loop:
   LD r2,r0,@xb_n
   CMP r2,r0
   JMP[EQ] @xb_end
   LD r1,r0,@xb_src
   LD r5,r1,0
+  LDN r11,r1,0
+  ST r11,r0,@xb_np
   SHR r7,r5,24
   SHR r8,r5,20
   MOVI r11,15
@@ -27,6 +31,9 @@ xb_loop:
   BOOL.8 r10,r5,r10
   MOVI r11,15
   BOOL.8 r12,r10,r11
+  MOVI r11,0x0A
+  CMP r7,r11
+  JMP[EQ] @xb_jmp
   MOVI r11,1
   CMP r7,r11
   JMP[EQ] @xb_movi
@@ -51,6 +58,12 @@ xb_loop:
   MOVI r11,0x27
   CMP r7,r11
   JMP[EQ] @xb_sar
+  MOVI r11,8
+  CMP r7,r11
+  JMP[EQ] @xb_ld
+  MOVI r11,9
+  CMP r7,r11
+  JMP[EQ] @xb_st
   MOVI r11,7
   CMP r7,r11
   JMP[EQ] @xb_cmp
@@ -137,6 +150,49 @@ xb_cmps:
   CALL @x64_cmp
   ST r1,r0,@xb_out
   JMP @xb_adv
+xb_jmp:
+  LD r4,r0,@xb_np
+  MOVI r11,15
+  CMP r4,r11
+  JMP[EQ] @xb_jmp_u
+  CMP r4,r0
+  JMP[EQ] @xb_adv
+  LD r1,r0,@xb_out
+  ADD r7,r10,r0
+  LD r8,r0,@xb_src
+  ADDI r8,r8,1
+  ADD r9,r4,r0
+  CALL @x64_jmp_cond
+  ST r1,r0,@xb_out
+  JMP @xb_ended
+xb_jmp_u:
+  LD r1,r0,@xb_out
+  ADD r7,r10,r0
+  CALL @x64_set_xpc
+  CALL @x64_ret
+  ST r1,r0,@xb_out
+xb_ended:
+  MOVI r11,1
+  ST r11,r0,@xb_ended
+  JMP @xb_adv
+
+
+xb_ld:
+  LD r1,r0,@xb_out
+  ADD r5,r8,r0
+  ADD r6,r9,r0
+  ADD r7,r10,r0
+  CALL @x64_ld
+  ST r1,r0,@xb_out
+  JMP @xb_adv
+xb_st:
+  LD r1,r0,@xb_out
+  ADD r5,r8,r0
+  ADD r6,r9,r0
+  ADD r7,r10,r0
+  CALL @x64_st
+  ST r1,r0,@xb_out
+  JMP @xb_adv
 xb_adv:
   LD r1,r0,@xb_src
   ADDI r1,r1,1
@@ -146,11 +202,15 @@ xb_adv:
   ST r2,r0,@xb_n
   JMP @xb_loop
 xb_end:
+  LD r11,r0,@xb_ended
+  CMP r11,r0
+  JMP[NE] @xb_done
   LD r1,r0,@xb_out
   LD r7,r0,@xb_next
   CALL @x64_set_xpc
   CALL @x64_ret
   ST r1,r0,@xb_out
+xb_done:
   LD r1,r0,@xb_out
   LD r2,r0,@xb_start
   SUB r1,r1,r2
@@ -172,4 +232,8 @@ xb_out:
 xb_start:
   .word 0
 xb_next:
+  .word 0
+xb_np:
+  .word 0
+xb_ended:
   .word 0

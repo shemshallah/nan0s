@@ -38,7 +38,7 @@ while [ "$m" -le 62 ]; do
   m=$((m+1))
 done
 VEC="nan_simd nan_vec nan_vec_native nan_vec_avx2 nan_q4 nan_q4lm nan_bench xlate_x86"
-IMAGES="mkall qgate64 qgate64core qgate64block qgate64alu qgate qgate_gui xmemgate mkproof"
+IMAGES="mkall qgate64 qgate64core qgate64block qgate64alu qgate64branch qgate64mem qgate qgate_gui xmemgate mkproof"
 NATIVE="$VEC narena narena64 nten nmatmul nmat64 nmat64x64"
 
 GATES=""
@@ -62,6 +62,10 @@ for f in $FILES; do
       add "mkall qgate64block" ;;
     src/tests/xlate64_alu.nas|tools/qgate64alu.sh)
       add "mkall qgate64alu" ;;
+    src/tests/xlate64_branch.nas|tools/qgate64branch.sh)
+      add "mkall qgate64branch" ;;
+    src/tests/xlate64_mem.nas|tools/qgate64mem.sh)
+      add "mkall qgate64mem" ;;
     src/translate/*|src/tests/xlate*|tools/xlate_x86.sh)
       add "xlate_x86" ;;
     src/lib/narena*.nas|src/lib/nten.nas|src/lib/nmat.nas|src/lib/n64.nas)
@@ -167,7 +171,7 @@ esac
 
 # Image gates are sequential and ordered: build once, then boot the image.
 SEQ=""
-for g in mkall qgate64 qgate64core qgate64block qgate64alu mkproof qgate qgate_gui xmemgate; do
+for g in mkall qgate64 qgate64core qgate64block qgate64alu qgate64branch qgate64mem mkproof qgate qgate_gui xmemgate; do
   case " $RUN " in *" $g "*) SEQ="$SEQ $g" ;; esac
 done
 PAR=""

@@ -7,6 +7,8 @@
 .equ X64_R   0x50000
 .equ X64_XPC 0x50800
 .equ X64_FLAGM 0x50400
+.equ X64_MASK 0x50404
+.equ X64_G 0x200000
 
 ; x64_8: r1=out r2=byte -> r1=out+1
 x64_8:
@@ -370,6 +372,161 @@ x64_cmp:
   MOVI r2,0xC8
   CALL @x64_8
   CALL @x64_flags_zl
+  SUB r14,r14,r13
+  LD r15,r14,0
+  RET
+
+
+; target r7, fall r8, predicate n r9.
+; test ecx,n; mov eax,target; mov edx,fall; cmovz eax,edx;
+; mov [XPC],eax; ret
+x64_jmp_cond:
+  ST r15,r14,0
+  ADD r14,r14,r13
+  MOVI r2,0x8B
+  CALL @x64_8
+  MOVI r2,0x0C
+  CALL @x64_8
+  MOVI r2,0x25
+  CALL @x64_8
+  LA r2,#X64_FLAGM
+  CALL @x64_32
+  MOVI r2,0xF7
+  CALL @x64_8
+  MOVI r2,0xC1
+  CALL @x64_8
+  ADD r2,r9,r0
+  CALL @x64_32
+  MOVI r2,0xB8
+  CALL @x64_8
+  ADD r2,r7,r0
+  CALL @x64_32
+  MOVI r2,0xBA
+  CALL @x64_8
+  ADD r2,r8,r0
+  CALL @x64_32
+  MOVI r2,0x0F
+  CALL @x64_8
+  MOVI r2,0x44
+  CALL @x64_8
+  MOVI r2,0xC2
+  CALL @x64_8
+  MOVI r2,0x89
+  CALL @x64_8
+  MOVI r2,0x04
+  CALL @x64_8
+  MOVI r2,0x25
+  CALL @x64_8
+  LA r2,#X64_XPC
+  CALL @x64_32
+  MOVI r2,0xC3
+  CALL @x64_8
+  SUB r14,r14,r13
+  LD r15,r14,0
+  RET
+
+
+; 89 0C 25 addr : R[d] = ecx
+x64_store_ecx_r:
+  ST r15,r14,0
+  ADD r14,r14,r13
+  MOVI r2,0x89
+  CALL @x64_8
+  MOVI r2,0x0C
+  CALL @x64_8
+  MOVI r2,0x25
+  CALL @x64_8
+  ADD r6,r5,r0
+  CALL @x64_addr
+  SUB r14,r14,r13
+  LD r15,r14,0
+  RET
+
+; eax = ((R[a]+imm) & MASK)<<3 + G
+x64_addr_word:
+  ST r15,r14,0
+  ADD r14,r14,r13
+  ADD r10,r5,r0
+  ADD r5,r6,r0
+  CALL @x64_load_eax_r
+  ADD r5,r10,r0
+  MOVI r2,0x05
+  CALL @x64_8
+  ADD r2,r7,r0
+  CALL @x64_32
+  MOVI r2,0x23
+  CALL @x64_8
+  MOVI r2,0x04
+  CALL @x64_8
+  MOVI r2,0x25
+  CALL @x64_8
+  LA r2,#X64_MASK
+  CALL @x64_32
+  MOVI r2,0xC1
+  CALL @x64_8
+  MOVI r2,0xE0
+  CALL @x64_8
+  MOVI r2,0x03
+  CALL @x64_8
+  MOVI r2,0x05
+  CALL @x64_8
+  LA r2,#X64_G
+  CALL @x64_32
+  SUB r14,r14,r13
+  LD r15,r14,0
+  RET
+
+; LD d,a,imm
+x64_ld:
+  ST r15,r14,0
+  ADD r14,r14,r13
+  CALL @x64_addr_word
+  MOVI r2,0x8B
+  CALL @x64_8
+  MOVI r2,0x48
+  CALL @x64_8
+  MOVI r2,0x02
+  CALL @x64_8
+  CALL @x64_store_ecx_r
+  SUB r14,r14,r13
+  LD r15,r14,0
+  RET
+
+; ST d,a,imm
+x64_st:
+  ST r15,r14,0
+  ADD r14,r14,r13
+  CALL @x64_addr_word
+  ADD r8,r5,r0
+  CALL @x64_load_ecx_r
+  MOVI r2,0x89
+  CALL @x64_8
+  MOVI r2,0x48
+  CALL @x64_8
+  MOVI r2,0x02
+  CALL @x64_8
+  MOVI r2,0x66
+  CALL @x64_8
+  MOVI r2,0xC7
+  CALL @x64_8
+  MOVI r2,0x00
+  CALL @x64_8
+  MOVI r2,0xF8
+  CALL @x64_8
+  MOVI r2,0x7F
+  CALL @x64_8
+  MOVI r2,0x66
+  CALL @x64_8
+  MOVI r2,0xC7
+  CALL @x64_8
+  MOVI r2,0x40
+  CALL @x64_8
+  MOVI r2,0x06
+  CALL @x64_8
+  MOVI r2,0xF8
+  CALL @x64_8
+  MOVI r2,0x7F
+  CALL @x64_8
   SUB r14,r14,r13
   LD r15,r14,0
   RET
