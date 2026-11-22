@@ -74,8 +74,10 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done and gated.
 - [x] Guest control flow: CALL, CALLR, RET, JMPR and NOP; `qgate64call`
       calls across blocks and returns to an earlier PC (r1=16, XPC=2).
       The native dispatcher now rescans its table after each block.
-- [ ] Full NaN-coded 64-bit core: LDN/STW/BSWAPM, MUL/DIV/MOD, BOOL,
-      traps, vector/FP families, guest loader and self-hosting.
+- [x] MUL/MULH/MULHU, BOOL, DIV/MOD/DIVU/MODU with exact zero/-1 and
+      zero-divisor semantics; `qgate64mul` (0x2D), `qgate64div` (0x37).
+- [ ] Full NaN-coded 64-bit core: LDN/STW/BSWAPM, BCOPY/BFILL, traps,
+      scalar FP, vector families, guest loader and self-hosting.
 - [ ] Port the native NaN16 execution core to 64-bit (`kan64`) only where the
       bootstrap/EXECN substrate requires it; core policy stays NaN.
 - [ ] 64-bit native shims for ports, CPUID, RDTSC, MSRs, page tables.

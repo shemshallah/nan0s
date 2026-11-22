@@ -38,7 +38,7 @@ while [ "$m" -le 62 ]; do
   m=$((m+1))
 done
 VEC="nan_simd nan_vec nan_vec_native nan_vec_avx2 nan_q4 nan_q4lm nan_bench xlate_x86"
-IMAGES="mkall qgate64 qgate64core qgate64block qgate64alu qgate64branch qgate64mem qgate64byte qgate64prog qgate64call qgate qgate_gui xmemgate mkproof"
+IMAGES="mkall qgate64 qgate64core qgate64block qgate64alu qgate64branch qgate64mem qgate64byte qgate64prog qgate64call qgate64mul qgate64div qgate qgate_gui xmemgate mkproof"
 NATIVE="$VEC narena narena64 nten nmatmul nmat64 nmat64x64"
 
 GATES=""
@@ -55,9 +55,9 @@ for f in $FILES; do
     src/native/kan16.xa|src/native/nan16_x86.nan|x86/native/*|x86/boot/*)
       add "$NATIVE $IMAGES" ;;
     src/native64/*|tools/qgate64.sh)
-      add "mkall qgate64 qgate64core qgate64block qgate64alu qgate64branch qgate64mem qgate64byte qgate64prog qgate64call" ;;
+      add "mkall qgate64 qgate64core qgate64block qgate64alu qgate64branch qgate64mem qgate64byte qgate64prog qgate64call qgate64mul qgate64div" ;;
     src/translate/x86_64.nas|src/translate/x64_block.nas)
-      add "mkall qgate64core qgate64block qgate64alu qgate64branch qgate64mem qgate64byte qgate64prog qgate64call" ;;
+      add "mkall qgate64core qgate64block qgate64alu qgate64branch qgate64mem qgate64byte qgate64prog qgate64call qgate64mul qgate64div" ;;
     src/tests/xlate64_test.nas|tools/qgate64core.sh)
       add "mkall qgate64core" ;;
     src/tests/xlate64_block.nas|tools/qgate64block.sh)
@@ -74,6 +74,10 @@ for f in $FILES; do
       add "mkall qgate64prog" ;;
     src/tests/xlate64_call.nas|tools/qgate64call.sh)
       add "mkall qgate64call" ;;
+    src/tests/xlate64_mul.nas|tools/qgate64mul.sh)
+      add "mkall qgate64mul" ;;
+    src/tests/xlate64_div.nas|tools/qgate64div.sh)
+      add "mkall qgate64div" ;;
     src/translate/*|src/tests/xlate*|tools/xlate_x86.sh)
       add "xlate_x86" ;;
     src/lib/narena*.nas|src/lib/nten.nas|src/lib/nmat.nas|src/lib/n64.nas)
@@ -179,7 +183,7 @@ esac
 
 # Image gates are sequential and ordered: build once, then boot the image.
 SEQ=""
-for g in mkall qgate64 qgate64core qgate64block qgate64alu qgate64branch qgate64mem qgate64byte qgate64prog qgate64call mkproof qgate qgate_gui xmemgate; do
+for g in mkall qgate64 qgate64core qgate64block qgate64alu qgate64branch qgate64mem qgate64byte qgate64prog qgate64call qgate64mul qgate64div mkproof qgate qgate_gui xmemgate; do
   case " $RUN " in *" $g "*) SEQ="$SEQ $g" ;; esac
 done
 PAR=""

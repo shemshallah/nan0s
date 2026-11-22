@@ -42,9 +42,11 @@ The emitted x86-64 uses SIB absolute `disp32` addressing, e.g.
 Current NaN encoder coverage: MOVI, MOVHI, ADD, SUB, ADDI, SHL, SHR, SAR,
 CMP/CMPS, FLAGM, JMP[cond], LD/ST, LDB/STB (word/byte guest memory at
 G=0x200000 with the mask at 0x50404), set-XPC, HALT, RET, JMPR, CALL,
-CALLR and NOP.  Gates: `qgate64core`, `qgate64block`, `qgate64alu`,
-`qgate64branch`, `qgate64mem` (0x12345678), `qgate64byte` (0xAB),
-`qgate64call` (CALL/RET across blocks, r1=16).
+CALLR, NOP, BOOL, MUL/MULH/MULHU, DIV/MOD/DIVU/MODU.  Gates:
+`qgate64core`, `qgate64block`, `qgate64alu`, `qgate64branch`,
+`qgate64mem` (0x12345678), `qgate64byte` (0xAB), `qgate64call`
+(CALL/RET across blocks, r1=16), `qgate64mul` (MUL/BOOL/MULHU, r1=0x2D),
+`qgate64div` (signed/unsigned DIV/MOD with zero divisors, r1=0x37).
 
 ## Multi-block dispatch
 
@@ -75,9 +77,12 @@ the native dispatcher must rescan the table from its base after every block
 rather than continuing from the matched entry.  Block images are copied in
 2 KiB pages, so a block is no longer limited to 512 bytes.
 
-Next: LDN/LDW/STW, CALL/RET/JMPR, multiply/divide and BOOL, traps, the
-vector/FP families, a guest loader that preserves NaN header predicates,
-and self-hosting.
+Division is branchless: a zero or -1 divisor is replaced by 1, the
+architectural result is selected with `cmov`, and `k=3` is forced when the
+divisor is zero.  This avoids x86 #DE without a native helper.
+
+Next: LDN/STW/BSWAPM, BCOPY/BFILL, traps, scalar FP, the vector families,
+a guest loader that preserves NaN header predicates, and self-hosting.
 
 ## Bootstrap / self-hosting
 
