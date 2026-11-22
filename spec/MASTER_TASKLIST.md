@@ -57,8 +57,14 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done and gated.
       0x8FFE/0x9000 and the long-mode stub scans it, but x86-64 SeaBIOS is
       not delivering a usable table to the floppy boot path yet. The gate
       does not require it; `src/native64/e820probe.S` is the diagnostic.
-- [ ] Port the NaN16 execution core to 64-bit (`kan64.xa`), preserving exact
-      NaN/DP4B/vector semantics.
+- [x] NaN-coded x86-64 encoder (`src/translate/x86_64.nas`): MOVI/ADD/set-XPC/
+      RET, SIB absolute addressing into the 64-bit register file.
+- [x] Native 64-bit substrate executes the NaN-emitted block and reads back
+      r1 (`qgate64core`, r1=84). The substrate does not decode instructions.
+- [ ] Full NaN-coded 64-bit block core: MOVHI/ADDI/shifts/CMP/CMOV, memory,
+      branches, traps; then the full dispatcher and self-hosting core.
+- [ ] Port the native NaN16 execution core to 64-bit (`kan64`) only where the
+      bootstrap/EXECN substrate requires it; core policy stays NaN.
 - [ ] 64-bit native shims for ports, CPUID, RDTSC, MSRs, page tables.
 
 ### P0.4.2 Virtual memory
