@@ -7,8 +7,8 @@ a time and re-runs `tools/presqlite_gate.sh`.
 | # | Gap | Before | Worktree / branch | Gate |
 | - | --- | --- | --- | --- |
 | 0 | Real allocator (S0) | closed | `6f5534e`, `2d47f9e` | `ncc_alloc` |
-| 1 | Object-like replacement-text macros | numeric-only | `presql_wt/macros`, `presql/macros` | `ncc_macro_text` |
-| 2 | Real `#include` (quoted + system) | skipped | `presql_wt/include`, `presql/include` | `ncc_include` |
+| 1 | Object-like replacement-text macros | **closed**; nested/blue-paint function+object macros | merged `ebd0b20` | `ncc_macro_text` |
+| 2 | Real `#include` (quoted + system) | **closed**; NPAF relative/nested/guarded + standard placeholders | merged `f2262ad` | `ncc_include` |
 | 3 | Correctly rounded float32 libm | **closed for \|x\| <= 65536**; 0/20,981 bit mismatches; larger args use coarse fallback | merged `5c153a6` | `ncc_libm_exact` |
 | 4 | ISO C language/library gaps | C11/wide-stdio exclusions | `presql_wt/iso`, `presql/iso` | `ncc_iso_c` |
 | 5 | c-testsuite / GCC torture | no suite in tree | `presql_wt/ctest`, `presql/ctest` | `ncc_ctests` |
@@ -25,6 +25,10 @@ Already closed before this round:
 - Correctly rounded float32 `sin`/`cos` for `|x| <= 65536`, exact
   `sqrt/fabs/floor/ceil/trunc/round`, and exact `fmod` for the gated range,
   using an in-guest double-float path (`ncc_libm_exact`, 20,981 comparisons).
+- Object-like replacement-text macros with the C blue-paint rule, plus real
+  quoted/system `#include` resolution (`ncc_macro_text`, `ncc_include`).
+- The C heap is no longer a fixed 2 MB arena: it starts at 256 KiB and grows
+  on demand to 6.9 MB across 8.1-15 MB, with the whole-heap allocation gate.
 
 Coordination notes live in `~/presql_coord/`. Integration order is macros,
 include, libm, iso, ctest; each merge must keep `presqlite_gate` green.
