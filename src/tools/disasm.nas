@@ -508,6 +508,10 @@ t_ops:
 .str "OUTSW  "
 .word 67,33
 .str "OUTL   "
+.word 68,801
+.str "CPUID  "
+.word 69,33
+.str "RDTSC  "
 .word 255,0
 .str "HALT   "
 .word 4096,0

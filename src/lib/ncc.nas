@@ -846,6 +846,14 @@
 .equ W_LM_TL    61914
 .equ W_LM_C     61915
 .equ W_LM_SG    61916
+.equ W_EXITCODE  61140      ; last main()/exit() status, returned by ncc_run
+.equ W_INCSTEP   61141      ; ++/-- step preserved across px_emit_store
+.equ W_PARM_SAVE 61142      ; saved W_PARAMP across member funcptr params
+.equ W_BUILTIN_IDX 61143    ; builtin shadowed by a prototype, or -1
+.equ W_EXISTFUNC 61144      ; existing function/prototype with same name, or -1
+.equ W_SWSAVE   61145      ; switch break-count saved across break patching
+.equ W_DECLBASE 61146      ; unsuffixed base type for a declarator list
+.equ W_DECLFLAG 61147      ; first declarator's pointer suffix already consumed
 .equ W_BITUNIT   61800
 .equ W_BITUSED   61801
 .equ W_MEMBIT    61802
@@ -1819,6 +1827,8 @@ ST r0,r0,#W_IRYSTOP
 ST r0,r0,#W_ALARM
 ST r0,r0,#W_ATEXIT_RUN
 ST r0,r0,#W_ATEXIT_N
+LA r1,0xFFFFFFFF
+ST r1,r0,#W_EXITCODE
 LD r1,r0,#W_C_STACK
 ST r1,r0,#R_FP
 LA r1,#NCC_IRB
@@ -1830,6 +1840,28 @@ ST r0,r2,0
 ADDI r2,r2,-3
 ST r0,r2,0
 CALL @ncc_ir_loop
+; The compiler tail is CALL main; HALT, so a normal fall-through leaves
+; main's return value on top of the expression stack. exit()/_Exit()/abort()
+; record their own status before halting. Capture the status only here, after
+; the outermost loop; nested callback loops (qsort/bsearch/atexit) must not
+; consume their return values from the expression stack.
+LD r1,r0,#W_EXITCODE
+LA r2,0xFFFFFFFF
+CMP r1,r2
+JMP[NE] @nrun_status_done
+LD r1,r0,#R_SP
+LA r2,#NCC_ESB
+CMP r1,r2
+JMP[LE] @nrun_status_zero
+SUB r1,r1,r13
+ST r1,r0,#R_SP
+LD r2,r1,0
+ST r2,r0,#W_EXITCODE
+JMP @nrun_status_done
+nrun_status_zero:
+ST r0,r0,#W_EXITCODE
+nrun_status_done:
+LD r1,r0,#W_EXITCODE
 SUB r14,r14,r13
 LD r15,r14,0
 LD r14,r0,#W_PSAVE2
@@ -4743,6 +4775,11 @@ LD r1,r0,#W_TKA
 MOVI r2,#K_IDENT
 CMP r1,r2
 JMP[EQ] @pes_name
+; C99 permits a trailing comma before the closing brace
+MOVI r1,#P_RBRACE
+CALL @p_at_p
+CMP r1,r0
+JMP[NE] @pes_rbrace
 MOVI r1,63
 CALL @p_err
 pes_name:
@@ -4761,12 +4798,13 @@ CALL @p_cexpr
 ST r1,r0,#W_TY_ID
 JMP @pes_set
 pes_noval:
-LD r1,r0,#W_TY_ID
-ADD r1,r1,r13
+LD r1,r0,#W_ENUMVAL
 ST r1,r0,#W_TY_ID
 pes_set:
+; the symbol takes this enumerator's value; the next implicit value is +1
 LD r1,r0,#W_TY_ID
-ST r1,r0,#W_ENUMVAL
+ADD r2,r1,r13
+ST r2,r0,#W_ENUMVAL
 SUB r14,r14,r13
 LD r1,r14,0
 CALL @sym_entry
@@ -4780,6 +4818,7 @@ MOVI r1,#P_COMMA
 CALL @p_take_p
 CMP r1,r0
 JMP[NE] @pes_l
+pes_rbrace:
 MOVI r1,#P_RBRACE
 MOVI r2,64
 CALL @p_expect_p
@@ -4835,6 +4874,11 @@ ADD r14,r14,r13
 LD r1,r0,#W_STRUCTKIND
 ST r1,r14,0
 ADD r14,r14,r13
+; member declarations run p_typespec recursively, which clears W_SCLASS;
+; preserve the outer storage class so "typedef struct {...} name;" works
+LD r1,r0,#W_SCLASS
+ST r1,r14,0
+ADD r14,r14,r13
 LD r1,r0,#W_STRUCTID
 CALL @ty_addr
 ST r0,r1,#TY_SIZE
@@ -4878,6 +4922,109 @@ ST r1,r0,#W_STYPE
 LD r1,r0,#W_STYPE
 CALL @p_ptr_suffix
 ST r1,r0,#W_STYPE
+CALL @p_at_funcptr_decl
+CMP r1,r0
+JMP[EQ] @pss_mem_normal_decl
+; function-pointer member: RET (*name)(params)
+LD r1,r0,#W_STYPE
+ST r1,r0,#W_FPRET
+LD r1,r0,#W_PARAMP
+ST r1,r0,#W_PARM_SAVE
+ST r1,r0,#W_FPSTART
+ST r0,r0,#W_FPNP
+MOVI r1,#P_LPAREN
+MOVI r2,9
+CALL @p_expect_p
+MOVI r1,#P_STAR
+MOVI r2,36
+CALL @p_expect_p
+pssfp_stars:
+MOVI r1,#P_STAR
+CALL @p_at_p
+CMP r1,r0
+JMP[EQ] @pssfp_name
+CALL @p_adv
+JMP @pssfp_stars
+pssfp_name:
+LD r1,r0,#W_TKA
+MOVI r2,#K_IDENT
+CMP r1,r2
+JMP[EQ] @pssfp_nm
+MOVI r1,23
+CALL @p_err
+pssfp_nm:
+MOVI r1,#SK_MEMBER
+CALL @sym_get_cur
+ST r1,r14,0
+ADD r14,r14,r13
+CALL @p_adv
+MOVI r1,#P_RPAREN
+MOVI r2,10
+CALL @p_expect_p
+MOVI r1,#P_LPAREN
+MOVI r2,9
+CALL @p_expect_p
+pssfp_param_start:
+MOVI r1,#P_RPAREN
+CALL @p_at_p
+CMP r1,r0
+JMP[NE] @pssfp_params_done
+MOVI r1,#KW_VOID
+CALL @p_at_k
+CMP r1,r0
+JMP[EQ] @pssfp_param_l
+CALL @p_peek
+LD r1,r0,#W_TKB
+MOVI r2,#K_PUNCT
+CMP r1,r2
+JMP[NE] @pssfp_param_l
+LD r1,r0,#W_TKB+1
+MOVI r2,#P_RPAREN
+CMP r1,r2
+JMP[NE] @pssfp_param_l
+CALL @p_adv
+JMP @pssfp_params_done
+pssfp_param_l:
+CALL @p_typespec
+CALL @p_ptr_suffix
+ST r1,r0,#W_FPTMP
+LD r1,r0,#W_TKA
+MOVI r2,#K_IDENT
+CMP r1,r2
+JMP[NE] @pssfp_noid
+CALL @p_adv
+pssfp_noid:
+LD r2,r0,#W_PARAMP
+ADD r3,r2,r0
+LD r1,r0,#W_FPTMP
+ST r1,r3,0
+ADD r2,r2,r13
+ST r2,r0,#W_PARAMP
+LD r1,r0,#W_FPNP
+ADD r1,r1,r13
+ST r1,r0,#W_FPNP
+MOVI r1,#P_COMMA
+CALL @p_take_p
+CMP r1,r0
+JMP[NE] @pssfp_param_l
+pssfp_params_done:
+MOVI r1,#P_RPAREN
+MOVI r2,10
+CALL @p_expect_p
+LD r1,r0,#W_FPRET
+LD r2,r0,#W_FPNP
+CALL @ty_func
+ST r1,r0,#W_TY_TMP
+LD r1,r0,#W_FPSTART
+LD r2,r0,#W_FPNP
+CALL @ty_func_set_params
+LD r1,r0,#W_TY_TMP
+CALL @ty_ptr
+ST r1,r0,#W_STYPE
+LD r1,r0,#W_PARM_SAVE
+ST r1,r0,#W_PARAMP
+JMP @pss_mem_sized
+pss_mem_normal_decl:
 LD r1,r0,#W_TKA
 MOVI r2,#K_IDENT
 CMP r1,r2
@@ -5033,6 +5180,9 @@ JMP @pss_mem_l
 pss_final:
 CALL @p_adv
 ADDI r3,r14,-1
+LD r1,r3,0
+ST r1,r0,#W_SCLASS
+ADDI r3,r3,-1
 LD r2,r3,0
 ADDI r3,r3,-1
 LD r1,r3,0
@@ -5051,6 +5201,7 @@ ST r2,r1,#TY_ALIGN
 LD r2,r0,#W_SNMEM
 ST r2,r1,#TY_NMEM
 LD r1,r0,#W_STRUCTID
+SUB r14,r14,r13
 SUB r14,r14,r13
 SUB r14,r14,r13
 JMP @pss_d
@@ -9336,6 +9487,24 @@ CALL @p_adv
 JMP @pp_done
 pp_string:
 CALL @str_add_cur
+ST r1,r14,0
+ADD r14,r14,r13
+CALL @p_adv
+pstr_cat:
+LD r1,r0,#W_TKA
+MOVI r2,#K_STRING
+CMP r1,r2
+JMP[NE] @pstr_done
+; adjacent string literals concatenate: drop the previous NUL and append
+LD r1,r0,#W_STRP
+SUB r1,r1,r13
+ST r1,r0,#W_STRP
+CALL @str_add_cur
+CALL @p_adv
+JMP @pstr_cat
+pstr_done:
+SUB r14,r14,r13
+LD r1,r14,0
 ADD r2,r1,r0
 LA r1,#I_PUSH
 CALL @ir_emit
@@ -9343,7 +9512,6 @@ MOVI r1,#T_CHAR
 CALL @ty_ptr
 ST r1,r0,#W_ETYPE
 ST r0,r0,#W_LVAL
-CALL @p_adv
 JMP @pp_done
 pp_wstring:
 CALL @str_add_cur_wide
@@ -10308,6 +10476,7 @@ LD r1,r0,#W_LTYPE
 ST r1,r0,#W_TY_ID
 CALL @px_inc_step
 ST r1,r0,#W_TY_COUNT
+ST r1,r0,#W_INCSTEP
 ADD r2,r1,r0
 LA r1,#I_DUP
 CALL @ir_op
@@ -10336,7 +10505,7 @@ MOVI r2,1
 CALL @px_emit_store
 ; recover the old value from new
 LA r1,#I_PUSH
-LD r2,r0,#W_TY_COUNT
+LD r2,r0,#W_INCSTEP
 CALL @ir_emit
 LD r1,r0,#W_TY_RET
 MOVI r2,#P_INC
@@ -10376,7 +10545,7 @@ LD r1,r0,#W_TY_ID
 MOVI r2,1
 CALL @px_emit_store
 LA r1,#I_PUSH
-LD r2,r0,#W_TY_COUNT
+LD r2,r0,#W_INCSTEP
 CALL @ir_emit
 LA r1,#I_PUSH
 MOVI r2,0
@@ -10535,8 +10704,24 @@ CALL @p_unary
 LD r1,r0,#W_LVAL
 CMP r1,r0
 JMP[NE] @pu_addr_ok
+; &func: the function designator is already a pointer value
+LD r1,r0,#W_ETYPE
+CALL @ty_kind
+MOVI r2,#TY_PTR
+CMP r1,r2
+JMP[NE] @pu_addr_err
+LD r1,r0,#W_ETYPE
+CALL @ty_base
+CALL @ty_kind
+MOVI r2,#TY_FUNC
+CMP r1,r2
+JMP[EQ] @pu_addr_func
+pu_addr_err:
 MOVI r1,34
 CALL @p_err
+pu_addr_func:
+ST r0,r0,#W_LVAL
+JMP @pu_done
 pu_addr_ok:
 LD r1,r0,#W_LTYPE
 CALL @ty_ptr
@@ -10915,7 +11100,8 @@ CALL @px_emit_store
 LD r1,r0,#W_TY_ID
 ST r1,r0,#W_ETYPE
 ST r0,r0,#W_LVAL
-CALL @p_adv
+; NB: the prefix operator token was already consumed at entry; do not
+; advance again or the following token (often ';') is swallowed.
 JMP @pu_done
 pu_inc_ll:
 LA r1,#I_PUSH
@@ -15053,6 +15239,7 @@ sw_patch_brk:
 SUB r14,r14,r13
 LD r1,r14,0
 ST r1,r0,#W_TMP
+ST r1,r0,#W_SWSAVE
 sw_brk_l:
 LD r1,r0,#W_TMP
 LD r2,r0,#W_BRK_N
@@ -15071,7 +15258,8 @@ ADD r1,r1,r13
 ST r1,r0,#W_TMP
 JMP @sw_brk_l
 sw_brk_done:
-LD r1,r0,#W_TMP
+; W_TMP is the patching cursor now; restore from the untouched saved copy
+LD r1,r0,#W_SWSAVE
 ST r1,r0,#W_BRK_N
 SUB r14,r14,r13
 LD r1,r14,0
@@ -15661,13 +15849,23 @@ p_decl_external:
 ST r15,r14,0
 ADD r14,r14,r13
 ST r1,r0,#W_TY_RET
+ST r1,r0,#W_DECLBASE
 ST r0,r0,#W_MARK_CONST
 LD r2,r0,#W_TCONST
 ST r2,r0,#W_DECL_CONST
+; consume pointer stars/qualifiers on the base type before looking for
+; a function-pointer declarator, so "RET *(*name)(...)" is recognised.
+; Keep the unsuffixed base in W_DECLBASE and remember that the first
+; declarator's stars are already consumed.
+LD r1,r0,#W_TY_RET
+CALL @p_ptr_suffix
+ST r1,r0,#W_TY_TMP
+MOVI r1,1
+ST r1,r0,#W_DECLFLAG
 CALL @p_at_funcptr_decl
 CMP r1,r0
 JMP[EQ] @pde_not_fp
-LD r1,r0,#W_TY_RET
+LD r1,r0,#W_TY_TMP
 MOVI r2,1
 LD r3,r0,#W_SCLASS
 MOVI r4,3
@@ -15685,6 +15883,8 @@ MOVI r2,24
 CALL @p_expect_p
 JMP @pde_d
 pde_not_fp:
+LD r1,r0,#W_TY_TMP
+ST r1,r0,#W_TY_RET
 MOVI r1,#P_SEMI
 CALL @p_at_p
 CMP r1,r0
@@ -15694,8 +15894,19 @@ MOVI r2,3
 CMP r1,r2
 JMP[EQ] @pde_typedef
 pde_one:
+LD r1,r0,#W_DECLFLAG
+CMP r1,r0
+JMP[EQ] @pde_one_stars
+ST r0,r0,#W_DECLFLAG
+JMP @pde_one_have
+pde_one_stars:
+LD r1,r0,#W_DECLBASE
+ST r1,r0,#W_TY_RET
 LD r1,r0,#W_TY_RET
 CALL @p_ptr_suffix
+ST r1,r0,#W_TY_RET
+pde_one_have:
+LD r1,r0,#W_TY_RET
 ST r1,r0,#W_TY_ID
 CALL @px_decl_mark
 LD r1,r0,#W_TKA
@@ -16084,11 +16295,16 @@ ADDI r14,r14,-1
 MOVI r1,#P_COMMA
 CALL @p_take_p
 CMP r1,r0
-JMP[NE] @pde_one
+JMP[NE] @pde_one_more
 MOVI r1,#P_SEMI
 MOVI r2,24
 CALL @p_expect_p
 JMP @pde_d
+pde_one_more:
+LD r1,r0,#W_DECLBASE
+ST r1,r0,#W_TY_RET
+ST r0,r0,#W_DECLFLAG
+JMP @pde_one
 pde_func:
 LD r1,r0,#W_TY_ID
 CALL @p_func
@@ -16126,7 +16342,7 @@ ADDI r14,r14,-1
 MOVI r1,#P_COMMA
 CALL @p_take_p
 CMP r1,r0
-JMP[NE] @pde_typedef
+JMP[NE] @pde_typedef_more
 MOVI r1,#P_SEMI
 MOVI r2,24
 CALL @p_expect_p
@@ -16134,6 +16350,11 @@ pde_d:
 SUB r14,r14,r13
 LD r15,r14,0
 RET
+pde_typedef_more:
+LD r1,r0,#W_DECLBASE
+ST r1,r0,#W_TY_RET
+ST r0,r0,#W_DECLFLAG
+JMP @pde_typedef
 pde_type_only:
 CALL @p_adv
 JMP @pde_d
@@ -16147,6 +16368,14 @@ ST r0,r0,#W_SCOPEID
 MOVI r2,1
 ST r2,r0,#W_NEXTSCOPE
 ST r1,r0,#W_FUNCRET
+; a prototype for a standard-library name (e.g. "int strlen(char*);")
+; must not hide the builtin implementation
+MOVI r1,#SK_BUILTIN
+CALL @sym_find_cur
+ST r1,r0,#W_BUILTIN_IDX
+MOVI r1,#SK_FUNC
+CALL @sym_find_cur
+ST r1,r0,#W_EXISTFUNC
 MOVI r1,#SK_FUNC
 CALL @sym_get_cur
 ST r1,r14,0
@@ -16325,6 +16554,42 @@ MOVI r1,#P_SEMI
 CALL @p_take_p
 CMP r1,r0
 JMP[EQ] @pfu_body
+; if this prototype names a builtin, make the symbol dispatch to it
+LD r2,r0,#W_BUILTIN_IDX
+MOVI r3,0xFFFF
+SHL r3,r3,16
+ADDI r3,r3,-1
+CMP r2,r3
+JMP[EQ] @pfu_proto_done
+LD r1,r0,#W_BUILTIN_IDX
+CALL @sym_entry
+LD r3,r1,#SY_KIND
+LD r1,r0,#W_BUILTIN_IDX
+CALL @sym_entry
+LD r4,r1,#SY_AUX
+ADDI r5,r14,-1
+LD r1,r5,0
+CALL @sym_entry
+ST r3,r1,#SY_KIND
+ST r4,r1,#SY_AUX
+pfu_try_existing:
+; if an earlier definition of this name exists, reuse its entry
+LD r2,r0,#W_EXISTFUNC
+MOVI r3,0xFFFF
+SHL r3,r3,16
+ADDI r3,r3,-1
+CMP r2,r3
+JMP[EQ] @pfu_proto_done
+LD r1,r0,#W_EXISTFUNC
+CALL @sym_entry
+LD r3,r1,#SY_ENTRY
+CMP r3,r0
+JMP[EQ] @pfu_proto_done
+ADDI r5,r14,-1
+LD r1,r5,0
+CALL @sym_entry
+ST r3,r1,#SY_ENTRY
+pfu_proto_done:
 ADDI r14,r14,-1
 JMP @pfu_d
 pfu_body:
@@ -20596,6 +20861,8 @@ JMP @nbi_d
 nbi_abort:
 ST r0,r0,#W_SNOUT
 ST r0,r0,#W_SNPOS
+MOVI r1,134
+ST r1,r0,#W_EXITCODE
 LD r1,r0,#W_TAILHALT
 ST r1,r0,#R_IP
 JMP @nbi_d
@@ -20681,6 +20948,7 @@ JMP @nbi_d
 
 nbi__exit:
 CALL @ni_pop
+ST r1,r0,#W_EXITCODE
 LD r1,r0,#W_TAILHALT
 ST r1,r0,#R_IP
 JMP @nbi_d
@@ -21751,6 +22019,7 @@ ST r1,r0,#W_SNPOS
 JMP @nbi_d
 nbi_exit:
 CALL @ni_pop
+ST r1,r0,#W_EXITCODE
 LD r1,r0,#W_ATEXIT_RUN
 CMP r1,r0
 JMP[NE] @nex_go

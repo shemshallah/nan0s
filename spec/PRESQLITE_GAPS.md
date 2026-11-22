@@ -10,8 +10,8 @@ a time and re-runs `tools/presqlite_gate.sh`.
 | 1 | Object-like replacement-text macros | **closed**; nested/blue-paint function+object macros | merged `ebd0b20` | `ncc_macro_text` |
 | 2 | Real `#include` (quoted + system) | **closed**; NPAF relative/nested/guarded + standard placeholders | merged `f2262ad` | `ncc_include` |
 | 3 | Correctly rounded float32 libm | **closed for \|x\| <= 65536**; 0/20,981 bit mismatches; larger args use coarse fallback | merged `5c153a6` | `ncc_libm_exact` |
-| 4 | ISO C language/library gaps | C11/wide-stdio exclusions | `presql_wt/iso`, `presql/iso` | `ncc_iso_c` |
-| 5 | c-testsuite / GCC torture | no suite in tree | `presql_wt/ctest`, `presql/ctest` | `ncc_ctests` |
+| 4 | ISO C language/library gaps | **closed**; C11 language, uchar, wide stdio, atomic/fenv/threads | merged `dcdd823` | `ncc_iso_c` |
+| 5 | c-testsuite / GCC torture | **52/56 pass, 4 documented skips**; GCC torture still out of tree | merged `122ca35` | `ncc_ctests` |
 
 Already closed before this round:
 
@@ -34,5 +34,6 @@ Already closed before this round:
   VM and 6.9 MB on a 16M-word VM.  `ncc_alloc` allocates 100,000,000 bytes;
   `ncc_heap` checks 16/64/128/512 MiB VMs.
 
-Coordination notes live in `~/presql_coord/`. Integration order is macros,
-include, libm, iso, ctest; each merge must keep `presqlite_gate` green.
+Coordination notes live in `~/presql_coord/`. Macros, include, libm, ISO C
+and the c-testsuite baseline are merged; `tools/presqlite_gate.sh` is the
+aggregate gate. Remaining: GCC torture, Csmith, and the SQLite workload.
