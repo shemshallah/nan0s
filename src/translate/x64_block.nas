@@ -58,6 +58,30 @@ xb_loop:
   MOVI r11,0x26
   CMP r7,r11
   JMP[EQ] @xb_modu
+  MOVI r11,0x30
+  CMP r7,r11
+  JMP[EQ] @xb_fadd
+  MOVI r11,0x31
+  CMP r7,r11
+  JMP[EQ] @xb_fsub
+  MOVI r11,0x32
+  CMP r7,r11
+  JMP[EQ] @xb_fmul
+  MOVI r11,0x33
+  CMP r7,r11
+  JMP[EQ] @xb_fdiv
+  MOVI r11,0x34
+  CMP r7,r11
+  JMP[EQ] @xb_fsqrt
+  MOVI r11,0x35
+  CMP r7,r11
+  JMP[EQ] @xb_fcmp
+  MOVI r11,0x36
+  CMP r7,r11
+  JMP[EQ] @xb_cvtif
+  MOVI r11,0x37
+  CMP r7,r11
+  JMP[EQ] @xb_cvtfi
   MOVI r11,0x0B
   CMP r7,r11
   JMP[EQ] @xb_call
@@ -305,6 +329,85 @@ xb_modu:
   ADD r8,r12,r0
   MOVI r9,0x26
   CALL @x64_divmod
+  ST r1,r0,@xb_out
+  JMP @xb_adv
+
+xb_fadd:
+  LD r1,r0,@xb_out
+  ADD r5,r8,r0
+  ADD r6,r9,r0
+  ADD r8,r12,r0
+  MOVI r9,0x30
+  CALL @x64_fp
+  ST r1,r0,@xb_out
+  JMP @xb_adv
+
+xb_fsub:
+  LD r1,r0,@xb_out
+  ADD r5,r8,r0
+  ADD r6,r9,r0
+  ADD r8,r12,r0
+  MOVI r9,0x31
+  CALL @x64_fp
+  ST r1,r0,@xb_out
+  JMP @xb_adv
+
+xb_fmul:
+  LD r1,r0,@xb_out
+  ADD r5,r8,r0
+  ADD r6,r9,r0
+  ADD r8,r12,r0
+  MOVI r9,0x32
+  CALL @x64_fp
+  ST r1,r0,@xb_out
+  JMP @xb_adv
+
+xb_fdiv:
+  LD r1,r0,@xb_out
+  ADD r5,r8,r0
+  ADD r6,r9,r0
+  ADD r8,r12,r0
+  MOVI r9,0x33
+  CALL @x64_fp
+  ST r1,r0,@xb_out
+  JMP @xb_adv
+
+xb_fsqrt:
+  LD r1,r0,@xb_out
+  ADD r5,r8,r0
+  ADD r6,r9,r0
+  MOVI r8,0
+  MOVI r9,0x34
+  CALL @x64_fp
+  ST r1,r0,@xb_out
+  JMP @xb_adv
+
+xb_cvtif:
+  LD r1,r0,@xb_out
+  ADD r5,r8,r0
+  ADD r6,r9,r0
+  MOVI r8,0
+  MOVI r9,0x36
+  CALL @x64_fp
+  ST r1,r0,@xb_out
+  JMP @xb_adv
+
+xb_cvtfi:
+  LD r1,r0,@xb_out
+  ADD r5,r8,r0
+  ADD r6,r9,r0
+  MOVI r8,0
+  MOVI r9,0x37
+  CALL @x64_fp
+  ST r1,r0,@xb_out
+  JMP @xb_adv
+
+xb_fcmp:
+  LD r1,r0,@xb_out
+  ADD r6,r9,r0
+  ADD r8,r12,r0
+  MOVI r9,0x35
+  CALL @x64_fp
   ST r1,r0,@xb_out
   JMP @xb_adv
 

@@ -1022,11 +1022,11 @@ x64_divmod:
   ADD r5,r8,r0
   CALL @x64_load_ecx_r
   MOVI r2,0xC689
-  MOVHI r2,0
+  MOVHI r2,0x0000
   MOVI r3,2
   CALL @x64_emitn
   MOVI r2,0xCF89
-  MOVHI r2,0
+  MOVHI r2,0x0000
   MOVI r3,2
   CALL @x64_emitn
   MOVI r2,0x8941
@@ -1035,10 +1035,14 @@ x64_divmod:
   CALL @x64_emitn
   MOVI r2,0xBA41
   MOVHI r2,0x0001
-  MOVI r3,6
+  MOVI r3,4
+  CALL @x64_emitn
+  MOVI r2,0x0000
+  MOVHI r2,0x0000
+  MOVI r3,2
   CALL @x64_emitn
   MOVI r2,0xF983
-  MOVHI r2,0
+  MOVHI r2,0x0000
   MOVI r3,3
   CALL @x64_emitn
   MOVI r2,0x0F45
@@ -1062,7 +1066,7 @@ x64_div_signed:
   MOVI r3,4
   CALL @x64_emitn
   MOVI r2,0x0099
-  MOVHI r2,0
+  MOVHI r2,0x0000
   MOVI r3,1
   CALL @x64_emitn
   MOVI r2,0xF741
@@ -1072,7 +1076,7 @@ x64_div_signed:
   JMP @x64_div_select
 x64_div_unsigned:
   MOVI r2,0xD231
-  MOVHI r2,0
+  MOVHI r2,0x0000
   MOVI r3,2
   CALL @x64_emitn
   MOVI r2,0xF741
@@ -1113,7 +1117,7 @@ x64_div_special:
   CMP r9,r11
   JMP[NE] @x64_div_trymod
   MOVI r2,0xFF83
-  MOVHI r2,0
+  MOVHI r2,0x0000
   MOVI r3,3
   CALL @x64_emitn
   MOVI r2,0x0F45
@@ -1142,7 +1146,7 @@ x64_div_trymod:
   MOVI r3,4
   CALL @x64_emitn
   MOVI r2,0xFF83
-  MOVHI r2,0
+  MOVHI r2,0x0000
   MOVI r3,3
   CALL @x64_emitn
   MOVI r2,0x0F44
@@ -1155,7 +1159,7 @@ x64_div_trydivu:
   CMP r9,r11
   JMP[NE] @x64_div_modu
   MOVI r2,0xFF83
-  MOVHI r2,0
+  MOVHI r2,0x0000
   MOVI r3,3
   CALL @x64_emitn
   MOVI r2,0x0F45
@@ -1165,7 +1169,7 @@ x64_div_trydivu:
   JMP @x64_div_store
 x64_div_modu:
   MOVI r2,0xFF83
-  MOVHI r2,0
+  MOVHI r2,0x0000
   MOVI r3,3
   CALL @x64_emitn
   MOVI r2,0x0F44
@@ -1192,28 +1196,36 @@ x64_div_store:
   MOVI r3,3
   CALL @x64_emitn
   MOVI r2,0xD201
-  MOVHI r2,0
+  MOVHI r2,0x0000
   MOVI r3,2
   CALL @x64_emitn
   MOVI r2,0x01B8
-  MOVHI r2,0
-  MOVI r3,5
+  MOVHI r2,0x0000
+  MOVI r3,4
+  CALL @x64_emitn
+  MOVI r2,0x0000
+  MOVHI r2,0x0000
+  MOVI r3,1
   CALL @x64_emitn
   MOVI r2,0xD189
-  MOVHI r2,0
+  MOVHI r2,0x0000
   MOVI r3,2
   CALL @x64_emitn
   MOVI r2,0xE0D3
-  MOVHI r2,0
+  MOVHI r2,0x0000
   MOVI r3,2
   CALL @x64_emitn
   MOVI r2,0xFF83
-  MOVHI r2,0
+  MOVHI r2,0x0000
   MOVI r3,3
   CALL @x64_emitn
   MOVI r2,0x08B9
-  MOVHI r2,0
-  MOVI r3,5
+  MOVHI r2,0x0000
+  MOVI r3,4
+  CALL @x64_emitn
+  MOVI r2,0x0000
+  MOVHI r2,0x0000
+  MOVI r3,1
   CALL @x64_emitn
   MOVI r2,0x440F
   MOVHI r2,0x00C1
@@ -1225,6 +1237,495 @@ x64_div_store:
   CALL @x64_emitn
   LA r2,#X64_FLAGM
   CALL @x64_32
+  SUB r14,r14,r13
+  LD r15,r14,0
+  RET
+
+; store eax to R[d] (d in r10) and set FLAGM=1 (k=0)
+x64_fp_store_flag1:
+  ST r15,r14,0
+  ADD r14,r14,r13
+  ADD r5,r10,r0
+  CALL @x64_store_eax_r
+  MOVI r2,0xC7
+  CALL @x64_8
+  MOVI r2,0x04
+  CALL @x64_8
+  MOVI r2,0x25
+  CALL @x64_8
+  LA r2,#X64_FLAGM
+  CALL @x64_32
+  MOVI r2,1
+  CALL @x64_32
+  SUB r14,r14,r13
+  LD r15,r14,0
+  RET
+
+; scalar FP: r5=d r6=a r8=b r9=opcode (0x30..0x37)
+x64_fp:
+  ST r15,r14,0
+  ADD r14,r14,r13
+  ADD r10,r5,r0
+  ADD r5,r6,r0
+  CALL @x64_load_eax_r
+  ADD r5,r8,r0
+  CALL @x64_load_ecx_r
+  MOVI r2,0x0F66
+  MOVHI r2,0xC06E
+  MOVI r3,4
+  CALL @x64_emitn
+  MOVI r2,0x0F66
+  MOVHI r2,0xC96E
+  MOVI r3,4
+  CALL @x64_emitn
+  MOVI r2,0xC689
+  MOVHI r2,0x0000
+  MOVI r3,2
+  CALL @x64_emitn
+  MOVI r2,0xCF89
+  MOVHI r2,0x0000
+  MOVI r3,2
+  CALL @x64_emitn
+  MOVI r11,0x35
+  CMP r9,r11
+  JMP[EQ] @x64_fp_cmp
+  MOVI r11,0x36
+  CMP r9,r11
+  JMP[EQ] @x64_fp_cvtif
+  MOVI r11,0x37
+  CMP r9,r11
+  JMP[EQ] @x64_fp_cvtfi
+  MOVI r11,0x34
+  CMP r9,r11
+  JMP[EQ] @x64_fp_sqrt
+  MOVI r11,0x30
+  CMP r9,r11
+  JMP[EQ] @x64_fp_add
+  MOVI r11,0x31
+  CMP r9,r11
+  JMP[EQ] @x64_fp_sub
+  MOVI r11,0x32
+  CMP r9,r11
+  JMP[EQ] @x64_fp_mul
+  JMP @x64_fp_div
+x64_fp_add:
+  MOVI r2,0x0FF3
+  MOVHI r2,0xC158
+  MOVI r3,4
+  CALL @x64_emitn
+  JMP @x64_fp_arith_done
+x64_fp_sub:
+  MOVI r2,0x0FF3
+  MOVHI r2,0xC15C
+  MOVI r3,4
+  CALL @x64_emitn
+  JMP @x64_fp_arith_done
+x64_fp_mul:
+  MOVI r2,0x0FF3
+  MOVHI r2,0xC159
+  MOVI r3,4
+  CALL @x64_emitn
+  JMP @x64_fp_arith_done
+x64_fp_div:
+  MOVI r2,0x0FF3
+  MOVHI r2,0xC15E
+  MOVI r3,4
+  CALL @x64_emitn
+  MOVI r2,0x0F66
+  MOVHI r2,0xC07E
+  MOVI r3,4
+  CALL @x64_emitn
+  MOVI r2,0xC289
+  MOVHI r2,0x0000
+  MOVI r3,2
+  CALL @x64_emitn
+  MOVI r2,0xE281
+  MOVHI r2,0x0000
+  MOVI r3,4
+  CALL @x64_emitn
+  MOVI r2,0x7F80
+  MOVHI r2,0x0000
+  MOVI r3,2
+  CALL @x64_emitn
+  MOVI r2,0xFA81
+  MOVHI r2,0x0000
+  MOVI r3,4
+  CALL @x64_emitn
+  MOVI r2,0x7F80
+  MOVHI r2,0x0000
+  MOVI r3,2
+  CALL @x64_emitn
+  MOVI r2,0x940F
+  MOVHI r2,0x00C2
+  MOVI r3,3
+  CALL @x64_emitn
+  MOVI r2,0xC189
+  MOVHI r2,0x0000
+  MOVI r3,2
+  CALL @x64_emitn
+  MOVI r2,0xE181
+  MOVHI r2,0xFFFF
+  MOVI r3,4
+  CALL @x64_emitn
+  MOVI r2,0x007F
+  MOVHI r2,0x0000
+  MOVI r3,2
+  CALL @x64_emitn
+  MOVI r2,0x950F
+  MOVHI r2,0x00C1
+  MOVI r3,3
+  CALL @x64_emitn
+  MOVI r2,0xCA20
+  MOVHI r2,0x0000
+  MOVI r3,2
+  CALL @x64_emitn
+  MOVI r2,0xB60F
+  MOVHI r2,0x00D2
+  MOVI r3,3
+  CALL @x64_emitn
+  MOVI r2,0xF989
+  MOVHI r2,0x0000
+  MOVI r3,2
+  CALL @x64_emitn
+  MOVI r2,0xE181
+  MOVHI r2,0xFFFF
+  MOVI r3,4
+  CALL @x64_emitn
+  MOVI r2,0x7FFF
+  MOVHI r2,0x0000
+  MOVI r3,2
+  CALL @x64_emitn
+  MOVI r2,0xC985
+  MOVHI r2,0x0000
+  MOVI r3,2
+  CALL @x64_emitn
+  MOVI r2,0x940F
+  MOVHI r2,0x00C1
+  MOVI r3,3
+  CALL @x64_emitn
+  MOVI r2,0xB60F
+  MOVHI r2,0x00C9
+  MOVI r3,3
+  CALL @x64_emitn
+  MOVI r2,0xCA21
+  MOVHI r2,0x0000
+  MOVI r3,2
+  CALL @x64_emitn
+  MOVI r2,0x00B9
+  MOVHI r2,0xC000
+  MOVI r3,4
+  CALL @x64_emitn
+  MOVI r2,0x007F
+  MOVHI r2,0x0000
+  MOVI r3,1
+  CALL @x64_emitn
+  MOVI r2,0xD285
+  MOVHI r2,0x0000
+  MOVI r3,2
+  CALL @x64_emitn
+  MOVI r2,0x450F
+  MOVHI r2,0x00C1
+  MOVI r3,3
+  CALL @x64_emitn
+  JMP @x64_fp_arith_store
+x64_fp_sqrt:
+  MOVI r2,0x0FF3
+  MOVHI r2,0xC051
+  MOVI r3,4
+  CALL @x64_emitn
+  MOVI r2,0x0F66
+  MOVHI r2,0xC07E
+  MOVI r3,4
+  CALL @x64_emitn
+  MOVI r2,0xC289
+  MOVHI r2,0x0000
+  MOVI r3,2
+  CALL @x64_emitn
+  MOVI r2,0xE281
+  MOVHI r2,0x0000
+  MOVI r3,4
+  CALL @x64_emitn
+  MOVI r2,0x7F80
+  MOVHI r2,0x0000
+  MOVI r3,2
+  CALL @x64_emitn
+  MOVI r2,0xFA81
+  MOVHI r2,0x0000
+  MOVI r3,4
+  CALL @x64_emitn
+  MOVI r2,0x7F80
+  MOVHI r2,0x0000
+  MOVI r3,2
+  CALL @x64_emitn
+  MOVI r2,0x940F
+  MOVHI r2,0x00C2
+  MOVI r3,3
+  CALL @x64_emitn
+  MOVI r2,0xC189
+  MOVHI r2,0x0000
+  MOVI r3,2
+  CALL @x64_emitn
+  MOVI r2,0xE181
+  MOVHI r2,0xFFFF
+  MOVI r3,4
+  CALL @x64_emitn
+  MOVI r2,0x007F
+  MOVHI r2,0x0000
+  MOVI r3,2
+  CALL @x64_emitn
+  MOVI r2,0x950F
+  MOVHI r2,0x00C1
+  MOVI r3,3
+  CALL @x64_emitn
+  MOVI r2,0xCA20
+  MOVHI r2,0x0000
+  MOVI r3,2
+  CALL @x64_emitn
+  MOVI r2,0xB60F
+  MOVHI r2,0x00D2
+  MOVI r3,3
+  CALL @x64_emitn
+  MOVI r2,0x00B9
+  MOVHI r2,0xC000
+  MOVI r3,4
+  CALL @x64_emitn
+  MOVI r2,0x007F
+  MOVHI r2,0x0000
+  MOVI r3,1
+  CALL @x64_emitn
+  MOVI r2,0xD285
+  MOVHI r2,0x0000
+  MOVI r3,2
+  CALL @x64_emitn
+  MOVI r2,0x450F
+  MOVHI r2,0x00C1
+  MOVI r3,3
+  CALL @x64_emitn
+  JMP @x64_fp_arith_store
+x64_fp_arith_done:
+  MOVI r2,0x0F66
+  MOVHI r2,0xC07E
+  MOVI r3,4
+  CALL @x64_emitn
+x64_fp_arith_store:
+  CALL @x64_fp_store_flag1
+  JMP @x64_fp_done
+
+x64_fp_cvtif:
+  MOVI r2,0x0FF3
+  MOVHI r2,0xC02A
+  MOVI r3,4
+  CALL @x64_emitn
+  MOVI r2,0x0F66
+  MOVHI r2,0xC07E
+  MOVI r3,4
+  CALL @x64_emitn
+  CALL @x64_fp_store_flag1
+  JMP @x64_fp_done
+
+x64_fp_cvtfi:
+  MOVI r2,0x0FF3
+  MOVHI r2,0xC02C
+  MOVI r3,4
+  CALL @x64_emitn
+  MOVI r2,0xF289
+  MOVHI r2,0x0000
+  MOVI r3,2
+  CALL @x64_emitn
+  MOVI r2,0xE281
+  MOVHI r2,0x0000
+  MOVI r3,4
+  CALL @x64_emitn
+  MOVI r2,0x7F80
+  MOVHI r2,0x0000
+  MOVI r3,2
+  CALL @x64_emitn
+  MOVI r2,0xFA81
+  MOVHI r2,0x0000
+  MOVI r3,4
+  CALL @x64_emitn
+  MOVI r2,0x7F80
+  MOVHI r2,0x0000
+  MOVI r3,2
+  CALL @x64_emitn
+  MOVI r2,0x940F
+  MOVHI r2,0x00C2
+  MOVI r3,3
+  CALL @x64_emitn
+  MOVI r2,0xF189
+  MOVHI r2,0x0000
+  MOVI r3,2
+  CALL @x64_emitn
+  MOVI r2,0xE181
+  MOVHI r2,0xFFFF
+  MOVI r3,4
+  CALL @x64_emitn
+  MOVI r2,0x007F
+  MOVHI r2,0x0000
+  MOVI r3,2
+  CALL @x64_emitn
+  MOVI r2,0x950F
+  MOVHI r2,0x00C1
+  MOVI r3,3
+  CALL @x64_emitn
+  MOVI r2,0xCA20
+  MOVHI r2,0x0000
+  MOVI r3,2
+  CALL @x64_emitn
+  MOVI r2,0xB60F
+  MOVHI r2,0x00D2
+  MOVI r3,3
+  CALL @x64_emitn
+  MOVI r2,0x8941
+  MOVHI r2,0x00C0
+  MOVI r3,3
+  CALL @x64_emitn
+  MOVI r2,0x003D
+  MOVHI r2,0x0000
+  MOVI r3,4
+  CALL @x64_emitn
+  MOVI r2,0x0080
+  MOVHI r2,0x0000
+  MOVI r3,1
+  CALL @x64_emitn
+  MOVI r2,0x0F41
+  MOVHI r2,0xC094
+  MOVI r3,4
+  CALL @x64_emitn
+  MOVI r2,0x0F45
+  MOVHI r2,0xC0B6
+  MOVI r3,4
+  CALL @x64_emitn
+  MOVI r2,0xF189
+  MOVHI r2,0x0000
+  MOVI r3,2
+  CALL @x64_emitn
+  MOVI r2,0xE9C1
+  MOVHI r2,0x001F
+  MOVI r3,3
+  CALL @x64_emitn
+  MOVI r2,0xF183
+  MOVHI r2,0x0001
+  MOVI r3,3
+  CALL @x64_emitn
+  MOVI r2,0x2141
+  MOVHI r2,0x00C8
+  MOVI r3,3
+  CALL @x64_emitn
+  MOVI r2,0xFFB9
+  MOVHI r2,0xFFFF
+  MOVI r3,4
+  CALL @x64_emitn
+  MOVI r2,0x007F
+  MOVHI r2,0x0000
+  MOVI r3,1
+  CALL @x64_emitn
+  MOVI r2,0x8545
+  MOVHI r2,0x00C0
+  MOVI r3,3
+  CALL @x64_emitn
+  MOVI r2,0x450F
+  MOVHI r2,0x00C1
+  MOVI r3,3
+  CALL @x64_emitn
+  MOVI r2,0xC931
+  MOVHI r2,0x0000
+  MOVI r3,2
+  CALL @x64_emitn
+  MOVI r2,0xD285
+  MOVHI r2,0x0000
+  MOVI r3,2
+  CALL @x64_emitn
+  MOVI r2,0x450F
+  MOVHI r2,0x00C1
+  MOVI r3,3
+  CALL @x64_emitn
+  ADD r5,r10,r0
+  CALL @x64_store_eax_r
+  MOVI r2,0xC085
+  MOVHI r2,0x0000
+  MOVI r3,2
+  CALL @x64_emitn
+  CALL @x64_flags_z
+  JMP @x64_fp_done
+
+x64_fp_cmp:
+  MOVI r2,0x2E0F
+  MOVHI r2,0x00C1
+  MOVI r3,3
+  CALL @x64_emitn
+  MOVI r2,0x940F
+  MOVHI r2,0x00C2
+  MOVI r3,3
+  CALL @x64_emitn
+  MOVI r2,0x920F
+  MOVHI r2,0x00C1
+  MOVI r3,3
+  CALL @x64_emitn
+  MOVI r2,0x9A0F
+  MOVHI r2,0x00C0
+  MOVI r3,3
+  CALL @x64_emitn
+  MOVI r2,0xB60F
+  MOVHI r2,0x00D2
+  MOVI r3,3
+  CALL @x64_emitn
+  MOVI r2,0xB60F
+  MOVHI r2,0x00C9
+  MOVI r3,3
+  CALL @x64_emitn
+  MOVI r2,0xB60F
+  MOVHI r2,0x00C0
+  MOVI r3,3
+  CALL @x64_emitn
+  MOVI r2,0xD201
+  MOVHI r2,0x0000
+  MOVI r3,2
+  CALL @x64_emitn
+  MOVI r2,0xCA01
+  MOVHI r2,0x0000
+  MOVI r3,2
+  CALL @x64_emitn
+  MOVI r2,0x01BF
+  MOVHI r2,0x0000
+  MOVI r3,4
+  CALL @x64_emitn
+  MOVI r2,0x0000
+  MOVHI r2,0x0000
+  MOVI r3,1
+  CALL @x64_emitn
+  MOVI r2,0xD189
+  MOVHI r2,0x0000
+  MOVI r3,2
+  CALL @x64_emitn
+  MOVI r2,0xE7D3
+  MOVHI r2,0x0000
+  MOVI r3,2
+  CALL @x64_emitn
+  MOVI r2,0xC085
+  MOVHI r2,0x0000
+  MOVI r3,2
+  CALL @x64_emitn
+  MOVI r2,0x08B9
+  MOVHI r2,0x0000
+  MOVI r3,4
+  CALL @x64_emitn
+  MOVI r2,0x0000
+  MOVHI r2,0x0000
+  MOVI r3,1
+  CALL @x64_emitn
+  MOVI r2,0x450F
+  MOVHI r2,0x00F9
+  MOVI r3,3
+  CALL @x64_emitn
+  MOVI r2,0x3C89
+  MOVHI r2,0x0025
+  MOVI r3,3
+  CALL @x64_emitn
+  LA r2,#X64_FLAGM
+  CALL @x64_32
+
+x64_fp_done:
   SUB r14,r14,r13
   LD r15,r14,0
   RET

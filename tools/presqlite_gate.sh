@@ -80,6 +80,8 @@ if [ -f tools/mkall.sh ]; then
   [ -f tools/qgate64prog.sh ] && run qgate64prog sh tools/qgate64prog.sh
   [ -f tools/qgate64mul.sh ] && run qgate64mul sh tools/qgate64mul.sh
   [ -f tools/qgate64div.sh ] && run qgate64div sh tools/qgate64div.sh
+  [ -f tools/qgate64fp.sh ] && run qgate64fp sh tools/qgate64fp.sh
+  [ -f tools/qgate64fpe.sh ] && run qgate64fpe sh tools/qgate64fpe.sh
   [ -f tools/qgate64call.sh ] && run qgate64call sh tools/qgate64call.sh
 fi
 

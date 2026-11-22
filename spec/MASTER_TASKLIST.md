@@ -76,8 +76,11 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done and gated.
       The native dispatcher now rescans its table after each block.
 - [x] MUL/MULH/MULHU, BOOL, DIV/MOD/DIVU/MODU with exact zero/-1 and
       zero-divisor semantics; `qgate64mul` (0x2D), `qgate64div` (0x37).
+- [x] Scalar FP: FADD/FSUB/FMUL/FDIV/FSQRT/FCMP/CVTIF/CVTFI with exact
+      NaN, zero-divisor, clamp and unordered-compare semantics;
+      `qgate64fp`, `qgate64fpe`.  SSE enabled in the substrate.
 - [ ] Full NaN-coded 64-bit core: LDN/STW/BSWAPM, BCOPY/BFILL, traps,
-      scalar FP, vector families, guest loader and self-hosting.
+      vector families, guest loader and self-hosting.
 - [ ] Port the native NaN16 execution core to 64-bit (`kan64`) only where the
       bootstrap/EXECN substrate requires it; core policy stays NaN.
 - [ ] 64-bit native shims for ports, CPUID, RDTSC, MSRs, page tables.

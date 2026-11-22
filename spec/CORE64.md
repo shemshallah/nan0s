@@ -42,11 +42,14 @@ The emitted x86-64 uses SIB absolute `disp32` addressing, e.g.
 Current NaN encoder coverage: MOVI, MOVHI, ADD, SUB, ADDI, SHL, SHR, SAR,
 CMP/CMPS, FLAGM, JMP[cond], LD/ST, LDB/STB (word/byte guest memory at
 G=0x200000 with the mask at 0x50404), set-XPC, HALT, RET, JMPR, CALL,
-CALLR, NOP, BOOL, MUL/MULH/MULHU, DIV/MOD/DIVU/MODU.  Gates:
+CALLR, NOP, BOOL, MUL/MULH/MULHU, DIV/MOD/DIVU/MODU, FADD/FSUB/FMUL/
+FDIV/FSQRT/FCMP/CVTIF/CVTFI.  Gates:
 `qgate64core`, `qgate64block`, `qgate64alu`, `qgate64branch`,
 `qgate64mem` (0x12345678), `qgate64byte` (0xAB), `qgate64call`
 (CALL/RET across blocks, r1=16), `qgate64mul` (MUL/BOOL/MULHU, r1=0x2D),
-`qgate64div` (signed/unsigned DIV/MOD with zero divisors, r1=0x37).
+`qgate64div` (signed/unsigned DIV/MOD with zero divisors, r1=0x37),
+`qgate64fp` (FP quartet/sqrt/cvt/cmp, XPC=0x200) and `qgate64fpe`
+(0/0, sqrt(-1), +-inf conversions, r1=0x2D).
 
 ## Multi-block dispatch
 
@@ -80,6 +83,13 @@ rather than continuing from the matched entry.  Block images are copied in
 Division is branchless: a zero or -1 divisor is replaced by 1, the
 architectural result is selected with `cmov`, and `k=3` is forced when the
 divisor is zero.  This avoids x86 #DE without a native helper.
+
+Scalar FP uses SSE (`addss`/`subss`/`mulss`/`divss`/`sqrtss`,
+`cvtsi2ss`/`cvttss2si`, `ucomiss`) with branchless post-checks matching the
+reference: div-by-zero and negative-sqrt NaNs become `0x7FC00000`, CVTFI
+clamps to INT_MAX/INT_MIN and maps NaN to 0, and FCMP forces `k=3` for
+unordered operands.  The substrate sets CR4.OSFXSR/OSXMMEXCPT and clears
+CR0.EM so SSE is usable in long mode.
 
 Next: LDN/STW/BSWAPM, BCOPY/BFILL, traps, scalar FP, the vector families,
 a guest loader that preserves NaN header predicates, and self-hosting.

@@ -31,7 +31,7 @@ _start:
     jb 1b
     lgdt gdtr
     mov %cr4, %eax
-    or $0x20, %eax
+    or $0x620, %eax          /* PAE | OSFXSR | OSXMMEXCPT */
     mov %eax, %cr4
     mov $0x30000, %eax
     mov %eax, %cr3
@@ -40,7 +40,8 @@ _start:
     or $0x100, %eax
     wrmsr
     mov %cr0, %eax
-    or $0x80000000, %eax
+    and $0xFFFFFFFB, %eax    /* clear EM */
+    or $0x80000002, %eax     /* PG | MP */
     mov %eax, %cr0
     ljmp $0x08, $long_mode
 
