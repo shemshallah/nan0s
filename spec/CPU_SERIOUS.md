@@ -78,8 +78,8 @@ new x86 line unless a new *primitive* is missing.
 - [ ] Decoded block cache: decode once, validate once, execute tokens.
 - [ ] Superinstruction fusion in the decoded stream: common
       `LD/ST/LDB/STB` + `ADD/SUB/CMP/JMP` pairs, FMA-shaped float pairs.
-- [x] Native scalar vector handlers: VZERO/VBCAST/VDP4B/VGET/VSET.
-- [ ] SIMD vector lowering (SSE2/AVX2/AVX-512/NEON/RVV) with CPUID steer.
+- [x] Native vector handlers for the full 0x50-0x5F family; VDP4B uses SSE2.
+- [ ] AVX2/AVX-512/NEON/RVV lowerings and CPUID feature steer.
 - [ ] Native block chaining for loop back-edges; step budget exact.
 - [ ] Baseline NaN->x86 translator for hot blocks, driven by the NaN-native
       translator (`src/translate/x86.nas`) through a single `EXECN` shim.
@@ -98,8 +98,8 @@ the JIT from becoming a second hidden operating system.
       int32, exact integer, Z/L flags.
 - [x] 512-bit abstract vector family (0x50-0x5F): 16 vector registers,
       VZERO/VBCAST/VLOAD/VSTORE, packed-i8/i32 add/sub/mul, VDP4B (16 lanes,
-      64 MACs), VGET/VSET. C reference exact; native scalar VZERO/VBCAST/
-      VDP4B/VGET/VSET exact on bare x86. SIMD lowering is the next step.
+      64 MACs), VGET/VSET. C reference exact; the full family is exact on
+      bare x86, with VDP4B lowered to SSE2. Wider SIMD is the next step.
 - [ ] `FMA d,a,b`: fused f32 `d = a*b + d`, one rounding, explicitly gated
       against the libm/donut vectors.
 - [ ] `DP2H d,a,b`: two f16 lanes, dot to f32 (after DP4B is proven).

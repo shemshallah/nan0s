@@ -919,15 +919,42 @@ h_vdp4b:
   AND $15,%EBX
   SHL $6,%EBX
   ADD $VREG,%EBX
-  MOV $16,%ECX
+  MOV $4,%ECX
 vdp_l:
-  MOV [ESI],%EAX
-  MOV [EDI],%EDX
-  CALL @v_dot4
-  MOV %EAX,[EBX]
-  ADD $4,%ESI
-  ADD $4,%EDI
-  ADD $4,%EBX
+  .byte 0xF3,0x0F,0x6F,0x06      ; movdqu xmm0,[esi]
+  .byte 0xF3,0x0F,0x6F,0x17      ; movdqu xmm2,[edi]
+  .byte 0x66,0x0F,0xEF,0xE4      ; pxor xmm4,xmm4
+  .byte 0x66,0x0F,0x6F,0xC8      ; movdqa xmm1,xmm0
+  .byte 0x66,0x0F,0x64,0xE1      ; pcmpgtb xmm4,xmm1 (negative mask)
+  .byte 0x66,0x0F,0x60,0xCC      ; punpcklbw xmm1,xmm4 (A low words)
+  .byte 0x66,0x0F,0xEF,0xED      ; pxor xmm5,xmm5
+  .byte 0x66,0x0F,0x6F,0xDA      ; movdqa xmm3,xmm2
+  .byte 0x66,0x0F,0x64,0xEB      ; pcmpgtb xmm5,xmm3
+  .byte 0x66,0x0F,0x60,0xDD      ; punpcklbw xmm3,xmm5 (B low words)
+  .byte 0x66,0x0F,0xF5,0xCB      ; pmaddwd xmm1,xmm3
+  .byte 0x66,0x0F,0x6F,0xF1      ; movdqa xmm6,xmm1
+  .byte 0x66,0x0F,0x70,0xF6,0xB1 ; pshufd xmm6,xmm6,0xb1
+  .byte 0x66,0x0F,0xFE,0xCE      ; paddd xmm1,xmm6
+  .byte 0x66,0x0F,0x70,0xC9,0x08 ; pshufd xmm1,xmm1,0x08
+  .byte 0x66,0x0F,0x6F,0xF1      ; movdqa xmm6,xmm1 (save low lanes)
+  .byte 0x66,0x0F,0xEF,0xE4      ; pxor xmm4,xmm4
+  .byte 0x66,0x0F,0x6F,0xC8      ; movdqa xmm1,xmm0
+  .byte 0x66,0x0F,0x64,0xE1      ; pcmpgtb xmm4,xmm1
+  .byte 0x66,0x0F,0x68,0xCC      ; punpckhbw xmm1,xmm4 (A high words)
+  .byte 0x66,0x0F,0xEF,0xED      ; pxor xmm5,xmm5
+  .byte 0x66,0x0F,0x6F,0xDA      ; movdqa xmm3,xmm2
+  .byte 0x66,0x0F,0x64,0xEB      ; pcmpgtb xmm5,xmm3
+  .byte 0x66,0x0F,0x68,0xDD      ; punpckhbw xmm3,xmm5 (B high words)
+  .byte 0x66,0x0F,0xF5,0xCB      ; pmaddwd xmm1,xmm3
+  .byte 0x66,0x0F,0x6F,0xF9      ; movdqa xmm7,xmm1
+  .byte 0x66,0x0F,0x70,0xFF,0xB1 ; pshufd xmm7,xmm7,0xb1
+  .byte 0x66,0x0F,0xFE,0xCF      ; paddd xmm1,xmm7
+  .byte 0x66,0x0F,0x70,0xC9,0x08 ; pshufd xmm1,xmm1,0x08
+  .byte 0x66,0x0F,0x6C,0xF1      ; punpcklqdq xmm6,xmm1 (low,high)
+  .byte 0xF3,0x0F,0x7F,0x33      ; movdqu [ebx],xmm6
+  ADD $16,%ESI
+  ADD $16,%EDI
+  ADD $16,%EBX
   DEC %ECX
   JNZ @vdp_l
   POP %EBP
@@ -935,56 +962,6 @@ vdp_l:
   POP %EDI
   POP %ESI
   JMP @loop
-v_dot4:
-  PUSH %EBX
-  PUSH %ESI
-  PUSH %EDI
-  PUSH %EBP
-  XOR %EBP,%EBP
-  MOV %EAX,%EBX
-  SHL $24,%EBX
-  SAR $24,%EBX
-  MOV %EDX,%ESI
-  SHL $24,%ESI
-  SAR $24,%ESI
-  IMUL %ESI,%EBX
-  ADD %EBX,%EBP
-  SHR $8,%EAX
-  SHR $8,%EDX
-  MOV %EAX,%EBX
-  SHL $24,%EBX
-  SAR $24,%EBX
-  MOV %EDX,%ESI
-  SHL $24,%ESI
-  SAR $24,%ESI
-  IMUL %ESI,%EBX
-  ADD %EBX,%EBP
-  SHR $8,%EAX
-  SHR $8,%EDX
-  MOV %EAX,%EBX
-  SHL $24,%EBX
-  SAR $24,%EBX
-  MOV %EDX,%ESI
-  SHL $24,%ESI
-  SAR $24,%ESI
-  IMUL %ESI,%EBX
-  ADD %EBX,%EBP
-  SHR $8,%EAX
-  SHR $8,%EDX
-  MOV %EAX,%EBX
-  SHL $24,%EBX
-  SAR $24,%EBX
-  MOV %EDX,%ESI
-  SHL $24,%ESI
-  SAR $24,%ESI
-  IMUL %ESI,%EBX
-  ADD %EBX,%EBP
-  MOV %EBP,%EAX
-  POP %EBP
-  POP %EDI
-  POP %ESI
-  POP %EBX
-  RET
 h_vget:
   MOV %EAX,%ECX
   SHR $16,%ECX
