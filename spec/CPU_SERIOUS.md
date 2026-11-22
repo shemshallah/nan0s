@@ -111,6 +111,8 @@ them stays NaN.
       by the S0 allocator.
 - [x] `src/lib/narena64.nas`: 64-bit `(lo,hi)` arena, 64-bit mark/release,
       4 GiB-crossing pointer test.
+- [x] `src/lib/nten.nas`: 64-bit tensor descriptors and path arithmetic with
+      64-bit strides and a 4 GiB crossing.
 - [x] `src/lib/nmat.nas` `nmat_dot64`: DP4B into a signed 64-bit accumulator,
       proven past 2^32 and on negative vectors.
 - [ ] NaN task scheduler: contexts, run queue, yield via a primitive. One
@@ -126,6 +128,7 @@ them stays NaN.
 - `tools/narena.sh`: alignment, overlap, mark/release, reset, exhaustion. Done.
 - `tools/narena64.sh`: 64-bit arena, high-half base, 4 GiB crossing. Done.
 - `tools/nmat64.sh`: DP4B into a 64-bit accumulator past 2^32. Done.
+- `tools/nten.sh`: 64-bit tensor paths, 64-bit strides, 4 GiB crossing. Done.
 - `tools/ncc_aligned.sh`: `aligned_alloc` 16/32/64, writes, free, realloc. Done.
 - `tools/cpu_bench.sh`: one NaN program, measured on the C core and the
   native x86 core; prints guest steps and wall time. Thresholds are recorded,
