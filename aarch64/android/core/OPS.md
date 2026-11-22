@@ -3,7 +3,7 @@ Authority: kan16.xa (AT&T order: `MOV src,dst`). Every line below was re-read ag
 this round. Items marked [FIX] correct the first draft of this file.
 
 ## Image / memory
-- build/nan0s.img: boot sector 0-511, kernel 512-8703, guest words from byte 0x2200 (8704). The guest word count is a little-endian u32 at byte 504; images may be smaller or larger than 1,474,560 bytes (up to the VM's runtime word count; `nan_create_words` defaults to 32M words).
+- build/nan0s.img: boot sector 0-511, kernel 512-66047 (128-sector window), guest words from byte 0x10200 (66048). The guest word count is a little-endian u32 at byte 504; images may be smaller or larger than 1,474,560 bytes (up to the VM's runtime word count; `nan_create_words` defaults to 32M words).
   (524,288 B). The portable core copies them to guest word 0 with a runtime mask; the x86 kernel still has its own fixed map.
 - Word = 8 raw bytes: b0-1 FAR head (big-endian u16), b2-5 payload (LE u32), b6-7 NEAR head (LE u16).
   Heads: 0x7FF1,0xFFF1,0x7FF8,0xFFF8 = class 0..3. Valid iff (h&0x7FF0)==0x7FF0 and (h&15) is 1 or 8.
@@ -51,8 +51,8 @@ Trap text: "!" + 'G'|'O' + uppercase hex of (pc after the fetch increment), min 
 54 VADD8 d,a,b | 55 VSUB8 | 56 VADD32 | 57 VSUB32 | 58 VMUL32
 59 VDP4B d,a,b (16 lanes, 64 MACs) | 5E VGET d,a,lane | 5F VSET d,a,lane
 The V family uses 16 x 512-bit vector registers.  The bare x86 core
-lowers VDP4B with a runtime-selected AVX2 (256-bit) or SSE2 path, the
-packed add/sub/mul family with SSE2, and VLOAD/VSTORE with an aligned
+lowers VDP4B and the packed VADD8/VSUB8/VADD32/VSUB32/VMUL32 family with
+a runtime-selected AVX2 (256-bit) or SSE2 path, and VLOAD/VSTORE with an aligned
 SSE2 gather/scatter fast path plus an exact byte-loop fallback.  The scalar
 handlers remain as the fallback tier; AVX2/AVX-512/NEON/RVV are next.
 4B-4F and 60-7F are reserved for wider (1024/2048-bit) and fp8/int4 forms,

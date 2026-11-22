@@ -83,8 +83,9 @@ results. The packed `VADD8/VSUB8` (`paddb/psubb`), `VADD32/VSUB32`
 SSE2, four 128-bit chunks per 512-bit register. `VLOAD/VSTORE` gather and
 scatter four payload dwords per SSE2 step when the guest address is
 aligned and outside the RAW window, with the exact byte loop as fallback. The native core detects XSAVE+AVX+AVX2 at boot, enables CR4.OSXSAVE and
-XCR0=7, and selects a 256-bit AVX2 `VDP4B` tier when available (two
-chunks per 512-bit register); SSE2 remains the fallback.  AVX-512 can
+XCR0=7, and selects 256-bit AVX2 tiers for `VDP4B` and the packed add/sub/mul
+family when available (two chunks per 512-bit register); SSE2 remains the
+fallback.  AVX-512 can
 widen the same lowering; NEON/RVV use their own dot instructions. The C core remains
 the exact reference.
 

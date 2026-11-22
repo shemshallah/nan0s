@@ -1685,7 +1685,7 @@ tbl:
   .long @h_fbinfo,@h_vsync,@h_fbcopy,@h_fbfill,@h_outb,@h_inb,@h_inw,@h_outw,@h_outsw,@h_outl,@h_cpuid,@h_rdtsc
   .long @badop,@badop,@badop,@badop,@h_dp4b
   .long @badop,@badop,@badop,@badop,@badop
-  .long @h_vzero,@h_vbcast,@h_vload_sse2,@h_vstore_sse2,@h_vadd8_sse2,@h_vsub8_sse2,@h_vadd32_sse2,@h_vsub32_sse2,@h_vmul32_sse2,@h_vdp4b_disp,@badop,@badop,@badop,@badop,@h_vget,@h_vset
+  .long @h_vzero,@h_vbcast,@h_vload_sse2,@h_vstore_sse2,@h_vadd8_disp,@h_vsub8_disp,@h_vadd32_disp,@h_vsub32_disp,@h_vmul32_disp,@h_vdp4b_disp,@badop,@badop,@badop,@badop,@h_vget,@h_vset
   .long @h_codelen,@h_execn
 
 
@@ -1755,10 +1755,10 @@ ms_store:
   POP %EBX
   RET
 
-; ---- r27: ATA guest loader (kernel+0x1900, 174 bytes) --------
+; ---- r27: ATA guest loader (kernel+0x1900, 174 bytes; guest LBA 129) ----
 ; The gold bytes are authoritative. The routine selects the primary master,
-; reads ceil(LMAX/64) sectors from LBA 17 into flat guest memory G, and
-; falls back to the floppy-staged 512 KiB copy when no IDE disk answers.
+; reads ceil(LMAX/64) sectors from LBA 129 into flat guest memory G, and
+; falls back to the floppy-staged 512 KiB copy at 0x20000 when no IDE answers.
 .org 0x1900
 ; ATA guest loader at kernel+0x1900: authoritative gold bytes (the source form did not
 ; reproduce the branch-relaxed encoding; nasm1 output is verified by
@@ -1767,13 +1767,13 @@ ata_load_guest:
   .byte 0x66,0xBA,0xF6,0x01,0xB0,0xA0,0xEE,0x66,0xBA,0xF7,0x01,0xEC,0xEC,0xEC,0xEC,0xEC
   .byte 0x3C,0x00,0x0F,0x84,0x80,0x00,0x00,0x00,0x3C,0xFF,0x74,0x7C,0xA1,0xF8,0x7D,0x00
   .byte 0x00,0x85,0xC0,0x74,0x73,0x83,0xC0,0x3F,0xC1,0xE8,0x06,0xA3,0x5A,0x17,0x01,0x00
-  .byte 0xBB,0x11,0x00,0x00,0x00,0xBF,0x00,0x00,0x20,0x00,0x89,0xD8,0xC1,0xE8,0x18,0x24
+  .byte 0xBB,0x81,0x00,0x00,0x00,0xBF,0x00,0x00,0x20,0x00,0x89,0xD8,0xC1,0xE8,0x18,0x24
   .byte 0x0F,0x0C,0xE0,0x66,0xBA,0xF6,0x01,0xEE,0x66,0xBA,0xF7,0x01,0xEC,0xEC,0xEC,0xEC
   .byte 0x66,0xBA,0xF2,0x01,0xB0,0x01,0xEE,0x66,0xBA,0xF3,0x01,0x89,0xD8,0xEE,0x66,0xBA
   .byte 0xF4,0x01,0x89,0xD8,0xC1,0xE8,0x08,0xEE,0x66,0xBA,0xF5,0x01,0x89,0xD8,0xC1,0xE8
   .byte 0x10,0xEE,0x66,0xBA,0xF7,0x01,0xB0,0x20,0xEE,0xEC,0xA8,0x80,0x75,0xFB,0xEC,0xA8
   .byte 0x08,0x74,0xFB,0x66,0xBA,0xF0,0x01,0xB9,0x80,0x00,0x00,0x00,0xF3,0x6D,0x43,0xFF
-  .byte 0x0D,0x5A,0x17,0x01,0x00,0x75,0xA3,0xC3,0xBE,0x00,0x20,0x01,0x00,0xBF,0x00,0x00
+  .byte 0x0D,0x5A,0x17,0x01,0x00,0x75,0xA3,0xC3,0xBE,0x00,0x00,0x02,0x00,0xBF,0x00,0x00
   .byte 0x20,0x00,0xB9,0x00,0x00,0x02,0x00,0xF3,0xA5,0xC3,0x00,0x00,0x00,0x00
 
 ; ---- SSE2 tier for the packed vector arithmetic (appended after the
@@ -2151,6 +2151,220 @@ vdp_a_l:
   ADD $32,%EBX
   DEC %ECX
   JNZ @vdp_a_l
+  .byte 0xC5,0xF8,0x77           ; vzeroupper
+  POP %EBP
+  POP %EBX
+  POP %EDI
+  POP %ESI
+  JMP @loop
+
+; ---- AVX2 packed arithmetic and runtime dispatch ----
+h_vadd8_disp:
+  MOVZXB [AVX2F],%EDX
+  TEST %EDX,%EDX
+  JNZ @h_vadd8_avx2
+  JMP @h_vadd8_sse2
+h_vsub8_disp:
+  MOVZXB [AVX2F],%EDX
+  TEST %EDX,%EDX
+  JNZ @h_vsub8_avx2
+  JMP @h_vsub8_sse2
+h_vadd32_disp:
+  MOVZXB [AVX2F],%EDX
+  TEST %EDX,%EDX
+  JNZ @h_vadd32_avx2
+  JMP @h_vadd32_sse2
+h_vsub32_disp:
+  MOVZXB [AVX2F],%EDX
+  TEST %EDX,%EDX
+  JNZ @h_vsub32_avx2
+  JMP @h_vsub32_sse2
+h_vmul32_disp:
+  MOVZXB [AVX2F],%EDX
+  TEST %EDX,%EDX
+  JNZ @h_vmul32_avx2
+  JMP @h_vmul32_sse2
+h_vadd8_avx2:
+  PUSH %ESI
+  PUSH %EDI
+  PUSH %EBX
+  PUSH %EBP
+  MOV %EAX,%ESI
+  SHR $16,%ESI
+  AND $15,%ESI
+  SHL $6,%ESI
+  ADD $VREG,%ESI
+  MOV %EAX,%EBX
+  AND $15,%EBX
+  SHL $6,%EBX
+  ADD $VREG,%EBX
+  MOV %EAX,%EDI
+  SHR $20,%EDI
+  AND $15,%EDI
+  SHL $6,%EDI
+  ADD $VREG,%EDI
+  MOV $2,%ECX
+va8a_l:
+  .byte 0xC5,0xFE,0x6F,0x06      ; vmovdqu ymm0,[esi]
+  .byte 0xC5,0xFE,0x6F,0x0B      ; vmovdqu ymm1,[ebx]
+  .byte 0xC5,0xFD,0xFC,0xC1      ; vpaddb ymm0,ymm0,ymm1
+  .byte 0xC5,0xFE,0x7F,0x07      ; vmovdqu [edi],ymm0
+  ADD $32,%ESI
+  ADD $32,%EBX
+  ADD $32,%EDI
+  DEC %ECX
+  JNZ @va8a_l
+  .byte 0xC5,0xF8,0x77           ; vzeroupper
+  POP %EBP
+  POP %EBX
+  POP %EDI
+  POP %ESI
+  JMP @loop
+h_vsub8_avx2:
+  PUSH %ESI
+  PUSH %EDI
+  PUSH %EBX
+  PUSH %EBP
+  MOV %EAX,%ESI
+  SHR $16,%ESI
+  AND $15,%ESI
+  SHL $6,%ESI
+  ADD $VREG,%ESI
+  MOV %EAX,%EBX
+  AND $15,%EBX
+  SHL $6,%EBX
+  ADD $VREG,%EBX
+  MOV %EAX,%EDI
+  SHR $20,%EDI
+  AND $15,%EDI
+  SHL $6,%EDI
+  ADD $VREG,%EDI
+  MOV $2,%ECX
+vs8a_l:
+  .byte 0xC5,0xFE,0x6F,0x06
+  .byte 0xC5,0xFE,0x6F,0x0B
+  .byte 0xC5,0xFD,0xF8,0xC1      ; vpsubb
+  .byte 0xC5,0xFE,0x7F,0x07
+  ADD $32,%ESI
+  ADD $32,%EBX
+  ADD $32,%EDI
+  DEC %ECX
+  JNZ @vs8a_l
+  .byte 0xC5,0xF8,0x77           ; vzeroupper
+  POP %EBP
+  POP %EBX
+  POP %EDI
+  POP %ESI
+  JMP @loop
+h_vadd32_avx2:
+  PUSH %ESI
+  PUSH %EDI
+  PUSH %EBX
+  PUSH %EBP
+  MOV %EAX,%ESI
+  SHR $16,%ESI
+  AND $15,%ESI
+  SHL $6,%ESI
+  ADD $VREG,%ESI
+  MOV %EAX,%EBX
+  AND $15,%EBX
+  SHL $6,%EBX
+  ADD $VREG,%EBX
+  MOV %EAX,%EDI
+  SHR $20,%EDI
+  AND $15,%EDI
+  SHL $6,%EDI
+  ADD $VREG,%EDI
+  MOV $2,%ECX
+va32a_l:
+  .byte 0xC5,0xFE,0x6F,0x06
+  .byte 0xC5,0xFE,0x6F,0x0B
+  .byte 0xC5,0xFD,0xFE,0xC1      ; vpaddd
+  .byte 0xC5,0xFE,0x7F,0x07
+  ADD $32,%ESI
+  ADD $32,%EBX
+  ADD $32,%EDI
+  DEC %ECX
+  JNZ @va32a_l
+  .byte 0xC5,0xF8,0x77           ; vzeroupper
+  POP %EBP
+  POP %EBX
+  POP %EDI
+  POP %ESI
+  JMP @loop
+h_vsub32_avx2:
+  PUSH %ESI
+  PUSH %EDI
+  PUSH %EBX
+  PUSH %EBP
+  MOV %EAX,%ESI
+  SHR $16,%ESI
+  AND $15,%ESI
+  SHL $6,%ESI
+  ADD $VREG,%ESI
+  MOV %EAX,%EBX
+  AND $15,%EBX
+  SHL $6,%EBX
+  ADD $VREG,%EBX
+  MOV %EAX,%EDI
+  SHR $20,%EDI
+  AND $15,%EDI
+  SHL $6,%EDI
+  ADD $VREG,%EDI
+  MOV $2,%ECX
+vs32a_l:
+  .byte 0xC5,0xFE,0x6F,0x06
+  .byte 0xC5,0xFE,0x6F,0x0B
+  .byte 0xC5,0xFD,0xFA,0xC1      ; vpsubd
+  .byte 0xC5,0xFE,0x7F,0x07
+  ADD $32,%ESI
+  ADD $32,%EBX
+  ADD $32,%EDI
+  DEC %ECX
+  JNZ @vs32a_l
+  .byte 0xC5,0xF8,0x77           ; vzeroupper
+  POP %EBP
+  POP %EBX
+  POP %EDI
+  POP %ESI
+  JMP @loop
+h_vmul32_avx2:
+  PUSH %ESI
+  PUSH %EDI
+  PUSH %EBX
+  PUSH %EBP
+  MOV %EAX,%ESI
+  SHR $16,%ESI
+  AND $15,%ESI
+  SHL $6,%ESI
+  ADD $VREG,%ESI
+  MOV %EAX,%EBX
+  AND $15,%EBX
+  SHL $6,%EBX
+  ADD $VREG,%EBX
+  MOV %EAX,%EDI
+  SHR $20,%EDI
+  AND $15,%EDI
+  SHL $6,%EDI
+  ADD $VREG,%EDI
+  MOV $2,%ECX
+vm32a_l:
+  .byte 0xC5,0xFE,0x6F,0x06      ; vmovdqu ymm0,[esi]
+  .byte 0xC5,0xFE,0x6F,0x1B      ; vmovdqu ymm3,[ebx]
+  .byte 0xC5,0xFD,0x6F,0xD0      ; vmovdqa ymm2,ymm0
+  .byte 0xC5,0xFD,0xF4,0xC3      ; vpmuludq ymm0,ymm0,ymm3
+  .byte 0xC5,0xED,0x73,0xD2,0x20 ; vpsrlq ymm2,ymm2,32
+  .byte 0xC5,0xE5,0x73,0xD3,0x20 ; vpsrlq ymm3,ymm3,32
+  .byte 0xC5,0xED,0xF4,0xD3      ; vpmuludq ymm2,ymm2,ymm3
+  .byte 0xC5,0xFD,0x70,0xC0,0x08 ; vpshufd ymm0,ymm0,0x08
+  .byte 0xC5,0xFD,0x70,0xD2,0x08 ; vpshufd ymm2,ymm2,0x08
+  .byte 0xC5,0xFD,0x62,0xC2      ; vpunpckldq ymm0,ymm0,ymm2
+  .byte 0xC5,0xFE,0x7F,0x07      ; vmovdqu [edi],ymm0
+  ADD $32,%ESI
+  ADD $32,%EBX
+  ADD $32,%EDI
+  DEC %ECX
+  JNZ @vm32a_l
   .byte 0xC5,0xF8,0x77           ; vzeroupper
   POP %EBP
   POP %EBX

@@ -16,4 +16,4 @@ sed -e 's/^\[nan_cli\].*$//' -e '/^$/d' "$T/f.com" > "$T/f.got"
 cmp -s "$T/f.got" src/tests/avx2_feature.expected || { echo "nan_vec_avx2: FAIL (tier not active)"; cat "$T/f.got"; exit 1; }
 QEMU_CPU=max sh tools/nan_vec.sh
 QEMU_CPU=max sh tools/nan_vec_native.sh
-echo "nan_vec_avx2: PASS (feature bit set, AVX2 VDP4B lanes exact)"
+echo "nan_vec_avx2: PASS (feature bit set, AVX2 VDP4B + packed ALU lanes exact)"

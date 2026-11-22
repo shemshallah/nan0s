@@ -3,7 +3,7 @@
 #   gawk -f tools/mkimg.awk -v GOLD=x86/native/nan16_x86.nan -v GUEST=src/nan/museum.nan \
 #        -v CARTS=tools/carts.txt -v OUTB=$T/n0sb.bin -v OUTG=$T/n0sg.bin
 # mkall.sh then: cat OUTB OUTG > img; truncate -s 1474560 img.
-# Layout: bytes 0-511 boot, 512-8703 kernel (gold, zero-padded), then guest words
+# Layout: bytes 0-511 boot, 512-66047 kernel (gold, zero-padded to 128 sectors), then guest words
 # (8 bytes each: far head hi,lo = NEAR[n&3], payload LE, near head lo,hi = NEAR[n>>2]),
 # zero-padded to 524288, then zero-padded to 1474560 total.
 BEGIN {
@@ -21,7 +21,7 @@ BEGIN {
     if (hx != "") for (j = 1; j <= length(hx); j += 2) GBY[NGB++] = hexv(substr(hx,j,2))
   }
   close(GOLD)
-  if (NGB < 6320 || NGB > 8704) die("gold stream is " NGB " bytes, expected 6320..8704")
+  if (NGB < 6320 || NGB > 66048) die("gold stream is " NGB " bytes, expected 6320..66048")
   # ---- guest program words ----
   LMAX = loadguest(GUEST)
   if (LMAX == 0) die("no guest words in " GUEST)
@@ -106,7 +106,7 @@ BEGIN {
   if (LMAX < 4096) LMAX = 4096
   # arbitrary guest sizes, bounded only by the VM's word space
   if (LMAX > 4000000) die("guest image " LMAX " words exceeds the VM memory")
-  # ---- boot + kernel binary (8704 bytes: 512 boot, kernel zero-padded to 8192) ----
+  # ---- boot + kernel binary (66048 bytes: 512 boot, kernel zero-padded to 65536) ----
   s = ""
   for (i = 0; i < 512; i++){
     b = i < NGB ? GBY[i] : 0
@@ -114,7 +114,7 @@ BEGIN {
     if (i >= 504 && i < 508) b = int(LMAX / (2^(8*(i-504)))) % 256
     s = s sprintf("%c", b)
   }
-  for (i = 512; i < 8704; i++) s = s sprintf("%c", i < NGB ? GBY[i] : 0)
+  for (i = 512; i < 66048; i++) s = s sprintf("%c", i < NGB ? GBY[i] : 0)
   printf "%s", s > OUTB
   # ---- guest region binary (8*LMAX bytes) ----
   s = ""

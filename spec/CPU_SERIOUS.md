@@ -73,6 +73,10 @@ new x86 line unless a new *primitive* is missing.
 
 ### 3.1 Native core (allowed to be x86)
 
+The boot loader reserves a **128-sector (64 KiB) kernel window**; the guest
+image starts at LBA 129 and is staged at 0x20000.  The kernel can grow to
+64 KiB without moving the guest ABI again.
+
 - [x] Runtime word count and mask (`mem_size`, CPUID `0x4E4D00FF`).
 - [x] Dynamic C address space and 100 MB heap.
 - [ ] Decoded block cache: decode once, validate once, execute tokens.
@@ -86,9 +90,10 @@ new x86 line unless a new *primitive* is missing.
       fallback tier.
 - [x] CPUID/XSAVE feature steer: XSAVE+AVX+AVX2 detection, CR4.OSXSAVE,
       XCR0=7, feature bit 8 in the machine query, `vzeroupper` on exit.
-- [x] AVX2 VDP4B tier (two 256-bit chunks, 32 bytes each), selected at
-      runtime; SSE2 remains the fallback.
-- [ ] AVX2 for the remaining packed ops, AVX-512/NEON/RVV lowerings.
+- [x] AVX2 tier for VDP4B and VADD8/VSUB8/VADD32/VSUB32/VMUL32 (two
+      256-bit chunks per 512-bit register), selected at runtime; SSE2
+      remains the fallback.
+- [ ] AVX-512/NEON/RVV lowerings.
 - [ ] Native block chaining for loop back-edges; step budget exact.
 - [x] Baseline NaN->x86 translator for basic blocks: NaN-native encoders
       in `src/translate/x86.nas`, driver in `src/translate/block.nas`,

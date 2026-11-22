@@ -1,6 +1,6 @@
 ; kboot0.xa - NaN/0S boot sector, assembled by nasm1 (the NaN16 x86 emitter).
 ; r26f: INT 15h E820 map -> 0x600 (24 B entries), count word at 0x5FC (0 = BIOS has no E820).
-; BIOS floppy -> load 1040 sectors to 0x10000 -> A20 -> protected mode -> jump to kernel.
+; BIOS floppy -> load 1152 sectors (128 kernel + 1024 guest) to 0x10000 -> A20 -> protected mode -> jump to kernel.
 .base 0x7C00
 .code16
 _start:
@@ -36,7 +36,7 @@ e8d:
   XOR %BX,%BX
   MOV $0x0002,%CX
   XOR %DH,%DH
-  MOV $1040,%SI
+  MOV $1152,%SI
 L1:
   MOV $0x0201,%AX
   MOV [drive],%DL
