@@ -25,3 +25,4 @@ INCORPORATEANDDELETE/
 **/nannetsuite/
 
 aarch64/android/app/src/main/assets/n16_train.nan
+aarch64/android/tests/test_nannet_driver
