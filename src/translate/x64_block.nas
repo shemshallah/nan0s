@@ -560,9 +560,11 @@ xb_done:
   LD r15,r0,@xb_retaddr
   RET
 xb_fail:
-  MOVI r1,0
-  LD r15,r0,@xb_retaddr
-  RET
+  LD r1,r0,@xb_out
+  MOVI r9,0x4F
+  CALL @x64_trap
+  ST r1,r0,@xb_out
+  JMP @xb_ended
 
 xb_retaddr:
   .word 0

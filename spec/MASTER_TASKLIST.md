@@ -82,8 +82,10 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done and gated.
 - [x] LDN/STW/BSWAPM (header classes and byte-swap) and BCOPY/BFILL
       (memmove-safe copy, class-10 fill); `qgate64mem2`,
       `qgate64blockops`.
-- [ ] Full NaN-coded 64-bit core: trap paths, vector families, guest
-      loader that preserves header predicates, and self-hosting.
+- [x] Trap path: unsupported opcodes emit a halt + trap code (0x4F);
+      `qgate64trap`.
+- [ ] Full NaN-coded 64-bit core: vector families, guest loader that
+      preserves header predicates, and self-hosting.
 - [ ] Port the native NaN16 execution core to 64-bit (`kan64`) only where the
       bootstrap/EXECN substrate requires it; core policy stays NaN.
 - [ ] 64-bit native shims for ports, CPUID, RDTSC, MSRs, page tables.

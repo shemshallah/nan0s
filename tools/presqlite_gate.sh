@@ -84,6 +84,7 @@ if [ -f tools/mkall.sh ]; then
   [ -f tools/qgate64fpe.sh ] && run qgate64fpe sh tools/qgate64fpe.sh
   [ -f tools/qgate64mem2.sh ] && run qgate64mem2 sh tools/qgate64mem2.sh
   [ -f tools/qgate64blockops.sh ] && run qgate64blockops sh tools/qgate64blockops.sh
+  [ -f tools/qgate64trap.sh ] && run qgate64trap sh tools/qgate64trap.sh
   [ -f tools/qgate64call.sh ] && run qgate64call sh tools/qgate64call.sh
 fi
 

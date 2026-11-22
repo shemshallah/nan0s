@@ -104,6 +104,13 @@ long_mode:
     call print
     mov 0x50800, %edi
     call print_hex32
+    mov 0x50C04, %edi
+    test %edi, %edi
+    jz 8f
+    lea trapmsg(%rip), %rsi
+    call print
+    call print_hex32
+8:
     lea okmsg(%rip), %rsi
     call print
     cli
@@ -155,5 +162,7 @@ coremsg:
     .asciz "NAN64 CORE "
 xpcmsg:
     .asciz " XPC "
+trapmsg:
+    .asciz " TRAP "
 okmsg:
     .asciz " OK\n"

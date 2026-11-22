@@ -10,6 +10,7 @@
 .equ X64_MASK 0x50404
 .equ X64_G 0x200000
 .equ X64_HALT 0x50C00
+.equ X64_TRAP 0x50C04
 
 ; x64_8: r1=out r2=byte -> r1=out+1
 x64_8:
@@ -2513,6 +2514,36 @@ x64_bfill:
   MOVHI r2,0x00FF
   MOVI r3,3
   CALL @x64_emitn
+  SUB r14,r14,r13
+  LD r15,r14,0
+  RET
+
+; trap: r9 = code.  Store the code at X64_TRAP, set the halt flag, RET.
+x64_trap:
+  ST r15,r14,0
+  ADD r14,r14,r13
+  MOVI r2,0xC7
+  CALL @x64_8
+  MOVI r2,0x04
+  CALL @x64_8
+  MOVI r2,0x25
+  CALL @x64_8
+  LA r2,#X64_TRAP
+  CALL @x64_32
+  ADD r2,r9,r0
+  CALL @x64_32
+  MOVI r2,0xC7
+  CALL @x64_8
+  MOVI r2,0x04
+  CALL @x64_8
+  MOVI r2,0x25
+  CALL @x64_8
+  LA r2,#X64_HALT
+  CALL @x64_32
+  MOVI r2,1
+  CALL @x64_32
+  MOVI r2,0xC3
+  CALL @x64_8
   SUB r14,r14,r13
   LD r15,r14,0
   RET

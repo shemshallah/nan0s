@@ -102,6 +102,7 @@ long_mode:
     movl $0, 0x50800
     movl $0x1FFFFF, 0x50404
     movl $0, 0x50C00
+    movl $0, 0x50C04
 
     /* native mechanical dispatch: table entries are (pc, code) qwords.
        The NaN-emitted blocks update XPC; this loop only looks up and calls. */
@@ -133,6 +134,13 @@ done:
     call print
     mov 0x50800, %edi
     call print_hex32
+    mov 0x50C04, %edi
+    test %edi, %edi
+    jz 8f
+    lea trapmsg(%rip), %rsi
+    call print
+    call print_hex32
+8:
     lea okmsg(%rip), %rsi
     call print
     cli
@@ -184,5 +192,7 @@ coremsg:
     .asciz "NAN64 CORE "
 xpcmsg:
     .asciz " XPC "
+trapmsg:
+    .asciz " TRAP "
 okmsg:
     .asciz " OK\n"
