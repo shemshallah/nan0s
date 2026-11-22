@@ -40,10 +40,11 @@ The emitted x86-64 uses SIB absolute `disp32` addressing, e.g.
 5. requires `NAN64 CORE 00000054 OK` (42+42=84).
 
 Current NaN encoder coverage: MOVI, MOVHI, ADD, SUB, ADDI, SHL, SHR, SAR,
-CMP/CMPS, FLAGM, JMP[cond], LD/ST (guest word memory at G=0x200000 with a
-mask at 0x50404), set-XPC and RET.  Gates: `qgate64core`, `qgate64block`,
-`qgate64alu`, `qgate64branch` (XPC=0x200), `qgate64mem`
-(r1=0x12345678, XPC=0x200).  Next: LDB/STB, traps, the full dispatcher.
+CMP/CMPS, FLAGM, JMP[cond], LD/ST, LDB/STB (word/byte guest memory at
+G=0x200000 with the mask at 0x50404), set-XPC and RET.  Gates:
+`qgate64core`, `qgate64block`, `qgate64alu`, `qgate64branch`,
+`qgate64mem` (0x12345678), `qgate64byte` (0xAB).  Next: LDN/HALT/traps,
+the full dispatcher, vector/FP families and self-hosting.
 
 ## Bootstrap / self-hosting
 

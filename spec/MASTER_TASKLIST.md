@@ -67,8 +67,10 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done and gated.
       fallthrough in XPC; `qgate64branch` (XPC=0x200).
 - [x] 64-bit guest word memory: LD/ST with the mask at 0x50404 and
       G=0x200000; `qgate64mem` (r1=0x12345678 exact).
-- [ ] Full NaN-coded 64-bit core: LDB/STB, traps, the full dispatcher and
-      self-hosting core.
+- [x] 64-bit byte memory: LDB/STB byte addressing over the guest word
+      model; `qgate64byte` (r1=0xAB, XPC=0x200).
+- [ ] Full NaN-coded 64-bit core: LDN/HALT/traps, the full dispatcher,
+      vector/FP families and self-hosting.
 - [ ] Port the native NaN16 execution core to 64-bit (`kan64`) only where the
       bootstrap/EXECN substrate requires it; core policy stays NaN.
 - [ ] 64-bit native shims for ports, CPUID, RDTSC, MSRs, page tables.

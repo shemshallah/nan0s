@@ -64,6 +64,12 @@ xb_loop:
   MOVI r11,9
   CMP r7,r11
   JMP[EQ] @xb_st
+  MOVI r11,0x2A
+  CMP r7,r11
+  JMP[EQ] @xb_ldb
+  MOVI r11,0x2B
+  CMP r7,r11
+  JMP[EQ] @xb_stb
   MOVI r11,7
   CMP r7,r11
   JMP[EQ] @xb_cmp
@@ -191,6 +197,23 @@ xb_st:
   ADD r6,r9,r0
   ADD r7,r10,r0
   CALL @x64_st
+  ST r1,r0,@xb_out
+  JMP @xb_adv
+
+xb_ldb:
+  LD r1,r0,@xb_out
+  ADD r5,r8,r0
+  ADD r6,r9,r0
+  ADD r7,r10,r0
+  CALL @x64_ldb
+  ST r1,r0,@xb_out
+  JMP @xb_adv
+xb_stb:
+  LD r1,r0,@xb_out
+  ADD r5,r8,r0
+  ADD r6,r9,r0
+  ADD r7,r10,r0
+  CALL @x64_stb
   ST r1,r0,@xb_out
   JMP @xb_adv
 xb_adv:

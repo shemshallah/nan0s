@@ -531,6 +531,149 @@ x64_st:
   LD r15,r14,0
   RET
 
+
+; LDB d,a,imm: byte address R[a]+imm; word=(addr>>2)&M; byte=addr&3
+x64_ldb:
+  ST r15,r14,0
+  ADD r14,r14,r13
+  ADD r10,r5,r0
+  ADD r5,r6,r0
+  CALL @x64_load_eax_r
+  ADD r5,r10,r0
+  MOVI r2,0x05
+  CALL @x64_8
+  ADD r2,r7,r0
+  CALL @x64_32
+  MOVI r2,0x89
+  CALL @x64_8
+  MOVI r2,0xC2
+  CALL @x64_8
+  MOVI r2,0x83
+  CALL @x64_8
+  MOVI r2,0xE2
+  CALL @x64_8
+  MOVI r2,0x03
+  CALL @x64_8
+  MOVI r2,0xC1
+  CALL @x64_8
+  MOVI r2,0xE8
+  CALL @x64_8
+  MOVI r2,0x02
+  CALL @x64_8
+  MOVI r2,0x23
+  CALL @x64_8
+  MOVI r2,0x04
+  CALL @x64_8
+  MOVI r2,0x25
+  CALL @x64_8
+  LA r2,#X64_MASK
+  CALL @x64_32
+  MOVI r2,0xC1
+  CALL @x64_8
+  MOVI r2,0xE0
+  CALL @x64_8
+  MOVI r2,0x03
+  CALL @x64_8
+  MOVI r2,0x05
+  CALL @x64_8
+  LA r2,#X64_G
+  CALL @x64_32
+  MOVI r2,0x0F
+  CALL @x64_8
+  MOVI r2,0xB6
+  CALL @x64_8
+  MOVI r2,0x4C
+  CALL @x64_8
+  MOVI r2,0x10
+  CALL @x64_8
+  MOVI r2,0x02
+  CALL @x64_8
+  CALL @x64_store_ecx_r
+  SUB r14,r14,r13
+  LD r15,r14,0
+  RET
+
+; STB d,a,imm
+x64_stb:
+  ST r15,r14,0
+  ADD r14,r14,r13
+  ADD r10,r5,r0
+  ADD r5,r6,r0
+  CALL @x64_load_eax_r
+  ADD r5,r10,r0
+  MOVI r2,0x05
+  CALL @x64_8
+  ADD r2,r7,r0
+  CALL @x64_32
+  MOVI r2,0x89
+  CALL @x64_8
+  MOVI r2,0xC2
+  CALL @x64_8
+  MOVI r2,0x83
+  CALL @x64_8
+  MOVI r2,0xE2
+  CALL @x64_8
+  MOVI r2,0x03
+  CALL @x64_8
+  MOVI r2,0xC1
+  CALL @x64_8
+  MOVI r2,0xE8
+  CALL @x64_8
+  MOVI r2,0x02
+  CALL @x64_8
+  MOVI r2,0x23
+  CALL @x64_8
+  MOVI r2,0x04
+  CALL @x64_8
+  MOVI r2,0x25
+  CALL @x64_8
+  LA r2,#X64_MASK
+  CALL @x64_32
+  MOVI r2,0xC1
+  CALL @x64_8
+  MOVI r2,0xE0
+  CALL @x64_8
+  MOVI r2,0x03
+  CALL @x64_8
+  MOVI r2,0x05
+  CALL @x64_8
+  LA r2,#X64_G
+  CALL @x64_32
+  CALL @x64_load_ecx_r
+  MOVI r2,0x88
+  CALL @x64_8
+  MOVI r2,0x4C
+  CALL @x64_8
+  MOVI r2,0x10
+  CALL @x64_8
+  MOVI r2,0x02
+  CALL @x64_8
+  MOVI r2,0x66
+  CALL @x64_8
+  MOVI r2,0xC7
+  CALL @x64_8
+  MOVI r2,0x00
+  CALL @x64_8
+  MOVI r2,0xF8
+  CALL @x64_8
+  MOVI r2,0x7F
+  CALL @x64_8
+  MOVI r2,0x66
+  CALL @x64_8
+  MOVI r2,0xC7
+  CALL @x64_8
+  MOVI r2,0x40
+  CALL @x64_8
+  MOVI r2,0x06
+  CALL @x64_8
+  MOVI r2,0xF8
+  CALL @x64_8
+  MOVI r2,0x7F
+  CALL @x64_8
+  SUB r14,r14,r13
+  LD r15,r14,0
+  RET
+
 ; C7 04 25 <XPC> <next>
 x64_set_xpc:
   ST r15,r14,0
