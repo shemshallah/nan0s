@@ -4899,6 +4899,12 @@ ST r2,r1,#SY_TYPE
 pss_type_ok:
 ; save the parent table state, then this definition's type/kind/class.
 ; Parent state is pushed first so pss_final can pop type/kind/class first.
+LD r1,r0,#W_SSIZE
+ST r1,r14,0
+ADD r14,r14,r13
+LD r1,r0,#W_SALIGN
+ST r1,r14,0
+ADD r14,r14,r13
 LD r1,r0,#W_SSPKIND
 ST r1,r14,0
 ADD r14,r14,r13
@@ -5364,6 +5370,12 @@ ST r1,r0,#W_ANON_OFF
 SUB r14,r14,r13
 LD r1,r14,0
 ST r1,r0,#W_SSPKIND
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_SALIGN
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_SSIZE
 ; an up-arena parent resumes at its saved pointer; a down-arena parent
 ; must resume below the nested table just allocated.
 LD r2,r0,#W_SDOWN
@@ -5377,6 +5389,8 @@ LD r1,r0,#W_MEMTOP
 ST r1,r0,#W_MEMBP
 JMP @pssf_done
 pssf_drop_all:
+SUB r14,r14,r13
+SUB r14,r14,r13
 SUB r14,r14,r13
 SUB r14,r14,r13
 SUB r14,r14,r13
@@ -5789,10 +5803,16 @@ ADD r14,r14,r13
 LD r1,r0,#W_TY_BASE
 ST r1,r14,0
 ADD r14,r14,r13
+LD r1,r0,#W_ML_SOFT
+ST r1,r14,0
+ADD r14,r14,r13
 MOVI r1,1
 ST r1,r0,#W_ML_SOFT
 LD r1,r0,#W_ANON_TY
 CALL @p_member_lookup
+SUB r14,r14,r13
+LD r1,r14,0
+ST r1,r0,#W_ML_SOFT
 SUB r14,r14,r13
 LD r1,r14,0
 ST r1,r0,#W_TY_BASE
@@ -5802,8 +5822,6 @@ ST r1,r0,#W_TY_COUNT
 SUB r14,r14,r13
 LD r1,r14,0
 ST r1,r0,#W_TY_MEM
-MOVI r1,0
-ST r1,r0,#W_ML_SOFT
 CMP r2,r0
 JMP[EQ] @pml_next
 LD r3,r0,#W_ANON_OFF

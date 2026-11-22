@@ -9,14 +9,17 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done and gated.
 
 ### P0.1 Vendored c-testsuite
 - [x] 00043 nested named struct definitions (separate nested member arena).
-- [ ] 00046 anonymous union/struct members (recursive member lookup).
+- [x] 00046 anonymous union/struct members (marker entries + recursive lookup;
+      nested member and parent size/alignment state restored).
 - [ ] 00078 block-scope function prototype.
 - [ ] 00130 pointer-to-array declarator `(*p)[4]`.
-- [ ] Add more c-testsuite cases until the vendored set has 0 skips.
+- [x] Vendored c-testsuite has 0 skips: 56 passed, 0 failed.
+- [ ] Add more c-testsuite cases beyond the vendored subset.
 
 ### P0.2 Fundamental types and ABI
-- [ ] Audit and gate `sizeof(char, short, int, long, long long, float, double,
-      long double, void*, size_t, ptrdiff_t, off_t, time_t)`.
+- [ ] Audit and gate `sizeof(...)`. Measured baseline: char1 short2 int4 long4
+      llong8 float4 double4 ldouble4 ptr4 size_t4 ptrdiff4. `double`,
+      `long double` and pointers are the P0 ABI gaps.
 - [ ] `long long` / `unsigned long long` are 64-bit in the C ABI, including
       arithmetic, shifts, division, varargs, struct layout and alignment.
 - [ ] `double` and `long double` are >= 64-bit IEEE-754, including arithmetic,

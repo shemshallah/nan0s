@@ -54,7 +54,7 @@
 00168 run 0 30000000 recursion
 00170 run 0 40000000 enums and function pointer member
 00043 run 0 20000000 nested member tables fixed
-00046 skip 0 0 anonymous member promotion still open
+00046 run 0 20000000 anonymous members supported
 00064 run 0 30000000 object-like replacement-text macro
 00078 run 0 20000000 local prototype supported
 00130 run 0 20000000 pointer-to-array supported
