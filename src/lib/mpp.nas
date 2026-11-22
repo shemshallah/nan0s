@@ -27,22 +27,22 @@
 ; address used by LDB/STB.  Source text is byte addressed, so a word pointer
 ; from the caller is shifted left before scanning and shifted right on return.
 
-.equ MPTAB      12600000     ; 128 entries * 1024 bytes
+.equ MPTAB      1500000      ; 128 entries * 1024 bytes
 .equ MPSZ       1024
 .equ MPMax      128
-.equ MPTMP      12733000     ; scratch identifier
-.equ MPARG      12735000     ; 8 arguments * 2048 bytes
+.equ MPTMP      1633000      ; scratch identifier
+.equ MPARG      1635000      ; 8 arguments * 2048 bytes
 .equ MPARGSTEP  2048
-.equ MPARGV     12753000     ; 8 * (ptr,len) word pairs
-.equ MPSUB      12755000     ; substituted bodies, one 8 KiB slot per depth
+.equ MPARGV     1653000      ; 8 * (ptr,len) word pairs
+.equ MPSUB      1655000      ; substituted bodies, one 8 KiB slot per depth
 .equ MPSUBSZ    8192
 .equ MPDEPTHMAX 16
-.equ MPDIS      12890000     ; disabled counts, one byte per table entry
-.equ MPIFBUF    12891000     ; expanded #if / #elif expression
+.equ MPDIS      1789000      ; disabled counts, one byte per table entry
+.equ MPIFBUF    1789100      ; expanded #if / #elif expression
 .equ MPIFBUFSZ  3072
-.equ MPOUT1     13000000
-.equ MPOUT2     14000000
-.equ MPEND      15000000
+.equ MPOUT1     1800000
+.equ MPOUT2     2800000
+.equ MPEND      3800000
 .equ MPBODY     232          ; function body byte offset
 .equ MPBODYMAX  792
 .equ MPOBBODY   40           ; object replacement byte offset
@@ -50,7 +50,7 @@
 .equ MPPARAMOFF 40
 .equ MPPARAMSZ  24
 .equ MPPARAMMAX 8
-.equ MPIFSTK    2050000      ; word-addressed conditional stack, 3 words/level
+.equ MPIFSTK    980000       ; word-addressed conditional stack, 3 words/level
 .equ MPIFMAX    16
 
 .equ W_MPSRC    61500
