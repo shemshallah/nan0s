@@ -109,6 +109,44 @@ long_mode:
     jnz 5b
     mov $0x40000000, %rsi
     call print
+    /* Report usable E820 regions.  The count word at 0x5FC is in the BIOS
+       data area and can be clobbered by later INT 13h calls, so scan the
+       fixed 40-entry buffer and stop at the first all-zero entry. */
+    movzwl 0x8FFE(%rip), %r12d
+    test %r12d, %r12d
+    jnz 14f
+    mov $40, %r12d
+14:
+    lea 0x9000(%rip), %rbx
+6:
+    mov (%rbx), %rax
+    mov 8(%rbx), %r10
+    mov 16(%rbx), %r11d
+    test %rax, %rax
+    jnz 13f
+    test %r10, %r10
+    jnz 13f
+    test %r11d, %r11d
+    jz 7f
+13:
+    cmp $1, %r11d
+    jne 8f
+    lea ram64(%rip), %rsi
+    call print
+    mov (%rbx), %rdi
+    call print_hex64
+    mov $0x20, %al
+    mov $0x3F8, %dx
+    out %al, %dx
+    mov 8(%rbx), %rdi
+    call print_hex64
+    mov $0x0A, %al
+    out %al, %dx
+8:
+    add $24, %rbx
+    dec %r12d
+    jnz 6b
+7:
     cli
 4:
     hlt
@@ -123,6 +161,26 @@ print:
     out %al, %dx
     jmp print
 9:
+    ret
+
+/* RDI = 64-bit value; print 16 uppercase hex digits */
+print_hex64:
+    mov $16, %ecx
+10:
+    rol $4, %rdi
+    mov %di, %ax
+    and $0x0F, %al
+    cmp $10, %al
+    jb 11f
+    add $('A' - 10), %al
+    jmp 12f
+11:
+    add $'0', %al
+12:
+    mov $0x3F8, %dx
+    out %al, %dx
+    dec %ecx
+    jnz 10b
     ret
 
 .align 8
@@ -140,3 +198,5 @@ msg:
     .asciz "NAN0S x86-64 OK\n"
 high_msg:
     .asciz "NAN0S MMAP64 OK\n"
+ram64:
+    .asciz "RAM64 "

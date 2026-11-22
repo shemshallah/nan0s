@@ -14,8 +14,12 @@ _start:
   MOV %AX,%ES
   XOR %EBX,%EBX
   MOV $0x600,%DI
-  XOR %SI,%SI
+  MOV $0,%AX
+  MOV %AX,[0x8FFE]
 e8l:
+  XOR %AX,%AX
+  MOV %AX,%DS
+  MOV %AX,%ES
   MOV $0xE820,%EAX
   MOV $0x534D4150,%EDX
   MOV $24,%ECX
@@ -23,14 +27,36 @@ e8l:
   JC @e8d
   CMP $0x534D4150,%EAX
   JNE @e8d
-  INC %SI
+  MOV [0x8FFE],%AX
+  ADD $1,%AX
+  MOV %AX,[0x8FFE]
   ADD $24,%DI
   TEST %EBX,%EBX
   JZ @e8d
-  CMP $40,%SI
+  MOV [0x8FFE],%AX
+  CMP $40,%AX
   JB @e8l
 e8d:
-  MOV %SI,[0x5FC]
+  XOR %AX,%AX
+  MOV %AX,%DS
+  MOV %AX,%ES
+  MOV [0x8FFE],%AX
+  MOV %AX,[0x5FC]
+  ; back up the E820 map above the disk-I/O scratch area
+  MOV %AX,%CX
+  MOV $0x600,%SI
+  MOV $0x9000,%DI
+e8c_e:
+  MOV $12,%BX
+e8c_w:
+  MOV [SI],%AX
+  MOV %AX,[DI]
+  ADD $2,%SI
+  ADD $2,%DI
+  DEC %BX
+  JNZ @e8c_w
+  DEC %CX
+  JNZ @e8c_e
   MOV $0x1000,%AX
   MOV %AX,%ES
   XOR %BX,%BX

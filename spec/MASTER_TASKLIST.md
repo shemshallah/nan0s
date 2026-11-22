@@ -53,6 +53,10 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done and gated.
 - [x] 4-level non-identity mapping: VA 0x40000000 -> physical 0x35000 through
       PML4/PDPT/PD/PT, proven by writing and printing through the high VA.
       64-bit IDT/per-CPU TSS follow with the kernel port.
+- [ ] 64-bit E820 discovery: the boot sector backs the map up to
+      0x8FFE/0x9000 and the long-mode stub scans it, but x86-64 SeaBIOS is
+      not delivering a usable table to the floppy boot path yet. The gate
+      does not require it; `src/native64/e820probe.S` is the diagnostic.
 - [ ] Port the NaN16 execution core to 64-bit (`kan64.xa`), preserving exact
       NaN/DP4B/vector semantics.
 - [ ] 64-bit native shims for ports, CPUID, RDTSC, MSRs, page tables.

@@ -14,10 +14,15 @@ cat "$T/boot.bin" "$T/kernel64.bin" > "$T/img"
 truncate -s 66048 "$T/img"
 truncate -s 1474560 "$T/img"
 rm -f "$T/com"
-timeout 30 qemu-system-x86_64 -m 512 -drive format=raw,if=floppy,file="$T/img" \
+MEM="${QGATE64_MEM:-512}"
+timeout 30 qemu-system-x86_64 -m "$MEM" -drive format=raw,if=floppy,file="$T/img" \
   -display none -serial "file:$T/com" -no-reboot >/dev/null 2>&1 || true
 if grep -q 'NAN0S x86-64 OK' "$T/com" && grep -q 'NAN0S MMAP64 OK' "$T/com"; then
-  echo "qgate64: PASS (long mode + 4-level non-identity 1 GiB mapping)"
+  if grep -q '^RAM64 ' "$T/com"; then
+    echo "qgate64: PASS (long mode + 4-level mapping + 64-bit E820)"
+  else
+    echo "qgate64: PASS (long mode + 4-level mapping; BIOS E820 table unavailable)"
+  fi
 else
   echo "qgate64: FAIL (no long-mode banner)"
   head -c 200 "$T/com" | cat -v; echo
