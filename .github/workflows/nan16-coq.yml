@@ -43,7 +43,14 @@ jobs:
             echo 'Memory module deferred: foundation did not compile.'
             memory_status=1
           fi
-          if [ "$mirror_status" -ne 0 ] || [ "$bits_status" -ne 0 ] || [ "$signed_status" -ne 0 ] || [ "$memory_status" -ne 0 ]; then
+          if [ "$memory_status" -eq 0 ]; then
+            coqc -q NaN16MemoryAlgebra.v
+            algebra_status=$?
+          else
+            echo 'R5 algebra module deferred: R4 memory module did not compile.'
+            algebra_status=1
+          fi
+          if [ "$mirror_status" -ne 0 ] || [ "$bits_status" -ne 0 ] || [ "$signed_status" -ne 0 ] || [ "$memory_status" -ne 0 ] || [ "$algebra_status" -ne 0 ]; then
             exit 1
           fi
       - name: Run exhaustive arithmetic regression
@@ -53,3 +60,4 @@ jobs:
           python3 formal/nan16/check_bit_reverse.py
           python3 formal/nan16/check_signed.py
           python3 formal/nan16/check_memory.py
+          python3 formal/nan16/check_memory_algebra.py
