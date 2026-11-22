@@ -80,7 +80,10 @@ new x86 line unless a new *primitive* is missing.
       `LD/ST/LDB/STB` + `ADD/SUB/CMP/JMP` pairs, FMA-shaped float pairs.
 - [x] Native vector handlers for the full 0x50-0x5F family. VDP4B and the
       packed VADD8/VSUB8/VADD32/VSUB32/VMUL32 paths use SSE2 (four 128-bit
-      chunks); the scalar handlers remain as the fallback tier.
+      chunks). VLOAD/VSTORE gather/scatter four dwords per SSE2 step on
+      aligned, normal-G ranges; unaligned, RAW-window and wrapping ranges
+      fall back to the exact byte loop. The scalar handlers remain as the
+      fallback tier.
 - [ ] AVX2/AVX-512/NEON/RVV lowerings and CPUID feature steer.
 - [ ] Native block chaining for loop back-edges; step budget exact.
 - [x] Baseline NaN->x86 translator for basic blocks: NaN-native encoders

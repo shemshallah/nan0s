@@ -1658,7 +1658,7 @@ tbl:
   .long @h_fbinfo,@h_vsync,@h_fbcopy,@h_fbfill,@h_outb,@h_inb,@h_inw,@h_outw,@h_outsw,@h_outl,@h_cpuid,@h_rdtsc
   .long @badop,@badop,@badop,@badop,@h_dp4b
   .long @badop,@badop,@badop,@badop,@badop
-  .long @h_vzero,@h_vbcast,@h_vload,@h_vstore,@h_vadd8_sse2,@h_vsub8_sse2,@h_vadd32_sse2,@h_vsub32_sse2,@h_vmul32_sse2,@h_vdp4b,@badop,@badop,@badop,@badop,@h_vget,@h_vset
+  .long @h_vzero,@h_vbcast,@h_vload_sse2,@h_vstore_sse2,@h_vadd8_sse2,@h_vsub8_sse2,@h_vadd32_sse2,@h_vsub32_sse2,@h_vmul32_sse2,@h_vdp4b,@badop,@badop,@badop,@badop,@h_vget,@h_vset
   .long @h_codelen,@h_execn
 
 
@@ -1933,3 +1933,129 @@ vm32s_l:
   POP %EDI
   POP %ESI
   JMP @loop
+
+; ---- SSE2 VLOAD/VSTORE fast paths -------------------------------------
+; Aligned, normal-G, non-wrapping ranges use dword gather/scatter. Every
+; other case restores the saved registers and jumps to the exact byte
+; handler above.
+h_vload_sse2:
+  PUSH %ESI
+  PUSH %EDI
+  PUSH %EBX
+  PUSH %EBP
+  TEST $3,%ECX
+  JNZ @vl_slow
+  MOV %ECX,%EDX
+  CMP $RAWG,%EDX
+  JB @vl_ok
+  CMP $0x10000,%EDX
+  JB @vl_slow
+vl_ok:
+  MOV %ECX,%EDX
+  SHR $2,%EDX
+  AND [MASKM],%EDX
+  MOV [MASKM],%EBX
+  SUB $15,%EBX
+  CMP %EBX,%EDX
+  JA @vl_slow
+  MOV %EAX,%ESI
+  SHR $20,%ESI
+  AND $15,%ESI
+  SHL $6,%ESI
+  ADD $VREG,%ESI
+  MOV %EDX,%EBX
+  SHL $3,%EBX
+  ADD $G+2,%EBX
+  MOV %ESI,%EDI
+  MOV $4,%EBP
+vl_g:
+  .byte 0x66,0x0F,0x6E,0x03      ; movd xmm0,[ebx]
+  .byte 0x66,0x0F,0x6E,0x4B,0x08 ; movd xmm1,[ebx+8]
+  .byte 0x66,0x0F,0x62,0xC1      ; punpckldq xmm0,xmm1
+  .byte 0x66,0x0F,0x6E,0x4B,0x10 ; movd xmm1,[ebx+16]
+  .byte 0x66,0x0F,0x6E,0x53,0x18 ; movd xmm2,[ebx+24]
+  .byte 0x66,0x0F,0x62,0xCA      ; punpckldq xmm1,xmm2
+  .byte 0x66,0x0F,0x6C,0xC1      ; punpcklqdq xmm0,xmm1
+  .byte 0xF3,0x0F,0x7F,0x07      ; movdqu [edi],xmm0
+  ADD $32,%EBX
+  ADD $16,%EDI
+  DEC %EBP
+  JNZ @vl_g
+  POP %EBP
+  POP %EBX
+  POP %EDI
+  POP %ESI
+  JMP @loop
+vl_slow:
+  POP %EBP
+  POP %EBX
+  POP %EDI
+  POP %ESI
+  JMP @h_vload
+
+h_vstore_sse2:
+  PUSH %ESI
+  PUSH %EDI
+  PUSH %EBX
+  PUSH %EBP
+  TEST $3,%ECX
+  JNZ @vs_slow
+  MOV %ECX,%EDX
+  CMP $RAWG,%EDX
+  JB @vs_ok
+  CMP $0x10000,%EDX
+  JB @vs_slow
+vs_ok:
+  MOV %ECX,%EDX
+  SHR $2,%EDX
+  AND [MASKM],%EDX
+  MOV [MASKM],%EBX
+  SUB $15,%EBX
+  CMP %EBX,%EDX
+  JA @vs_slow
+  MOV %EAX,%ESI
+  SHR $20,%ESI
+  AND $15,%ESI
+  SHL $6,%ESI
+  ADD $VREG,%ESI
+  MOV %EDX,%EBX
+  SHL $3,%EBX
+  ADD $G+2,%EBX
+  MOV %ESI,%EDI
+  MOV $4,%EBP
+vs_g:
+  .byte 0xF3,0x0F,0x6F,0x07      ; movdqu xmm0,[edi]
+  .byte 0x66,0x0F,0x7E,0x03      ; movd [ebx],xmm0
+  .byte 0x66,0x0F,0x73,0xD8,0x04 ; psrldq xmm0,4
+  .byte 0x66,0x0F,0x7E,0x43,0x08 ; movd [ebx+8],xmm0
+  .byte 0x66,0x0F,0x73,0xD8,0x04
+  .byte 0x66,0x0F,0x7E,0x43,0x10 ; movd [ebx+16],xmm0
+  .byte 0x66,0x0F,0x73,0xD8,0x04
+  .byte 0x66,0x0F,0x7E,0x43,0x18 ; movd [ebx+24],xmm0
+  ADD $32,%EBX
+  ADD $16,%EDI
+  DEC %EBP
+  JNZ @vs_g
+  MOV %ECX,%EBX
+  SHR $2,%EBX
+  AND [MASKM],%EBX
+  SHL $3,%EBX
+  ADD $G,%EBX
+  MOV $16,%ECX
+vs_h:
+  .byte 0x66,0xC7,0x03,0xF8,0x7F    ; mov word [ebx],0x7FF8
+  .byte 0x66,0xC7,0x43,0x06,0xF8,0x7F ; mov word [ebx+6],0x7FF8
+  ADD $8,%EBX
+  DEC %ECX
+  JNZ @vs_h
+  POP %EBP
+  POP %EBX
+  POP %EDI
+  POP %ESI
+  JMP @loop
+vs_slow:
+  POP %EBP
+  POP %EBX
+  POP %EDI
+  POP %ESI
+  JMP @h_vstore

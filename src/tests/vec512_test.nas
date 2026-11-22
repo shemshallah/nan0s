@@ -54,6 +54,25 @@ ADD r10,r10,r13
 MOVI r2,16
 CMP r10,r2
 JMP[LT] @cmp
+; unaligned VLOAD/VSTORE must fall back to the byte path and stay exact
+LA r1,0x10001
+VLOAD r7,r1
+LA r1,0x11001
+VSTORE r7,r1
+MOVI r10,0
+ucmp:
+LA r1,0x10001
+ADD r1,r1,r10
+LDB r2,r1,0
+LA r1,0x11001
+ADD r1,r1,r10
+LDB r3,r1,0
+CMP r2,r3
+JMP[NE] @fail
+ADD r10,r10,r13
+MOVI r2,64
+CMP r10,r2
+JMP[LT] @ucmp
 LA r1,@s_pass
 CALL @puts
 HALT
