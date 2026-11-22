@@ -71,6 +71,7 @@ jobs:
           sh tools/ncc_m22.sh || exit 1
           sh tools/ncc_m23.sh || exit 1
           sh tools/ncc_m24.sh || exit 1
+          sh tools/ncc_iso_c.sh || exit 1
           sh tools/imgstore.sh || exit 1
           sh tools/ncc_donut.sh || exit 1
           sh tools/nfs2.sh || exit 1

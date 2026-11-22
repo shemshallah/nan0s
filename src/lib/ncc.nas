@@ -62,6 +62,7 @@
 .equ K_ERR      7
 .equ K_KEYWORD  8
 .equ K_FLOAT    9
+.equ K_WSTRING  10
 
 ; token structure: 8 fields + 64 words of packed text
 .equ TK_KIND    0
@@ -110,6 +111,14 @@
 .equ KW_INLINE   33
 .equ KW_RESTRICT 34
 .equ KW_BOOL     35
+; C11 keywords
+.equ KW_STATIC_ASSERT 36
+.equ KW_ALIGNOF  37
+.equ KW_ALIGNAS  38
+.equ KW_GENERIC  39
+.equ KW_NORETURN 40
+.equ KW_ATOMIC   41
+.equ KW_THREAD_LOCAL 42
 
 ; punctuator ids
 .equ P_PLUS     1
@@ -563,6 +572,79 @@
 .equ B_TOWCTRANS 234
 .equ B_ASSERT   235
 .equ B_FWIDE    236
+.equ B_MBRTOC16 237
+.equ B_C16RTOMB 238
+.equ B_MBRTOC32 239
+.equ B_C32RTOMB 240
+.equ B_FWPRINTF 241
+.equ B_FWSCANF  242
+.equ B_SWPRINTF 243
+.equ B_VSWPRINTF 244
+.equ B_VFWPRINTF 245
+.equ B_VFWSCANF 246
+.equ B_VSWSCANF 247
+.equ B_SWSCANF  248
+.equ B_ATOMIC_INIT 249
+.equ B_ATOMIC_LOAD 250
+.equ B_ATOMIC_STORE 251
+.equ B_ATOMIC_EXCH 252
+.equ B_ATOMIC_CAS  253
+.equ B_ATOMIC_FADD 254
+.equ B_ATOMIC_FSUB 255
+.equ B_ATOMIC_FOR  256
+.equ B_ATOMIC_FXOR 257
+.equ B_ATOMIC_FAND 258
+.equ B_ATOMIC_FLAG_TAS 259
+.equ B_ATOMIC_FLAG_CLR 260
+.equ B_ATOMIC_FENCE 261
+.equ B_ATOMIC_ISLF 262
+.equ B_ATOMIC_LOAD_EX 263
+.equ B_ATOMIC_STORE_EX 264
+.equ B_ATOMIC_EXCH_EX 265
+.equ B_ATOMIC_CAS_EX 266
+.equ B_ATOMIC_FADD_EX 267
+.equ B_ATOMIC_FSUB_EX 268
+.equ B_ATOMIC_FOR_EX 269
+.equ B_ATOMIC_FXOR_EX 270
+.equ B_ATOMIC_FAND_EX 271
+.equ B_ATOMIC_FLAG_TAS_EX 272
+.equ B_ATOMIC_FLAG_CLR_EX 273
+.equ B_FEGETROUND 274
+.equ B_FESETROUND 275
+.equ B_FECLEAREXCEPT 276
+.equ B_FERAISEEXCEPT 277
+.equ B_FETESTEXCEPT 278
+.equ B_FEGETENV 279
+.equ B_FESETENV 280
+.equ B_FEHOLDEXCEPT 281
+.equ B_FEUPDATEENV 282
+.equ B_FEGETEXCEPTFLAG 283
+.equ B_FESETEXCEPTFLAG 284
+.equ B_THRD_CREATE 285
+.equ B_THRD_JOIN 286
+.equ B_THRD_CURRENT 287
+.equ B_THRD_EQUAL 288
+.equ B_THRD_SLEEP 289
+.equ B_THRD_YIELD 290
+.equ B_THRD_EXIT 291
+.equ B_THRD_DETACH 292
+.equ B_MTX_INIT 293
+.equ B_MTX_LOCK 294
+.equ B_MTX_TRYLOCK 295
+.equ B_MTX_TIMEDLOCK 296
+.equ B_MTX_UNLOCK 297
+.equ B_MTX_DESTROY 298
+.equ B_CND_INIT 299
+.equ B_CND_SIGNAL 300
+.equ B_CND_BROADCAST 301
+.equ B_CND_WAIT 302
+.equ B_CND_TIMEDWAIT 303
+.equ B_CND_DESTROY 304
+.equ B_TSS_CREATE 305
+.equ B_TSS_GET 306
+.equ B_TSS_SET 307
+.equ B_TSS_DELETE 308
+.equ B_CALL_ONCE 309
 
 ; ------------------------------------------------------------------ compiler state
 ; Kept below word 65536 so ST/LD can use the 16-bit immediate form directly.
@@ -879,6 +961,24 @@
 .equ W_SWEND    60978
 .equ W_SWI      60979
 .equ W_TMP3     60980
+; C11 language helpers
+.equ W_ALIGNAS  61782
+.equ W_CNST_START 61783
+.equ W_CNST_SAVE 61784
+.equ W_CNST_FP  61770
+.equ W_CNST_STOP 61771
+.equ W_CNST_ALARM 61772
+.equ W_GEN_TYPE 61785
+.equ W_GEN_DONE 61786
+.equ W_GEN_TMP  61787
+.equ W_SCAN_DEPTH 61788
+.equ W_ISO_TMP  61789
+.equ W_CPLX_BASE 61773
+.equ W_CPLX_TYPE 61774
+.equ W_CPLX_LOCAL 61775
+.equ W_CPLX_N   61776
+.equ W_LEXWIDE  61759
+.equ ISO_SAVE   960000      ; free words between MP buffers and IR
 .equ W_TKA      60200
 .equ W_TKB      60272
 .equ W_TMP      60400
@@ -995,6 +1095,7 @@
 .include "strtox.nas"
 .include "mbs.nas"
 .include "extra.nas"
+.include "iso.nas"
 .include "headers.nas"
 
 ; q2_skipsp: consume spaces and tabs
@@ -1625,6 +1726,7 @@ ST r1,r0,#W_LOCALB
 ST r1,r0,#W_FRAMEB
 CALL @ncc_types_init
 CALL @ncc_builtins
+CALL @iso_register_all
 CALL @np_init
 CALL @p_tu
 CALL @sym_find_main
@@ -2413,6 +2515,28 @@ CALL @lx_peek
 CMP r1,r0
 JMP[EQ] @lx_eof
 ST r1,r0,#L_CH
+; wide string literal L"..."
+MOVI r2,76
+CMP r1,r2
+JMP[NE] @lx_not_wide
+MOVI r10,1
+CALL @peekn
+MOVI r2,34
+CMP r1,r2
+JMP[NE] @lx_not_wstr
+CALL @lx_get
+MOVI r1,1
+ST r1,r0,#W_LEXWIDE
+CALL @scan_string
+JMP @lx_fin
+lx_not_wstr:
+MOVI r2,39
+CMP r1,r2
+JMP[NE] @lx_not_wide
+CALL @lx_get
+CALL @scan_char
+JMP @lx_fin
+lx_not_wide:
 CALL @digit10
 MOVI r2,255
 CMP r1,r2
@@ -3251,6 +3375,12 @@ ss_fin:
 CALL @lx_get
 CALL @txt_finish
 MOVI r1,4
+LD r2,r0,#W_LEXWIDE
+CMP r2,r0
+JMP[EQ] @ss_kind
+MOVI r1,#K_WSTRING
+ST r0,r0,#W_LEXWIDE
+ss_kind:
 ST r1,r0,#L_KIND
 ST r0,r0,#L_VAL
 JMP @ss_d
@@ -3892,6 +4022,13 @@ kw_tab:
 .word 0xC2CB5034, 33
 .word 0xFDD57AE5, 34
 .word 0xAE76E4A2, 35
+.word 0x505E61EF, 36
+.word 0x4D81E832, 37
+.word 0x6AA4A81B, 38
+.word 0x10D4792F, 39
+.word 0x3974EFA7, 40
+.word 0xFF2BDAB7, 41
+.word 0x1D0E8DBE, 42
 .word 0
 
 ; ================================================================== IR EMITTER
@@ -4179,6 +4316,19 @@ JMP[EQ] @kit_y
 MOVI r2,28
 CMP r1,r2
 JMP[EQ] @kit_y
+; C11: _Alignas, _Noreturn, _Atomic, _Thread_local start declarations
+MOVI r2,#KW_ALIGNAS
+CMP r1,r2
+JMP[EQ] @kit_y
+MOVI r2,#KW_NORETURN
+CMP r1,r2
+JMP[EQ] @kit_y
+MOVI r2,#KW_ATOMIC
+CMP r1,r2
+JMP[EQ] @kit_y
+MOVI r2,#KW_THREAD_LOCAL
+CMP r1,r2
+JMP[EQ] @kit_y
 MOVI r1,0
 RET
 kit_y:
@@ -4235,6 +4385,18 @@ JMP[EQ] @pts_qual
 MOVI r2,#KW_BOOL
 CMP r1,r2
 JMP[EQ] @pts_bool
+MOVI r2,#KW_NORETURN
+CMP r1,r2
+JMP[EQ] @pts_qual
+MOVI r2,#KW_THREAD_LOCAL
+CMP r1,r2
+JMP[EQ] @pts_static
+MOVI r2,#KW_ATOMIC
+CMP r1,r2
+JMP[EQ] @pts_atomic
+MOVI r2,#KW_ALIGNAS
+CMP r1,r2
+JMP[EQ] @pts_alignas
 MOVI r2,#KW_SIGNED
 CMP r1,r2
 JMP[EQ] @pts_signed
@@ -4290,6 +4452,51 @@ ST r1,r0,#W_SCLASS
 JMP @pts_skip
 pts_qual:
 JMP @pts_skip
+pts_atomic:
+CALL @p_adv
+MOVI r1,#P_LPAREN
+CALL @p_at_p
+CMP r1,r0
+JMP[EQ] @pts_l
+CALL @p_adv
+CALL @p_typespec
+CALL @p_ptr_suffix
+MOVI r1,#P_RPAREN
+MOVI r2,10
+CALL @p_expect_p
+JMP @pts_ret
+pts_alignas:
+CALL @p_adv
+MOVI r1,#P_LPAREN
+MOVI r2,9
+CALL @p_expect_p
+LD r1,r0,#W_ALIGNAS
+ST r1,r14,0
+ADD r14,r14,r13
+CALL @p_is_type
+CMP r1,r0
+JMP[EQ] @pta_expr
+CALL @p_typespec
+CALL @p_ptr_suffix
+CALL @ty_align
+JMP @pta_have
+pta_expr:
+CALL @p_cexpr
+pta_have:
+ST r1,r0,#W_TMP
+MOVI r1,#P_RPAREN
+MOVI r2,10
+CALL @p_expect_p
+LD r2,r0,#W_TMP
+SUB r14,r14,r13
+LD r1,r14,0
+CMP r2,r1
+JMP[LE] @pta_keep
+ST r2,r0,#W_ALIGNAS
+JMP @pts_l
+pta_keep:
+ST r1,r0,#W_ALIGNAS
+JMP @pts_l
 pts_const:
 MOVI r1,1
 ST r1,r0,#W_TCONST
@@ -4651,6 +4858,17 @@ MOVI r1,#P_RBRACE
 CALL @p_at_p
 CMP r1,r0
 JMP[NE] @pss_final
+LD r1,r0,#W_TKA
+MOVI r2,#K_KEYWORD
+CMP r1,r2
+JMP[NE] @pss_mem_go
+LD r1,r0,#W_TKA+1
+MOVI r2,#KW_STATIC_ASSERT
+CMP r1,r2
+JMP[NE] @pss_mem_go
+CALL @p_static_assert
+JMP @pss_mem_l
+pss_mem_go:
 CALL @p_typespec
 ST r1,r0,#W_STYPE
 ST r1,r0,#W_SBASE
@@ -5792,6 +6010,17 @@ LA r1,0x18172F90
 LA r2,@ncc_s_mbstate_t
 MOVI r3,9
 MOVI r4,#T_INT
+CALL @ncc_add_typedef
+; C11 <uchar.h> character types
+LA r1,0x801A266D
+LA r2,@ncc_s_char16_t
+MOVI r3,8
+MOVI r4,#T_USHORT
+CALL @ncc_add_typedef
+LA r1,0xA846FC93
+LA r2,@ncc_s_char32_t
+MOVI r3,8
+MOVI r4,#T_UINT
 CALL @ncc_add_typedef
 CALL @ncc_add_tm
 CALL @ncc_add_lconv
@@ -7719,6 +7948,92 @@ MOVI r4,#B_WSCANF
 MOVI r5,0xFFFF
 MOVI r6,#T_INT
 CALL @ncc_add_builtin
+; C11 <uchar.h>
+LA r1,0x6CFB2385
+LA r2,@ncc_s_mbrtoc16
+MOVI r3,8
+MOVI r4,#B_MBRTOC16
+MOVI r5,4
+MOVI r6,#T_UINT
+CALL @ncc_add_builtin
+LA r1,0x7E1763E3
+LA r2,@ncc_s_c16rtomb
+MOVI r3,8
+MOVI r4,#B_C16RTOMB
+MOVI r5,3
+MOVI r6,#T_UINT
+CALL @ncc_add_builtin
+LA r1,0x78F6B93B
+LA r2,@ncc_s_mbrtoc32
+MOVI r3,8
+MOVI r4,#B_MBRTOC32
+MOVI r5,4
+MOVI r6,#T_UINT
+CALL @ncc_add_builtin
+LA r1,0x3E381171
+LA r2,@ncc_s_c32rtomb
+MOVI r3,8
+MOVI r4,#B_C32RTOMB
+MOVI r5,3
+MOVI r6,#T_UINT
+CALL @ncc_add_builtin
+; wide stdio f/s/v variants
+LA r1,0xCDB17C91
+LA r2,@ncc_s_fwprintf
+MOVI r3,8
+MOVI r4,#B_FWPRINTF
+MOVI r5,0xFFFF
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0x12CD01FB
+LA r2,@ncc_s_fwscanf
+MOVI r3,7
+MOVI r4,#B_FWSCANF
+MOVI r5,0xFFFF
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0xDB2DD230
+LA r2,@ncc_s_swprintf
+MOVI r3,8
+MOVI r4,#B_SWPRINTF
+MOVI r5,0xFFFF
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0x9C9DEE30
+LA r2,@ncc_s_swscanf
+MOVI r3,7
+MOVI r4,#B_SWSCANF
+MOVI r5,0xFFFF
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0x1CB2FBBD
+LA r2,@ncc_s_vfwprintf
+MOVI r3,9
+MOVI r4,#B_VFWPRINTF
+MOVI r5,3
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0x5EA48BE4
+LA r2,@ncc_s_vswprintf
+MOVI r3,9
+MOVI r4,#B_VSWPRINTF
+MOVI r5,4
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0xE163A3B7
+LA r2,@ncc_s_vfwscanf
+MOVI r3,8
+MOVI r4,#B_VFWSCANF
+MOVI r5,3
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
+LA r1,0x6A1D5624
+LA r2,@ncc_s_vswscanf
+MOVI r3,8
+MOVI r4,#B_VSWSCANF
+MOVI r5,3
+MOVI r6,#T_INT
+CALL @ncc_add_builtin
 LA r1,0x3FCCE0CF
 LA r2,@ncc_s_strtol
 MOVI r3,6
@@ -8287,6 +8602,56 @@ JMP @sac_l
 sac_end:
 STB r0,r2,0
 ADD r2,r2,r13
+ST r2,r0,#W_STRP
+LD r1,r0,#R_T0
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; str_add_cur_wide: like str_add_cur but emits 4-byte wide characters.
+str_add_cur_wide:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r2,r0,#W_STRP
+ST r2,r0,#R_T0
+LD r3,r0,#W_TKA+3
+ADD r3,r3,r13
+SHL r3,r3,2
+ADD r4,r2,r3
+LA r5,#C_ROEND
+CMP r4,r5
+JMP[LT] @sacw_room
+MOVI r1,4
+JMP @ncc_err
+sacw_room:
+LA r5,#W_TKA+#TK_TEXT
+SHL r5,r5,2
+LD r6,r0,#W_TKA+3
+MOVI r7,0
+sacw_l:
+CMP r7,r6
+JMP[GE] @sacw_end
+LDB r1,r5,0
+STB r1,r2,0
+ADDI r2,r2,1
+STB r0,r2,0
+ADDI r2,r2,1
+STB r0,r2,0
+ADDI r2,r2,1
+STB r0,r2,0
+ADDI r2,r2,1
+ADD r5,r5,r13
+ADD r7,r7,r13
+JMP @sacw_l
+sacw_end:
+STB r0,r2,0
+ADDI r2,r2,1
+STB r0,r2,0
+ADDI r2,r2,1
+STB r0,r2,0
+ADDI r2,r2,1
+STB r0,r2,0
+ADDI r2,r2,1
 ST r2,r0,#W_STRP
 LD r1,r0,#R_T0
 SUB r14,r14,r13
@@ -8904,6 +9269,9 @@ JMP[EQ] @pp_flit
 MOVI r2,#K_STRING
 CMP r1,r2
 JMP[EQ] @pp_string
+MOVI r2,#K_WSTRING
+CMP r1,r2
+JMP[EQ] @pp_wstring
 MOVI r2,#K_IDENT
 CMP r1,r2
 JMP[EQ] @pp_ident
@@ -8972,6 +9340,17 @@ ADD r2,r1,r0
 LA r1,#I_PUSH
 CALL @ir_emit
 MOVI r1,#T_CHAR
+CALL @ty_ptr
+ST r1,r0,#W_ETYPE
+ST r0,r0,#W_LVAL
+CALL @p_adv
+JMP @pp_done
+pp_wstring:
+CALL @str_add_cur_wide
+ADD r2,r1,r0
+LA r1,#I_PUSH
+CALL @ir_emit
+MOVI r1,#T_INT
 CALL @ty_ptr
 ST r1,r0,#W_ETYPE
 ST r0,r0,#W_LVAL
@@ -9418,6 +9797,38 @@ CMP r1,r2
 JMP[EQ] @pp_paren
 MOVI r1,7
 CALL @p_err
+; p_cplx_push/pop: nest compound-literal state across nested initializers.
+p_cplx_push:
+LD r1,r0,#W_CPLX_N
+MOVI r2,3
+MUL r2,r1,r2
+LA r3,#ISO_SAVE+200
+ADD r3,r3,r2
+LD r2,r0,#W_CPLX_TYPE
+ST r2,r3,0
+LD r2,r0,#W_CPLX_BASE
+ST r2,r3,1
+LD r2,r0,#W_CPLX_LOCAL
+ST r2,r3,2
+ADD r1,r1,r13
+ST r1,r0,#W_CPLX_N
+RET
+p_cplx_pop:
+LD r1,r0,#W_CPLX_N
+SUB r1,r1,r13
+ST r1,r0,#W_CPLX_N
+MOVI r2,3
+MUL r2,r1,r2
+LA r3,#ISO_SAVE+200
+ADD r3,r3,r2
+LD r2,r3,0
+ST r2,r0,#W_CPLX_TYPE
+LD r2,r3,1
+ST r2,r0,#W_CPLX_BASE
+LD r2,r3,2
+ST r2,r0,#W_CPLX_LOCAL
+RET
+
 pp_paren:
 CALL @p_peek
 LA r1,#W_TKB
@@ -9427,10 +9838,16 @@ JMP[EQ] @pp_paren_expr
 CALL @p_adv
 CALL @p_typespec
 CALL @p_ptr_suffix
+CALL @p_array_suffix
 ST r1,r0,#W_CASTTYPE
 MOVI r1,#P_RPAREN
 MOVI r2,10
 CALL @p_expect_p
+; compound literal: (type){...}
+MOVI r1,#P_LBRACE
+CALL @p_at_p
+CMP r1,r0
+JMP[NE] @pp_compound
 CALL @p_unary
 CALL @p_emit_rv
 LD r1,r0,#W_CASTTYPE
@@ -9439,6 +9856,245 @@ LD r1,r0,#W_CASTTYPE
 ST r1,r0,#W_ETYPE
 ST r0,r0,#W_LVAL
 JMP @pp_done
+pp_compound:
+LD r1,r0,#W_CASTTYPE
+CALL @ty_kind
+MOVI r2,#TY_ARRAY
+CMP r1,r2
+JMP[NE] @ppc_sized
+LD r1,r0,#W_CASTTYPE
+CALL @ty_count
+CMP r1,r0
+JMP[NE] @ppc_sized
+CALL @p_comp_count
+ST r1,r0,#W_ISO_TMP
+LD r1,r0,#W_CASTTYPE
+CALL @ty_base
+LD r2,r0,#W_ISO_TMP
+CALL @ty_array
+ST r1,r0,#W_CASTTYPE
+ppc_sized:
+LD r1,r0,#W_CASTTYPE
+CALL @ty_size
+ST r1,r0,#W_TY_TMP
+LD r1,r0,#W_CASTTYPE
+CALL @ty_align
+ST r1,r0,#W_TY_COUNT
+LD r1,r0,#W_FUNCSYM
+CMP r1,r0
+JMP[EQ] @ppc_global
+LD r1,r0,#W_LOCALB
+LD r2,r0,#W_TY_COUNT
+CALL @px_align_up
+ST r1,r0,#W_TY_BASE
+LD r2,r0,#W_TY_TMP
+ADD r2,r1,r2
+ST r2,r0,#W_LOCALB
+LD r1,r0,#W_CASTTYPE
+ST r1,r0,#W_CPLX_TYPE
+LD r1,r0,#W_TY_BASE
+ST r1,r0,#W_CPLX_BASE
+MOVI r1,1
+ST r1,r0,#W_CPLX_LOCAL
+CALL @p_cplx_push
+JMP @ppc_init
+ppc_global:
+LD r1,r0,#W_GLOBP
+LD r2,r0,#W_TY_COUNT
+CALL @px_align_up
+ST r1,r0,#W_TY_BASE
+LD r2,r0,#W_TY_TMP
+ADD r2,r1,r2
+LA r3,#C_GLOBEND
+CMP r2,r3
+JMP[LT] @ppc_groom
+MOVI r1,71
+CALL @p_err
+ppc_groom:
+ST r2,r0,#W_GLOBP
+LD r1,r0,#W_CASTTYPE
+ST r1,r0,#W_CPLX_TYPE
+LD r1,r0,#W_TY_BASE
+ST r1,r0,#W_CPLX_BASE
+ST r0,r0,#W_CPLX_LOCAL
+CALL @p_cplx_push
+ppc_init:
+LD r1,r0,#R_SP
+ST r1,r0,#W_GEN_TMP
+LD r1,r0,#W_CPLX_LOCAL
+CMP r1,r0
+JMP[NE] @ppc_pa_l
+LD r1,r0,#W_CPLX_BASE
+CALL @px_addr_g
+JMP @ppc_pa_d
+ppc_pa_l:
+LD r1,r0,#W_CPLX_BASE
+CALL @px_addr_l
+ppc_pa_d:
+LD r1,r0,#W_CPLX_TYPE
+CALL @p_init_braced
+LD r1,r0,#W_GEN_TMP
+ST r1,r0,#R_SP
+CALL @p_cplx_pop
+; re-push the object address as the lvalue result
+LD r1,r0,#W_CPLX_LOCAL
+CMP r1,r0
+JMP[NE] @ppc_rl
+LD r1,r0,#W_CPLX_BASE
+CALL @px_addr_g
+JMP @ppc_rd
+ppc_rl:
+LD r1,r0,#W_CPLX_BASE
+CALL @px_addr_l
+ppc_rd:
+LD r1,r0,#W_CPLX_TYPE
+ST r1,r0,#W_CASTTYPE
+ST r1,r0,#W_ETYPE
+ST r1,r0,#W_LTYPE
+MOVI r1,1
+ST r1,r0,#W_LVAL
+JMP @pp_done
+; p_lex_save / p_lex_restore: snapshot the one-token lookahead and the byte
+; cursor so a lookahead count can run without consuming parser input.
+p_lex_save:
+ST r15,r14,0
+ADD r14,r14,r13
+LA r2,#ISO_SAVE
+LD r1,r0,#L_WP
+ST r1,r2,0
+LD r1,r0,#L_BI
+ST r1,r2,1
+LD r1,r0,#L_LINE
+ST r1,r2,2
+LD r1,r0,#L_TOKP
+ST r1,r2,3
+LD r1,r0,#W_HAVE
+ST r1,r2,4
+MOVI r3,5
+ADD r2,r2,r3
+LA r1,#ISO_SAVE+5
+LA r2,#W_TKA
+MOVI r3,#TKSZ
+CALL @tok_copy
+LA r1,#ISO_SAVE+77
+LA r2,#W_TKB
+MOVI r3,#TKSZ
+CALL @tok_copy
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+p_lex_restore:
+ST r15,r14,0
+ADD r14,r14,r13
+LA r2,#ISO_SAVE
+LD r1,r2,0
+ST r1,r0,#L_WP
+LD r1,r2,1
+ST r1,r0,#L_BI
+LD r1,r2,2
+ST r1,r0,#L_LINE
+LD r1,r2,3
+ST r1,r0,#L_TOKP
+LD r1,r2,4
+ST r1,r0,#W_HAVE
+MOVI r3,5
+ADD r2,r2,r3
+LA r1,#W_TKA
+LA r2,#ISO_SAVE+5
+MOVI r3,#TKSZ
+CALL @tok_copy
+LA r1,#W_TKB
+LA r2,#ISO_SAVE+77
+MOVI r3,#TKSZ
+CALL @tok_copy
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; p_comp_count: current token is '{'; return the number of top-level
+; elements without consuming input. Nested braces count as one element.
+p_comp_count:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @p_lex_save
+MOVI r1,1
+ST r1,r0,#W_SCAN_DEPTH
+ST r0,r0,#W_GEN_TMP
+MOVI r1,1
+ST r1,r0,#W_ISO_TMP
+CALL @p_adv
+pcc_l:
+LD r1,r0,#W_TKA
+MOVI r2,#K_EOF
+CMP r1,r2
+JMP[EQ] @pcc_d
+MOVI r2,#K_PUNCT
+CMP r1,r2
+JMP[NE] @pcc_plain
+LD r1,r0,#W_TKA+1
+MOVI r2,#P_LBRACE
+CMP r1,r2
+JMP[EQ] @pcc_open
+MOVI r2,#P_RBRACE
+CMP r1,r2
+JMP[EQ] @pcc_close
+LD r2,r0,#W_SCAN_DEPTH
+MOVI r3,1
+CMP r2,r3
+JMP[NE] @pcc_plain
+MOVI r2,#P_COMMA
+CMP r1,r2
+JMP[NE] @pcc_plain
+MOVI r1,1
+ST r1,r0,#W_ISO_TMP
+JMP @pcc_adv
+pcc_open:
+LD r2,r0,#W_SCAN_DEPTH
+MOVI r3,1
+CMP r2,r3
+JMP[NE] @pcc_open_n
+LD r2,r0,#W_ISO_TMP
+CMP r2,r0
+JMP[EQ] @pcc_open_n
+LD r2,r0,#W_GEN_TMP
+ADD r2,r2,r13
+ST r2,r0,#W_GEN_TMP
+ST r0,r0,#W_ISO_TMP
+pcc_open_n:
+LD r2,r0,#W_SCAN_DEPTH
+ADD r2,r2,r13
+ST r2,r0,#W_SCAN_DEPTH
+JMP @pcc_adv
+pcc_close:
+LD r2,r0,#W_SCAN_DEPTH
+SUB r2,r2,r13
+ST r2,r0,#W_SCAN_DEPTH
+CMP r2,r0
+JMP[EQ] @pcc_d
+JMP @pcc_adv
+pcc_plain:
+LD r2,r0,#W_SCAN_DEPTH
+MOVI r3,1
+CMP r2,r3
+JMP[NE] @pcc_adv
+LD r2,r0,#W_ISO_TMP
+CMP r2,r0
+JMP[EQ] @pcc_adv
+LD r2,r0,#W_GEN_TMP
+ADD r2,r2,r13
+ST r2,r0,#W_GEN_TMP
+ST r0,r0,#W_ISO_TMP
+pcc_adv:
+CALL @p_adv
+JMP @pcc_l
+pcc_d:
+CALL @p_lex_restore
+LD r1,r0,#W_GEN_TMP
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
 pp_paren_expr:
 CALL @p_adv
 CALL @p_expr
@@ -9754,6 +10410,12 @@ LD r1,r0,#W_TKA+1
 MOVI r2,#KW_SIZEOF
 CMP r1,r2
 JMP[EQ] @pu_sizeof
+MOVI r2,#KW_ALIGNOF
+CMP r1,r2
+JMP[EQ] @pu_alignof
+MOVI r2,#KW_GENERIC
+CMP r1,r2
+JMP[EQ] @pu_generic
 JMP @pu_post
 pu_ptr:
 LD r1,r0,#W_TKA
@@ -9992,6 +10654,194 @@ MOVI r1,#T_UINT
 ST r1,r0,#W_ETYPE
 ST r0,r0,#W_LVAL
 JMP @pu_done
+
+; _Alignof(type-name): C11 alignment query. Returns size_t-compatible uint.
+pu_alignof:
+CALL @p_adv
+MOVI r1,#P_LPAREN
+MOVI r2,9
+CALL @p_expect_p
+CALL @p_is_type
+CMP r1,r0
+JMP[NE] @pua_type
+CALL @p_peek
+LA r1,#W_TKB
+CALL @p_tok_is_type
+CMP r1,r0
+JMP[EQ] @pua_bad
+pua_type:
+CALL @p_typespec
+CALL @p_ptr_suffix
+CALL @ty_align
+ST r1,r0,#W_TY_ID
+MOVI r1,#P_RPAREN
+MOVI r2,10
+CALL @p_expect_p
+LD r2,r0,#W_TY_ID
+LA r1,#I_PUSH
+CALL @ir_emit
+MOVI r1,#T_UINT
+ST r1,r0,#W_ETYPE
+ST r0,r0,#W_LVAL
+JMP @pu_done
+pua_bad:
+MOVI r1,79
+CALL @p_err
+
+; _Generic(controlling, type: expr, ..., default: expr)
+; The controlling expression is parsed for its type but its IR is discarded,
+; so it is not evaluated. Only the selected association is compiled.
+pu_generic:
+CALL @p_adv
+MOVI r1,#P_LPAREN
+MOVI r2,9
+CALL @p_expect_p
+LD r1,r0,#W_IRPC
+ST r1,r0,#W_GEN_TMP
+CALL @p_assign
+CALL @p_emit_rv
+LD r1,r0,#W_ETYPE
+ST r1,r0,#W_GEN_TYPE
+LD r1,r0,#W_GEN_TMP
+ST r1,r0,#W_IRPC
+ST r0,r0,#W_LVAL
+MOVI r1,#P_COMMA
+MOVI r2,24
+CALL @p_expect_p
+ST r0,r0,#W_GEN_DONE
+pug_l:
+LD r1,r0,#W_TKA
+MOVI r2,#K_PUNCT
+CMP r1,r2
+JMP[NE] @pug_assoc
+LD r1,r0,#W_TKA+1
+MOVI r2,#P_RPAREN
+CMP r1,r2
+JMP[EQ] @pug_close
+pug_assoc:
+MOVI r1,#KW_DEFAULT
+CALL @p_at_k
+CMP r1,r0
+JMP[NE] @pug_default
+CALL @p_typespec
+CALL @p_ptr_suffix
+ST r1,r0,#W_ISO_TMP
+MOVI r1,#P_COLON
+MOVI r2,12
+CALL @p_expect_p
+LD r1,r0,#W_GEN_DONE
+CMP r1,r0
+JMP[NE] @pug_skip
+LD r1,r0,#W_ISO_TMP
+LD r2,r0,#W_GEN_TYPE
+CMP r1,r2
+JMP[NE] @pug_skip
+CALL @p_assign
+MOVI r1,1
+ST r1,r0,#W_GEN_DONE
+JMP @pug_after
+pug_default:
+CALL @p_adv
+MOVI r1,#P_COLON
+MOVI r2,12
+CALL @p_expect_p
+LD r1,r0,#W_GEN_DONE
+CMP r1,r0
+JMP[NE] @pug_skip
+CALL @p_assign
+MOVI r1,1
+ST r1,r0,#W_GEN_DONE
+JMP @pug_after
+pug_skip:
+CALL @p_skip_generic
+pug_after:
+LD r1,r0,#W_TKA
+MOVI r2,#K_PUNCT
+CMP r1,r2
+JMP[NE] @pug_syn
+LD r1,r0,#W_TKA+1
+MOVI r2,#P_COMMA
+CMP r1,r2
+JMP[NE] @pug_end_assoc
+CALL @p_adv
+JMP @pug_l
+pug_end_assoc:
+MOVI r2,#P_RPAREN
+CMP r1,r2
+JMP[EQ] @pug_close
+pug_syn:
+MOVI r1,81
+CALL @p_err
+pug_close:
+CALL @p_adv
+LD r1,r0,#W_GEN_DONE
+CMP r1,r0
+JMP[NE] @pug_ok
+MOVI r1,82
+CALL @p_err
+pug_ok:
+JMP @pu_done
+
+; p_skip_generic: skip a balanced token sequence, stopping BEFORE a top-level
+; ',' or ')' (used for unselected _Generic associations).
+p_skip_generic:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r0,r0,#W_SCAN_DEPTH
+psg_l:
+LD r1,r0,#W_TKA
+MOVI r2,#K_EOF
+CMP r1,r2
+JMP[EQ] @psg_d
+MOVI r2,#K_PUNCT
+CMP r1,r2
+JMP[NE] @psg_adv
+LD r1,r0,#W_TKA+1
+LD r2,r0,#W_SCAN_DEPTH
+CMP r2,r0
+JMP[NE] @psg_nest
+MOVI r2,#P_COMMA
+CMP r1,r2
+JMP[EQ] @psg_d
+MOVI r2,#P_RPAREN
+CMP r1,r2
+JMP[EQ] @psg_d
+psg_nest:
+MOVI r2,#P_LPAREN
+CMP r1,r2
+JMP[EQ] @psg_up
+MOVI r2,#P_LBRACK
+CMP r1,r2
+JMP[EQ] @psg_up
+MOVI r2,#P_LBRACE
+CMP r1,r2
+JMP[EQ] @psg_up
+MOVI r2,#P_RPAREN
+CMP r1,r2
+JMP[EQ] @psg_dn
+MOVI r2,#P_RBRACK
+CMP r1,r2
+JMP[EQ] @psg_dn
+MOVI r2,#P_RBRACE
+CMP r1,r2
+JMP[EQ] @psg_dn
+JMP @psg_adv
+psg_up:
+LD r2,r0,#W_SCAN_DEPTH
+ADD r2,r2,r13
+ST r2,r0,#W_SCAN_DEPTH
+JMP @psg_adv
+psg_dn:
+LD r2,r0,#W_SCAN_DEPTH
+SUB r2,r2,r13
+ST r2,r0,#W_SCAN_DEPTH
+psg_adv:
+CALL @p_adv
+JMP @psg_l
+psg_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
 
 ; p_sizeof_name: current identifier -> r1 = object type size; consumes it
 p_sizeof_name:
@@ -11448,6 +12298,9 @@ MOVI r2,#K_KEYWORD
 CMP r1,r2
 JMP[NE] @pst_expr
 LD r1,r0,#W_TKA+1
+MOVI r2,#KW_STATIC_ASSERT
+CMP r1,r2
+JMP[EQ] @pst_sa
 MOVI r2,#KW_IF
 CMP r1,r2
 JMP[EQ] @pst_if
@@ -11520,6 +12373,9 @@ CALL @p_goto
 JMP @pst_d
 pst_label:
 CALL @p_label
+JMP @pst_d
+pst_sa:
+CALL @p_static_assert
 JMP @pst_d
 pst_decl:
 CALL @p_decl
@@ -11869,17 +12725,11 @@ px_align_up:
 MOVI r3,1
 CMP r2,r3
 JMP[EQ] @pxa_d
-MOVI r3,2
-CMP r2,r3
-JMP[EQ] @pxa_2
-ADDI r1,r1,3
-SHR r1,r1,2
-SHL r1,r1,2
+ADD r3,r1,r2
+ADDI r3,r3,-1
+DIVU r4,r3,r2
+MUL r1,r4,r2
 RET
-pxa_2:
-ADDI r1,r1,1
-SHR r1,r1,1
-SHL r1,r1,1
 pxa_d:
 RET
 
@@ -12032,6 +12882,50 @@ CMP r3,r4
 JMP[LE] @psti_n
 ADD r3,r4,r0
 psti_n:
+LA r1,#I_PUSH
+ADD r2,r3,r0
+CALL @ir_emit
+LA r1,#I_MEMCPY
+CALL @ir_op
+CALL @p_adv
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+p_wstr_init:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_SIGLB
+ST r2,r0,#W_SSIZE
+ST r3,r0,#W_STRUCTID
+LD r1,r0,#W_STRUCTID
+CALL @ty_base
+ST r1,r0,#W_STYPE
+LD r1,r0,#W_STRUCTID
+CALL @ty_size
+ST r1,r0,#W_MSIZE
+LD r1,r0,#W_SIGLB
+LD r2,r0,#W_SSIZE
+LD r3,r0,#W_MSIZE
+CALL @p_zero_range
+LD r1,r0,#W_SIGLB
+LD r2,r0,#W_SSIZE
+LD r3,r0,#W_STYPE
+CALL @p_decl_store_addr
+LD r1,r0,#W_TKA+3
+ADD r1,r1,r13
+SHL r1,r1,2
+ST r1,r0,#W_SOFF
+CALL @str_add_cur_wide
+ADD r2,r1,r0
+LA r1,#I_PUSH
+CALL @ir_emit
+LD r3,r0,#W_SOFF
+LD r4,r0,#W_MSIZE
+CMP r3,r4
+JMP[LE] @pwsti_n
+ADD r3,r4,r0
+pwsti_n:
 LA r1,#I_PUSH
 ADD r2,r3,r0
 CALL @ir_emit
@@ -12585,7 +13479,9 @@ JMP[EQ] @pib_struct
 MOVI r2,#TY_UNION
 CMP r1,r2
 JMP[EQ] @pib_struct
-; braced scalar
+; braced scalar: keep one copy of the object address for pib_close
+LA r1,#I_DUP
+CALL @ir_op
 CALL @p_assign
 CALL @p_emit_rv
 LD r1,r0,#W_ITYPE
@@ -12803,6 +13699,9 @@ CMP r1,r0
 JMP[EQ] @pisa_orig
 CALL @p_peek
 LD r1,r0,#W_TKB
+MOVI r2,#K_WSTRING
+CMP r1,r2
+JMP[EQ] @pisa_wide
 MOVI r2,#K_STRING
 CMP r1,r2
 JMP[NE] @pisa_orig
@@ -12811,6 +13710,19 @@ CALL @ty_base
 ST r1,r0,#W_TY_ID
 CALL @ty_size
 MOVI r2,1
+CMP r1,r2
+JMP[NE] @pisa_orig
+LD r2,r0,#W_TKB+3
+ADD r2,r2,r13
+LD r1,r0,#W_TY_ID
+CALL @ty_array
+JMP @pisa_d
+pisa_wide:
+LD r1,r0,#W_TY_TMP
+CALL @ty_base
+ST r1,r0,#W_TY_ID
+CALL @ty_size
+MOVI r2,4
 CMP r1,r2
 JMP[NE] @pisa_orig
 LD r2,r0,#W_TKB+3
@@ -13314,6 +14226,7 @@ RET
 p_decl:
 ST r15,r14,0
 ADD r14,r14,r13
+ST r0,r0,#W_ALIGNAS
 CALL @p_typespec
 ST r1,r0,#W_TY_RET
 ST r0,r0,#W_MARK_CONST
@@ -13372,6 +14285,11 @@ ST r1,r0,#W_TY_TMP
 LD r1,r0,#W_TY_ID
 CALL @ty_align
 ST r1,r0,#W_TY_COUNT
+LD r2,r0,#W_ALIGNAS
+CMP r2,r1
+JMP[LE] @pd_al_ok
+ST r2,r0,#W_TY_COUNT
+pd_al_ok:
 ; allocate
 LD r1,r0,#W_SCLASS
 MOVI r2,2
@@ -13461,6 +14379,30 @@ MOVI r1,0
 CALL @p_str_init
 JMP @pd_afterinit
 pd_not_str:
+LD r1,r0,#W_TKA
+MOVI r2,#K_WSTRING
+CMP r1,r2
+JMP[NE] @pd_not_wstr
+LD r1,r0,#W_TY_ID
+CALL @ty_kind
+MOVI r2,#TY_ARRAY
+CMP r1,r2
+JMP[NE] @pd_not_wstr
+LD r1,r0,#W_TY_ID
+CALL @ty_base
+CALL @ty_size
+MOVI r2,4
+CMP r1,r2
+JMP[NE] @pd_not_wstr
+ADDI r3,r14,-1
+LD r1,r3,0
+CALL @sym_entry
+LD r2,r1,#SY_AUX
+LD r3,r1,#SY_TYPE
+MOVI r1,0
+CALL @p_wstr_init
+JMP @pd_afterinit
+pd_not_wstr:
 LD r1,r0,#W_TY_ID
 CALL @ty_kind
 MOVI r2,#TY_STRUCT
@@ -14790,6 +15732,11 @@ ST r1,r0,#W_TY_TMP
 LD r1,r0,#W_TY_ID
 CALL @ty_align
 ST r1,r0,#W_TY_COUNT
+LD r2,r0,#W_ALIGNAS
+CMP r2,r1
+JMP[LE] @pde_al_ok
+ST r2,r0,#W_TY_COUNT
+pde_al_ok:
 LD r1,r0,#W_SCLASS
 MOVI r2,2
 CMP r1,r2
@@ -14858,6 +15805,30 @@ MOVI r1,1
 CALL @p_str_init
 JMP @pde_after
 pde_not_str:
+LD r1,r0,#W_TKA
+MOVI r2,#K_WSTRING
+CMP r1,r2
+JMP[NE] @pde_not_wstr
+LD r1,r0,#W_TY_ID
+CALL @ty_kind
+MOVI r2,#TY_ARRAY
+CMP r1,r2
+JMP[NE] @pde_not_wstr
+LD r1,r0,#W_TY_ID
+CALL @ty_base
+CALL @ty_size
+MOVI r2,4
+CMP r1,r2
+JMP[NE] @pde_not_wstr
+ADDI r3,r14,-1
+LD r1,r3,0
+CALL @sym_entry
+LD r2,r1,#SY_AUX
+LD r3,r1,#SY_TYPE
+MOVI r1,1
+CALL @p_wstr_init
+JMP @pde_after
+pde_not_wstr:
 LD r1,r0,#W_TY_ID
 CALL @ty_kind
 MOVI r2,#TY_STRUCT
@@ -15395,6 +16366,90 @@ SUB r14,r14,r13
 LD r15,r14,0
 RET
 ; translation unit
+; p_const_eval: parse a full constant expression and execute just its IR.
+; Used by _Static_assert. The generated instructions are discarded afterwards.
+p_const_eval:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r1,r0,#R_SP
+ST r1,r0,#W_CNST_SAVE
+LD r1,r0,#W_IRPC
+ST r1,r0,#W_CNST_START
+LD r1,r0,#R_FP
+ST r1,r0,#W_CNST_FP
+LD r1,r0,#W_IRYSTOP
+ST r1,r0,#W_CNST_STOP
+LD r1,r0,#W_ALARM
+ST r1,r0,#W_CNST_ALARM
+LA r1,#NCC_ESB
+ST r1,r0,#R_SP
+ST r0,r0,#R_FP
+ST r0,r0,#W_IRYSTOP
+ST r0,r0,#W_ALARM
+CALL @p_expr
+CALL @p_emit_rv
+LA r1,#I_HALT
+MOVI r2,0
+CALL @ir_emit
+LD r1,r0,#W_CNST_START
+ST r1,r0,#R_IP
+CALL @ncc_ir_loop
+CALL @ni_pop
+ST r1,r0,#W_ISO_TMP
+LD r1,r0,#W_CNST_START
+ST r1,r0,#W_IRPC
+LD r1,r0,#W_CNST_SAVE
+ST r1,r0,#R_SP
+LD r1,r0,#W_CNST_FP
+ST r1,r0,#R_FP
+LD r1,r0,#W_CNST_STOP
+ST r1,r0,#W_IRYSTOP
+LD r1,r0,#W_CNST_ALARM
+ST r1,r0,#W_ALARM
+LD r1,r0,#W_ISO_TMP
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; p_static_assert: _Static_assert(expr[, "message"]);
+p_static_assert:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @p_adv
+MOVI r1,#P_LPAREN
+MOVI r2,9
+CALL @p_expect_p
+CALL @p_const_eval
+ST r1,r0,#W_ISO_TMP
+MOVI r1,#P_COMMA
+CALL @p_take_p
+CMP r1,r0
+JMP[EQ] @psa_close
+LD r1,r0,#W_TKA
+MOVI r2,#K_STRING
+CMP r1,r2
+JMP[NE] @psa_msg
+CALL @p_adv
+psa_close:
+MOVI r1,#P_RPAREN
+MOVI r2,10
+CALL @p_expect_p
+MOVI r1,#P_SEMI
+MOVI r2,24
+CALL @p_expect_p
+LD r1,r0,#W_ISO_TMP
+CMP r1,r0
+JMP[NE] @psa_ok
+MOVI r1,80
+CALL @p_err
+psa_ok:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+psa_msg:
+MOVI r1,83
+CALL @p_err
+
 p_tu:
 ST r15,r14,0
 ADD r14,r14,r13
@@ -15405,8 +16460,18 @@ CMP r1,r2
 JMP[EQ] @ptu_d
 MOVI r2,#P_SEMI
 CMP r1,r2
-JMP[NE] @ptu_type
+JMP[NE] @ptu_sa
 CALL @p_adv
+JMP @ptu_l
+ptu_sa:
+MOVI r2,#K_KEYWORD
+CMP r1,r2
+JMP[NE] @ptu_type
+LD r1,r0,#W_TKA+1
+MOVI r2,#KW_STATIC_ASSERT
+CMP r1,r2
+JMP[NE] @ptu_type
+CALL @p_static_assert
 JMP @ptu_l
 ptu_type:
 CALL @p_is_type
@@ -15415,6 +16480,7 @@ JMP[NE] @ptu_go
 MOVI r1,30
 CALL @p_err
 ptu_go:
+ST r0,r0,#W_ALIGNAS
 CALL @p_typespec
 CALL @p_decl_external
 JMP @ptu_l
@@ -19103,6 +20169,225 @@ JMP[EQ] @nbi_wprintf
 MOVI r2,#B_WSCANF
 CMP r1,r2
 JMP[EQ] @nbi_wscanf
+MOVI r2,#B_MBRTOC16
+CMP r1,r2
+JMP[EQ] @nbi_mbrtoc16
+MOVI r2,#B_C16RTOMB
+CMP r1,r2
+JMP[EQ] @nbi_c16rtomb
+MOVI r2,#B_MBRTOC32
+CMP r1,r2
+JMP[EQ] @nbi_mbrtoc32
+MOVI r2,#B_C32RTOMB
+CMP r1,r2
+JMP[EQ] @nbi_c32rtomb
+MOVI r2,#B_FWPRINTF
+CMP r1,r2
+JMP[EQ] @nbi_fwprintf
+MOVI r2,#B_FWSCANF
+CMP r1,r2
+JMP[EQ] @nbi_fwscanf
+MOVI r2,#B_SWPRINTF
+CMP r1,r2
+JMP[EQ] @nbi_swprintf
+MOVI r2,#B_SWSCANF
+CMP r1,r2
+JMP[EQ] @nbi_swscanf
+MOVI r2,#B_ATOMIC_INIT
+CMP r1,r2
+JMP[EQ] @nbi_atomic_init
+MOVI r2,#B_ATOMIC_LOAD
+CMP r1,r2
+JMP[EQ] @nbi_atomic_load
+MOVI r2,#B_ATOMIC_STORE
+CMP r1,r2
+JMP[EQ] @nbi_atomic_store
+MOVI r2,#B_ATOMIC_EXCH
+CMP r1,r2
+JMP[EQ] @nbi_atomic_exch
+MOVI r2,#B_ATOMIC_CAS
+CMP r1,r2
+JMP[EQ] @nbi_atomic_cas
+MOVI r2,#B_ATOMIC_FADD
+CMP r1,r2
+JMP[EQ] @nbi_atomic_fadd
+MOVI r2,#B_ATOMIC_FSUB
+CMP r1,r2
+JMP[EQ] @nbi_atomic_fsub
+MOVI r2,#B_ATOMIC_FOR
+CMP r1,r2
+JMP[EQ] @nbi_atomic_for
+MOVI r2,#B_ATOMIC_FXOR
+CMP r1,r2
+JMP[EQ] @nbi_atomic_fxor
+MOVI r2,#B_ATOMIC_FAND
+CMP r1,r2
+JMP[EQ] @nbi_atomic_fand
+MOVI r2,#B_ATOMIC_FLAG_TAS
+CMP r1,r2
+JMP[EQ] @nbi_atomic_flag_tas
+MOVI r2,#B_ATOMIC_FLAG_CLR
+CMP r1,r2
+JMP[EQ] @nbi_atomic_flag_clr
+MOVI r2,#B_ATOMIC_FENCE
+CMP r1,r2
+JMP[EQ] @nbi_atomic_fence
+MOVI r2,#B_ATOMIC_ISLF
+CMP r1,r2
+JMP[EQ] @nbi_atomic_islf
+MOVI r2,#B_ATOMIC_LOAD_EX
+CMP r1,r2
+JMP[EQ] @nbi_atomic_load_ex
+MOVI r2,#B_ATOMIC_STORE_EX
+CMP r1,r2
+JMP[EQ] @nbi_atomic_store_ex
+MOVI r2,#B_ATOMIC_EXCH_EX
+CMP r1,r2
+JMP[EQ] @nbi_atomic_exch_ex
+MOVI r2,#B_ATOMIC_CAS_EX
+CMP r1,r2
+JMP[EQ] @nbi_atomic_cas_ex
+MOVI r2,#B_ATOMIC_FADD_EX
+CMP r1,r2
+JMP[EQ] @nbi_atomic_fadd_ex
+MOVI r2,#B_ATOMIC_FSUB_EX
+CMP r1,r2
+JMP[EQ] @nbi_atomic_fsub_ex
+MOVI r2,#B_ATOMIC_FOR_EX
+CMP r1,r2
+JMP[EQ] @nbi_atomic_for_ex
+MOVI r2,#B_ATOMIC_FXOR_EX
+CMP r1,r2
+JMP[EQ] @nbi_atomic_fxor_ex
+MOVI r2,#B_ATOMIC_FAND_EX
+CMP r1,r2
+JMP[EQ] @nbi_atomic_fand_ex
+MOVI r2,#B_ATOMIC_FLAG_TAS_EX
+CMP r1,r2
+JMP[EQ] @nbi_atomic_flag_tas_ex
+MOVI r2,#B_ATOMIC_FLAG_CLR_EX
+CMP r1,r2
+JMP[EQ] @nbi_atomic_flag_clr_ex
+MOVI r2,#B_FEGETROUND
+CMP r1,r2
+JMP[EQ] @nbi_fegetround
+MOVI r2,#B_FESETROUND
+CMP r1,r2
+JMP[EQ] @nbi_fesetround
+MOVI r2,#B_FECLEAREXCEPT
+CMP r1,r2
+JMP[EQ] @nbi_feclearexcept
+MOVI r2,#B_FERAISEEXCEPT
+CMP r1,r2
+JMP[EQ] @nbi_feraiseexcept
+MOVI r2,#B_FETESTEXCEPT
+CMP r1,r2
+JMP[EQ] @nbi_fetestexcept
+MOVI r2,#B_FEGETENV
+CMP r1,r2
+JMP[EQ] @nbi_fegetenv
+MOVI r2,#B_FESETENV
+CMP r1,r2
+JMP[EQ] @nbi_fesetenv
+MOVI r2,#B_FEHOLDEXCEPT
+CMP r1,r2
+JMP[EQ] @nbi_feholdexcept
+MOVI r2,#B_FEUPDATEENV
+CMP r1,r2
+JMP[EQ] @nbi_feupdateenv
+MOVI r2,#B_FEGETEXCEPTFLAG
+CMP r1,r2
+JMP[EQ] @nbi_fegetexceptflag
+MOVI r2,#B_FESETEXCEPTFLAG
+CMP r1,r2
+JMP[EQ] @nbi_fesetexceptflag
+MOVI r2,#B_THRD_CREATE
+CMP r1,r2
+JMP[EQ] @nbi_thrd_create
+MOVI r2,#B_THRD_JOIN
+CMP r1,r2
+JMP[EQ] @nbi_thrd_join
+MOVI r2,#B_THRD_CURRENT
+CMP r1,r2
+JMP[EQ] @nbi_thrd_current
+MOVI r2,#B_THRD_EQUAL
+CMP r1,r2
+JMP[EQ] @nbi_thrd_equal
+MOVI r2,#B_THRD_SLEEP
+CMP r1,r2
+JMP[EQ] @nbi_thrd_sleep
+MOVI r2,#B_THRD_YIELD
+CMP r1,r2
+JMP[EQ] @nbi_thrd_yield
+MOVI r2,#B_THRD_EXIT
+CMP r1,r2
+JMP[EQ] @nbi_thrd_exit
+MOVI r2,#B_THRD_DETACH
+CMP r1,r2
+JMP[EQ] @nbi_thrd_detach
+MOVI r2,#B_MTX_INIT
+CMP r1,r2
+JMP[EQ] @nbi_mtx_init
+MOVI r2,#B_MTX_LOCK
+CMP r1,r2
+JMP[EQ] @nbi_mtx_lock
+MOVI r2,#B_MTX_TRYLOCK
+CMP r1,r2
+JMP[EQ] @nbi_mtx_trylock
+MOVI r2,#B_MTX_TIMEDLOCK
+CMP r1,r2
+JMP[EQ] @nbi_mtx_timedlock
+MOVI r2,#B_MTX_UNLOCK
+CMP r1,r2
+JMP[EQ] @nbi_mtx_unlock
+MOVI r2,#B_MTX_DESTROY
+CMP r1,r2
+JMP[EQ] @nbi_mtx_destroy
+MOVI r2,#B_CND_INIT
+CMP r1,r2
+JMP[EQ] @nbi_cnd_init
+MOVI r2,#B_CND_SIGNAL
+CMP r1,r2
+JMP[EQ] @nbi_cnd_signal
+MOVI r2,#B_CND_BROADCAST
+CMP r1,r2
+JMP[EQ] @nbi_cnd_broadcast
+MOVI r2,#B_CND_WAIT
+CMP r1,r2
+JMP[EQ] @nbi_cnd_wait
+MOVI r2,#B_CND_TIMEDWAIT
+CMP r1,r2
+JMP[EQ] @nbi_cnd_timedwait
+MOVI r2,#B_CND_DESTROY
+CMP r1,r2
+JMP[EQ] @nbi_cnd_destroy
+MOVI r2,#B_TSS_CREATE
+CMP r1,r2
+JMP[EQ] @nbi_tss_create
+MOVI r2,#B_TSS_GET
+CMP r1,r2
+JMP[EQ] @nbi_tss_get
+MOVI r2,#B_TSS_SET
+CMP r1,r2
+JMP[EQ] @nbi_tss_set
+MOVI r2,#B_TSS_DELETE
+CMP r1,r2
+JMP[EQ] @nbi_tss_delete
+MOVI r2,#B_CALL_ONCE
+CMP r1,r2
+JMP[EQ] @nbi_call_once
+MOVI r2,#B_VFWPRINTF
+CMP r1,r2
+JMP[EQ] @nbi_vfwprintf
+MOVI r2,#B_VSWPRINTF
+CMP r1,r2
+JMP[EQ] @nbi_vswprintf
+MOVI r2,#B_VFWSCANF
+CMP r1,r2
+JMP[EQ] @nbi_vfwscanf
+MOVI r2,#B_VSWSCANF
+CMP r1,r2
+JMP[EQ] @nbi_vswscanf
 MOVI r2,#B_STRTOL
 CMP r1,r2
 JMP[EQ] @nbi_strtol

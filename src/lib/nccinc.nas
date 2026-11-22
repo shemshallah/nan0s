@@ -539,6 +539,8 @@ inc_std_tab:
 .word @inc_sh_signal, @inc_sh_stdarg, @inc_sh_stdbool, @inc_sh_stddef
 .word @inc_sh_stdint, @inc_sh_stdio, @inc_sh_stdlib, @inc_sh_string
 .word @inc_sh_tgmath, @inc_sh_time, @inc_sh_wchar, @inc_sh_wctype
+.word @inc_sh_stdatomic, @inc_sh_threads, @inc_sh_uchar
+.word @inc_sh_stdalign, @inc_sh_stdnoreturn
 .word 0
 inc_sh_assert:
 .str "assert.h"
@@ -588,6 +590,16 @@ inc_sh_wchar:
 .str "wchar.h"
 inc_sh_wctype:
 .str "wctype.h"
+inc_sh_stdatomic:
+.str "stdatomic.h"
+inc_sh_threads:
+.str "threads.h"
+inc_sh_uchar:
+.str "uchar.h"
+inc_sh_stdalign:
+.str "stdalign.h"
+inc_sh_stdnoreturn:
+.str "stdnoreturn.h"
 
 ; Optional path of the main source (a .str word pointer), set by callers that
 ; load the main file from NPAF.  Zero means "/".

@@ -16,11 +16,33 @@ The C89/C99 hosted library name set used by the port is now present: the
 last core names (`strtof`/`strtold`, `llabs`, `strncat`, `remquo`, and the
 restartable multibyte conversions) are gated by `M61`, and the `<inttypes.h>`,
 wide-ctype, `errno`, `assert`, and `fwide` additions are gated by `M62`.
-The explicit exclusions are C11 `<complex.h>`, `<fenv.h>`, `<threads.h>`,
-`<stdatomic.h>`, `<uchar.h>`, and the `f`/`s`/`v` wide-stdio variants; the
-ASCII wide formatter/scanner (`wprintf`/`wscanf`) is present.
+The explicit exclusions are now only C11 `<complex.h>` (and `_Complex`/
+`_Imaginary`) and variable-length arrays (`__STDC_NO_VLA__` is defined).
+C11 `_Static_assert`, `_Alignof`, `_Alignas`, `_Generic`, `_Noreturn`,
+`_Atomic`, `_Thread_local`, compound literals (including inferred-size array
+literals), wide string/character literals (`L"..."`/`L'x'`), flexible array
+members, `<uchar.h>` (real UTF-8/UTF-16/UTF-32 conversions), the `f`/`s`/`v`
+wide-stdio family, a single-threaded `<stdatomic.h>`, a stored-rounding
+`<fenv.h>`, and serialized `<threads.h>` are implemented and gated by
+`tools/ncc_iso_c.sh`.
 The remaining documented limitations are platform or optional-scope items:
 
+- `<stdatomic.h>` operations are plain 32-bit loads/stores (single-threaded;
+  `memory_order_*` values are accepted and sequential consistency is trivial);
+- `<fenv.h>` stores/returns a rounding mode but arithmetic stays
+  round-to-nearest, and floating exceptions are not raised or accumulated;
+- `<threads.h>` `thrd_create` runs the start routine synchronously and
+  `thrd_join` returns its result; mutexes/condition variables are successful
+  no-ops, and `tss_*` uses a small per-process table;
+- `_Alignas` beyond the natural type alignment is honored for globals and for
+  locals relative to the frame base; nested frames can only be as aligned as
+  their frame base;
+- wide string literals are pointer-typed (like the existing narrow literals),
+  so `sizeof L"..."` is the pointer size; use a `wchar_t` array when the array
+  size is needed;
+- wide stdio reuses the narrow formatter/scanner; in the ASCII C locale it
+  emits/consumes byte cells and does not UTF-8-encode non-ASCII wide output
+  (`<uchar.h>` does perform real UTF-8 conversion);
 - the C locale is the only locale (the ISO C minimum);
 - x86 BIOS boot media: qemu-system-i386 is installed. `tools/qgate.sh` passes
   the floppy fallback, and `tools/qgate_gui.sh` passes the full GUI by
@@ -87,8 +109,9 @@ are heap copies. There is no external ELF/COFF ABI to match.
 
 ## What ran, and what still diverges
 
-Run in this tree: `M1`-`M62`, `ncc_alloc`, `ncc_headers`, `ncc_include`, the
-GUI gates, `py_m1`, `ncc_torture`, `ncc_donut_exact`, `mkproof`, `qgate`, and
+Run in this tree: `M1`-`M62`, `ncc_alloc`, `ncc_heap`, `ncc_headers`,
+`ncc_include`, `ncc_iso_c`, the GUI gates, `py_m1`, `ncc_torture`,
+`ncc_donut_exact`, `mkproof`, `qgate`, `xmemgate`, and
 `qgate_gui` (x86 + ATA IDE loader). Not yet run: Csmith, the GCC torture
 tests, or the c-testsuite as a whole. Known divergences: the preprocessor is
 line-based; `#if`/`#elif` evaluate the full integer/character constant
@@ -103,8 +126,10 @@ constants plus the `int8_t`..`uint64_t` typedefs; function-like macro
 definitions in headers are not seen by the pre-expansion macro pass; `double`
 is 32-bit storage; the in-guest `sin`/`cos` are float32 and
 not correctly rounded for every input, although the a1k0n donut first frame is
-now byte-identical to clang's double-trig build; wide `f`/`s`/`v` stdio and C11
-complex/fenv/threads/atomic/uchar are excluded; a floppy-only x86 boot falls
+now byte-identical to clang's double-trig build; C11 `<complex.h>` and VLAs
+are excluded; the wide `f`/`s`/`v` stdio families and the C11 atomic/fenv/
+threads/uchar interfaces are present in the single-threaded form documented
+above; a floppy-only x86 boot falls
 back to the first 512 KiB (the full GUI needs the image as an IDE primary
 master, which the kernel ATA loader reads).
 
@@ -174,6 +199,20 @@ Implemented:
   the first member)
 - C99 designated initializers: `.member =`, `[index] =`, `[index].member =`,
   and nested braced designators (`.s = {.b = 2}`)
+- C11 `_Static_assert` (file scope, block scope, and inside struct/union
+  member lists), `_Alignof`, `_Alignas` (globals and locals; the effective
+  alignment is the maximum of the type alignment and the requested value),
+  `_Generic` (only the selected association is compiled; the controlling
+  expression is typed but not evaluated), `_Noreturn`, `_Atomic` as a
+  qualifier or `_Atomic(type)`, and `_Thread_local` (static storage in this
+  single-threaded runtime)
+- compound literals `(type){...}` for scalars, structs/unions, and arrays,
+  including brace designators and inferred-size arrays (`(int[]){1,2,3}`);
+  nested compound literals are supported
+- wide string and character literals (`L"..."`, `L'x'`) as 32-bit arrays;
+  `wchar_t` arrays can be initialised from a wide string literal
+- flexible array members (`int a[];` as the last struct member); `sizeof`
+  excludes the flexible member and element access uses the allocated tail
 - bit-fields (named, anonymous, signed/unsigned, comma declarators,
   initializers); the layout is implementation-defined and non-packed: each
   named field occupies its declared type's storage, and values are masked /
@@ -207,6 +246,8 @@ Not implemented (honest list):
   `<...>` first matches the built-in standard-header table (whose bodies are
   empty because the libc and standard types are built in) and otherwise falls
   back to NPAF
+- variable-length arrays are not implemented; `__STDC_NO_VLA__` is 1
+- `_Complex`/`_Imaginary` and `<complex.h>` are not implemented
 - the standard library is a practical subset. Sorting/searching
   (`qsort`/`bsearch`, including guest and builtin callbacks), non-local jumps
   (`setjmp`/`longjmp`), `strftime`, `tmpnam`/`tmpfile`, and the wide-string
@@ -227,6 +268,21 @@ Not implemented (honest list):
   scanf syntax and widens `%ls` destinations. The C locale is the only locale,
   which is the minimum required by ISO C; `setlocale` returns `"C"` and
   `localeconv` reports the C conventions
+- C11 library additions: `<uchar.h>` (`char16_t`, `char32_t`, `mbrtoc16`,
+  `c16rtomb`, `mbrtoc32`, `c32rtomb`) performs real UTF-8 conversion with
+  UTF-16 surrogate state in the 32-bit `mbstate_t`; the `f`/`s`/`v` wide-stdio
+  family (`fwprintf`, `fwscanf`, `swprintf`, `swscanf`, `vfwprintf`,
+  `vfwscanf`, `vswprintf`, `vswscanf`) converts the wide format to the ASCII
+  narrow form and reuses the narrow formatter/scanner (the scanner keeps the
+  existing `%ls` destination widening); `<stdatomic.h>` provides the atomic
+  typedefs, memory-order constants, `atomic_flag`, load/store/exchange/CAS/
+  fetch-op/flag/fence/is_lock_free and the `_explicit` spellings over 32-bit
+  objects; `<fenv.h>` provides `fenv_t`/`fexcept_t`, the `FE_*` constants and
+  get/set/hold/update entry points (rounding is stored but arithmetic stays
+  round-to-nearest); `<threads.h>` provides `thrd_t`/`mtx_t`/`cnd_t`/`tss_t`/
+  `once_flag`, synchronous `thrd_create`/`thrd_join`, successful mutex and
+  condition no-ops, a small TSS table, and working `call_once`. `_Complex` and
+  VLAs remain excluded (`__STDC_NO_VLA__` is 1)
 - signal handlers are installed and delivered by `raise`; `alarm()` and
   `setitimer`/`getitimer` perform asynchronous `SIGALRM` delivery at
   IR-instruction boundaries (ITIMER_REAL, with interval reload)
@@ -471,6 +527,12 @@ tools/ncc_m62.sh    inttypes, wide ctype, errno, assert, fwide
 tools/ncc_alloc.sh  S0 free-list heap: 10,000 malloc/free/realloc operations
 tools/ncc_headers.sh limits/stdint/float/stdio/locale/signal/math macros and fixed-width typedefs
 tools/ncc_include.sh #include: quoted/nested/guarded headers, std headers, diagnostics
+tools/ncc_heap.sh   one image on 16/64/128/512 MiB VMs (100 MB heap and reuse)
+tools/ncc_iso_c.sh  C11 language (_Static_assert/_Alignof/_Alignas/_Generic/
+                    _Noreturn/_Atomic/_Thread_local, compound/wide literals),
+                    <uchar.h>, f/s/v wide stdio, <stdatomic.h>, <fenv.h>,
+                    <threads.h>
+tools/xmemgate.sh   native x86 E820 sizing and the 100 MB C heap
 tools/ncc_ppexpr.sh #if/#elif arithmetic/bitwise/logical/defined/ternary expressions
 tools/ncc_torture.sh differential C torture case (clang vs ncc)
 tools/ncc_donut_exact.sh a1k0n donut first-frame parity
