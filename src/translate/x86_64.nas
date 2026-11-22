@@ -10249,3 +10249,22 @@ x64_vmul32:
   SUB r14,r14,r13
   LD r15,r14,0
   RET
+
+; PUTC d: write R[d] low byte to COM1
+x64_putc:
+  ST r15,r14,0
+  ADD r14,r14,r13
+  CALL @x64_load_eax_r
+  MOVI r2,0x66
+  CALL @x64_8
+  MOVI r2,0xBA
+  CALL @x64_8
+  MOVI r2,0xF8
+  CALL @x64_8
+  MOVI r2,0x03
+  CALL @x64_8
+  MOVI r2,0xEE
+  CALL @x64_8
+  SUB r14,r14,r13
+  LD r15,r14,0
+  RET

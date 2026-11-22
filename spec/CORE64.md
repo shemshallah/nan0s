@@ -45,7 +45,8 @@ G=0x200000 with the mask at 0x50404), set-XPC, HALT, RET, JMPR, CALL,
 CALLR, NOP, BOOL, MUL/MULH/MULHU, DIV/MOD/DIVU/MODU, FADD/FSUB/FMUL/
 FDIV/FSQRT/FCMP/CVTIF/CVTFI, STW/LDN/BSWAPM, BCOPY/BFILL and the full
 vector family (VZERO/VBCAST/VLOAD/VSTORE/VADD8/VSUB8/VADD32/VSUB32/
-VMUL32/VDP4B/VDP4B4/VGET/VSET).  Gates:
+VMUL32/VDP4B/VDP4B4/VGET/VSET), JMPF/CALLF (24-bit targets) and PUTC
+(COM1).  Gates:
 `qgate64core`, `qgate64block`, `qgate64alu`, `qgate64branch`,
 `qgate64mem` (0x12345678), `qgate64byte` (0xAB), `qgate64call`
 (CALL/RET across blocks, r1=16), `qgate64mul` (MUL/BOOL/MULHU, r1=0x2D),
@@ -55,7 +56,8 @@ VMUL32/VDP4B/VDP4B4/VGET/VSET).  Gates:
 (STW/LDN class nibbles + BSWAPM round-trip) and `qgate64blockops`
 (BCOPY and BFILL, r1=0x2D), `qgate64trap` (unsupported opcode halts
 with trap code 0x4F at `0x50C04`), `qgate64vec` (vector file ops),
-`qgate64vldst` (VLOAD/VSTORE), `qgate64vdp4b` and `qgate64vdp4b4`.
+`qgate64vldst` (VLOAD/VSTORE), `qgate64vdp4b`, `qgate64vdp4b4`,
+`qgate64callf` (24-bit CALLF) and `qgate64putc` (serial output).
 
 ## Vector file
 

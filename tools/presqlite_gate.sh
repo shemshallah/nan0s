@@ -89,6 +89,8 @@ if [ -f tools/mkall.sh ]; then
   [ -f tools/qgate64vldst.sh ] && run qgate64vldst sh tools/qgate64vldst.sh
   [ -f tools/qgate64vdp4b.sh ] && run qgate64vdp4b sh tools/qgate64vdp4b.sh
   [ -f tools/qgate64vdp4b4.sh ] && run qgate64vdp4b4 sh tools/qgate64vdp4b4.sh
+  [ -f tools/qgate64callf.sh ] && run qgate64callf sh tools/qgate64callf.sh
+  [ -f tools/qgate64putc.sh ] && run qgate64putc sh tools/qgate64putc.sh
   [ -f tools/qgate64call.sh ] && run qgate64call sh tools/qgate64call.sh
 fi
 
