@@ -16,8 +16,8 @@ truncate -s 1474560 "$T/img"
 rm -f "$T/com"
 timeout 30 qemu-system-x86_64 -m 512 -drive format=raw,if=floppy,file="$T/img" \
   -display none -serial "file:$T/com" -no-reboot >/dev/null 2>&1 || true
-if grep -q 'NAN0S x86-64 OK' "$T/com"; then
-  echo "qgate64: PASS (32-bit loader -> x86-64 long mode, COM1 banner)"
+if grep -q 'NAN0S x86-64 OK' "$T/com" && grep -q 'NAN0S MMAP64 OK' "$T/com"; then
+  echo "qgate64: PASS (long mode + 4-level non-identity 1 GiB mapping)"
 else
   echo "qgate64: FAIL (no long-mode banner)"
   head -c 200 "$T/com" | cat -v; echo

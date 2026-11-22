@@ -11,17 +11,19 @@ _start:
     cli
     cld
 
-    /* zero PML4 (0x30000), PDPT (0x31000), PD (0x32000) */
+    /* zero PML4 0x30000, PDPT 0x31000, PD0 0x32000, PD1 0x33000,
+       PT 0x34000, and the data page 0x35000 */
     mov $0x30000, %edi
     xor %eax, %eax
-    mov $(3 * 4096 / 4), %ecx
+    mov $(6 * 4096 / 4), %ecx
     rep stosl
 
     /* PML4[0] -> PDPT */
     movl $0x31003, 0x30000
-    /* PDPT[0] -> PD */
+    /* PDPT[0] -> PD0 (identity 0..1GiB), PDPT[1] -> PD1 */
     movl $0x32003, 0x31000
-    /* PD[i] = i*2MiB | present|rw|ps */
+    movl $0x33003, 0x31008
+    /* PD0[i] = i*2MiB | present|rw|ps */
     mov $0x32000, %edi
     xor %ecx, %ecx
 1:
@@ -33,6 +35,10 @@ _start:
     inc %ecx
     cmp $512, %ecx
     jb 1b
+    /* PD1[0] -> PT; PT[0] -> physical 0x35000.
+       This maps VA 0x40000000 through PML4/PDPT/PD/PT non-identically. */
+    movl $0x34003, 0x33000
+    movl $0x35003, 0x34000
 
     /* new GDT: null, 64-bit code, 64-bit data */
     lgdt gdtr
@@ -92,18 +98,32 @@ long_mode:
     out %al, %dx
 
     lea msg(%rip), %rsi
-2:
+    call print
+    /* copy the second banner through the non-identity mapping at 1 GiB */
+    lea high_msg(%rip), %rsi
+    mov $0x40000000, %rdi
+5:
     lodsb
+    stosb
     test %al, %al
-    jz 3f
-    mov $0x3F8, %dx
-    out %al, %dx
-    jmp 2b
-3:
+    jnz 5b
+    mov $0x40000000, %rsi
+    call print
     cli
 4:
     hlt
     jmp 4b
+
+/* RSI = NUL-terminated string; clobbers AL and DX */
+print:
+    lodsb
+    test %al, %al
+    jz 9f
+    mov $0x3F8, %dx
+    out %al, %dx
+    jmp print
+9:
+    ret
 
 .align 8
 gdt:
@@ -118,3 +138,5 @@ gdtr:
 .section .rodata
 msg:
     .asciz "NAN0S x86-64 OK\n"
+high_msg:
+    .asciz "NAN0S MMAP64 OK\n"
