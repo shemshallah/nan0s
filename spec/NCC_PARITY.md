@@ -87,18 +87,21 @@ are heap copies. There is no external ELF/COFF ABI to match.
 
 ## What ran, and what still diverges
 
-Run in this tree: `M1`-`M62`, `ncc_alloc`, `ncc_headers`, the GUI gates,
-`py_m1`, `ncc_torture`, `ncc_donut_exact`, `mkproof`, `qgate`, and
+Run in this tree: `M1`-`M62`, `ncc_alloc`, `ncc_headers`, `ncc_include`, the
+GUI gates, `py_m1`, `ncc_torture`, `ncc_donut_exact`, `mkproof`, `qgate`, and
 `qgate_gui` (x86 + ATA IDE loader). Not yet run: Csmith, the GCC torture
 tests, or the c-testsuite as a whole. Known divergences: the preprocessor is
 line-based; `#if`/`#elif` evaluate the full integer/character constant
 operator set, `defined()`, macro values, parentheses, and `?:`; object-like
 macros carry arbitrary replacement text (types, storage classes,
 expressions, declarations, empty bodies) and are expanded recursively with
-the C blue-paint rule; `#include <...>` system headers are skipped, but
-`src/lib/headers.nas` installs the C89/C99 limits, stdint, float, stdio,
-locale, signal, math, and wchar constants plus the `int8_t`..`uint64_t`
-typedefs; `double` is 32-bit storage; the in-guest `sin`/`cos` are float32 and
+the C blue-paint rule; `#include "..."`/`<...>` are expanded from the NPAF
+path store (relative to the including file, then `/`), standard headers are
+accepted as empty placeholders because `src/lib/headers.nas` installs the
+C89/C99 limits, stdint, float, stdio, locale, signal, math, and wchar
+constants plus the `int8_t`..`uint64_t` typedefs; function-like macro
+definitions in headers are not seen by the pre-expansion macro pass; `double`
+is 32-bit storage; the in-guest `sin`/`cos` are float32 and
 not correctly rounded for every input, although the a1k0n donut first frame is
 now byte-identical to clang's double-trig build; wide `f`/`s`/`v` stdio and C11
 complex/fenv/threads/atomic/uchar are excluded; a floppy-only x86 boot falls
@@ -199,8 +202,11 @@ Not implemented (honest list):
   (assignment/compound assignment/`++`/`--` are rejected). `volatile` accesses
   are always emitted because there is no optimiser; `register` is ignored as a
   hint, which C permits
-- `#include <...>` system headers are skipped; the libc and standard types are
-  built in
+- `#include "..."` and `#include <...>` are expanded from NPAF; quoted names
+  are searched relative to the including file's directory, then `/`, while
+  `<...>` first matches the built-in standard-header table (whose bodies are
+  empty because the libc and standard types are built in) and otherwise falls
+  back to NPAF
 - the standard library is a practical subset. Sorting/searching
   (`qsort`/`bsearch`, including guest and builtin callbacks), non-local jumps
   (`setjmp`/`longjmp`), `strftime`, `tmpnam`/`tmpfile`, and the wide-string
@@ -259,9 +265,16 @@ remaining text; `tools/ncc_macro_text.sh` gates the object-macro path.
   obvious inactive regions (`#if 0`, `#ifdef` of an undefined name);
   elaborate `#if` expressions are conservatively treated as active while
   the lexer still selects the correct branch.
-- `#include "path"` is expanded from the runtime path filesystem (nested
-  includes up to 8 levels); `#include <...>` is skipped
-- nesting up to 16 levels; inactive branches are skipped without tokenizing
+- `#include "path"` searches the including file's directory, then `/`;
+  `#include <name>` first accepts a built-in standard header (empty body), then
+  searches NPAF at `/name` and in the including directory
+- includes nest up to 16 levels, with a recursion guard that rejects a file
+  that is already active; a missing include is `!C0090@<line>`, a depth
+  overflow `!C0091`, and a recursive include `!C0092`
+- conditional nesting up to 16 levels; inactive branches are skipped without
+  tokenizing, including `#include` directives in dead branches
+- line numbers are per file: an included file starts at line 1 and the
+  including file's line count resumes after the directive
 
 ## Runtime library
 
@@ -363,9 +376,10 @@ mkdir PATH         create a directory entry
 ```
 
 The C editor adds `.save` to write the buffer back to the current path.
-`#include "path"` is flattened recursively from the same store before the
-compiler runs; `#include <stdio.h>` remains a no-op because the libc is
-built in.
+`#include` is handled by the compiler itself (nested, guarded, relative paths);
+the GUI `cc` command pre-flattens quoted includes from the store before
+compiling, and `#include <stdio.h>` is accepted as an empty standard header
+because the libc is built in.
 
 The classic C donut is shipped as `/donut.c` (original sampling) and
 `/donut_fast.c` (coarser sampling); `cc /donut_fast.c` renders a torus in the
@@ -435,6 +449,7 @@ tools/ncc_m61.sh    strtof/strtold, llabs, strncat, remquo, restartable mbs
 tools/ncc_m62.sh    inttypes, wide ctype, errno, assert, fwide
 tools/ncc_alloc.sh  S0 free-list heap: 10,000 malloc/free/realloc operations
 tools/ncc_headers.sh limits/stdint/float/stdio/locale/signal/math macros and fixed-width typedefs
+tools/ncc_include.sh #include: quoted/nested/guarded headers, std headers, diagnostics
 tools/ncc_ppexpr.sh #if/#elif arithmetic/bitwise/logical/defined/ternary expressions
 tools/ncc_torture.sh differential C torture case (clang vs ncc)
 tools/ncc_donut_exact.sh a1k0n donut first-frame parity
