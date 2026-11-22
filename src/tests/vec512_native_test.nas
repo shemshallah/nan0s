@@ -22,6 +22,25 @@ CALL @ph
 VZERO r6
 VGET r3,r6,0
 CALL @ph
+LA r1,0x01010101
+VBCAST r1,r1
+VADD8 r2,r1,r1
+VGET r3,r2,0
+CALL @ph
+VSUB8 r2,r1,r1
+VGET r3,r2,0
+CALL @ph
+VADD32 r2,r1,r1
+VGET r3,r2,0
+CALL @ph
+VSUB32 r2,r1,r1
+VGET r3,r2,0
+CALL @ph
+LA r1,0x00010001
+VBCAST r1,r1
+VMUL32 r2,r1,r1
+VGET r3,r2,0
+CALL @ph
 LA r1,@s_pass
 CALL @puts
 HALT

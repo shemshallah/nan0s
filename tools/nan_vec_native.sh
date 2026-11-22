@@ -12,4 +12,4 @@ timeout 30 qemu-system-i386 -m 512 -drive format=raw,if=floppy,file="$T/t.img" \
   -display none -serial "file:$T/com" -no-reboot >/dev/null 2>&1 || true
 sed -e 's/^\[nan_cli\].*$//' -e '/^$/d' "$T/com" > "$T/got"
 cmp -s "$T/got" src/tests/vec512_native.expected || { echo "nan_vec_native: FAIL"; diff -u src/tests/vec512_native.expected "$T/got" | head -20; exit 1; }
-echo "nan_vec_native: PASS (VZERO/VBCAST/VDP4B/VGET/VSET on bare x86)"
+echo "nan_vec_native: PASS (VZERO/VBCAST/VADD8/VSUB8/VADD32/VSUB32/VMUL32/VDP4B/VGET/VSET on bare x86)"

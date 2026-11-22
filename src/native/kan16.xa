@@ -1011,6 +1011,182 @@ h_vset:
   ADD %EAX,%ECX
   MOV %EDX,[ECX]
   JMP @loop
+
+h_vadd8:
+  PUSH %ESI
+  PUSH %EDI
+  PUSH %EBX
+  PUSH %EBP
+  MOV %EAX,%ESI
+  SHR $16,%ESI
+  AND $15,%ESI
+  SHL $6,%ESI
+  ADD $VREG,%ESI
+  MOV %EAX,%EBX
+  AND $15,%EBX
+  SHL $6,%EBX
+  ADD $VREG,%EBX
+  MOV %EAX,%EDI
+  SHR $20,%EDI
+  AND $15,%EDI
+  SHL $6,%EDI
+  ADD $VREG,%EDI
+  MOV $64,%ECX
+va8_l:
+  MOVZXB [ESI],%EAX
+  MOVZXB [EBX],%EDX
+  ADD %EDX,%EAX
+  MOVB %AL,[EDI]
+  INC %ESI
+  INC %EBX
+  INC %EDI
+  DEC %ECX
+  JNZ @va8_l
+  POP %EBP
+  POP %EBX
+  POP %EDI
+  POP %ESI
+  JMP @loop
+h_vsub8:
+  PUSH %ESI
+  PUSH %EDI
+  PUSH %EBX
+  PUSH %EBP
+  MOV %EAX,%ESI
+  SHR $16,%ESI
+  AND $15,%ESI
+  SHL $6,%ESI
+  ADD $VREG,%ESI
+  MOV %EAX,%EBX
+  AND $15,%EBX
+  SHL $6,%EBX
+  ADD $VREG,%EBX
+  MOV %EAX,%EDI
+  SHR $20,%EDI
+  AND $15,%EDI
+  SHL $6,%EDI
+  ADD $VREG,%EDI
+  MOV $64,%ECX
+vs8_l:
+  MOVZXB [ESI],%EAX
+  MOVZXB [EBX],%EDX
+  SUB %EDX,%EAX
+  MOVB %AL,[EDI]
+  INC %ESI
+  INC %EBX
+  INC %EDI
+  DEC %ECX
+  JNZ @vs8_l
+  POP %EBP
+  POP %EBX
+  POP %EDI
+  POP %ESI
+  JMP @loop
+h_vadd32:
+  PUSH %ESI
+  PUSH %EDI
+  PUSH %EBX
+  PUSH %EBP
+  MOV %EAX,%ESI
+  SHR $16,%ESI
+  AND $15,%ESI
+  SHL $6,%ESI
+  ADD $VREG,%ESI
+  MOV %EAX,%EBX
+  AND $15,%EBX
+  SHL $6,%EBX
+  ADD $VREG,%EBX
+  MOV %EAX,%EDI
+  SHR $20,%EDI
+  AND $15,%EDI
+  SHL $6,%EDI
+  ADD $VREG,%EDI
+  MOV $16,%ECX
+va32_l:
+  MOV [ESI],%EAX
+  MOV [EBX],%EDX
+  ADD %EDX,%EAX
+  MOV %EAX,[EDI]
+  ADD $4,%ESI
+  ADD $4,%EBX
+  ADD $4,%EDI
+  DEC %ECX
+  JNZ @va32_l
+  POP %EBP
+  POP %EBX
+  POP %EDI
+  POP %ESI
+  JMP @loop
+h_vsub32:
+  PUSH %ESI
+  PUSH %EDI
+  PUSH %EBX
+  PUSH %EBP
+  MOV %EAX,%ESI
+  SHR $16,%ESI
+  AND $15,%ESI
+  SHL $6,%ESI
+  ADD $VREG,%ESI
+  MOV %EAX,%EBX
+  AND $15,%EBX
+  SHL $6,%EBX
+  ADD $VREG,%EBX
+  MOV %EAX,%EDI
+  SHR $20,%EDI
+  AND $15,%EDI
+  SHL $6,%EDI
+  ADD $VREG,%EDI
+  MOV $16,%ECX
+vs32_l:
+  MOV [ESI],%EAX
+  MOV [EBX],%EDX
+  SUB %EDX,%EAX
+  MOV %EAX,[EDI]
+  ADD $4,%ESI
+  ADD $4,%EBX
+  ADD $4,%EDI
+  DEC %ECX
+  JNZ @vs32_l
+  POP %EBP
+  POP %EBX
+  POP %EDI
+  POP %ESI
+  JMP @loop
+h_vmul32:
+  PUSH %ESI
+  PUSH %EDI
+  PUSH %EBX
+  PUSH %EBP
+  MOV %EAX,%ESI
+  SHR $16,%ESI
+  AND $15,%ESI
+  SHL $6,%ESI
+  ADD $VREG,%ESI
+  MOV %EAX,%EBX
+  AND $15,%EBX
+  SHL $6,%EBX
+  ADD $VREG,%EBX
+  MOV %EAX,%EDI
+  SHR $20,%EDI
+  AND $15,%EDI
+  SHL $6,%EDI
+  ADD $VREG,%EDI
+  MOV $16,%ECX
+vm32_l:
+  MOV [ESI],%EAX
+  MOV [EBX],%EDX
+  IMUL %EDX,%EAX
+  MOV %EAX,[EDI]
+  ADD $4,%ESI
+  ADD $4,%EBX
+  ADD $4,%EDI
+  DEC %ECX
+  JNZ @vm32_l
+  POP %EBP
+  POP %EBX
+  POP %EDI
+  POP %ESI
+  JMP @loop
 h_fadd:
   MOVD %ECX,%XMM0
   MOVD %EDX,%XMM1
@@ -1391,7 +1567,7 @@ tbl:
   .long @h_fbinfo,@h_vsync,@h_fbcopy,@h_fbfill,@h_outb,@h_inb,@h_inw,@h_outw,@h_outsw,@h_outl,@h_cpuid,@h_rdtsc
   .long @badop,@badop,@badop,@badop,@h_dp4b
   .long @badop,@badop,@badop,@badop,@badop
-  .long @h_vzero,@h_vbcast,@badop,@badop,@badop,@badop,@badop,@badop,@badop,@h_vdp4b,@badop,@badop,@badop,@badop,@h_vget,@h_vset
+  .long @h_vzero,@h_vbcast,@badop,@badop,@h_vadd8,@h_vsub8,@h_vadd32,@h_vsub32,@h_vmul32,@h_vdp4b,@badop,@badop,@badop,@badop,@h_vget,@h_vset
 
 
 ; ---- memory discovery: E820 -> runtime word mask --------------------
