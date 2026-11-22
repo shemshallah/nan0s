@@ -128,6 +128,9 @@ void nan_set_time_ms(nan_vm *v, uint32_t ms) { v->ms = ms; }
 uint32_t nan_reg(const nan_vm *v, int i) { return v->r[i & 15]; }
 uint32_t nan_pc(const nan_vm *v) { return v->pc; }
 uint64_t nan_word(const nan_vm *v, uint32_t i) { return v->mem[i & v->mem_mask]; }
+uint32_t nan_vector_lane(const nan_vm *v, int vreg, int lane) {
+  return ((const uint32_t *)(const void *)v->vreg[vreg & 15])[lane & 15];
+}
 void nan_set_word(nan_vm *v, uint32_t i, uint64_t raw) { v->mem[i & v->mem_mask] = raw; }
 /* Host boundary: pack external bytes into NaN16 data words for guest LDB.
    Corpus interpretation and all training decisions remain in the guest. */

@@ -10,8 +10,8 @@
 
 #define PAGE 4096u
 #define VRAM_PAGES (NAN_VRAM / PAGE)
-#define STATE_VERSION 1u
-#define SCALAR_LEN 6144u   /* fixed size of the scalar block (about 5.5 KB used, rest reserved), see put_scalars() */
+#define STATE_VERSION 2u
+#define SCALAR_LEN 8192u   /* fixed scalar block: original state + 1 KiB vector file */
 
 typedef struct { uint8_t *p; size_t n, cap; int ok; } wr;
 static void w8(wr *w, uint32_t x)  { if (w->p) { if (w->n + 1 > w->cap) w->ok = 0; else w->p[w->n] = (uint8_t)x; } w->n += 1; }
@@ -38,6 +38,7 @@ static int page_zero(const uint8_t *p) {
 static void put_scalars(wr *w, const nan_vm *v) {
   size_t start = w->n;
   for (int i = 0; i < 16; i++) w32(w, v->r[i]);
+  wb(w, v->vreg, sizeof v->vreg);
   w32(w, v->pc); w32(w, (uint32_t)v->k); w32(w, (uint32_t)v->halted); w64(w, v->steps); w32(w, v->ms);
   w32(w, (uint32_t)v->vmode); w32(w, v->fbw); w32(w, v->fbh); w32(w, v->fbtot);
   for (int i = 0; i < 2000; i++) w16(w, v->cells[i]);
@@ -98,6 +99,7 @@ int nan_restore_state(nan_vm *v, const uint8_t *buf, size_t len) {
   /* parse the scalar block into locals, sanitising everything the interpreter indexes with */
   rd r = { buf, scalars_at, scalars_at + SCALAR_LEN, 1 };
   uint32_t reg[16]; for (int i = 0; i < 16; i++) reg[i] = r32(&r);
+  uint8_t vreg[16][64]; rb(&r, vreg, sizeof vreg);
   uint32_t pc = r32(&r), k = r32(&r), halted = r32(&r); uint64_t steps = r64(&r); uint32_t ms = r32(&r);
   uint32_t vmode = r32(&r), fbw = r32(&r), fbh = r32(&r), fbtot = r32(&r);
   uint16_t cells[2000]; for (int i = 0; i < 2000; i++) cells[i] = (uint16_t)r16(&r);
@@ -122,7 +124,7 @@ int nan_restore_state(nan_vm *v, const uint8_t *buf, size_t len) {
       for (uint32_t j = 0; j < PAGE / 8; j++) dst[j] = le64(q.p + q.n + (size_t)j * 8);
       q.n += PAGE; }
     for (uint32_t i = 0; i < nv; i++) { uint32_t ix = r32(&q); memcpy(v->vram + (size_t)ix * PAGE, q.p + q.n, PAGE); q.n += PAGE; } }
-  memcpy(v->r, reg, sizeof reg); v->pc = pc; v->k = (int)k; v->halted = halted ? 1 : 0; v->steps = steps; v->ms = ms;
+  memcpy(v->r, reg, sizeof reg); memcpy(v->vreg, vreg, sizeof vreg); v->pc = pc; v->k = (int)k; v->halted = halted ? 1 : 0; v->steps = steps; v->ms = ms;
   v->vmode = (int)vmode; v->fbw = fbw; v->fbh = fbh; v->fbtot = fbtot; memcpy(v->cells, cells, sizeof cells);
   memcpy(v->dac, dac, sizeof dac); v->dac_loaded = dloaded ? 1 : 0; v->dac_wi = (int)dwi; v->dac_wp = (int)dwp; v->dac_ri = (int)dri; v->dac_rp = (int)drp;
   memcpy(v->ring, ring, 16); v->rhead = (int)rhead; v->rtail = (int)rtail; v->rawkb = (int)rawkb; v->shift = shift ? 1 : 0; v->caps = caps ? 1 : 0; v->e0 = e0 ? 1 : 0;

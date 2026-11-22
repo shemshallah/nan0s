@@ -103,15 +103,15 @@ static void t_predication_and_traps(void) {
   begin(); I(0x07, 0, 0, 0); nan_set_reg(V, 1, 6); nan_set_reg(V, 2, 3); emit(0x00, 3, 1, 2, 8); halt(); go(100); EQ(R(3), 2);
   /* HALT is silent and unconditional */
   begin(); emit(0xFF, 0, 0, 0, 0); go(10); ser(b, sizeof b); EQ(go(10), NAN_HALTED); CHECK(b[0] == 0); CHECK(!*nan_trap_text(V));
-  /* bad op >0x45: trap text !O + pc after fetch, min 4 hex digits */
+  /* reserved op 0x49 and op >0x5F: trap text !O + pc after fetch, min 4 hex digits */
   begin(); I(0x01, 3, 0, 1); I(0x49, 0, 0, 0); EQ(go(10), NAN_HALTED); ser(b, sizeof b); CHECK(!strcmp(b, "!O0002")); CHECK(!strcmp(nan_trap_text(V), "!O0002"));
   EQ(go(10), NAN_HALTED);                                                   /* stays halted */
   begin(); I(0x0E, 0, 0, 0); go(10); ser(b, sizeof b); CHECK(!strcmp(b, "!O0001"));      /* table entry 0x0E is a bad op */
   begin(); I(0x1C, 0, 0, 0); go(10); ser(b, sizeof b); CHECK(!strcmp(b, "!O0001"));
   /* predicated-off bad table op does not trap; 0x2F is a NOP */
   begin(); emit(0x0E, 0, 0, 0, 1 << 3); I(0x2F, 0, 0, 0); I(0x01, 3, 0, 5); halt(); go(10); EQ(R(3), 5); ser(b, sizeof b); CHECK(b[0] == 0);
-  /* but op>0x45 traps even when predicated off */
-  begin(); emit(0x50, 0, 0, 0, 1 << 3); go(10); ser(b, sizeof b); CHECK(!strcmp(b, "!O0001"));
+  /* but op>0x5F traps even when predicated off */
+  begin(); emit(0x60, 0, 0, 0, 1 << 3); go(10); ser(b, sizeof b); CHECK(!strcmp(b, "!O0001"));
   /* gate: zero word (invalid heads) at pc -> !G + pc+1 */
   begin(); I(0x0F, 0, 0, 0); I(0x0F, 0, 0, 0); go(10); ser(b, sizeof b); CHECK(!strcmp(b, "!G0003"));
   /* one bad head only is still a gate trap */
@@ -321,13 +321,14 @@ static void t_hooks(void) {
 static void t_state(void) {
   nan_vm *B = nan_create(); CHECK(B != NULL);
   begin(); nan_set_reg(V, 1, 0x13); I(0x19, 1, 0, 0); nan_set_reg(V, 7, 33); nan_set_reg(V, 2, 0x99); I(0x10, 2, 7, 0); nan_set_reg(V, 3, 0xDEADBEEFu); nan_set_reg(V, 4, 9000); I(0x09, 3, 4, 3);
-  nan_set_reg(V, 5, 0x3FFFFF); I(0x09, 3, 5, 0); I(0x01, 6, 0, 'Q'); I(0x15, 6, 0, 0); nan_set_word(V, 70000, 0x1122334455667788ull);
+  nan_set_reg(V, 5, 0x3FFFFF); I(0x09, 3, 5, 0); I(0x01, 6, 0, 'Q'); I(0x15, 6, 0, 0); nan_set_reg(V, 8, 0xCAFEBABEu); I(0x5F, 7, 8, 3); nan_set_word(V, 70000, 0x1122334455667788ull);
   nan_port_out(V, 0x3C8, 9, 1); nan_port_out(V, 0x3C9, 1, 1); nan_port_out(V, 0x3C9, 2, 1); nan_key_char(V, 'k'); nan_key_char(V, 'j'); halt(); go(100);
   size_t sz = nan_state_size(V); CHECK(sz > 5000 && sz < 100000); uint8_t *buf = (uint8_t *)malloc(sz);
   EQ(nan_save_state(V, buf, sz), sz); EQ(nan_save_state(V, buf, sz - 1), 0);
   CHECK(nan_restore_state(B, buf, sz) == 0);
   EQ(nan_word(B, 9003), nan_word(V, 9003)); EQ(nan_word(B, 0x3FFFFF), nan_word(V, 0x3FFFFF)); EQ(nan_word(B, 70000), 0x1122334455667788ull); EQ(nan_pc(B), nan_pc(V));
   for (int i = 0; i < 16; i++) EQ(nan_reg(B, i), nan_reg(V, i));
+  EQ(nan_vector_lane(B, 7, 3), 0xCAFEBABEu);
   EQ(nan_display_mode(B), 1); EQ(nan_steps(B), nan_steps(V)); EQ(nan_flags(B), nan_flags(V));
   uint8_t c1[3], c2[3]; nan_dac_rgb(B, 9, c1); nan_dac_rgb(V, 9, c2); CHECK(!memcmp(c1, c2, 3));
   static uint32_t pa[320 * 200], pb[320 * 200]; nan_render_gfx(V, pa, 64000); nan_render_gfx(B, pb, 64000); CHECK(!memcmp(pa, pb, sizeof pa));
@@ -341,11 +342,11 @@ static void t_state(void) {
   CHECK(nan_restore_state(B, buf, sz - 1) == -1); CHECK(nan_restore_state(B, buf, 8) == -1); CHECK(nan_restore_state(B, NULL, 100) == -1);
   memcpy(bad, buf, sz); bad[8] ^= 1; CHECK(nan_restore_state(B, bad, sz) == -1);                     /* scalar length field */
   memcpy(bad, buf, sz); bad[4] = 9; CHECK(nan_restore_state(B, bad, sz) == -1);                      /* version */
-  { size_t pages = 12 + 6144; memcpy(bad, buf, sz); bad[pages] = 0xFF; bad[pages + 1] = 0xFF; bad[pages + 2] = 0xFF; bad[pages + 3] = 0x7F; CHECK(nan_restore_state(B, bad, sz) == -1); }   /* absurd page count */
+  { size_t pages = 12 + 8192; memcpy(bad, buf, sz); bad[pages] = 0xFF; bad[pages + 1] = 0xFF; bad[pages + 2] = 0xFF; bad[pages + 3] = 0x7F; CHECK(nan_restore_state(B, bad, sz) == -1); }   /* absurd page count */
   { /* pc/regs in a scalar block that violate invariants: ring head 99 */
-    size_t off = 12 + 64 + 12 + 8 + 4 + 16 + 4000 + 768 + 20 + 16;          /* offset of rhead */
+    size_t off = 12 + 64 + 1024 + 12 + 8 + 4 + 16 + 4000 + 768 + 20 + 16;          /* offset of rhead */
     memcpy(bad, buf, sz); bad[off] = 99; CHECK(nan_restore_state(B, bad, sz) == -1);
-    memcpy(bad, buf, sz); bad[12 + 64 + 4] = 7; CHECK(nan_restore_state(B, bad, sz) == -1); }          /* k = 7 */
+    memcpy(bad, buf, sz); bad[12 + 64 + 1024 + 4] = 7; CHECK(nan_restore_state(B, bad, sz) == -1); }          /* k = 7 */
   CHECK(nan_pc(B) == nan_pc(V));                                                                   /* a rejected restore left B untouched */
   /* a fresh deterministic replay: same program run from the same snapshot reaches the same state */
   free(bad);

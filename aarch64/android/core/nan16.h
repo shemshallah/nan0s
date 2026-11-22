@@ -41,6 +41,7 @@ nan_vm *nan_create(void);
    The word count is exposed to guests through CPUID leaf 0x4E4D00FF. */
 nan_vm *nan_create_words(uint32_t words);
 uint32_t nan_mem_words(const nan_vm *v);
+uint32_t nan_vector_lane(const nan_vm *v, int vreg, int lane);
 void    nan_destroy(nan_vm *v);
 void    nan_reset(nan_vm *v);                       /* clear memory/state */
 

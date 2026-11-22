@@ -84,6 +84,86 @@ LD/ST/STW/BSWAPM/LDB/STB/BCOPY use 32-bit register
 addresses; pc is 32 bits when nwords>65536 (JMPR/RET/CALLR reach everywhere,
 JMP/CALL imm stay 16 bits so hot code lives low; far = MOVI+MOVHI+JMPR).
 
+### 3.1 Vector and tensor registers (512-bit base, wider reserved)
+
+NaN16 has 16 scalar 32-bit registers. The vector extension adds 16
+**abstractly 512-bit** vector registers `V0..V15`. The width is part of the
+ISA, not the host: a backend may implement it as 4x128 (SSE/NEON), 2x256
+(AVX2), 1x512 (AVX-512), variable-length (SVE/RVV), or a scalar loop. A
+narrower backend must preserve the exact lane order and wrap rules. Kernel
+code is written once against 512 bits and scales with the host.
+
+Lane views of one vector register:
+
+| view | count | element |
+| --- | --- | --- |
+| `u8` / `i8` | 64 | 8-bit |
+| `u16` / `i16` | 32 | 16-bit |
+| `u32` / `i32` | 16 | 32-bit |
+| `f32` | 16 | binary32 |
+| `f16` / `bf16` | 32 | planned |
+| `fp8` e4m3/e5m2 | 64 | planned |
+| `i4` packed | 128 | planned, low nibble first |
+
+Encoding family `0x50-0x5F` (fixed 512-bit meaning):
+
+    50 VZERO d                  Vd = 0
+    51 VBCAST d,a               Vd[i] = r[a] for every 32-bit lane i
+    52 VLOAD d,a                Vd = 64 payload bytes at guest byte address r[a]
+    53 VSTORE d,a               guest bytes at r[a] = Vd (class +q/+q words)
+    54 VADD8 d,a,b              ../../.. 64 i8 lanes, wrapping
+    55 VSUB8 d,a,b              ../../.. 64 i8 lanes, wrapping
+    56 VADD32 d,a,b             ../../.. 16 i32 lanes, wrapping
+    57 VSUB32 d,a,b             ../../.. 16 i32 lanes, wrapping
+    58 VMUL32 d,a,b             ../../.. 16 i32 lanes, low 32 bits
+    59 VDP4B d,a,b              for each 32-bit lane i:
+                                 Vd[i] = dot4(Va[i], Vb[i])
+                               one guest instruction = 16 dots = 64 MACs;
+                               each lane is four signed i8, low byte first
+    5E VGET d,a,lane            r[d] = u32 lane of Va
+    5F VSET d,a,lane            u32 lane of Vd = r[a]
+
+`d`, `a`, `b` are vector-register numbers where the mnemonic names a vector;
+`VGET/VSET` use `d` as a scalar register for `VGET` and `a` as a scalar
+register for `VSET`. Predication follows the ordinary n/k rule. Vector ops do
+not change flags except where a future saturating/compare form defines it.
+
+`VLOAD`/`VSTORE` move 64 payload bytes = 16 guest words. 64-byte alignment is
+the fast path; unaligned is allowed and byte-exact. `VSTORE` rewrites each
+touched word with the +q/+q class, like `ST`/`STB`.
+
+Reserved widening space:
+
+- `0x4B` is the `VOP` prefix: `imm[15:4]` is a 12-bit sub-op, `imm[3:0]` is a
+  vector-source selector. It is reserved for 1024/2048-bit forms, fp8/int4
+  tensor ops and lane-select variants.
+- `0x4C-0x4F` and `0x60-0x7F` are reserved. A future width bump must use
+  these or `VOP`; it may not redefine `0x50-0x5F`, so old cartridges keep
+  their meaning forever.
+- A 512-bit instruction is exactly 16 32-bit lanes; a 1024-bit instruction
+  will be a new opcode, not a silent doubling of an old one.
+
+Backend mapping contract:
+
+| host | 512-bit lowering |
+| --- | --- |
+| portable C | exact scalar loops (reference) |
+| x86 SSE2 | 4 x 128-bit chunks; `pmaddubsw`/`pmaddwd` for VDP4B |
+| x86 AVX2 | 2 x 256-bit chunks; `vpmaddubsw`/`vpmaddwd` |
+| x86 AVX-512 | 1 x 512-bit register; VNNI dot where available |
+| AArch64 NEON | 4 x 128-bit chunks; `smull`/`sadalp` dot |
+| AArch64 SVE | one or more scalable chunks, predicated tails |
+| RISC-V RVV | one or more `vsetvl` chunks; `vdot`/`vwmul` |
+
+If the host lacks a vector lowering, the native core traps the op with `!O`.
+It must not silently scalarize with a different lane order or saturation
+rule.
+
+Vector ABI: `V0-V7` are argument/return registers, `V8-V15` are
+caller-saved-in-a-call (a callee that uses them saves them explicitly, like
+the scalar convention). There is no hidden vector stack; kernels spill with
+`VSTORE`/`VLOAD` into their `narena64` frames.
+
 ## 4. NaNVM1 — native plan (arbitrary RAM, then VRAM/GPU)
 
 PLAN AND PSEUDOCODE ONLY, NOTHING HERE IS IMPLEMENTED OR RUN.
@@ -382,7 +462,7 @@ existing op/ABI or its op is added here with a version.
 | NaNVM1 op set 0x20-0x48 (32-bit mul/div, bytes, BCOPY, float32, FEXP/FTANH/FLOG) | DONE in the C core (`aarch64/android/core/nan16.c`, `tests/test_core.c`); native implementation PLAN (§4) |
 | 64-bit effective addresses (ADDRH, 0x40) | PLAN (§4.1) |
 | SMP cores, atomics, fences (0x41-0x44) | PLAN (§9.2, §9.3) |
-| AI packed math: DP4B (0x4A) | DONE in C core and native x86 (`nan_simd`, `ncc_dp4b`); FMA/DP2H/CVTPK PLAN |
+| AI packed math: DP4B (0x4A), 512-bit V family/VDP4B (0x50-0x5F) | DP4B DONE both cores; 512-bit C reference DONE (`vec512`); native V lowering PLAN |
 | 16 GB RAM configuration (NAN_WORDS, 64-bit indices, demand-mapped host memory) | PLAN — C core revision |
 | nalloc64 (heaps > 2^31 words, 64-bit pointers/sizes) | PLAN (§11) |
 | NaNVM1 native flat memory + 32-bit pc | PLAN (§4.1-4.2) |
