@@ -2,9 +2,8 @@
 # tools/ncc_alloc.sh - ncc S0 allocator gate.
 # 10,000 random malloc/free/realloc operations over the in-guest free-list
 # heap: alignment, live-block overlap, full-pattern realloc preservation,
-# coalescing/leak check via a whole-heap 1,999,992-byte allocation and reuse,
-# calloc zeroing and
-# overflow, and realloc(NULL,n). The whole test is compiled and run by ncc in
+# coalescing/leak check via a whole-heap 9,999,992-byte allocation and reuse,
+# calloc zeroing and overflow, and realloc(NULL,n). The whole test is compiled and run by ncc in
 # the NaN16 guest; no host C runtime takes part.
 set -e; cd "$(dirname "$0")/.."; export LC_ALL=C
 T="${TMPDIR:-/tmp}/nccalloc.$$"; mkdir -p "$T"; trap 'rm -rf "$T"' EXIT

@@ -293,17 +293,25 @@ atoi(s)            abs(n)             exit(code)
 ```
 
 `malloc` is an S0 boundary-tag free-list allocator over
-`C_HEAP..C_HEAP_END` (2 MB): 4-byte alignment, a header/footer word per
-block, `next`/`prev` in the free payload, minimum 4 words, and coalescing
-with the previous and next physical blocks on `free`. The whole heap starts
-as one free block; `ncc_run` resets it. `realloc` always moves: it allocates,
-copies `min(old,new)` bytes and frees the old block, so shrinking cannot
-leave a stray split. `tools/ncc_alloc.sh` runs 10,000 random
-malloc/free/realloc operations and checks 4-byte alignment, overlap among
-live blocks, full-pattern preservation across realloc, leak-free reuse
-(including a whole-heap 1,999,992-byte allocation, then the same
-allocation again after `free`), `calloc` zeroing/overflow and
-`realloc(NULL,n)`.
+`C_HEAP..C_HEAP_END` (10 MB of C address space): 4-byte alignment, a
+header/footer word per block, `next`/`prev` in the free payload, minimum
+4 words, and coalescing with the previous and next physical blocks on
+`free`. The heap starts with a 256 KiB tail and grows on demand
+(`ni_heap_grow`) by extending toward `C_HEAP_END`, merging the new tail with
+a free block that already ends at the old limit. `ncc_run` resets it.
+`realloc` always moves: it allocates, copies `min(old,new)` bytes and frees
+the old block, so shrinking cannot leave a stray split.
+`tools/ncc_alloc.sh` runs 10,000 random malloc/free/realloc operations and
+checks 4-byte alignment, overlap among live blocks, full-pattern preservation
+across realloc, leak-free reuse (including a whole-heap 9,999,992-byte
+allocation, then the same allocation again after `free`), `calloc`
+zeroing/overflow and `realloc(NULL,n)`.
+
+The C runtime buffers were moved above the heap to make that range
+contiguous: IR at 12 MB, expression stack at 13.6 MB, interpreter stack at
+14.4 MB, C call stack at 15 MB. The guest C address space is 16 MB (the
+4M-word VM); a larger heap needs a VM/memory-map expansion, not a bigger
+`realloc`.
 
 ## Diagnostics and undefined behaviour
 

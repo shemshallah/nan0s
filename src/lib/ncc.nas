@@ -17,9 +17,9 @@
 .include "mpp.nas"
 
 ; ------------------------------------------------------------------ memory map
-.equ NCC_IRB    1200000      ; IR: 2 words per instruction
+.equ NCC_IRB    3000000      ; IR: 2 words per instruction (byte 12 MB)
 .equ NCC_IRMAX  400000
-.equ NCC_IREND  1600000
+.equ NCC_IREND  3400000
 .equ NCC_NAME   1600000      ; identifier spelling pool (4 chars/word)
 .equ NCC_NAMEMAX 50000
 .equ NCC_STRB   1650000      ; scratch / preprocessor text
@@ -37,17 +37,17 @@
 .equ NCC_CASEMAX 4096
 .equ NCC_GOTOB  1950000      ; pending goto patches: 2048 x (label-sym,jmp-index)
 .equ NCC_GOTOMAX 4096
-.equ NCC_ESB    2000000      ; expression stack (words)
+.equ NCC_ESB    3400000      ; expression stack (words; byte 13.6 MB)
 .equ NCC_ESMAX  200000
-.equ NCC_ESEND  2200000
-.equ NCC_PS     2900000      ; compiler/interpreter call stack (words)
+.equ NCC_ESEND  3600000
+.equ NCC_PS     3600000      ; compiler/interpreter call stack (words; byte 14.4 MB)
 ; C program memory is byte-addressed: 4 payload bytes per NaN word.
-.equ C_RODATA   12000000     ; string literals and const data
-.equ C_ROEND    12500000
-.equ C_GLOB     12500000     ; globals and static locals
-.equ C_GLOBEND  13000000
-.equ C_HEAP     13000000     ; malloc arena
-.equ C_HEAP_END 15000000
+.equ C_RODATA   1000000      ; string literals and const data
+.equ C_ROEND    1500000
+.equ C_GLOB     1500000      ; globals and static locals
+.equ C_GLOBEND  2000000
+.equ C_HEAP     2000000      ; growable malloc arena
+.equ C_HEAP_END 12000000
 .equ C_STACK    15000000     ; C call stack (bytes, grows up)
 .equ C_STACK_END 16000000
 
@@ -790,6 +790,7 @@
 .equ W_ALLOC_OLD 61825
 .equ W_ALLOC_NEW 61826
 .equ W_AGHI     61827
+.equ W_HEAP_LIMIT 61836
 .equ W_ERRNO     61795
 .equ W_FWIDE_STD 61796
 .equ W_STDPB     61820
@@ -1634,6 +1635,7 @@ ST r0,r0,#W_SNPOS
 ; with one free block spanning C_HEAP..C_HEAP_END
 ST r0,r0,#W_HEAP_INIT
 ST r0,r0,#W_FREELIST
+ST r0,r0,#W_HEAP_LIMIT
 LA r1,#NCC_ESB
 ST r1,r0,#R_SP
 ST r0,r0,#W_IRYSTOP
@@ -17742,7 +17744,19 @@ MOVI r1,1
 ST r1,r0,#W_HEAP_INIT
 LA r1,#C_HEAP
 SHR r1,r1,2
-LA r2,#C_HEAP_END
+LD r2,r0,#W_HEAP_LIMIT
+CMP r2,r0
+JMP[NE] @nhi_have
+; start with 256 KiB and grow on demand up to C_HEAP_END
+LA r2,0x228480
+ST r2,r0,#W_HEAP_LIMIT
+nhi_have:
+LA r3,#C_HEAP_END
+CMP r2,r3
+JMP[LE] @nhi_clamp
+ADD r2,r3,r0
+ST r2,r0,#W_HEAP_LIMIT
+nhi_clamp:
 SHR r2,r2,2
 SUB r2,r2,r1
 ST r2,r1,0
@@ -17757,7 +17771,87 @@ SUB r14,r14,r13
 LD r15,r14,0
 RET
 
-; insert block r1 into the free list
+; ni_heap_grow: extend the contiguous heap toward C_HEAP_END.
+; r1 = requested words -> r1=1 if grown, 0 if full.
+; The new tail is inserted as a free block; if the old tail is free,
+; the two are merged. The C stack and N16T buffers are above C_HEAP_END.
+ni_heap_grow:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_ALLOC_NEED
+LD r1,r0,#W_HEAP_LIMIT
+CMP r1,r0
+JMP[EQ] @nhg_no
+LA r2,#C_HEAP_END
+CMP r1,r2
+JMP[GE] @nhg_no
+LA r3,0x40000
+LD r4,r0,#W_ALLOC_NEED
+SHL r4,r4,2
+ADDI r4,r4,8
+CMP r4,r3
+JMP[LE] @nhg_use
+ADD r3,r4,r0
+nhg_use:
+ADD r2,r1,r3
+LA r5,#C_HEAP_END
+CMP r2,r5
+JMP[LE] @nhg_fit
+ADD r2,r5,r0
+nhg_fit:
+SUB r3,r2,r1
+MOVI r4,16
+CMP r3,r4
+JMP[LT] @nhg_no
+ST r2,r0,#W_HEAP_LIMIT
+SHR r5,r1,2
+SHR r6,r2,2
+SUB r7,r6,r5
+ST r5,r0,#W_ALLOC_OLD
+ST r7,r0,#W_ALLOC_A
+; If a free block ends exactly at the old limit, absorb it.
+LD r1,r0,#W_FREELIST
+nhg_scan:
+CMP r1,r0
+JMP[EQ] @nhg_new
+LD r2,r1,0
+ADD r3,r1,r2
+LD r4,r0,#W_ALLOC_OLD
+CMP r3,r4
+JMP[EQ] @nhg_merge
+LD r1,r1,1
+JMP @nhg_scan
+nhg_merge:
+LD r4,r0,#W_ALLOC_A
+ADD r7,r2,r4
+ST r7,r0,#W_ALLOC_SIZE
+ST r1,r0,#W_ALLOC_BLK
+CALL @ni_fl_remove
+LD r1,r0,#W_ALLOC_BLK
+LD r7,r0,#W_ALLOC_SIZE
+JMP @nhg_mark
+nhg_new:
+LD r1,r0,#W_ALLOC_OLD
+LD r7,r0,#W_ALLOC_A
+ST r7,r0,#W_ALLOC_SIZE
+nhg_mark:
+ST r7,r1,0
+ADD r4,r1,r7
+ADDI r4,r4,-1
+ST r7,r4,0
+ST r0,r1,1
+ST r0,r1,2
+CALL @ni_fl_insert
+MOVI r1,1
+JMP @nhg_d
+nhg_no:
+MOVI r1,0
+nhg_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+
 ni_fl_insert:
 LD r2,r0,#W_FREELIST
 ST r2,r1,1
@@ -17807,12 +17901,19 @@ CALL @ni_heap_init
 LD r2,r0,#W_FREELIST
 nm_search:
 CMP r2,r0
-JMP[EQ] @nm_zero
+JMP[EQ] @nm_grow
 LD r3,r2,0
 LD r4,r0,#W_ALLOC_NEED
 CMP r3,r4
 JMP[GE] @nm_found
 LD r2,r2,1
+JMP @nm_search
+nm_grow:
+LD r1,r0,#W_ALLOC_NEED
+CALL @ni_heap_grow
+CMP r1,r0
+JMP[EQ] @nm_zero
+LD r2,r0,#W_FREELIST
 JMP @nm_search
 nm_found:
 ST r2,r0,#W_ALLOC_BLK
@@ -17915,7 +18016,7 @@ ADD r3,r1,r2
 ADDI r3,r3,-1
 ST r2,r3,0
 ADD r4,r1,r2
-LA r5,#C_HEAP_END
+LD r5,r0,#W_HEAP_LIMIT
 SHR r5,r5,2
 CMP r4,r5
 JMP[GE] @nf_insert
