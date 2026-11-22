@@ -1,6 +1,6 @@
 (* NaN16 palindromic mirror geometry: a finite, explicit foundation. *)
 (* All statements use the standard Coq kernel; no axioms or Admitted. *)
-From Coq Require Import Arith Lia List.
+From Coq Require Import Arith Lia List Ring.
 Import ListNotations.
 
 Definition cell : Type := (nat * nat)%type.
@@ -238,10 +238,13 @@ Definition flat_addr (a b : nat) : nat := a * byte_bound + b.
 Lemma flat_addr_in_range : forall a b,
   a < byte_bound -> b < byte_bound -> flat_addr a b < 65536.
 Proof.
-  intros a b Ha Hb. unfold flat_addr, byte_bound in *.
-  assert (Ha' : a <= 255) by lia.
-  assert (Hb' : b <= 255) by lia.
-  nia.
+  intros a b Ha Hb.
+  unfold flat_addr, byte_bound in *.
+  change (a * 256 + b < 256 * 256).
+  eapply Nat.lt_le_trans with (m := a * 256 + 256).
+  - apply Nat.add_lt_mono_l. exact Hb.
+  - replace (a * 256 + 256) with ((a + 1) * 256) by ring.
+    apply Nat.mul_le_mono_r. lia.
 Qed.
 
 Lemma flat_addr_injective : forall a b c d,
@@ -251,8 +254,8 @@ Lemma flat_addr_injective : forall a b c d,
 Proof.
   intros a b c d Ha Hb Hc Hd Heq.
   unfold flat_addr, byte_bound in *.
-  assert (Hac : a <= c) by nia.
-  assert (Hca : c <= a) by nia.
-  assert (Hequal : a = c) by lia.
-  subst c. split; [reflexivity | nia].
+  (* Here multiplication by 256 is multiplication by a constant, so the
+     injectivity step is Presburger arithmetic, not nonlinear arithmetic. *)
+  assert (Hac : a = c) by lia.
+  subst c. split; [reflexivity | lia].
 Qed.
