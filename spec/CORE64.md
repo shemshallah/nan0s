@@ -20,7 +20,7 @@ not know the guest ISA and never decodes a guest instruction.
 | --- | --- |
 | guest register file (16 x u32) | `0x50000` |
 | XPC | `0x50800` |
-| emitted block page | `0x51000` |
+| emitted block pages | `0x51000`, `0x52000`, `0x53000` |
 | page tables | `0x30000-0x33fff` |
 | C stack (native call) | `0x1F0000` |
 
@@ -41,10 +41,37 @@ The emitted x86-64 uses SIB absolute `disp32` addressing, e.g.
 
 Current NaN encoder coverage: MOVI, MOVHI, ADD, SUB, ADDI, SHL, SHR, SAR,
 CMP/CMPS, FLAGM, JMP[cond], LD/ST, LDB/STB (word/byte guest memory at
-G=0x200000 with the mask at 0x50404), set-XPC and RET.  Gates:
+G=0x200000 with the mask at 0x50404), set-XPC, HALT and RET.  Gates:
 `qgate64core`, `qgate64block`, `qgate64alu`, `qgate64branch`,
-`qgate64mem` (0x12345678), `qgate64byte` (0xAB).  Next: LDN/HALT/traps,
-the full dispatcher, vector/FP families and self-hosting.
+`qgate64mem` (0x12345678), `qgate64byte` (0xAB).
+
+## Multi-block dispatch
+
+`tools/qgate64prog.sh` translates a three-block program:
+
+```
+PC0: MOVI r1,0 ; MOVI r2,3
+PC2: ADDI r1,r1,1 ; CMP r1,r2 ; JMP[LT] 2
+PC5: HALT
+```
+
+The wrapper embeds the three NaN-emitted blocks and a mechanical table of
+`(guest pc, code address)` qwords.  `src/native64/core64_dispatch_body.S`
+scans that table for the current XPC, calls the matching block, and stops when
+the block sets the halt flag at `0x50C00`.  The substrate never inspects a
+guest instruction.  Expected result: `r1=3`, `XPC=5`.
+
+Two bugs found by the multi-block gate and fixed in the NaN driver:
+
+- `xb_ended` was both the branch join label and the flag slot, so branches
+  jumped into data and re-entered the harness.  The flag slot is now
+  `xb_endflag`.
+- a conditional branch's fallthrough used the translator's source pointer + 1
+  instead of the guest's declared next PC; it now uses `@xb_next`.
+
+Next: LDN/LDW/STW, CALL/RET/JMPR, multiply/divide and BOOL, traps, the
+vector/FP families, a guest loader that preserves NaN header predicates,
+and self-hosting.
 
 ## Bootstrap / self-hosting
 

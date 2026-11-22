@@ -69,8 +69,10 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done and gated.
       G=0x200000; `qgate64mem` (r1=0x12345678 exact).
 - [x] 64-bit byte memory: LDB/STB byte addressing over the guest word
       model; `qgate64byte` (r1=0xAB, XPC=0x200).
-- [ ] Full NaN-coded 64-bit core: LDN/HALT/traps, the full dispatcher,
-      vector/FP families and self-hosting.
+- [x] HALT and the mechanical multi-block `(pc, code)` dispatcher;
+      `qgate64prog` runs a three-block loop (r1=3, XPC=5).
+- [ ] Full NaN-coded 64-bit core: LDN, CALL/RET/JMPR, MUL/DIV, BOOL,
+      traps, vector/FP families, guest loader and self-hosting.
 - [ ] Port the native NaN16 execution core to 64-bit (`kan64`) only where the
       bootstrap/EXECN substrate requires it; core policy stays NaN.
 - [ ] 64-bit native shims for ports, CPUID, RDTSC, MSRs, page tables.

@@ -3,7 +3,7 @@
 #
 #   sh tools/gate_targeted.sh                 # map git changes -> gates
 #   sh tools/gate_targeted.sh FILE...         # map explicit files
-#   sh tools/gate_targeted.sh --full          # complete 95-gate battery
+#   sh tools/gate_targeted.sh --full          # complete battery
 #
 # Targeted runs are parallel, time-boxed, and cache successful gates in
 # .gate-cache/ keyed by their input families.  Use --full (or NO_CACHE=1) for
@@ -38,7 +38,7 @@ while [ "$m" -le 62 ]; do
   m=$((m+1))
 done
 VEC="nan_simd nan_vec nan_vec_native nan_vec_avx2 nan_q4 nan_q4lm nan_bench xlate_x86"
-IMAGES="mkall qgate64 qgate64core qgate64block qgate64alu qgate64branch qgate64mem qgate64byte qgate qgate_gui xmemgate mkproof"
+IMAGES="mkall qgate64 qgate64core qgate64block qgate64alu qgate64branch qgate64mem qgate64byte qgate64prog qgate qgate_gui xmemgate mkproof"
 NATIVE="$VEC narena narena64 nten nmatmul nmat64 nmat64x64"
 
 GATES=""
@@ -55,10 +55,12 @@ for f in $FILES; do
     src/native/kan16.xa|src/native/nan16_x86.nan|x86/native/*|x86/boot/*)
       add "$NATIVE $IMAGES" ;;
     src/native64/*|tools/qgate64.sh)
-      add "mkall qgate64" ;;
-    src/translate/x86_64.nas|src/tests/xlate64_test.nas|tools/qgate64core.sh)
+      add "mkall qgate64 qgate64core qgate64block qgate64alu qgate64branch qgate64mem qgate64byte qgate64prog" ;;
+    src/translate/x86_64.nas|src/translate/x64_block.nas)
+      add "mkall qgate64core qgate64block qgate64alu qgate64branch qgate64mem qgate64byte qgate64prog" ;;
+    src/tests/xlate64_test.nas|tools/qgate64core.sh)
       add "mkall qgate64core" ;;
-    src/translate/x64_block.nas|src/tests/xlate64_block.nas|tools/qgate64block.sh)
+    src/tests/xlate64_block.nas|tools/qgate64block.sh)
       add "mkall qgate64block" ;;
     src/tests/xlate64_alu.nas|tools/qgate64alu.sh)
       add "mkall qgate64alu" ;;
@@ -68,6 +70,8 @@ for f in $FILES; do
       add "mkall qgate64mem" ;;
     src/tests/xlate64_byte.nas|tools/qgate64byte.sh)
       add "mkall qgate64byte" ;;
+    src/tests/xlate64_prog.nas|tools/qgate64prog.sh)
+      add "mkall qgate64prog" ;;
     src/translate/*|src/tests/xlate*|tools/xlate_x86.sh)
       add "xlate_x86" ;;
     src/lib/narena*.nas|src/lib/nten.nas|src/lib/nmat.nas|src/lib/n64.nas)
@@ -173,7 +177,7 @@ esac
 
 # Image gates are sequential and ordered: build once, then boot the image.
 SEQ=""
-for g in mkall qgate64 qgate64core qgate64block qgate64alu qgate64branch qgate64mem qgate64byte mkproof qgate qgate_gui xmemgate; do
+for g in mkall qgate64 qgate64core qgate64block qgate64alu qgate64branch qgate64mem qgate64byte qgate64prog mkproof qgate qgate_gui xmemgate; do
   case " $RUN " in *" $g "*) SEQ="$SEQ $g" ;; esac
 done
 PAR=""

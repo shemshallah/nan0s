@@ -12,7 +12,7 @@ x64_block:
   ST r3,r0,@xb_start
   ST r4,r0,@xb_next
   MOVI r11,0
-  ST r11,r0,@xb_ended
+  ST r11,r0,@xb_endflag
 xb_loop:
   LD r2,r0,@xb_n
   CMP r2,r0
@@ -31,6 +31,9 @@ xb_loop:
   BOOL.8 r10,r5,r10
   MOVI r11,15
   BOOL.8 r12,r10,r11
+  MOVI r11,0xFF
+  CMP r7,r11
+  JMP[EQ] @xb_halt
   MOVI r11,0x0A
   CMP r7,r11
   JMP[EQ] @xb_jmp
@@ -156,6 +159,12 @@ xb_cmps:
   CALL @x64_cmp
   ST r1,r0,@xb_out
   JMP @xb_adv
+xb_halt:
+  LD r1,r0,@xb_out
+  CALL @x64_halt
+  ST r1,r0,@xb_out
+  JMP @xb_ended
+
 xb_jmp:
   LD r4,r0,@xb_np
   MOVI r11,15
@@ -165,8 +174,7 @@ xb_jmp:
   JMP[EQ] @xb_adv
   LD r1,r0,@xb_out
   ADD r7,r10,r0
-  LD r8,r0,@xb_src
-  ADDI r8,r8,1
+  LD r8,r0,@xb_next
   ADD r9,r4,r0
   CALL @x64_jmp_cond
   ST r1,r0,@xb_out
@@ -179,7 +187,7 @@ xb_jmp_u:
   ST r1,r0,@xb_out
 xb_ended:
   MOVI r11,1
-  ST r11,r0,@xb_ended
+  ST r11,r0,@xb_endflag
   JMP @xb_adv
 
 
@@ -225,7 +233,7 @@ xb_adv:
   ST r2,r0,@xb_n
   JMP @xb_loop
 xb_end:
-  LD r11,r0,@xb_ended
+  LD r11,r0,@xb_endflag
   CMP r11,r0
   JMP[NE] @xb_done
   LD r1,r0,@xb_out
@@ -258,5 +266,5 @@ xb_next:
   .word 0
 xb_np:
   .word 0
-xb_ended:
+xb_endflag:
   .word 0
