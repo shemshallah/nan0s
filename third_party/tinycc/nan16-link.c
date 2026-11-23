@@ -24,7 +24,7 @@ typedef struct { int pos; char name[64]; int addend; } NanReloc;
 static NanReloc *nan_relocs;
 static int nan_nrelocs, nan_reloc_cap;
 
-typedef struct { int lo, hi; char name[64]; int addend; } NanAddrReloc;
+typedef struct { int lo, hi, sym_index; char name[64]; int addend; } NanAddrReloc;
 static NanAddrReloc *nan_addr_relocs;
 static int nan_naddr_relocs, nan_addr_reloc_cap;
 
@@ -57,6 +57,9 @@ void nan16_add_addr_reloc(int lo, int hi, Sym *sym, int addend)
     if (!sym || strlen(get_tok_str(sym->v, NULL)) >= sizeof nan_addr_relocs[0].name)
         tcc_error("nan16: invalid address symbol");
     strcpy(nan_addr_relocs[nan_naddr_relocs].name, get_tok_str(sym->v, NULL));
+    if (!sym->c)
+        put_extern_sym(sym, NULL, 0, 0);
+    nan_addr_relocs[nan_naddr_relocs].sym_index = sym->c;
     nan_naddr_relocs++;
 }
 
@@ -194,11 +197,19 @@ int nan16_output_file(TCCState *s1, const char *filename)
 
     for (i = 0; i < nan_naddr_relocs; i++) {
         NanAddrReloc *r = &nan_addr_relocs[i];
-        int si = nan16_sym_index(s1, r->name);
-        ElfSym *es = si ? &((ElfSym *)s1->symtab->data)[si] : NULL;
+        int si = r->sym_index;
+        int nsym = s1->symtab->data_offset / sizeof(ElfSym);
+        Section *strtab = s1->symtab->link;
+        ElfSym *es = (si > 0 && si < nsym) ? &((ElfSym *)s1->symtab->data)[si] : NULL;
+        const char *inm = (es && strtab && es->st_name < strtab->data_offset)
+                        ? (char *)strtab->data + es->st_name : "";
         Section *sec;
         int addr;
-        if (!es) {
+        if (!es || !es->st_shndx || strcmp(inm, r->name)) {
+            si = nan16_sym_index(s1, r->name);
+            es = si ? &((ElfSym *)s1->symtab->data)[si] : NULL;
+        }
+        if (!es || !es->st_shndx) {
             fprintf(stderr, "nan16: unresolved address '%s'\n", r->name);
             return -1;
         }

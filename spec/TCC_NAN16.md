@@ -45,15 +45,15 @@ dynamic per-function frames, `.rodata`, `.data.ro`, `.data`, `.bss`,
 minimal NaN16 libc (`third_party/nan16-libc`) and a driver into a ~1.8 MB
 cartridge.  The libc supplies a heap, strings, `printf`, `strtod`, math
 helpers, setjmp/system stubs and a flat in-memory VFS, so the driver can
-register `test.c` and retrieve `out.bin`.  The cartridge builds and runs to
-HALT, but the driver currently returns 0 with an empty output: the generated
-libtcc's `tcc_new`/`tcc_mallocz` call and function-symbol alignment is not
-yet correct, so `tcc_add_file`/`tcc_output_file` do not produce a program.
-Fixing that call/symbol layout is the next tcc1 step.
+register `test.c` and retrieve `out.bin`.  The cartridge builds, but the
+generated libtcc still traps in its first calls (a bad call/return after
+~7k steps); its `tcc_new`/`tcc_mallocz` call and function-symbol/frame
+layout is not yet correct, so `tcc_add_file`/`tcc_output_file` do not
+produce a program.  Fixing that layout is the next tcc1 step.
 
-Open before tcc1: fix the generated libtcc call/symbol alignment (the
-self-host driver currently returns no output), finish the VFS/headers, and
-run tcc1 -> tcc2.  The softfloat runtime supplies IEEE binary64
+Open before tcc1: fix the generated libtcc call/symbol/frame layout (the
+self-host driver currently traps in its first calls), finish the VFS and
+headers, and run tcc1 -> tcc2.  The softfloat runtime supplies IEEE binary64
 add/sub/mul/div, comparison and conversion helpers.  The same runtime also
 supplies `__divdi3`, `__udivdi3`, `__moddi3`, `__umoddi3`, `__ashldi3`,
 `__ashrdi3` and `__lshrdi3`.

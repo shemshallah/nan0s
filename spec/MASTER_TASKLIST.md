@@ -152,10 +152,11 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done and gated.
       switch, pointers, strings, structs, function pointers, `long long`
       pairs, struct args/returns, 64-bit division/shifts, varargs and
       8-byte binary64 `double`/`long double`.
-- [ ] Before tcc1: fix the generated libtcc call/symbol alignment.  The
+- [ ] Before tcc1: fix the generated libtcc call/symbol/frame layout.  The
       self-host harness (`tools/tcc_nan16_selfhost.sh`) builds a 1.8 MB
-      libtcc+libc cartridge; it runs but returns empty output.  The minimal
-      libc/VFS is in `third_party/nan16-libc`; `printf`/`strtod` are in place.
+      libtcc+libc cartridge; it traps in the first calls after ~7k steps.
+      The minimal libc/VFS is in `third_party/nan16-libc`; `printf`/`strtod`
+      are in place.
 - [ ] NaN16 output: flat cartridge/executable writer, relocations, sections,
       entry point, symbol table.
 - [ ] ABI parity with ncc: args/returns, stack frames, varargs, structs,
