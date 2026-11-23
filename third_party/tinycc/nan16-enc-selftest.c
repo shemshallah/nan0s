@@ -102,5 +102,21 @@ int main(int argc, char **argv)
     fclose(f);
     printf("NAN16 ENC OK const=%u\n", (unsigned)p.n);
     nan16_free(&p);
+
+    /* Label/fixup resolution: CALL func ; ST ; HALT ; func: MOVI r1,9 ; RET */
+    if (nan16_init(&p, 16)) return 1;
+    if (nan16_call(&p, 0)
+        || nan16_st(&p, 1, 0, 0x100)
+        || nan16_halt(&p)
+        || nan16_label(&p, "func")
+        || nan16_movi(&p, 1, 9)
+        || nan16_ret(&p)
+        || nan16_fixup16(&p, 0, "func")
+        || nan16_resolve(&p))
+        return 1;
+    assert(p.n == 5);
+    assert(nan16_payload(p.w[0]) == 0x0B000003);
+    printf("NAN16 ENC OK label=%u\n", (unsigned)p.n);
+    nan16_free(&p);
     return 0;
 }

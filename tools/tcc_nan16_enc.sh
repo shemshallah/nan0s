@@ -14,6 +14,7 @@ grep -q '^NAN16 ENC OK words=3$' "$T/selftest.out"
 grep -q '^NAN16 ENC OK loop=7$' "$T/selftest.out"
 grep -q '^NAN16 ENC OK call=5$' "$T/selftest.out"
 grep -q '^NAN16 ENC OK const=4$' "$T/selftest.out"
+grep -q '^NAN16 ENC OK label=5$' "$T/selftest.out"
 for img in prog.bin prog.nan loop.bin loop.nan call.bin call.nan const.bin const.nan; do
   "$CLI" --img "$T/$img" --mem 16 --steps 1000 --serial --peek 0x100:1 \
       > "$T/$img.out" 2> "$T/$img.err" || true

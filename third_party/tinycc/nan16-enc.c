@@ -6,9 +6,9 @@
 int nan16_init(Nan16Prog *p, size_t cap)
 {
     if (!cap) cap = 64;
+    memset(p, 0, sizeof(*p));
     p->w = (uint64_t *)calloc(cap, sizeof(uint64_t));
     if (!p->w) return -1;
-    p->n = 0;
     p->cap = cap;
     return 0;
 }
@@ -16,8 +16,14 @@ int nan16_init(Nan16Prog *p, size_t cap)
 void nan16_free(Nan16Prog *p)
 {
     free(p->w);
+    free(p->labels);
+    free(p->fixups);
     p->w = NULL;
+    p->labels = NULL;
+    p->fixups = NULL;
     p->n = p->cap = 0;
+    p->nlabels = p->caplabels = 0;
+    p->nfixups = p->capfixups = 0;
 }
 
 int nan16_emit_word(Nan16Prog *p, uint64_t word)
@@ -88,6 +94,65 @@ int nan16_patch_imm16(Nan16Prog *p, size_t index, uint16_t value)
     payload = nan16_payload(p->w[index]);
     payload = (payload & 0xFFFF0000u) | value;
     p->w[index] = nan16_mkword(payload, 15);
+    return 0;
+}
+
+static int nan16_copy_name(char *dst, const char *src)
+{
+    size_t n = strlen(src);
+    if (n >= 32) return -1;
+    memcpy(dst, src, n + 1);
+    return 0;
+}
+
+int nan16_label(Nan16Prog *p, const char *name)
+{
+    Nan16Label *nl;
+    if (p->nlabels == p->caplabels) {
+        size_t nc = p->caplabels ? p->caplabels * 2 : 16;
+        nl = (Nan16Label *)realloc(p->labels, nc * sizeof(Nan16Label));
+        if (!nl) return -1;
+        p->labels = nl;
+        p->caplabels = nc;
+    }
+    if (nan16_copy_name(p->labels[p->nlabels].name, name)) return -1;
+    p->labels[p->nlabels].word = (uint16_t)p->n;
+    p->nlabels++;
+    return 0;
+}
+
+int nan16_fixup16(Nan16Prog *p, size_t index, const char *name)
+{
+    Nan16Fixup *nf;
+    if (index >= p->n) return -1;
+    if (p->nfixups == p->capfixups) {
+        size_t nc = p->capfixups ? p->capfixups * 2 : 16;
+        nf = (Nan16Fixup *)realloc(p->fixups, nc * sizeof(Nan16Fixup));
+        if (!nf) return -1;
+        p->fixups = nf;
+        p->capfixups = nc;
+    }
+    p->fixups[p->nfixups].index = index;
+    if (nan16_copy_name(p->fixups[p->nfixups].name, name)) return -1;
+    p->nfixups++;
+    return 0;
+}
+
+int nan16_resolve(Nan16Prog *p)
+{
+    size_t i, j;
+    for (i = 0; i < p->nfixups; i++) {
+        uint16_t target = 0;
+        int found = 0;
+        for (j = 0; j < p->nlabels; j++)
+            if (!strcmp(p->labels[j].name, p->fixups[i].name)) {
+                target = p->labels[j].word;
+                found = 1;
+                break;
+            }
+        if (!found) return -1;
+        if (nan16_patch_imm16(p, p->fixups[i].index, target)) return -1;
+    }
     return 0;
 }
 

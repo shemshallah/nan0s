@@ -14,9 +14,23 @@
 #include "nan16-abi.h"
 
 typedef struct {
+    char name[32];
+    uint16_t word;
+} Nan16Label;
+
+typedef struct {
+    size_t index;
+    char name[32];
+} Nan16Fixup;
+
+typedef struct {
     uint64_t *w;
     size_t n;
     size_t cap;
+    Nan16Label *labels;
+    size_t nlabels, caplabels;
+    Nan16Fixup *fixups;
+    size_t nfixups, capfixups;
 } Nan16Prog;
 
 int  nan16_init(Nan16Prog *p, size_t cap);
@@ -65,6 +79,11 @@ int nan16_halt(Nan16Prog *p);                            /* 0xFF */
 
 /* Relocation-style patch of a 16-bit immediate/entry field. */
 int nan16_patch_imm16(Nan16Prog *p, size_t index, uint16_t value);
+
+/* Named labels and deferred 16-bit fixups (TCC gsym/gsym_addr analogue). */
+int nan16_label(Nan16Prog *p, const char *name);
+int nan16_fixup16(Nan16Prog *p, size_t index, const char *name);
+int nan16_resolve(Nan16Prog *p);
 
 /* Writers. */
 int nan16_write_words(FILE *f, const Nan16Prog *p);
