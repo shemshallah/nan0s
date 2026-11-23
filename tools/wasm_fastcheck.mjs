@@ -137,6 +137,15 @@ try {
     console.log("bare n + a + 2 backspaces: CPU still executing");
 
     if (!bootOnly) {
+        // Bare build is a help command, never the legacy 'b' browser alias.
+        await type(emulator, "build\n");
+        await until(() => state.serial.includes("NANBUILD HELP"),
+            "raw NaN16 build usage reply", 12_000);
+        assert.ok(!state.serial.includes("NANBUILD OK"),
+            "Bare build must not start a disk build");
+        assert.ok(new Uint8Array(blankReplica).every(byte => byte === 0),
+            "Bare build must leave the output disk unchanged");
+        console.log("bare 'build' displayed NaN16 usage and left the output disk blank");
         await type(emulator, "build nan0s\n");
         await until(() =>
             state.serial.includes("NANBUILD OK") || state.serial.includes("NANBUILD FAIL"),
