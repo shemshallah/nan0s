@@ -142,7 +142,7 @@ for g in ncc_abi_sizes ncc_alloc ncc_heap ncc_aligned narena narena64 nten nan_s
          ncc_donut_exact; do
   [ -f "tools/$g.sh" ] && run "$g" sh "tools/$g.sh"
 done
-for g in ncc_macro_text ncc_include ncc_libm_exact ncc_iso_c ncc_ctests; do
+for g in ncc_macro_text ncc_include ncc_libm_exact ncc_iso_c ncc_ctests tcc_nan16_enc; do
   [ -f "tools/$g.sh" ] && run "$g" sh "tools/$g.sh"
 done
 [ -f tools/py_m1.sh ] && run py_m1 sh tools/py_m1.sh

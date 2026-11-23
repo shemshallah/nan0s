@@ -143,8 +143,11 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done and gated.
 
 ## P0.7 TCC self-hosting and the verified compiler chain
 - [x] Vendor TCC at `third_party/tinycc` (commit 5cef7f3, LGPL-2.1).
+- [x] NaN16 ABI contract (`nan16-abi.h`), host word encoder
+      (`nan16-enc.c/.h`) and a runnable `MOVI/ST/HALT` smoke test
+      (`tcc_nan16_enc`, raw words and `.nan` text).
 - [ ] `TCC_TARGET_NAN16`: `nan16-gen.c`, `nan16-link.c`, `nan16-asm.c`,
-      `nan16-tok.h`, `nan16-abi.h`.
+      `nan16-tok.h` wired into `tcc.h`/`configure`.
 - [ ] NaN16 output: flat cartridge/executable writer, relocations, sections,
       entry point, symbol table.
 - [ ] ABI parity with ncc: args/returns, stack frames, varargs, structs,

@@ -3,6 +3,12 @@
 Status: P0.7, started. TCC source is vendored at
 `third_party/tinycc` commit `5cef7f3f85b0fbbd4663fd3518ba097d7fe3d738`.
 
+The ABI contract is in `third_party/tinycc/nan16-abi.h` and the host-side
+word encoder in `nan16-enc.c/.h`.  `tools/tcc_nan16_enc.sh` builds the
+encoder, emits `MOVI r1,42 ; ST r1,r0,0x100 ; HALT` as raw words and as
+`.nan` text, and executes both in `nan_cli` (stored payload 0x2A, halted).
+The TCC backend (`nan16-gen.c`, cartridge writer) is the next stage.
+
 ## The milestone
 
 `tcc2` is the moment: TCC compiled by TCC on NaN16, compiling TCC again to a
@@ -98,8 +104,9 @@ TCC cannot precede the ABI and memory work:
 
 ## Immediate next steps
 
-1. Add `TCC_TARGET_NAN16` to `tcc.h`/`configure`, and a `nan16-gen.c` skeleton
-   with the encoder and a `main(){return 42;}` smoke test.
+1. [x] ABI contract + host encoder + `main(){return 42;}` smoke test.
+   [ ] Wire `TCC_TARGET_NAN16` into `tcc.h`/`configure` and implement
+   `nan16-gen.c` against the encoder and ABI header.
 2. Define `nan16-abi.h` from the ncc calling convention and write a
    bidirectional call test (TCC code calls ncc `printf`; ncc calls TCC code).
 3. Implement the flat cartridge writer and relocations for `MOVI/MOVHI`,

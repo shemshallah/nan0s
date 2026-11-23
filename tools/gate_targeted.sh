@@ -46,6 +46,8 @@ add() { for g in $1; do GATES="$GATES $g"; done; }
 full=0
 for f in $FILES; do
   case "$f" in
+    third_party/tinycc/nan16-*|tools/tcc_nan16_enc.sh)
+      add "tcc_nan16_enc" ;;
     spec/*|third_party/*|*.md|build/*|aarch64/android/app/src/main/assets/*)
       ;;
     src/lib/ncc.nas|src/lib/ppexpr.nas|src/lib/mpp.nas|src/lib/wide*.nas|src/lib/vscanf.nas|src/lib/iso*.nas|src/lib/mathx.nas|src/prog/nasm0_tables.nas|src/tools/disasm.nas|src/tests/ctests/*|src/tests/ncc_*)
