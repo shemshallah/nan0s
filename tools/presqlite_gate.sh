@@ -27,7 +27,7 @@ while [ $# -gt 0 ]; do
                nan_simd nan_vec nan_vec_native nan_vec_avx2 nan_q4 nan_q4lm nan_bench \
                xlate_x86 ncc_dp4b nmatmul nmat64 nmat64x64 ncc_headers ncc_ppexpr \
                ncc_torture ncc_donut_exact ncc_macro_text ncc_include ncc_libm_exact \
-               ncc_iso_c ncc_ctests mkproof mkall qgate qgate_gui xmemgate qgate64 \
+               ncc_iso_c ncc_ctests tcc_nan16_enc mkproof mkall qgate qgate_gui xmemgate qgate64 \
                qgate64core qgate64block qgate64alu qgate64branch qgate64mem qgate64byte \
                qgate64prog qgate64mul qgate64div qgate64fp qgate64fpe qgate64mem2 \
                qgate64blockops qgate64trap qgate64vec qgate64vldst qgate64vdp4b \
