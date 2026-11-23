@@ -2,6 +2,7 @@
 __pycache__/
 *.pyc
 node_modules/
+.cache/nan0s-wasm/
 *.o
 *.tmp
 .DS_Store
