@@ -1054,8 +1054,10 @@ MOVI r1,4
 CALL @gui_single
 JMP @tm_done
 tm_net:
-MOVI r1,7
-CALL @gui_open_new
+; The n command opens NaNNet (kind 5), not the browser (kind 7).
+; Reuse the single network-control window like the F6 shortcut.
+MOVI r1,5
+CALL @gui_single
 JMP @tm_done
 tm_utl:
 MOVI r1,6
@@ -1374,7 +1376,7 @@ RET
 tm_id:
 .word 0
 s_help:
-.str "h c v w b l m x t s n u f e q\nb browser l lattice m monitor x hex\nt term w count c clear v ver\ne C editor (.run/.demo)\ns settings n browser u utils\nf files (nsh) q quit gui\n"
+.str "h c v w b l m x t s n u f e q\nb browser l lattice m monitor x hex\nt term w count c clear v ver\ne C editor (.run/.demo)\ns settings n NaNNet u utils\nf files (nsh) q quit gui\n"
 s_ver:
 .str "NaN/0S GUI r26\npure NaN16 wm\n"
 s_wins:
@@ -4316,10 +4318,10 @@ RET
 br_init:
 ST r15,r0,@bi_ret
 ST r1,r0,@br_id
-MOVI r1,66
-PUTC r1
-MOVI r1,82
-PUTC r1
+; The original debug PUTC instructions clobbered r1 with ASCII 'R' (82).
+; term_fit requires the actual window ID. Passing 82 escaped MAXW and
+; corrupted/blocked the browser launch, notably via terminal command n.
+LD r1,r0,@br_id
 CALL @term_fit
 MOVI r1,0
 ST r1,r0,@br_tab
