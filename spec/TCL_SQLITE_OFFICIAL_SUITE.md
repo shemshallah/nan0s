@@ -185,8 +185,15 @@ Status legend: **done**, **partial**, **planned**.
 
 ### P4 — SQLite testfixture and official suite
 
-- [ ] Vendor `sqlite-src-3540100` (test suite) with hashes; put the test
-      tree and Tcl library on the guest VFS/disk.
+- [x] Pin Tcl 9.0.3 and `sqlite-src-3540100` provenance in
+      `src/tests/tcl_sqlite/VENDOR`; `tools/fetch_tcl_sqlite_suite.sh` verifies
+      both archives by SHA-256 and extracts outside the repo.
+- [x] `tools/tcl_sqlite_native_baseline.sh`: x86_64-gated native Tcl +
+      `testfixture` build and official-test baseline (development oracle is
+      explicitly opt-in on other hosts).
+- [ ] Run the x86_64 baseline and archive exact result counts.
+- [ ] Pack the Tcl library and the 1,199 `.test` files into a guest-readable
+      suite image (no host filesystem in the product path).
 - [ ] Full `testfixture` build with the official flags, THREADSAFE=1, all
       extensions and test hooks; guest VFS on NaNFS.
 - [ ] Port `tester.tcl` capability probes and the test runner; no host
