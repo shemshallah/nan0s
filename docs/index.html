@@ -62,7 +62,8 @@
     .typebar-row button { padding: 7px 10px; }
     /*
      * Never squeeze the native 1024x768 guest into the phone's width.
-     * Display at a readable pixel scale and let touch gestures pan the guest.
+     * Display at a readable pixel scale. One finger pans; two fingers zoom
+     * only the guest viewport, never the entire HTML page.
      */
     #screen_container {
       width: 100%;
@@ -70,6 +71,7 @@
       height: clamp(260px, 62svh, 660px);
       overflow: auto;
       overscroll-behavior: contain;
+      /* One-finger scroll stays native; our two-finger handler zooms only NaN/0S. */
       touch-action: pan-x pan-y;
       -webkit-overflow-scrolling: touch;
     }
@@ -112,7 +114,7 @@
     <button id="zoom-fit" type="button" disabled>Fit</button>
     <button id="download-replica" type="button" disabled title="Enabled after build nan0s verifies the full secondary IDE disk">Download rebuilt .img</button>
     <span class="hint" id="image-fingerprint" aria-live="polite" title="SHA-256 of the exact guest image fetched by this browser">guest disk: loading…</span>
-    <span class="hint">Type <b>build</b> + Enter for command help, or <b>build nan0s</b> + Enter to replicate the entire bootable disk onto an independent IDE slave. The guest verifies every sector, then enables the image download. · boots the complete guest (floppy + primary IDE) to the desktop with one terminal · <b>q</b> quits the GUI → museum menu (<b>1–8</b>, <b>ESC</b> back) · tap the keys below or the text bar to type</span>
+    <span class="hint"><b>Two-finger pinch zooms NaN/0S; one finger pans.</b> Type <b>build</b> + Enter for command help, or <b>build nan0s</b> + Enter to replicate the entire bootable disk onto an independent IDE slave. The guest verifies every sector, then enables the image download. · boots the complete guest (floppy + primary IDE) to the desktop with one terminal · <b>q</b> quits the GUI → museum menu (<b>1–8</b>, <b>ESC</b> back) · tap the keys below or the text bar to type</span>
   </div>
   <div class="typebar">
     <label for="type" class="hint">Phone keyboard → NaN/0S PS/2 keyboard</label>
@@ -200,7 +202,8 @@
   }
 
   function updateGuestZoom(next) {
-    zoom = Math.max(0.375, Math.min(3, next));
+    // Full-screen Fit must be possible even on narrow phone viewports.
+    zoom = Math.max(0.25, Math.min(4, next));
     zoomLevelEl.textContent = Math.round(zoom * 100) + "%";
     if (emulator && typeof emulator.screen_set_scale === "function") {
       emulator.screen_set_scale(zoom, zoom);
@@ -210,7 +213,66 @@
   function fitGuestScreen() {
     var available = Math.max(160, screenEl.clientWidth - 24);
     updateGuestZoom(available / Math.max(320, guestWidth));
+    screenEl.scrollLeft = 0;
+    screenEl.scrollTop = 0;
   }
+
+  // Two-finger pinch scales the real v86 NaN/0S framebuffer, NOT the webpage.
+  // Anchoring in guest-content coordinates keeps the pixels beneath the fingers
+  // stationary even when the fingers also drag while changing their distance.
+  var pinch = null;
+  function pinchGeometry(touches) {
+    var a = touches[0], b = touches[1];
+    var rect = screenEl.getBoundingClientRect();
+    return {
+      x: (a.clientX + b.clientX) / 2 - rect.left - screenEl.clientLeft,
+      y: (a.clientY + b.clientY) / 2 - rect.top - screenEl.clientTop,
+      distance: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY)
+    };
+  }
+  function beginGuestPinch(event) {
+    if (!emulator || !isTouchView || event.touches.length !== 2) return;
+    var g = pinchGeometry(event.touches);
+    if (g.distance < 8) return;
+    pinch = {
+      distance: g.distance,
+      zoom: zoom,
+      anchorX: (screenEl.scrollLeft + g.x) / zoom,
+      anchorY: (screenEl.scrollTop + g.y) / zoom
+    };
+    if (event.cancelable !== false) event.preventDefault();
+  }
+  screenEl.addEventListener("touchstart", function (event) {
+    if (event.touches.length === 2) beginGuestPinch(event);
+  }, { passive: false });
+  screenEl.addEventListener("touchmove", function (event) {
+    if (event.touches.length !== 2 || !emulator || !isTouchView) return;
+    if (!pinch) beginGuestPinch(event);
+    if (!pinch) return;
+    if (event.cancelable !== false) event.preventDefault();
+    var g = pinchGeometry(event.touches);
+    updateGuestZoom(pinch.zoom * g.distance / pinch.distance);
+    var left = Math.max(0, pinch.anchorX * zoom - g.x);
+    var top = Math.max(0, pinch.anchorY * zoom - g.y);
+    screenEl.scrollLeft = left;
+    screenEl.scrollTop = top;
+    // v86 may update the canvas CSS dimensions after layout; reapply only
+    // the newest gesture to avoid stale animation frames jumping the viewport.
+    if (typeof requestAnimationFrame === "function") {
+      var gesture = pinch;
+      requestAnimationFrame(function () {
+        if (pinch === gesture) {
+          screenEl.scrollLeft = left;
+          screenEl.scrollTop = top;
+        }
+      });
+    }
+  }, { passive: false });
+  screenEl.addEventListener("touchend", function (event) {
+    // Once only one finger remains, restore normal native viewport scrolling.
+    if (event.touches.length !== 2) pinch = null;
+  }, { passive: true });
+  screenEl.addEventListener("touchcancel", function () { pinch = null; }, { passive: true });
 
   function setInputEnabled(on) {
     typeEl.disabled = !on;
