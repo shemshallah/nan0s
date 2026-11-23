@@ -85,10 +85,10 @@ for p in ret42 call loop global larray garray fact sw ptr str struct gstruct; do
       > "$T/$p.out" 2> "$T/$p.err" || true
   want=0000002A
   case "$p" in
-    loop*) want=0000002D ;;
-    garray*) want=00000004 ;;
-    fact*) want=00000078 ;;
-    str*) want=00006869 ;;
+    loop) want=0000002D ;;
+    garray) want=00000004 ;;
+    fact) want=00000078 ;;
+    str) want=00006869 ;;
   esac
   if ! grep -qx "$want" "$T/$p.out"; then
     echo "tcc_nan16_smoke: FAIL ($p did not return $want)"
