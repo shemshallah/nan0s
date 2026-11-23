@@ -162,7 +162,9 @@
   // The live Pages workflow rebuilds the complete guest system and publishes docs/.
   // Boot like tools/qgate_gui.sh: one source image, two independent virtual disks.
   // A floppy boot alone is NOT the full GUI path; the ATA loader reads the IDE master.
-  // docs/nan0s.img is the published image, with a repo-root fallback for local serving.
+  // Always fetch the currently published guest disk. force-cache silently reused
+  // obsolete NaN/0S images on Android even when the HTML and Pages were updated.
+  // Query nonce also bypasses intermediate HTTP caches that ignore Cache-Control.
   var CANDIDATES = ["nan0s.img", "../build/nan0s.img"];
 
   var statusEl = document.getElementById("status");
@@ -229,8 +231,9 @@
         return Promise.reject(new Error("floppy image not found (tried " + CANDIDATES.join(", ") + ")"));
       }
       var url = CANDIDATES[i++];
-      status("fetching " + url + " …");
-      return fetch(url, { cache: "force-cache" }).then(function (r) {
+      var freshUrl = url + (url.indexOf("?") < 0 ? "?" : "&") + "guest=" + Date.now();
+      status("fetching fresh NaN/0S guest image: " + url + " …");
+      return fetch(freshUrl, { cache: "no-store" }).then(function (r) {
         if (!r.ok) throw new Error(url + ": HTTP " + r.status);
         return r.arrayBuffer().then(function (data) {
           var bytes = new Uint8Array(data);
