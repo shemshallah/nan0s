@@ -109,8 +109,10 @@ async function main() {
   assert.equal(single.defaultPrevented, false, 'One-finger pan must not be intercepted');
   const pinchStart = screen.dispatch('touchstart', { touches: first, cancelable: true });
   assert.equal(pinchStart.defaultPrevented, true, 'Two-finger start blocks page zoom');
+  assert.equal(pinchStart.propagationStopped, true, 'Pinch must not become v86 mouse input');
   const pinchOut = screen.dispatch('touchmove', { touches: expanded, cancelable: true });
   assert.equal(pinchOut.defaultPrevented, true, 'Pinch must block page scrolling and zoom');
+  assert.equal(pinchOut.propagationStopped, true, 'Two-finger movement is not a guest mouse');
   assert.deepEqual(emulator.scales.at(-1), [2.25, 2.25],
     'Spreading 1.5x must scale the NaN/0S desktop from 150% to 225%');
   assert.equal(elements['zoom-level'].textContent, '225%', 'Pinch updates toolbar');
@@ -129,6 +131,8 @@ async function main() {
   screen.dispatch('touchend', { touches: [first[0]] });
   const oneMove = screen.dispatch('touchmove', { touches: [first[0]], cancelable: true });
   assert.equal(oneMove.defaultPrevented, false, 'Single-finger panning remains native');
+  assert.equal(oneMove.propagationStopped, true,
+    'Screen must stop v86 global touch adapter from cancelling native scrolling');
   screen.dispatch('touchcancel', { touches: [] });
   assert.ok(!emulator.codes.length, 'Screen pinch must not inject keyboard input');
 
