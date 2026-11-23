@@ -15,14 +15,22 @@
 .equ SB_CHECK 450128
 
 ; State is static guest words and survives nested NaN calls safely.
-sb_lba: .word 0
-sb_bufp: .word 0
-sb_drive: .word 0
-sb_mode: .word 0
-sb_ok: .word 0
-sb_sector: .word 0
-sb_pos: .word 0
-sb_ret: .word 0
+sb_lba:
+.word 0
+sb_bufp:
+.word 0
+sb_drive:
+.word 0
+sb_mode:
+.word 0
+sb_ok:
+.word 0
+sb_sector:
+.word 0
+sb_pos:
+.word 0
+sb_ret:
+.word 0
 
 sb_build:
 ST r15,r14,0
