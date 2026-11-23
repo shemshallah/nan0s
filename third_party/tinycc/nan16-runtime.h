@@ -45,9 +45,16 @@
     "    return neg ? (i64)((u64)0 - r) : (i64)r;\n" \
     "}\n" \
     "\n" \
-    "u64 __ashldi3(u64 a, int n) { while (n > 0) { a = a << 1; n--; } return a; }\n" \
-    "u64 __lshrdi3(u64 a, int n) { while (n > 0) { a = a >> 1; n--; } return a; }\n" \
-    "i64 __ashrdi3(i64 a, int n) { while (n > 0) { a = a >> 1; n--; } return a; }\n" \
+    "static void __nan16_badshift(int op, int n, u64 a)\n" \
+    "{\n" \
+    "    *(volatile u32 *)0x03D00000u = (u32)n;\n" \
+    "    *(volatile u32 *)0x03D00004u = (u32)a;\n" \
+    "    *(volatile u32 *)0x03D00008u = (u32)(a >> 32);\n" \
+    "    *(volatile u32 *)0x03D0000Cu = 0x53484654u | ((u32)op << 28);\n" \
+    "}\n" \
+    "u64 __ashldi3(u64 a, int n) { if (n < 0 || n >= 64) { __nan16_badshift(0, n, a); return 0; } while (n > 0) { a = a << 1; n--; } return a; }\n" \
+    "u64 __lshrdi3(u64 a, int n) { if (n < 0 || n >= 64) { __nan16_badshift(1, n, a); return 0; } while (n > 0) { a = a >> 1; n--; } return a; }\n" \
+    "i64 __ashrdi3(i64 a, int n) { if (n < 0 || n >= 64) { __nan16_badshift(2, n, (u64)a); return 0; } while (n > 0) { a = a >> 1; n--; } return a; }\n" \
     "\n" \
     "/* ---- binary64 helpers ---- */\n" \
     "#define DSIGN(x) ((int)((x) >> 63))\n" \

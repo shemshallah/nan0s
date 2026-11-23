@@ -432,7 +432,34 @@ char *getenv(const char *name)
 }
 
 int nan16_exit_code;
-void exit(int code) { nan16_exit_code = code; for (;;) ; }
+#ifdef NAN16_EXIT_DIAG
+extern unsigned char *nan16_stderr_data;
+extern unsigned nan16_stderr_len;
+extern unsigned char *nan16_stdout_data;
+extern unsigned nan16_stdout_len;
+static void exit_diag(int code)
+{
+    unsigned char *d;
+    unsigned n;
+    d = (unsigned char *)0x03E00000u;
+    n = nan16_stderr_len; if (n > 262144u) n = 262144u;
+    if (n && nan16_stderr_data) memcpy(d, nan16_stderr_data, n);
+    d[n] = 0;
+    *(volatile unsigned *)0x03DFFFF0u = n;
+    d = (unsigned char *)0x03E40000u;
+    n = nan16_stdout_len; if (n > 262144u) n = 262144u;
+    if (n && nan16_stdout_data) memcpy(d, nan16_stdout_data, n);
+    d[n] = 0;
+    *(volatile unsigned *)0x03DFFFF4u = n;
+    *(volatile unsigned *)0x03DFFFF8u = (unsigned)code;
+}
+#endif
+void exit(int code) {
+#ifdef NAN16_EXIT_DIAG
+    exit_diag(code);
+#endif
+    nan16_exit_code = code; for (;;) ;
+}
 void _Exit(int code) { exit(code); }
 void abort(void) { exit(134); }
 
@@ -454,14 +481,15 @@ int atexit(void (*fn)(void)) { (void)fn; return 0; }
 int system(const char *s) { (void)s; return 0; }
 
 /* ---------------------------------------------------------------- stdio/VFS */
-#define MAXFILES 64
-#define MAXSTREAMS 16
+#define MAXFILES 2048
+#define MAXSTREAMS 64
 #define FD_VFS_BASE 3
+#define VFS_NAME_MAX 128
 typedef struct MemFile {
-    char name[64];
+    char name[VFS_NAME_MAX];
     unsigned char *data;
     unsigned size, cap, pos;
-    int used, writable;
+    int used, writable, owned;
 } MemFile;
 static MemFile files[MAXFILES];
 
@@ -507,10 +535,11 @@ static MemFile *mf_new(const char *name)
     for (i = 0; i < MAXFILES; i++) {
         if (!files[i].used) {
             files[i].used = 1;
-            strncpy(files[i].name, name, 63);
-            files[i].name[63] = 0;
+            strncpy(files[i].name, name, VFS_NAME_MAX - 1);
+            files[i].name[VFS_NAME_MAX - 1] = 0;
             files[i].data = 0; files[i].size = files[i].cap = files[i].pos = 0;
             files[i].writable = 1;
+            files[i].owned = 1;
             return &files[i];
         }
     }
@@ -521,11 +550,27 @@ int nan16_vfs_add(const char *name, const void *data, unsigned size)
     MemFile *f = mf_find(name);
     if (!f) f = mf_new(name);
     if (!f) return -1;
-    f->data = malloc(size);
+    if (f->owned && f->data) free(f->data);
+    f->data = malloc(size ? size : 1);
     if (!f->data) return -1;
     memcpy(f->data, data, size);
     f->size = f->cap = size;
-    f->pos = 0; f->writable = 0;
+    f->pos = 0; f->writable = 0; f->owned = 1;
+    return 0;
+}
+
+/* Register a read-only file backed directly by embedded ROM data.  The
+   compiler and the test suite use this to avoid a second copy of multi-
+   megabyte sources in the guest heap. */
+int nan16_vfs_add_ro(const char *name, const void *data, unsigned size)
+{
+    MemFile *f = mf_find(name);
+    if (!f) f = mf_new(name);
+    if (!f) return -1;
+    if (f->owned && f->data) free(f->data);
+    f->data = (unsigned char *)(void *)data;
+    f->size = f->cap = size;
+    f->pos = 0; f->writable = 0; f->owned = 0;
     return 0;
 }
 int nan16_vfs_get(const char *name, unsigned char **data, unsigned *size)
@@ -581,7 +626,7 @@ ssize_t write(int fd, const void *buf, size_t n)
     }
     if (fd < FD_VFS_BASE || fd >= FD_VFS_BASE + MAXFILES) return -1;
     f = &files[fd - FD_VFS_BASE];
-    if (!f->used) return -1;
+    if (!f->used || !f->writable) return -1;
     if (f->pos + n > f->cap) {
         unsigned nc = f->cap ? f->cap : 256;
         unsigned char *nb;
