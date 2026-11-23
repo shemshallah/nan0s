@@ -146,6 +146,9 @@ gate_files() {
     c_core_test|ncc_*)
       echo "src/lib/*.nas src/prog/nasm0_tables.nas src/tools/disasm.nas src/tests/ncc_*.nas src/tests/ctests/* aarch64/android/core/*.c aarch64/android/core/*.h aarch64/android/tests/*.c aarch64/android/tools/nan_cli.c aarch64/android/Makefile tools/nmk.awk tools/ncc_*.sh"
       ;;
+    tcc_nan16_*)
+      echo "third_party/tinycc/nan16-* third_party/tinycc/tcc.h third_party/tinycc/libtcc.c third_party/tinycc/libtcc.h third_party/tinycc/tccelf.c tools/tcc_nan16_*.sh"
+      ;;
     *)
       echo "src/native/*.xa src/native/*.nan src/native64/* x86/native/* x86/boot/* src/translate/*.nas src/tests/*.nas tools/mkimg.awk tools/nmk.awk tools/mkall.sh tools/xgold.sh tools/nan_*.sh tools/xlate_x86.sh tools/qgate*.sh tools/mkproof.sh"
       ;;
@@ -157,7 +160,8 @@ gate_key() {
 }
 COMPILER_KEY=$(gate_key ncc_m1)
 NATIVE_KEY=$(gate_key xlate_x86)
-key_for() { case "$1" in c_core_test|ncc_*) echo "$COMPILER_KEY" ;; *) echo "$NATIVE_KEY" ;; esac; }
+TCC_KEY=$(gate_key tcc_nan16_smoke)
+key_for() { case "$1" in c_core_test|ncc_*) echo "$COMPILER_KEY" ;; tcc_nan16_*) echo "$TCC_KEY" ;; *) echo "$NATIVE_KEY" ;; esac; }
 is_cached() {
   [ "${NO_CACHE:-0}" = 1 ] && return 1
   [ -f "$CACHE/$1.sha" ] || return 1
