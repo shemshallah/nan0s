@@ -130,6 +130,27 @@ This runner is **not an interactive full-screen terminal emulator**. It supports
 
 ### 4. Run meaningful tests
 
+For rapid iteration, run **the same v86/WebAssembly core as the browser locally**.
+It boots the actual full NaN/0S guest, sends PS/2 keys (including `n`),
+executes the raw-NaN16 `build nan0s` replica command, verifies every byte of
+the new bootable disk, and then boots that disk in a second WASM machine.
+
+```sh
+# One-time setup (Node 22+; Node 24 recommended)
+npm install --no-save v86@0.5.473
+
+# Each iteration — no push or GitHub Actions required
+sh tools/build.sh
+node tools/wasm_fastcheck.mjs --boot-only  # faster key/boot smoke test
+node tools/wasm_fastcheck.mjs              # full bootable replica gate
+```
+
+The first run caches SeaBIOS locally; subsequent runs work offline with the
+already installed v86 package and cached firmware. This is a **guest image
+replication** gate, not proof of reconstructing the entire OS from source. See
+[WASM rapid-test instructions](docs/WASM_FAST_LOOP.md) for requirements,
+diagnostics, limits, and the self-bootstrap distinction.
+
 ```sh
 # Native C execution and sanitizer checks
 make -C aarch64/android test
