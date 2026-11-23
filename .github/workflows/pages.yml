@@ -1,9 +1,13 @@
-name: Publish NaN/0S browser demo
+name: Publish NaN/0S full-system browser demo
 
 on:
   push:
     branches: [main]
     paths:
+      - "src/**"
+      - "tools/**"
+      - "x86/**"
+      - "build/**"
       - "docs/**"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
@@ -19,33 +23,53 @@ concurrency:
 
 jobs:
   deploy:
-    name: Verify and deploy browser demo
+    name: Build, test and deploy full NaN/0S
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Checkout source
+      - name: Checkout current system sources
         uses: actions/checkout@v4
 
-      - name: Verify files for public demo
+      - name: Install system-image build and boot-test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gawk xxd qemu-system-x86 ffmpeg
+
+      - name: Build current complete guest image
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh tools/build.sh
+          cmp build/nan0s.img docs/nan0s.img
+
+      - name: Verify complete image and browser launcher
         shell: bash
         run: |
           set -euo pipefail
           test -s docs/index.html
           test -s docs/nan0s.img
           test -f docs/.nojekyll
-          grep -q 'nan0s.img' docs/index.html
+          grep -q 'hda: { buffer: ideImage }' docs/index.html
+          grep -q 'fda: { buffer: image }' docs/index.html
+          grep -q 'boot_order: 0x321' docs/index.html
           grep -q 'v86.wasm' docs/index.html
-          echo "Browser player and boot image are present."
-          ls -lh docs/index.html docs/nan0s.img
+          test "$(stat -c %s docs/nan0s.img)" -ge 1474560
+          test "$(dd if=docs/nan0s.img bs=1 skip=510 count=2 status=none | od -An -tx1 | tr -d ' \n')" = "55aa"
+          echo "Full system image, two-disk WASM boot and floppy signature: PASS"
+          sha256sum build/nan0s.img docs/nan0s.img
+
+      - name: Verify native full-system GUI and ATA loader
+        shell: bash
+        run: sh tools/qgate_gui.sh
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
         with:
           enablement: true
 
-      - name: Upload static website
+      - name: Upload current system and browser player
         uses: actions/upload-pages-artifact@v4
         with:
           path: docs
