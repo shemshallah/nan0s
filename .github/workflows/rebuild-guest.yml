@@ -1,0 +1,61 @@
+name: Publish rebuilt NaN/0S guest image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/exhibits/gui_cart.nas"
+      - "tools/build.sh"
+      - ".github/workflows/rebuild-guest.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nan0s-guest-image-publisher
+  cancel-in-progress: false
+
+jobs:
+  rebuild:
+    name: Rebuild guest, test native boot, update published image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: true
+
+      - name: Install assembly and full-system boot dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gawk xxd qemu-system-x86 ffmpeg
+
+      - name: Rebuild GUI from source and regenerate full-system image
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh tools/build.sh
+          cmp build/nan0s.img docs/nan0s.img
+          test "$(stat -c %s docs/nan0s.img)" -ge 1474560
+
+      - name: Validate native full GUI and IDE loader
+        shell: bash
+        run: sh tools/qgate_gui.sh
+
+      - name: Commit generated artifacts to main for GitHub Pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -u -- src/nan/gui_cart.nan build/nan0s.img docs/nan0s.img aarch64/android/app/src/main/assets/nan0s.img
+          if git diff --cached --quiet; then
+            echo "Generated image already matches source."
+            exit 0
+          fi
+          git diff --cached --stat
+          git commit -m "build: publish guest GUI fix and synchronized WASM image"
+          # A normal fast-forward push; never overwrite somebody else's changes.
+          git push origin HEAD:main
