@@ -13,6 +13,21 @@ cp build/nan0s.img "$T/ide.img"
   sleep 5
   echo "screendump $T/start.ppm"
   sleep 0.4
+  # First reproduce a bare n key, before ENTER can launch any command.
+  echo "sendkey n"
+  sleep 1
+  echo "screendump $T/typed-n.ppm"
+  sleep 0.3
+  echo "sendkey a"
+  sleep 1
+  echo "screendump $T/typed-na.ppm"
+  sleep 0.3
+  echo "sendkey backspace"
+  sleep 0.2
+  echo "sendkey backspace"
+  sleep 0.5
+  echo "screendump $T/cleared-typing.ppm"
+  sleep 0.3
   echo "sendkey n"
   sleep 0.4
   echo "sendkey ret"
@@ -34,7 +49,7 @@ cp build/nan0s.img "$T/ide.img"
   echo "screendump $T/after-browser.ppm"
   sleep 0.4
   echo quit
-) | timeout 45 qemu-system-i386 -m 512 -boot order=a \
+) | timeout 55 qemu-system-i386 -m 128 -boot order=a \
   -drive format=raw,if=floppy,file=build/nan0s.img \
   -drive format=raw,if=ide,file="$T/ide.img" \
   -display none -serial "file:$T/com1.txt" -monitor stdio \
@@ -64,17 +79,20 @@ def ppm(name):
     return data
 
 frames = {name: ppm(name) for name in
-          ("start", "net", "after-net", "browser", "after-browser")}
+          ("start", "typed-n", "typed-na", "cleared-typing", "net", "after-net", "browser", "after-browser")}
 def changed(before, after):
     # Ignore clock and title bar; compare pixels in the guest window area.
     start, end = 80 * 1024 * 3, 760 * 1024 * 3
     a, b = frames[before][start:end], frames[after][start:end]
     return sum(a[i:i+3] != b[i:i+3] for i in range(0, len(a), 3))
 
-for a, b in (("start", "net"), ("net", "after-net"),
+for a, b in (("start", "typed-n"), ("typed-n", "typed-na"),
+             ("typed-na", "cleared-typing"),
+             ("cleared-typing", "net"), ("net", "after-net"),
              ("after-net", "browser"), ("browser", "after-browser")):
     count = changed(a, b)
     print(f"{a} -> {b}: {count} changed GUI pixels")
-    assert count > 2000, f"Guest did not visibly handle {a} -> {b}"
-print("PASS: n + Enter, Esc, b + Enter, Esc all responsive with 1024x768 GUI")
+    minimum = 8 if b in ("typed-n", "typed-na", "cleared-typing") else 2000
+    assert count > minimum, f"Guest failed to respond to {a} -> {b}"
+print("PASS: bare n then a, Backspace twice, n+Enter, Esc, b+Enter, Esc at browser-matched 128 MiB")
 PY
