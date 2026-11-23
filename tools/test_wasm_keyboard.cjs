@@ -33,7 +33,8 @@ async function main() {
     querySelectorAll() { return []; }
   }
   const elements = Object.fromEntries(
-    ['type', 'clear-type', 'pad', 'status', 'screen_container', 'serial', 'restart', 'fullscreen']
+    ['type', 'clear-type', 'pad', 'status', 'screen_container', 'serial', 'restart', 'fullscreen',
+     'zoom-out', 'zoom-in', 'zoom-fit', 'zoom-level']
       .map(id => [id, new Element()])
   );
   const document = { getElementById(id) { assert.ok(elements[id], 'Missing mock element ' + id); return elements[id]; } };
@@ -51,14 +52,24 @@ async function main() {
   }
   const disk = new Uint8Array(1474560);
   disk[510] = 0x55; disk[511] = 0xaa;
-  const fetch = async () => ({ ok: true, arrayBuffer: async () => disk.buffer });
+  const fetches = [];
+  const fetch = async (url, opts) => {
+    fetches.push({ url, opts });
+    return { ok: true, arrayBuffer: async () => disk.buffer };
+  };
   vm.runInNewContext(code, { document, fetch, V86, setInterval() {}, console }, { filename: 'docs/index.html' });
   // Let fetchImage().then(boot) run.
   for (let i = 0; i < 10 && !emulator; ++i) await new Promise(resolve => setImmediate(resolve));
   assert.ok(emulator, 'Browser did not boot after image fetch');
+  assert.equal(fetches.length, 1, 'Only one guest image fetch expected');
+  assert.match(fetches[0].url, /^nan0s\.img\?guest=[0-9]+$/, 'Guest URL must bust stale cached disk');
+  assert.equal(fetches[0].opts.cache, 'no-store', 'Guest disk must bypass the browser HTTP cache');
   emulator.listeners['emulator-ready']();
   assert.equal(elements.type.disabled, false);
   assert.equal(elements['clear-type'].disabled, false);
+  assert.equal(elements['zoom-in'].disabled, false);
+  assert.equal(elements['zoom-out'].disabled, false);
+  assert.equal(elements['zoom-fit'].disabled, false);
   assert.ok(emulator.options.fda && emulator.options.hda, 'Full system must use floppy and IDE');
 
   const input = elements.type;
