@@ -65,6 +65,10 @@ jobs:
         shell: bash
         run: sh tools/qgate_gui.sh
 
+      - name: Verify n / b commands remain responsive in QEMU
+        shell: bash
+        run: sh tools/qgate_gui_commands.sh
+
       # GitHub Pages is configured to publish main/docs directly. Its existing
       # 'pages build and deployment' workflow publishes the checked-in full image.
       # Avoid actions/deploy-pages here: that parallel deployment conflicted with
