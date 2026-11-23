@@ -1,4 +1,4 @@
-name: Publish NaN/0S full-system browser demo
+name: Verify NaN/0S full-system browser demo
 
 on:
   push:
@@ -14,8 +14,6 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: github-pages
@@ -23,11 +21,8 @@ concurrency:
 
 jobs:
   deploy:
-    name: Build, test and deploy full NaN/0S
+    name: Build and boot-test full NaN/0S
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Checkout current system sources
         uses: actions/checkout@v4
@@ -64,16 +59,7 @@ jobs:
         shell: bash
         run: sh tools/qgate_gui.sh
 
-      - name: Configure Pages
-        uses: actions/configure-pages@v5
-        with:
-          enablement: true
-
-      - name: Upload current system and browser player
-        uses: actions/upload-pages-artifact@v4
-        with:
-          path: docs
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+      # GitHub Pages is configured to publish main/docs directly. Its existing
+      # 'pages build and deployment' workflow publishes the checked-in full image.
+      # Avoid actions/deploy-pages here: that parallel deployment conflicted with
+      # the branch publisher and failed artifact discovery.
