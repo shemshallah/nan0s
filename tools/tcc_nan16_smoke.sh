@@ -92,6 +92,57 @@ struct S { int a; int b; };
 struct S make(void){ struct S s; s.a = 40; s.b = 2; return s; }
 int main(void){ struct S s = make(); return s.a + s.b; }
 EOC
+cat > "$T/lldiv.c" <<'EOC'
+long long a = 5000000000LL;
+int main(void){ return (int)(a / 1000000000LL); }
+EOC
+cat > "$T/lldivneg.c" <<'EOC'
+long long a = -5000000000LL;
+int main(void){ return (int)(a / 1000000000LL); }
+EOC
+cat > "$T/llmod.c" <<'EOC'
+long long a = 5000000000LL;
+int main(void){ return (int)(a % 7LL); }
+EOC
+cat > "$T/llshv.c" <<'EOC'
+long long a = 1;
+int main(void){ int n = 40; return (int)((a << n) >> 32); }
+EOC
+cat > "$T/llshrv.c" <<'EOC'
+long long a = -0x100000000LL;
+int main(void){ int n = 32; return (int)(a >> n); }
+EOC
+cat > "$T/llcmp.c" <<'EOC'
+int main(void){ long long a = -5; return (a == -5) + (a < 0) + (a != 0); }
+EOC
+cat > "$T/va.c" <<'EOC'
+typedef __builtin_va_list va_list;
+#define va_start(ap,last) __builtin_va_start(ap,last)
+#define va_arg(ap,t) __builtin_va_arg(ap,t)
+int sum(int n, ...)
+{
+    va_list ap;
+    int s = 0;
+    va_start(ap, n);
+    while (n-- > 0) s += va_arg(ap, int);
+    return s;
+}
+int main(void){ return sum(3, 10, 20, 12); }
+EOC
+cat > "$T/vall.c" <<'EOC'
+typedef __builtin_va_list va_list;
+#define va_start(ap,last) __builtin_va_start(ap,last)
+#define va_arg(ap,t) __builtin_va_arg(ap,t)
+long long sumll(int n, ...)
+{
+    va_list ap;
+    long long s = 0;
+    va_start(ap, n);
+    while (n-- > 0) s += va_arg(ap, long long);
+    return s;
+}
+int main(void){ return (int)sumll(2, 20LL, 22LL); }
+EOC
 
 "$T/tcc_nan16" -c "$T/ret42.c" -o "$T/ret42.bin"
 "$T/tcc_nan16" -c "$T/call.c" -o "$T/call.bin"
@@ -112,13 +163,21 @@ EOC
 "$T/tcc_nan16" -c "$T/llsh.c" -o "$T/llsh.bin"
 "$T/tcc_nan16" -c "$T/sbv.c" -o "$T/sbv.bin"
 "$T/tcc_nan16" -c "$T/sret.c" -o "$T/sret.bin"
-for b in ret42 call loop global larray garray fact sw ptr str struct gstruct fnptr lladd llfact llg llsh sbv sret; do
+"$T/tcc_nan16" -c "$T/lldiv.c" -o "$T/lldiv.bin"
+"$T/tcc_nan16" -c "$T/lldivneg.c" -o "$T/lldivneg.bin"
+"$T/tcc_nan16" -c "$T/llmod.c" -o "$T/llmod.bin"
+"$T/tcc_nan16" -c "$T/llshv.c" -o "$T/llshv.bin"
+"$T/tcc_nan16" -c "$T/llshrv.c" -o "$T/llshrv.bin"
+"$T/tcc_nan16" -c "$T/llcmp.c" -o "$T/llcmp.bin"
+"$T/tcc_nan16" -c "$T/va.c" -o "$T/va.bin"
+"$T/tcc_nan16" -c "$T/vall.c" -o "$T/vall.bin"
+for b in ret42 call loop global larray garray fact sw ptr str struct gstruct fnptr lladd llfact llg llsh sbv sret lldiv lldivneg llmod llshv llshrv llcmp va vall; do
   [ -s "$T/$b.bin" ] || { echo "tcc_nan16_smoke: FAIL (empty $b object)"; exit 1; }
 done
 
 
-for p in ret42 call loop global larray garray fact sw ptr str struct gstruct fnptr lladd llfact llg llsh sbv sret; do
-  "$CLI" --img "$T/$p.bin" --mem 16 --steps 4000 --serial --peek 0x100:1 \
+for p in ret42 call loop global larray garray fact sw ptr str struct gstruct fnptr lladd llfact llg llsh sbv sret lldiv lldivneg llmod llshv llshrv llcmp va vall; do
+  "$CLI" --img "$T/$p.bin" --mem 16 --steps 300000 --serial --peek 0x100:1 \
       > "$T/$p.out" 2> "$T/$p.err" || true
   want=0000002A
   case "$p" in
@@ -126,7 +185,12 @@ for p in ret42 call loop global larray garray fact sw ptr str struct gstruct fnp
     garray) want=00000004 ;;
     fact|llfact) want=00000078 ;;
     str) want=00006869 ;;
-    llsh) want=00000100 ;;
+    llsh|llshv) want=00000100 ;;
+    lldiv) want=00000005 ;;
+    lldivneg) want=FFFFFFFB ;;
+    llshrv) want=FFFFFFFF ;;
+    llmod) want=00000002 ;;
+    llcmp) want=00000003 ;;
   esac
   if ! grep -qx "$want" "$T/$p.out"; then
     echo "tcc_nan16_smoke: FAIL ($p did not return $want)"
@@ -134,4 +198,4 @@ for p in ret42 call loop global larray garray fact sw ptr str struct gstruct fnp
   fi
   grep -q 'rc=3' "$T/$p.err" || { echo "tcc_nan16_smoke: FAIL ($p did not halt)"; cat -v "$T/$p.err"; exit 1; }
 done
-echo "tcc_nan16_smoke: PASS (TCC emits NaN16: 20 programs incl. long long pairs, struct args and struct returns)"
+echo "tcc_nan16_smoke: PASS (TCC emits NaN16: 28 programs incl. varargs)"

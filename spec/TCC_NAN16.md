@@ -9,7 +9,7 @@ encoder and executes raw-word and `.nan` programs in `nan_cli`.
 
 **tcc0 works.**  `third_party/tinycc/nan16-gen.c` and `nan16-link.c` implement
 the mandatory TCC generator/linker surface.  `tools/tcc_nan16_smoke.sh`
-builds TCC with `TCC_TARGET_NAN16`, compiles 13 C programs and runs each
+builds TCC with `TCC_TARGET_NAN16`, compiles 28 C programs and runs each
 flat cartridge directly in `nan_cli`.  Passing:
 
 - `return 42`; `add(20,22)`; a `for` loop (sum 0..9 = 45)
@@ -19,7 +19,12 @@ flat cartridge directly in `nan_cli`.  Passing:
 - function pointers (`int (*f)(int,int)=add; f(20,22)` -> 42)
 - 64-bit pairs: `long long` add with arguments/return, recursive
   `fact(5)`=120, global 5e9 arithmetic, `(1<<40)>>32`=256
-- struct-by-value arguments (`struct S {int a,b;}` passed to `sum`)
+- struct-by-value arguments (`struct S {int a,b;}` passed to `sum`) and
+  struct returns through the hidden pointer
+- 64-bit division/modulo (`5e9/1e9`, negative and unsigned) and variable
+  shifts, via a C runtime injected into every link
+- comparisons as values and signed compares (`a == -5`, `a < 0`, `!x`)
+- stack varargs with `int` and `long long` (`sum(3,10,20,12)` = 42)
 
 Coverage: byte-addressed C pointers (locals/params `SP*4+ci`/`FP*4+ci`,
 data `section_word*4+offset`), size-aware LDB/STB/LD/ST, stack arguments,
@@ -27,11 +32,10 @@ callee-saved frame pointer, absolute jump/call relocations, `.rodata`,
 `.data.ro`, `.data`, `.bss`, `.rel.data`, and the 4-word entry prelude
 (`MOVI r14,0x8000; CALL main; ST r1,r0,0x100; HALT`).
 
-Open before tcc1: 64-bit division/modulo (generic `gen_opl` calls
-`__divdi3/__moddi3`), struct **returns** (the hidden-pointer `func_vc`
-path and native `BCOPY` struct copy now compile and run, but the returned
-fields still come back as 0; the local/temp offset mapping needs work),
-varargs, `double`, external libc/libtcc1, and the VFS.
+Open before tcc1: 8-byte `double` (loads/stores, arithmetic, arguments,
+varargs, `printf`), external libc/libtcc1, and the VFS.  The NaN16 runtime
+injected by `tcc.c` currently supplies `__divdi3`, `__udivdi3`, `__moddi3`,
+`__umoddi3`, `__ashldi3`, `__ashrdi3` and `__lshrdi3`.
 
 ## The milestone
 

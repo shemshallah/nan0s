@@ -23,6 +23,9 @@
 #endif
 
 #include "tcc.h"
+#ifdef TCC_TARGET_NAN16
+# include "nan16-runtime.h"
+#endif
 #if ONE_SOURCE
 # include "libtcc.c"
 #endif
@@ -388,6 +391,18 @@ redo:
         if (s->output_type == TCC_OUTPUT_OBJ && !s->option_r)
             break;
     }
+
+#ifdef TCC_TARGET_NAN16
+    /* Every NaN16 link gets the software 64-bit helpers.  They are
+       ordinary C compiled by this same TCC, so the target never depends
+       on a host libgcc/libtcc1 for long long division or variable shifts. */
+    if (0 == ret && s->output_type != TCC_OUTPUT_PREPROCESS) {
+        int saved_filetype = s->filetype;
+        s->filetype = AFF_TYPE_C;
+        ret = tcc_compile_string(s, NAN16_RUNTIME_SRC);
+        s->filetype = saved_filetype;
+    }
+#endif
 
     if (s->do_bench)
         end_time = getclock_ms();

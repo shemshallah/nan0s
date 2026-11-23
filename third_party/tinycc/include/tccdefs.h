@@ -243,6 +243,13 @@
                                   & -(__alignof__(type)))
     #define __builtin_va_arg(ap,type) (*(sizeof(type) > (2*__va_reg_size) ? *(type **)((ap += __va_reg_size) - __va_reg_size) : (ap = (va_list)(_tcc_align(ap,type) + (sizeof(type)+__va_reg_size - 1)& -__va_reg_size), (type *)(ap - ((sizeof(type)+ __va_reg_size - 1)& -__va_reg_size)))))
 
+#elif defined __nan16
+    typedef char *__builtin_va_list;
+    #define _tcc_alignof(type) 4
+    #define _tcc_align(addr,type) (((unsigned)addr + 3) & ~3)
+    #define __builtin_va_arg(ap,type) (ap = (void *) ((_tcc_align(ap,type)+sizeof(type)+3) \
+                           &~3), *(type *)(ap - ((sizeof(type)+3)&~3)))
+
 #else /* __i386__ */
     typedef char *__builtin_va_list;
     #define __builtin_va_start(ap,last) (ap = ((char *)&(last)) + ((sizeof(last)+3)&~3))

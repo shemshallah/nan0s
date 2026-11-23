@@ -38,6 +38,7 @@ ST_FUNC void gen_struct_copy(int size);
 #define NAN_FRAME 256
 static int nan_nparams;
 static int nan_paramwords;
+static int nan_variadic;
 
 void nan16_add_reloc(int pos, Sym *sym, int addend);
 void nan16_add_addr_reloc(int lo, int hi, Sym *sym, int addend);
@@ -92,6 +93,7 @@ static void nan_pred_op(int op, int d, int a, int imm, int pred)
 }
 
 static void nan_patch16(int pos, uint16_t v);
+static void nan_patch_jump(int pos, int target_word);
 
 /* After ADD/SUB, materialise the carry/borrow flag into r11.  n is the
    NaN predicate mask for the carry state (k=1 and, for ADD, k=3). */
@@ -102,7 +104,7 @@ static void nan_cap_carry(int pred)
     nan_pred_op(0x0A, 0, 0, 0, pred);  /* JMP[pred] over the zero */
     pos = ind - 6;
     nan_op(0x01, 11, 0, 0);            /* MOVI r11,0 */
-    nan_patch16(pos, (uint16_t)(ind / 8));
+    nan_patch_jump(pos, ind / 8);
 }
 
 static void nan_movi32(int r, uint32_t v)
@@ -130,6 +132,14 @@ static void nan_patch16(int pos, uint16_t v)
     if (pos < 0) return;
     cur_text_section->data[pos] = v & 0xFF;
     cur_text_section->data[pos + 1] = v >> 8;
+}
+
+/* Patch a jump immediate and record its position so that the linker's
+   entry-prelude shift (nan16_shift_jumps) adjusts the target too. */
+static void nan_patch_jump(int pos, int target_word)
+{
+    nan_patch16(pos, (uint16_t)target_word);
+    nan_jump_new(pos, 0);
 }
 
 ST_FUNC void gsym_addr(int t, int a)
@@ -217,6 +227,17 @@ ST_FUNC int gjmp_cond(int op, int t)
 ST_FUNC void ggoto(void)
 {
     nan_op(0x0D, 0, vtop->r & VT_VALMASK, 0);
+}
+
+ST_FUNC void gen_va_start(void)
+{
+    int r;
+    vtop--;                         /* drop the 'last' argument */
+    r = get_reg(RC_INT);
+    nan_op(0x29, r, 12, -1);        /* hidden pointer at FP-1 */
+    nan_op(0x08, r, r, 0);
+    nan_op(0x05, r, r, 2);          /* word index -> byte address */
+    vset(&char_pointer_type, r, 0);
 }
 
 ST_FUNC void gen_struct_copy(int size)
@@ -338,6 +359,26 @@ ST_FUNC void load(int r, SValue *sv)
         if (r != v)
             nan_op(0x03, r, v, 0);
         nan_load_indirect(r, size, sign);
+    } else if (v == VT_CMP) {
+        /* materialise a deferred comparison as 0/1 */
+        int op = (int)sv->c.i;
+        int pos;
+        nan_emit_cmp();
+        nan_movi32(r, 1);
+        nan_pred_op(0x0A, 0, 0, 0, nan_pred_for(op));
+        pos = ind - 6;
+        nan_movi32(r, 0);
+        nan_patch_jump(pos, ind / 8);
+    } else if (v == VT_JMP || v == VT_JMPI) {
+        /* materialise a branch value as 0/1 */
+        int t = v & 1;
+        int pos;
+        nan_movi32(r, t);
+        nan_op(0x0A, 0, 0, 0);
+        pos = ind - 6;
+        gsym((int)sv->c.i);
+        nan_movi32(r, t ^ 1);
+        nan_patch_jump(pos, ind / 8);
     } else {
         nan_op(0x03, r, v, 0);
     }
@@ -372,7 +413,8 @@ static void nan_gen_cmp(int op)
     gv2(RC_INT, RC_INT);
     nan_cmp_a = vtop[-1].r & VT_VALMASK;
     nan_cmp_b = vtop[0].r & VT_VALMASK;
-    nan_cmp_signed = !(op >= TOK_ULT && op <= TOK_GT);
+    nan_cmp_signed = (op == TOK_LT || op == TOK_GE
+                      || op == TOK_LE || op == TOK_GT);
     nan_cmp_pending = 1;
     vtop -= 2;
     vtop++;
@@ -514,10 +556,28 @@ ST_FUNC void gfunc_prolog(Sym *func_sym)
         byteoff += sz < 4 ? 4 : sz;
     }
     nan_paramwords = (byteoff + 3) / 4;
-    nan_op(0x09, 12, 14, 1);
-    nan_op(0x29, 12, 14, -nan_paramwords);
-    nan_op(0x09, 15, 12, nan_paramwords);
-    nan_op(0x29, 14, 12, nan_paramwords + 2 + NAN_FRAME);
+    nan_variadic = (func_type->ref->f.func_type == FUNC_ELLIPSIS);
+    if (nan_variadic) {
+        /* Variadic arguments sit above the named ones, so the usual
+           link/saved-FP slots at FP+paramwords would clobber the first
+           two arguments.  Keep them in three reserved local words at the
+           top of the frame instead. */
+        nan_op(0x03, 11, 12, 0);          /* r11 = caller FP */
+        nan_op(0x29, 12, 14, -nan_paramwords);
+        nan_op(0x29, 10, 12, nan_paramwords + 2 + NAN_FRAME - 3);
+        nan_op(0x09, 15, 10, 0);          /* link */
+        nan_op(0x29, 10, 12, nan_paramwords + 2 + NAN_FRAME - 2);
+        nan_op(0x09, 11, 10, 0);          /* saved caller FP */
+        nan_op(0x29, 10, 12, nan_paramwords + 2 + NAN_FRAME - 1);
+        nan_op(0x09, 14, 10, 0);          /* caller SP */
+        nan_op(0x29, 14, 12, nan_paramwords + 2 + NAN_FRAME);
+        loc -= 12;                        /* reserve the three slots */
+    } else {
+        nan_op(0x09, 12, 14, 1);
+        nan_op(0x29, 12, 14, -nan_paramwords);
+        nan_op(0x09, 15, 12, nan_paramwords);
+        nan_op(0x29, 14, 12, nan_paramwords + 2 + NAN_FRAME);
+    }
     if (struct_ret) {
         loc -= 4;
         func_vc = loc;
@@ -536,49 +596,88 @@ ST_FUNC void gfunc_epilog(void)
 {
     if (-loc / 4 > NAN_FRAME)
         tcc_error("nan16: frame too large (%d bytes)", -loc);
-    nan_op(0x08, 15, 12, nan_paramwords);
-    nan_op(0x08, 11, 12, nan_paramwords + 1);
-    nan_op(0x29, 14, 12, nan_paramwords);
+    if (nan_variadic) {
+        nan_op(0x29, 10, 12, nan_paramwords + 2 + NAN_FRAME - 3);
+        nan_op(0x08, 15, 10, 0);
+        nan_op(0x29, 10, 12, nan_paramwords + 2 + NAN_FRAME - 2);
+        nan_op(0x08, 11, 10, 0);
+        nan_op(0x29, 10, 12, nan_paramwords + 2 + NAN_FRAME - 1);
+        nan_op(0x08, 14, 10, 0);
+    } else {
+        nan_op(0x08, 15, 12, nan_paramwords);
+        nan_op(0x08, 11, 12, nan_paramwords + 1);
+        nan_op(0x29, 14, 12, nan_paramwords);
+    }
     nan_op(0x03, 12, 11, 0);
     nan_op(0x0C, 0, 0, 0);
+}
+
+static void nan_push_arg(SValue *arg, int *words)
+{
+    int align;
+    int size = type_size(&arg->type, &align);
+    if (size == 8) {
+        SValue hi = *arg;
+        load(1, arg);
+        nan_op(0x09, 1, 14, 0);
+        nan_op(0x29, 14, 14, 1);
+        if ((hi.r & VT_VALMASK) == VT_CONST && !(hi.r & VT_SYM)) {
+            hi.c.i = (uint64_t)hi.c.i >> 32;
+        } else if (hi.r & VT_LVAL) {
+            hi.c.i = (int)hi.c.i + 4;
+        } else if (hi.r2 && hi.r2 < VT_CONST) {
+            hi.r = hi.r2;
+        } else {
+            tcc_error("nan16: cannot pass 64-bit value from this location");
+        }
+        load(2, &hi);
+        nan_op(0x09, 2, 14, 0);
+        nan_op(0x29, 14, 14, 1);
+        *words += 2;
+    } else if (size <= 4) {
+        load(1, arg);
+        nan_op(0x09, 1, 14, 0);
+        nan_op(0x29, 14, 14, 1);
+        (*words)++;
+    } else {
+        tcc_error("nan16: struct arguments are not implemented");
+    }
 }
 
 ST_FUNC void gfunc_call(int nb_args)
 {
     SValue *fn = &vtop[-nb_args];
     int i, pos, words = 0;
+    int nn = 0, variadic = 0, struct_ret = 0;
 
     save_regs(nb_args + 1);
-    for (i = 0; i < nb_args; i++) {
-        SValue *arg = &vtop[-(nb_args - 1 - i)];
-        int align;
-        int size = type_size(&arg->type, &align);
-        if (size == 8) {
-            SValue hi = *arg;
-            load(1, arg);
-            nan_op(0x09, 1, 14, 0);
-            nan_op(0x29, 14, 14, 1);
-            if ((hi.r & VT_VALMASK) == VT_CONST && !(hi.r & VT_SYM)) {
-                hi.c.i = (uint64_t)hi.c.i >> 32;
-            } else if (hi.r & VT_LVAL) {
-                hi.c.i = (int)hi.c.i + 4;
-            } else if (hi.r2 && hi.r2 < VT_CONST) {
-                hi.r = hi.r2;
-            } else {
-                tcc_error("nan16: cannot pass 64-bit value from this location");
-            }
-            load(2, &hi);
-            nan_op(0x09, 2, 14, 0);
-            nan_op(0x29, 14, 14, 1);
-            words += 2;
-        } else if (size <= 4) {
-            load(1, arg);
-            nan_op(0x09, 1, 14, 0);
-            nan_op(0x29, 14, 14, 1);
-            words++;
-        } else {
-            tcc_error("nan16: struct arguments are not implemented");
-        }
+
+    if (fn->type.ref) {
+        Sym *ps = fn->type.ref->next;
+        CType *rt = &fn->type.ref->type;
+        CType rtype;
+        int ra, rs;
+        while (ps) { nn++; ps = ps->next; }
+        variadic = (fn->type.ref->f.func_type == FUNC_ELLIPSIS);
+        struct_ret = ((rt->t & VT_BTYPE) == VT_STRUCT
+                      && gfunc_sret(rt, variadic, &rtype, &ra, &rs) == 0);
+        if (struct_ret) nn++;
+    }
+    if (variadic) {
+        /* Variadic arguments go below the named ones.  The hidden pointer
+           to the first variadic argument is pushed after them, so it sits
+           at FP-1; the named arguments follow at FP..FP+paramwords-1. */
+        nan_op(0x03, 10, 14, 0);          /* r10 = first variadic word */
+        for (i = nn; i < nb_args; i++)
+            nan_push_arg(&vtop[-(nb_args - 1 - i)], &words);
+        nan_op(0x09, 10, 14, 0);          /* hidden varargs pointer */
+        nan_op(0x29, 14, 14, 1);
+        words++;
+        for (i = 0; i < nn; i++)
+            nan_push_arg(&vtop[-(nb_args - 1 - i)], &words);
+    } else {
+        for (i = 0; i < nb_args; i++)
+            nan_push_arg(&vtop[-(nb_args - 1 - i)], &words);
     }
     if ((fn->r & VT_VALMASK) == VT_CONST && (fn->r & VT_SYM)) {
         nan_op(0x0B, 0, 0, 0);
