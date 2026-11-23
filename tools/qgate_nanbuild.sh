@@ -16,7 +16,16 @@ truncate -s 1474560 "$T/output.img"
 echo "nanbuild: boot original, keep master separate, build on IDE slave"
 (
   sleep 5
-  # Enter the complete command into the GUI's NaN16 terminal.
+  # Regression: a bare "build" must display help, NOT open the browser
+  # through the legacy one-letter 'b' fallback.
+  for key in b u i l d ret; do
+    echo "sendkey $key"
+    sleep 0.2
+  done
+  sleep 1
+  echo "screendump $T/help.ppm"
+  sleep 0.3
+  # Now request the complete raw-NaN16 disk replication.
   for key in b u i l d spc n a n 0 s ret; do
     echo "sendkey $key"
     sleep 0.2
@@ -43,6 +52,13 @@ echo "nanbuild: boot original, keep master separate, build on IDE slave"
   -display none -serial "file:$T/serial.txt" -monitor stdio \
   > "$T/monitor.log" 2> "$T/qemu.log"
 
+if ! grep -q 'NANBUILD HELP' "$T/serial.txt"; then
+  echo "nanbuild: bare 'build' did not display NaN16 usage/help"
+  tail -c 2000 "$T/serial.txt" || :
+  exit 1
+fi
+test -s "$T/help.ppm"
+echo "nanbuild: bare 'build' displayed help without opening the browser"
 if ! grep -q 'NANBUILD OK' "$T/serial.txt"; then
   echo "nanbuild: guest did not verify complete output"
   tail -c 2000 "$T/serial.txt" || :
