@@ -151,13 +151,18 @@ done
 if [ -f tools/mkall.sh ] && want mkall; then
   run mkall sh tools/mkall.sh
 fi
-for g in qgate qgate_gui xmemgate qgate64 qgate64core qgate64block qgate64alu \
-         qgate64branch qgate64mem qgate64byte qgate64prog qgate64mul qgate64div \
-         qgate64fp qgate64fpe qgate64mem2 qgate64blockops qgate64trap qgate64vec \
-         qgate64vldst qgate64vdp4b qgate64vdp4b4 qgate64call qgate64callf \
-         qgate64putc; do
+for g in qgate qgate_gui xmemgate; do
   [ -f "tools/$g.sh" ] && run "$g" sh "tools/$g.sh"
 done
+# The qgate64* gates are independent QEMU boots; run them in parallel.
+q64specs=""
+for g in qgate64 qgate64core qgate64block qgate64alu qgate64branch qgate64mem \
+         qgate64byte qgate64prog qgate64mul qgate64div qgate64fp qgate64fpe \
+         qgate64mem2 qgate64blockops qgate64trap qgate64vec qgate64vldst \
+         qgate64vdp4b qgate64vdp4b4 qgate64call qgate64callf qgate64putc; do
+  [ -f "tools/$g.sh" ] && q64specs="$q64specs $g=tools/$g.sh"
+done
+run_parallel $q64specs
 
 say "presqlite done: $n gate(s), $fail failure(s)"
 [ "$fail" -eq 0 ]

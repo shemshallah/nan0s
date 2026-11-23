@@ -144,6 +144,9 @@ done:
     lea okmsg(%rip), %rsi
     call print
     cli
+    xor %eax, %eax
+    lidt idt_zero(%rip)
+    int3
 2:
     hlt
     jmp 2b
@@ -188,6 +191,10 @@ gdtr:
     .long gdt
 
 .section .rodata
+.align 8
+idt_zero:
+    .word 0
+    .quad 0
 coremsg:
     .asciz "NAN64 CORE "
 xpcmsg:

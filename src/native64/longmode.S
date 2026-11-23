@@ -148,6 +148,9 @@ long_mode:
     jnz 6b
 7:
     cli
+    xor %eax, %eax
+    lidt idt_zero(%rip)
+    int3
 4:
     hlt
     jmp 4b
@@ -194,6 +197,10 @@ gdtr:
     .long gdt
 
 .section .rodata
+.align 8
+idt_zero:
+    .word 0
+    .quad 0
 msg:
     .asciz "NAN0S x86-64 OK\n"
 high_msg:
