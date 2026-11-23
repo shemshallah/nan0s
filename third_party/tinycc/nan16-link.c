@@ -172,10 +172,15 @@ int nan16_output_file(TCCState *s1, const char *filename)
         int si = nan16_sym_index(s1, r->name);
         ElfSym *es = si ? &((ElfSym *)s1->symtab->data)[si] : NULL;
         int value;
-        if (!es) tcc_error("nan16: unresolved symbol '%s'", r->name);
+        if (!es) {
+            fprintf(stderr, "nan16: unresolved symbol '%s'\n", r->name);
+            return -1;
+        }
         value = (int)es->st_value + r->addend;
-        if (value < 0 || value / 8 > 0xFFFF || (value & 7))
-            tcc_error("nan16: call relocation out of range");
+        if (value < 0 || value / 8 > 0xFFFF || (value & 7)) {
+            fprintf(stderr, "nan16: call relocation out of range for '%s'\n", r->name);
+            return -1;
+        }
         value = value / 8 + pre;
         text->data[r->pos] = value & 0xFF;
         text->data[r->pos + 1] = (value >> 8) & 0xFF;
@@ -187,15 +192,20 @@ int nan16_output_file(TCCState *s1, const char *filename)
         ElfSym *es = si ? &((ElfSym *)s1->symtab->data)[si] : NULL;
         Section *sec;
         int addr;
-        if (!es) tcc_error("nan16: unresolved address '%s'", r->name);
+        if (!es) {
+            fprintf(stderr, "nan16: unresolved address '%s'\n", r->name);
+            return -1;
+        }
         sec = es->st_shndx < s1->nb_sections ? s1->sections[es->st_shndx] : NULL;
         if (sec == text)
             addr = (int)es->st_value / 8 + pre + r->addend / 8;
         else
             addr = nan16_flat_addr(sec, (int)es->st_value, text_words,
                                    ds, dbase, nd, 0) + r->addend;
-        if (addr < 0 || addr > 0xFFFFFFFF)
-            tcc_error("nan16: address out of range for '%s'", r->name);
+        if (addr < 0 || addr > 0xFFFFFFFF) {
+            fprintf(stderr, "nan16: address out of range for '%s'\n", r->name);
+            return -1;
+        }
         text->data[r->lo] = addr & 0xFF;
         text->data[r->lo + 1] = (addr >> 8) & 0xFF;
         text->data[r->hi] = (addr >> 16) & 0xFF;
@@ -224,7 +234,10 @@ int nan16_output_file(TCCState *s1, const char *filename)
             else
                 addr = nan16_flat_addr(sec, (int)es->st_value, text_words,
                                        ds, dbase, nd, 0) + addend;
-            if (addr < 0) tcc_error("nan16: bad data relocation");
+            if (addr < 0) {
+                fprintf(stderr, "nan16: bad data relocation\n");
+                return -1;
+            }
             write32le(tgt->data + rr->r_offset, (uint32_t)addr);
         }
     }

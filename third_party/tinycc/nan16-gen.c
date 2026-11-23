@@ -26,6 +26,8 @@
 #define LDOUBLE_SIZE 8
 #define LDOUBLE_ALIGN 8
 #define MAX_ALIGN 8
+#define TCC_TARGET_NATIVE_STRUCT_COPY
+ST_FUNC void gen_struct_copy(int size);
 
 #else /* !TARGET_DEFS_ONLY */
 #define USING_GLOBALS
@@ -215,6 +217,20 @@ ST_FUNC int gjmp_cond(int op, int t)
 ST_FUNC void ggoto(void)
 {
     nan_op(0x0D, 0, vtop->r & VT_VALMASK, 0);
+}
+
+ST_FUNC void gen_struct_copy(int size)
+{
+    int d, a;
+    gv2(RC_INT, RC_INT);
+    d = vtop[-1].r & VT_VALMASK;
+    a = vtop[0].r & VT_VALMASK;
+    nan_op(0x06, d, d, 2);          /* byte address -> word index */
+    nan_op(0x06, a, a, 2);
+    nan_movi32(1, (uint32_t)((size + 3) / 4));
+    nan_op(0x2D, d, a, 1);          /* BCOPY dst,src,cnt */
+    vpop();
+    vpop();
 }
 
 ST_FUNC void gen_fill_nops(int n)
@@ -464,8 +480,10 @@ ST_FUNC void gen_cvt_ftof(int t) { (void)t; }
 ST_FUNC int gfunc_sret(CType *vt, int variadic, CType *ret,
                        int *align, int *regsize)
 {
-    (void)vt; (void)variadic; (void)ret; (void)align; (void)regsize;
-    return -1;                  /* struct returns use memory */
+    (void)variadic; (void)ret;
+    *align = 1;
+    *regsize = 4;
+    return type_size(vt, align) ? 0 : 0;  /* struct returns use memory */
 }
 
 ST_FUNC void gfunc_prolog(Sym *func_sym)
@@ -474,13 +492,21 @@ ST_FUNC void gfunc_prolog(Sym *func_sym)
     Sym *sym = func_type->ref;
     int n = 0, i, byteoff;
 
+    int struct_ret = 0;
+    CType rt;
+    int ra, rs;
+    if ((func_vt.t & VT_BTYPE) == VT_STRUCT
+        && gfunc_sret(&func_vt, func_var, &rt, &ra, &rs) == 0)
+        struct_ret = 1;
+
     while ((sym = sym->next) != NULL) n++;
     sym = func_type->ref->next;
     nan_nparams = n;
 
     /* FP = first pushed argument; link at FP+paramwords; saved caller FP
-       at FP+paramwords+1; locals above. */
-    byteoff = 0;
+       at FP+paramwords+1; locals above.  A struct return uses hidden
+       pointer argument 0 and a local slot at func_vc. */
+    byteoff = struct_ret ? 4 : 0;
     for (i = 0; i < n; i++, sym = sym->next) {
         int align, sz;
         gfunc_set_param(sym, byteoff, 0);
@@ -492,6 +518,18 @@ ST_FUNC void gfunc_prolog(Sym *func_sym)
     nan_op(0x29, 12, 14, -nan_paramwords);
     nan_op(0x09, 15, 12, nan_paramwords);
     nan_op(0x29, 14, 12, nan_paramwords + 2 + NAN_FRAME);
+    if (struct_ret) {
+        loc -= 4;
+        func_vc = loc;
+        /* r1 = hidden pointer at FP[0] */
+        nan_op(0x05, 1, 12, 2);
+        nan_op(0x06, 1, 1, 2);
+        nan_op(0x08, 1, 1, 0);
+        /* store it in the local slot at func_vc */
+        nan_local_addr(2, func_vc);
+        nan_op(0x06, 2, 2, 2);
+        nan_op(0x09, 1, 2, 0);
+    }
 }
 
 ST_FUNC void gfunc_epilog(void)

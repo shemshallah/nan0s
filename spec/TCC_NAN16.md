@@ -28,9 +28,10 @@ callee-saved frame pointer, absolute jump/call relocations, `.rodata`,
 (`MOVI r14,0x8000; CALL main; ST r1,r0,0x100; HALT`).
 
 Open before tcc1: 64-bit division/modulo (generic `gen_opl` calls
-`__divdi3/__moddi3`, which are not provided yet), struct **returns**
-(currently crash; `func_vc` hidden-pointer handling is missing), varargs,
-`double`, external libc/libtcc1, and the VFS.
+`__divdi3/__moddi3`), struct **returns** (the hidden-pointer `func_vc`
+path and native `BCOPY` struct copy now compile and run, but the returned
+fields still come back as 0; the local/temp offset mapping needs work),
+varargs, `double`, external libc/libtcc1, and the VFS.
 
 ## The milestone
 
