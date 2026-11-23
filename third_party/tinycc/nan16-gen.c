@@ -255,9 +255,12 @@ static void nan_store_indirect(int r, int size, int addr_reg)
    params: ci>=0, byte address = FP*4 + ci */
 static void nan_local_addr(int r, int ci)
 {
-    int base = ci < 0 ? 14 : 12;
-    nan_op(0x05, r, base, 2);           /* SHL r,base,2 */
-    nan_op(0x29, r, r, ci);
+    /* Locals live below SP but their address must not move when arguments
+       are pushed, so address them from FP.  Local ci<0 maps to
+       FP + (n+2+FRAME) + ci/4 words; parameters ci>=0 map to FP + ci/4. */
+    int off = ci < 0 ? (nan_nparams + 2 + NAN_FRAME) * 4 + ci : ci;
+    nan_op(0x05, r, 12, 2);             /* SHL r,FP,2 */
+    nan_op(0x29, r, r, off);
 }
 
 ST_FUNC void load(int r, SValue *sv)
