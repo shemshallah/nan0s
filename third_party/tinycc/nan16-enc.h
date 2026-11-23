@@ -24,6 +24,18 @@ void nan16_free(Nan16Prog *p);
 int  nan16_emit(Nan16Prog *p, uint32_t payload, int n);
 int  nan16_emit_word(Nan16Prog *p, uint64_t word);
 
+/* Predicate nibbles: bit k is set when the instruction executes for flag
+   state k (FLAGM = 1 << k). */
+#define NAN16_PRED_NEVER  0
+#define NAN16_PRED_GT     1
+#define NAN16_PRED_LT     2
+#define NAN16_PRED_NE     3
+#define NAN16_PRED_EQ     4
+#define NAN16_PRED_GE     5
+#define NAN16_PRED_LE     6
+#define NAN16_PRED_ALWAYS 15
+int  nan16_emit_pred(Nan16Prog *p, uint32_t payload, int pred);
+
 /* Payload constructors. */
 uint32_t nan16_p(uint8_t op, uint8_t d, uint8_t a, uint16_t imm);
 
@@ -38,6 +50,7 @@ int nan16_cmp(Nan16Prog *p, int a, int b);               /* 0x07 */
 int nan16_ld(Nan16Prog *p, int d, int a, uint16_t imm);  /* 0x08 */
 int nan16_st(Nan16Prog *p, int d, int a, uint16_t imm);  /* 0x09 */
 int nan16_jmp(Nan16Prog *p, uint16_t target);            /* 0x0A */
+int nan16_jmp_cond(Nan16Prog *p, uint16_t target, int pred); /* 0x0A */
 int nan16_call(Nan16Prog *p, uint16_t target);           /* 0x0B */
 int nan16_ret(Nan16Prog *p);                             /* 0x0C */
 int nan16_jmpr(Nan16Prog *p, int a);                     /* 0x0D */

@@ -14,8 +14,8 @@ int main(int argc, char **argv)
     Nan16Prog p;
     FILE *f;
 
-    if (argc != 3) {
-        fprintf(stderr, "usage: %s words.bin prog.nan\n", argv[0]);
+    if (argc != 5) {
+        fprintf(stderr, "usage: %s words.bin prog.nan loop.bin loop.nan\n", argv[0]);
         return 2;
     }
     if (nan16_init(&p, 16)) return 1;
@@ -39,6 +39,30 @@ int main(int argc, char **argv)
     fclose(f);
 
     printf("NAN16 ENC OK words=%u\n", (unsigned)p.n);
+    nan16_free(&p);
+
+    /* Branch-loop program:
+       MOVI r1,0 ; MOVI r2,3 ; ADDI r1,r1,1 ; CMP r1,r2 ;
+       JMP[LT] 2 ; ST r1,r0,0x100 ; HALT  */
+    if (nan16_init(&p, 16)) return 1;
+    if (nan16_movi(&p, 1, 0)
+        || nan16_movi(&p, 2, 3)
+        || nan16_addi(&p, 1, 1, 1)
+        || nan16_cmp(&p, 1, 2)
+        || nan16_jmp_cond(&p, 2, NAN16_PRED_LT)
+        || nan16_st(&p, 1, 0, 0x100)
+        || nan16_halt(&p))
+        return 1;
+    assert(p.n == 7);
+    assert(nan16_near(p.w[4]) == 0x7FF1);   /* LT: near class 0 */
+    assert(nan16_far(p.w[4]) == 0x7FF8);    /* LT: far class 2 */
+    f = fopen(argv[3], "wb");
+    if (!f || nan16_write_words(f, &p)) return 1;
+    fclose(f);
+    f = fopen(argv[4], "w");
+    if (!f || nan16_write_text(f, &p)) return 1;
+    fclose(f);
+    printf("NAN16 ENC OK loop=%u\n", (unsigned)p.n);
     nan16_free(&p);
     return 0;
 }

@@ -38,6 +38,11 @@ int nan16_emit(Nan16Prog *p, uint32_t payload, int n)
     return nan16_emit_word(p, nan16_mkword(payload, n));
 }
 
+int nan16_emit_pred(Nan16Prog *p, uint32_t payload, int pred)
+{
+    return nan16_emit(p, payload, pred & 15);
+}
+
 uint32_t nan16_p(uint8_t op, uint8_t d, uint8_t a, uint16_t imm)
 {
     return ((uint32_t)op << 24) | ((uint32_t)(d & 15) << 20)
@@ -57,6 +62,10 @@ int nan16_cmp(Nan16Prog *p, int a, int b)          { return EMIT(0x07, 0, a, b);
 int nan16_ld(Nan16Prog *p, int d, int a, uint16_t imm)  { return EMIT(0x08, d, a, imm); }
 int nan16_st(Nan16Prog *p, int d, int a, uint16_t imm)  { return EMIT(0x09, d, a, imm); }
 int nan16_jmp(Nan16Prog *p, uint16_t target)       { return EMIT(0x0A, 0, 0, target); }
+int nan16_jmp_cond(Nan16Prog *p, uint16_t target, int pred)
+{
+    return nan16_emit_pred(p, nan16_p(0x0A, 0, 0, target), pred);
+}
 int nan16_call(Nan16Prog *p, uint16_t target)      { return EMIT(0x0B, 0, 0, target); }
 int nan16_ret(Nan16Prog *p)                        { return EMIT(0x0C, 0, 0, 0); }
 int nan16_jmpr(Nan16Prog *p, int a)                { return EMIT(0x0D, 0, a, 0); }
