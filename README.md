@@ -137,7 +137,7 @@ the new bootable disk, and then boots that disk in a second WASM machine.
 
 ```sh
 # One-time setup (Node 22+; Node 24 recommended)
-npm install --no-save v86@0.5.473
+npm install --no-save --no-package-lock v86@0.5.473
 
 # Each iteration — no push or GitHub Actions required
 sh tools/build.sh
