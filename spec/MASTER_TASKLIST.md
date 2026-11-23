@@ -149,9 +149,10 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done and gated.
 - [x] `TCC_TARGET_NAN16` builds (`nan16-gen.c`, `nan16-link.c`, `tcc.h`,
       `libtcc.c`, `tccelf.c` hooks).  tcc0 compiles and runs 13 C programs
       (`tcc_nan16_smoke`): returns, calls, loops, arrays, recursion,
-      switch, pointers, strings, structs, function pointers (14 programs).
-- [ ] Before tcc1: 64-bit `long long`/`double` values/args (ADDC/SUBC/
-      UMULL), struct-by-value, varargs, external libc/libtcc1, VFS.
+      switch, pointers, strings, structs, function pointers, `long long`
+      pairs and struct-by-value arguments (19 programs).
+- [ ] Before tcc1: 64-bit division helpers, struct returns, varargs,
+      `double`, external libc/libtcc1, VFS.
 - [ ] NaN16 output: flat cartridge/executable writer, relocations, sections,
       entry point, symbol table.
 - [ ] ABI parity with ncc: args/returns, stack frames, varargs, structs,

@@ -17,6 +17,9 @@ flat cartridge directly in `nan_cli`.  Passing:
 - local pointers (`&x`, `*p`); string literals and `char` loads
 - local and global structs
 - function pointers (`int (*f)(int,int)=add; f(20,22)` -> 42)
+- 64-bit pairs: `long long` add with arguments/return, recursive
+  `fact(5)`=120, global 5e9 arithmetic, `(1<<40)>>32`=256
+- struct-by-value arguments (`struct S {int a,b;}` passed to `sum`)
 
 Coverage: byte-addressed C pointers (locals/params `SP*4+ci`/`FP*4+ci`,
 data `section_word*4+offset`), size-aware LDB/STB/LD/ST, stack arguments,
@@ -24,10 +27,10 @@ callee-saved frame pointer, absolute jump/call relocations, `.rodata`,
 `.data.ro`, `.data`, `.bss`, `.rel.data`, and the 4-word entry prelude
 (`MOVI r14,0x8000; CALL main; ST r1,r0,0x100; HALT`).
 
-Open before tcc1: 64-bit `long long`/`double` values and arguments (the
-generic `gen_opl` uses TOK_ADDC1/SUBC1/UMULL, which `gen_opi` does not yet
-implement), struct passing by value/return, varargs, external libc/libtcc1,
-and the VFS.
+Open before tcc1: 64-bit division/modulo (generic `gen_opl` calls
+`__divdi3/__moddi3`, which are not provided yet), struct **returns**
+(currently crash; `func_vc` hidden-pointer handling is missing), varargs,
+`double`, external libc/libtcc1, and the VFS.
 
 ## The milestone
 
