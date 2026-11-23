@@ -34,7 +34,7 @@ async function main() {
   }
   const elements = Object.fromEntries(
     ['type', 'clear-type', 'pad', 'status', 'screen_container', 'serial', 'restart', 'fullscreen',
-     'zoom-out', 'zoom-in', 'zoom-fit', 'zoom-level']
+     'zoom-out', 'zoom-in', 'zoom-fit', 'zoom-level', 'image-fingerprint']
       .map(id => [id, new Element()])
   );
   const document = { getElementById(id) { assert.ok(elements[id], 'Missing mock element ' + id); return elements[id]; } };
@@ -64,6 +64,8 @@ async function main() {
   assert.equal(fetches.length, 1, 'Only one guest image fetch expected');
   assert.match(fetches[0].url, /^nan0s\.img\?guest=[0-9]+$/, 'Guest URL must bust stale cached disk');
   assert.equal(fetches[0].opts.cache, 'no-store', 'Guest disk must bypass the browser HTTP cache');
+  assert.match(elements['image-fingerprint'].textContent, /guest disk: 1474560 bytes/,
+    'The page must identify the exact fetched disk to help detect stale images');
   emulator.listeners['emulator-ready']();
   assert.equal(elements.type.disabled, false);
   assert.equal(elements['clear-type'].disabled, false);
