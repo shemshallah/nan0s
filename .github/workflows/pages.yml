@@ -27,6 +27,9 @@ jobs:
       - name: Checkout current system sources
         uses: actions/checkout@v4
 
+      - name: Check Android phone keyboard forwarding
+        run: node tools/test_wasm_keyboard.cjs
+
       - name: Install system-image build and boot-test dependencies
         run: |
           sudo apt-get update
