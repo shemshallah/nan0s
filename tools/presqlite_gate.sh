@@ -23,7 +23,7 @@ while [ $# -gt 0 ]; do
     --only) shift; ONLY="$*"; break ;;
     --list)
       for m in $(seq 1 62); do [ -f "tools/ncc_m$m.sh" ] && echo "ncc_m$m"; done
-      for g in ncc_abi_sizes ncc_alloc ncc_heap ncc_aligned narena narena64 nten \
+      for g in ncc_abi_sizes ncc_abi_ll ncc_alloc ncc_heap ncc_aligned narena narena64 nten \
                nan_simd nan_vec nan_vec_native nan_vec_avx2 nan_q4 nan_q4lm nan_bench \
                xlate_x86 ncc_dp4b nmatmul nmat64 nmat64x64 ncc_headers ncc_ppexpr \
                ncc_torture ncc_donut_exact ncc_macro_text ncc_include ncc_libm_exact \
@@ -136,7 +136,7 @@ done
 say "batch ncc_m1..ncc_m62"
 run_parallel $mspecs
 
-for g in ncc_abi_sizes ncc_alloc ncc_heap ncc_aligned narena narena64 nten nan_simd \
+for g in ncc_abi_sizes ncc_abi_ll ncc_alloc ncc_heap ncc_aligned narena narena64 nten nan_simd \
          nan_vec nan_vec_native nan_vec_avx2 nan_q4 nan_q4lm nan_bench xlate_x86 \
          ncc_dp4b nmatmul nmat64 nmat64x64 ncc_headers ncc_ppexpr ncc_torture \
          ncc_donut_exact; do
