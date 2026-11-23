@@ -34,6 +34,33 @@
     border-radius:5px; padding:11px 12px; font:inherit; }
   .typebar input:focus { outline:none; border-color:var(--cyan); }
   .typebar-row button { white-space:nowrap; }
+  /*
+   * Android browsers scroll a focused INPUT toward the center of the reduced
+   * viewport, obscuring the emulated display. Pin the existing IME text field
+   * on phones so the page does not chase an input below the NaN/0S screen.
+   * The guest PS/2 input bridge and desktop layout remain unchanged.
+   */
+  @media (pointer: coarse), (max-width: 760px) {
+    header { padding-top: 80px; }
+    .typebar {
+      position: fixed;
+      top: max(6px, env(safe-area-inset-top));
+      left: 6px;
+      right: 6px;
+      z-index: 50;
+      width: auto;
+      max-width: none;
+      margin: 0;
+      padding: 6px 8px;
+      background: #101027;
+      border: 1px solid #343464;
+      border-radius: 8px;
+      box-shadow: 0 2px 12px #0009;
+    }
+    .typebar > label, .typebar > .hint { display: none; }
+    .typebar input { font-size: 16px; padding: 8px 10px; min-height: 40px; }
+    .typebar-row button { padding: 7px 10px; }
+  }
   .pad { display:flex; flex-wrap:wrap; gap:6px; justify-content:center; max-width:760px; margin:0 auto 8px; }
   .pad button { min-width:44px; padding:10px 0; font-size:15px; }
   details { margin-top:16px; color:var(--dim); }
@@ -328,7 +355,7 @@
   typeEl.addEventListener("compositionend", syncPhoneInput);
   clearTypeBtn.addEventListener("click", function () {
     clearPhoneInput();
-    typeEl.focus();
+    typeEl.focus({ preventScroll: true });
   });
 
   fetchImage().then(function (image) {
