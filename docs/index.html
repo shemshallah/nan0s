@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>NaN/0S — live in the browser (v86)</title>
+<title>NaN/0S — full system live in the browser (v86)</title>
 <style>
   :root { --bg:#0b0b1a; --fg:#cfd2e6; --dim:#6d7194; --blue:#8f9bff; --cyan:#00f0ff; --pink:#ff2bd6; --green:#39ff14; }
   * { box-sizing: border-box; }
@@ -51,7 +51,7 @@
     no host OS underneath.</p>
 </header>
 <main>
-  <div id="status">loading v86…</div>
+  <div id="status">loading NaN/0S full-system boot…</div>
   <div id="screen_container" tabindex="0">
     <div style="white-space:pre;font:14px/14px monospace;color:#d8d8e8"></div>
     <canvas style="display:none"></canvas>
@@ -59,7 +59,7 @@
   <div class="controls">
     <button id="restart" disabled>Restart</button>
     <button id="fullscreen" disabled>Full screen</button>
-    <span class="hint">boots to the desktop with one terminal · <b>q</b> quits the GUI → museum menu (<b>1–8</b>, <b>ESC</b> back) · tap the keys below or the text bar to type</span>
+    <span class="hint">boots the complete guest (floppy + primary IDE) to the desktop with one terminal · <b>q</b> quits the GUI → museum menu (<b>1–8</b>, <b>ESC</b> back) · tap the keys below or the text bar to type</span>
   </div>
   <div class="typebar">
     <input id="type" type="text" inputmode="text" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"
@@ -92,7 +92,7 @@
   </details>
 </main>
 <footer>
-  v86 © copy.sh, BSD-2 · this page boots <code>nan0s.img</code> from the repository
+  v86 © copy.sh, BSD-2 · this page boots the complete <code>nan0s.img</code> with separate floppy and primary IDE drives
   (<a href="https://github.com/shemshallah/nan0s">shemshallah/nan0s</a>) · v86 is fetched from jsDelivr at run time ·
   site: <code>docs/</code> (GitHub Pages, branch <code>main</code> / <code>docs</code>)
 </footer>
@@ -103,9 +103,10 @@
   // Pinned v86 build. BIOS images are not in the npm package; they come from the v86 repo via jsDelivr.
   var V86_CDN = "https://cdn.jsdelivr.net/npm/v86@0.5.473/build/";
   var BIOS_CDN = "https://cdn.jsdelivr.net/gh/copy/v86@master/bios/";
-  // docs/index.html is the GitHub Pages site: Settings -> Pages -> Deploy from a branch,
-  // branch main + folder /docs. nan0s.img sits next to this page; ../build/nan0s.img is
-  // the fallback when serving the repository root locally or on an older deployment.
+  // The live Pages workflow rebuilds the complete guest system and publishes docs/.
+  // Boot like tools/qgate_gui.sh: one source image, two independent virtual disks.
+  // A floppy boot alone is NOT the full GUI path; the ATA loader reads the IDE master.
+  // docs/nan0s.img is the published image, with a repo-root fallback for local serving.
   var CANDIDATES = ["nan0s.img", "../build/nan0s.img"];
 
   var statusEl = document.getElementById("status");
@@ -153,26 +154,38 @@
       status("fetching " + url + " …");
       return fetch(url, { cache: "force-cache" }).then(function (r) {
         if (!r.ok) throw new Error(url + ": HTTP " + r.status);
-        return r.arrayBuffer();
+        return r.arrayBuffer().then(function (data) {
+          var bytes = new Uint8Array(data);
+          if (bytes.length < 1474560 || bytes[510] !== 0x55 || bytes[511] !== 0xAA) {
+            throw new Error(url + ": invalid or incomplete NaN/0S boot image");
+          }
+          return data;
+        });
       }).catch(attempt);
     }
     return attempt();
   }
 
+  var bootBannerSeen = false;
   function boot(image) {
-    status("starting v86 …");
+    status("starting v86 with floppy and primary IDE disk …");
+    // The IDE disk must have an independent backing buffer: the guest can write to it
+    // without corrupting the boot floppy. Both contain the exact same built system.
+    var ideImage = image.slice(0);
     emulator = new V86({
       wasm_path: V86_CDN + "v86.wasm",
       bios: { url: BIOS_CDN + "seabios.bin" },
       vga_bios: { url: BIOS_CDN + "vgabios.bin" },
+      boot_order: 0x321, // floppy, hard disk, CD-ROM (matches QEMU -boot order=a)
       fda: { buffer: image },
-      memory_size: 32 * 1024 * 1024,
+      hda: { buffer: ideImage }, // primary IDE master, required by native ATA guest loader
+      memory_size: 128 * 1024 * 1024,
       vga_memory_size: 2 * 1024 * 1024,
       autostart: true,
       screen_container: screenEl
     });
     emulator.add_listener("emulator-ready", function () {
-      status("running — tap a key below, or the text bar to use the phone keyboard");
+      status("v86 ready — booting complete NaN/0S from floppy + IDE…");
       restartBtn.disabled = false;
       fsBtn.disabled = false;
       setInputEnabled(true);
@@ -180,6 +193,10 @@
     emulator.add_listener("serial0-output-byte", function (b) {
       serialBuf += String.fromCharCode(b);
       serialDirty = true;
+      if (serialBuf.indexOf("NaN/0S") !== -1 && !bootBannerSeen) {
+        bootBannerSeen = true;
+        status("NaN/0S boot banner detected — full-system IDE disk attached");
+      }
     });
     emulator.add_listener("download-error", function (e) {
       status("download failed: " + (e && e.file_name ? e.file_name : "component"), true);
