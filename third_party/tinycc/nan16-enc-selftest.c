@@ -14,8 +14,8 @@ int main(int argc, char **argv)
     Nan16Prog p;
     FILE *f;
 
-    if (argc != 7) {
-        fprintf(stderr, "usage: %s words.bin prog.nan loop.bin loop.nan call.bin call.nan\n", argv[0]);
+    if (argc != 9) {
+        fprintf(stderr, "usage: %s words.bin prog.nan loop.bin loop.nan call.bin call.nan const.bin const.nan\n", argv[0]);
         return 2;
     }
     if (nan16_init(&p, 16)) return 1;
@@ -83,6 +83,24 @@ int main(int argc, char **argv)
     if (!f || nan16_write_text(f, &p)) return 1;
     fclose(f);
     printf("NAN16 ENC OK call=%u\n", (unsigned)p.n);
+    nan16_free(&p);
+
+    /* 32-bit constant: MOVI/MOVHI r1,0x12345678 ; ST ; HALT */
+    if (nan16_init(&p, 16)) return 1;
+    if (nan16_movi32(&p, 1, 0x12345678u)
+        || nan16_st(&p, 1, 0, 0x100)
+        || nan16_halt(&p))
+        return 1;
+    assert(p.n == 4);
+    assert(nan16_payload(p.w[0]) == 0x01105678);   /* low half */
+    assert(nan16_payload(p.w[1]) == 0x02101234);   /* high half */
+    f = fopen(argv[7], "wb");
+    if (!f || nan16_write_words(f, &p)) return 1;
+    fclose(f);
+    f = fopen(argv[8], "w");
+    if (!f || nan16_write_text(f, &p)) return 1;
+    fclose(f);
+    printf("NAN16 ENC OK const=%u\n", (unsigned)p.n);
     nan16_free(&p);
     return 0;
 }

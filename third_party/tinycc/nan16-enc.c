@@ -54,6 +54,10 @@ uint32_t nan16_p(uint8_t op, uint8_t d, uint8_t a, uint16_t imm)
 
 int nan16_movi(Nan16Prog *p, int d, uint16_t imm)  { return EMIT(0x01, d, 0, imm); }
 int nan16_movhi(Nan16Prog *p, int d, uint16_t imm) { return EMIT(0x02, d, 0, imm); }
+int nan16_movi32(Nan16Prog *p, int d, uint32_t v)
+{
+    return nan16_movi(p, d, (uint16_t)v) || nan16_movhi(p, d, (uint16_t)(v >> 16));
+}
 int nan16_add(Nan16Prog *p, int d, int a, int b)   { return EMIT(0x03, d, a, b); }
 int nan16_sub(Nan16Prog *p, int d, int a, int b)   { return EMIT(0x04, d, a, b); }
 int nan16_shl(Nan16Prog *p, int d, int a, uint16_t imm) { return EMIT(0x05, d, a, imm); }

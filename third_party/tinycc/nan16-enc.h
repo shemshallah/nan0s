@@ -42,6 +42,7 @@ uint32_t nan16_p(uint8_t op, uint8_t d, uint8_t a, uint16_t imm);
 /* Opcode emitters (opcode values match the NaN16 ISA table). */
 int nan16_movi(Nan16Prog *p, int d, uint16_t imm);       /* 0x01 */
 int nan16_movhi(Nan16Prog *p, int d, uint16_t imm);      /* 0x02 */
+int nan16_movi32(Nan16Prog *p, int d, uint32_t v);       /* MOVI+MOVHI */
 int nan16_add(Nan16Prog *p, int d, int a, int b);        /* 0x03 */
 int nan16_sub(Nan16Prog *p, int d, int a, int b);        /* 0x04 */
 int nan16_shl(Nan16Prog *p, int d, int a, uint16_t imm); /* 0x05 */

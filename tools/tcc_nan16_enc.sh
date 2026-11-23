@@ -9,15 +9,16 @@ CC=${HOST_CC:-cc}
 $CC -std=c99 -O2 -Ithird_party/tinycc \
    third_party/tinycc/nan16-enc.c \
    third_party/tinycc/nan16-enc-selftest.c -o "$T/selftest"
-"$T/selftest" "$T/prog.bin" "$T/prog.nan" "$T/loop.bin" "$T/loop.nan" "$T/call.bin" "$T/call.nan" > "$T/selftest.out"
+"$T/selftest" "$T/prog.bin" "$T/prog.nan" "$T/loop.bin" "$T/loop.nan" "$T/call.bin" "$T/call.nan" "$T/const.bin" "$T/const.nan" > "$T/selftest.out"
 grep -q '^NAN16 ENC OK words=3$' "$T/selftest.out"
 grep -q '^NAN16 ENC OK loop=7$' "$T/selftest.out"
 grep -q '^NAN16 ENC OK call=5$' "$T/selftest.out"
-for img in prog.bin prog.nan loop.bin loop.nan call.bin call.nan; do
+grep -q '^NAN16 ENC OK const=4$' "$T/selftest.out"
+for img in prog.bin prog.nan loop.bin loop.nan call.bin call.nan const.bin const.nan; do
   "$CLI" --img "$T/$img" --mem 16 --steps 1000 --serial --peek 0x100:1 \
       > "$T/$img.out" 2> "$T/$img.err" || true
   want=0000002A
-  case "$img" in loop*) want=00000003 ;; call*) want=00000007 ;; esac
+  case "$img" in loop*) want=00000003 ;; call*) want=00000007 ;; const*) want=12345678 ;; esac
   if ! grep -qx "$want" "$T/$img.out"; then
     echo "tcc_nan16_enc: FAIL ($img did not store $want)"
     cat -v "$T/$img.out" "$T/$img.err"; exit 1
