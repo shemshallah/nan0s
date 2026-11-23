@@ -29,3 +29,8 @@ aarch64/android/tests/test_nannet_driver
 
 # targeted gate cache
 .gate-cache/
+
+# aggregate gate logs
+build/gate-progress.log
+build/gate-full-*.log
+build/.gate-full-log
