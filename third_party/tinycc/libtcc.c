@@ -53,6 +53,9 @@
 #include "riscv64-gen.c"
 #include "riscv64-link.c"
 #include "riscv64-asm.c"
+#elif defined(TCC_TARGET_NAN16)
+#include "nan16-gen.c"
+#include "nan16-link.c"
 #else
 #error unknown target
 #endif
@@ -1786,6 +1789,8 @@ static const char dumpmachine_str[] =
     "aarch64"
 #elif defined TCC_TARGET_RISCV64
     "riscv64"
+#elif defined TCC_TARGET_NAN16
+    "nan16"
 #endif
     "-"
 #ifdef TCC_TARGET_PE

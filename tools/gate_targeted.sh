@@ -46,6 +46,8 @@ add() { for g in $1; do GATES="$GATES $g"; done; }
 full=0
 for f in $FILES; do
   case "$f" in
+    third_party/tinycc/nan16-gen.c|third_party/tinycc/nan16-link.c|third_party/tinycc/tcc.h|third_party/tinycc/libtcc.c|third_party/tinycc/libtcc.h|third_party/tinycc/tccelf.c|tools/tcc_nan16_smoke.sh)
+      add "tcc_nan16_smoke tcc_nan16_enc" ;;
     third_party/tinycc/nan16-*|tools/tcc_nan16_enc.sh)
       add "tcc_nan16_enc" ;;
     spec/*|third_party/*|*.md|build/*|aarch64/android/app/src/main/assets/*)

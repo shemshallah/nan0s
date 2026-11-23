@@ -34,3 +34,10 @@ aarch64/android/tests/test_nannet_driver
 build/gate-progress.log
 build/gate-full-*.log
 build/.gate-full-log
+
+# tcc host build artifacts
+third_party/tinycc/config.h
+third_party/tinycc/config.mak
+third_party/tinycc/c2str.exe
+third_party/tinycc/tccdefs_.h
+third_party/tinycc/tcc_nan16

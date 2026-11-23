@@ -83,6 +83,7 @@ LIBTCCAPI int tcc_add_symbol(TCCState *s, const char *name, const void *val);
 /* output an executable, library or object file. DO NOT call
    tcc_relocate() before. */
 LIBTCCAPI int tcc_output_file(TCCState *s, const char *filename);
+int nan16_output_file(TCCState *s, const char *filename);
 
 /* link and run main() function and return its value. DO NOT call
    tcc_relocate() before. */
