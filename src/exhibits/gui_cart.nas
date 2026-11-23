@@ -19,6 +19,7 @@ JMP @cart_entry
 .include "../lib/kbd.nas"
 .include "../lib/wm.nas"
 .include "../lib/ncc.nas"
+.include "../lib/bootbuild.nas"
 cart_entry:
 ST r15,r0,@g_ret
 MOVI r13,1
@@ -1376,7 +1377,7 @@ RET
 tm_id:
 .word 0
 s_help:
-.str "h c v w b l m x t s n u f e q\nb browser l lattice m monitor x hex\nt term w count c clear v ver\ne C editor (.run/.demo)\ns settings n NaNNet u utils\nf files (nsh) q quit gui\n"
+.str "h c v w b l m x t s n u f e q\nb browser l lattice m monitor x hex\nt term w count c clear v ver\ne C editor (.run/.demo)\ns settings n NaNNet u utils\nf files (nsh) q quit gui\nfull image: build nan0s\n"
 s_ver:
 .str "NaN/0S GUI r26\npure NaN16 wm\n"
 s_wins:
@@ -4442,6 +4443,14 @@ RET
 fs_dispatch:
 ST r15,r14,0
 ADD r14,r14,r13
+; Unlike the older one-letter demos, this command builds a complete
+; bootable disk entirely through in-guest NaN16 ATA PIO. The ATA master is
+; read-only, and the blank IDE slave is the distinct output artifact.
+LA r1,#FNB
+LA r2,@fs_s_build
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @fs_d_build
 LA r1,#FNB
 LA r2,@fs_s_cc
 CALL @fs_prefix
@@ -4489,6 +4498,9 @@ CMP r1,r0
 JMP[NE] @fs_d_pwd
 MOVI r1,0
 JMP @fs_disp_d
+fs_d_build:
+CALL @sb_build
+JMP @fs_disp_y
 fs_d_cc:
 LA r1,#FNB
 ADDI r1,r1,3
@@ -4851,6 +4863,8 @@ SUB r14,r14,r13
 LD r15,r14,0
 RET
 
+fs_s_build:
+.str "build nan0s"
 fs_s_cc:
 .str "cc "
 fs_s_run:
