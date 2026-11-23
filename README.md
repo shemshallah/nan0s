@@ -65,7 +65,7 @@ This is both a practical engineering project and an investigation into represent
 
 **[Launch NaN/0S in your browser](https://shemshallah.github.io/nan0s/)**
 
-The demonstration loads a real NaN/0S disk image through [v86](https://github.com/copy/v86), an x86 emulator compiled for the web. The NaN/0S **guest** does not require a conventional guest operating system; the browser and emulator are, of course, hosted software. This is a convenient exploration route, not a claim of native browser hardware execution.
+The demonstration boots the **full built NaN/0S x86 guest image**, not a JavaScript re-creation or a floppy-only reduced mode. The browser [v86](https://github.com/copy/v86) emulator attaches the same complete `nan0s.img` as **two independent virtual devices**: the boot floppy and the primary IDE master. This matches the native [full GUI boot gate](tools/qgate_gui.sh), whose NaN16 ATA loader reads the IDE copy. The guest requires no conventional guest operating system, although the browser and WebAssembly emulator run on a conventional host. The published image is checked against the current build by [the browser-demo verification workflow](.github/workflows/pages.yml).
 
 The museum provides exhibitions on the Manchester Baby, George Boole, the Sierpinski triangle, trusting trust, the Patriot missile failure, double-ended computation, and the project itself. A terminal, monitor, memory tools, and a graphics environment are part of the guest experience. The exact menus and controls may change as the image evolves; the browser player includes touch-friendly controls.
 
