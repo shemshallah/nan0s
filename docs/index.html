@@ -238,7 +238,8 @@
       distance: g.distance,
       zoom: zoom,
       anchorX: (screenEl.scrollLeft + g.x) / zoom,
-      anchorY: (screenEl.scrollTop + g.y) / zoom
+      anchorY: (screenEl.scrollTop + g.y) / zoom,
+      revision: 0
     };
     if (event.cancelable !== false) event.preventDefault();
   }
@@ -260,8 +261,9 @@
     // the newest gesture to avoid stale animation frames jumping the viewport.
     if (typeof requestAnimationFrame === "function") {
       var gesture = pinch;
+      var revision = ++gesture.revision;
       requestAnimationFrame(function () {
-        if (pinch === gesture) {
+        if (pinch === gesture && pinch.revision === revision) {
           screenEl.scrollLeft = left;
           screenEl.scrollTop = top;
         }
