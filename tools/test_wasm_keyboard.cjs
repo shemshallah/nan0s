@@ -82,7 +82,7 @@ async function main() {
   assert.equal(new Uint8Array(emulator.options.hdb.buffer).every(b => b === 0), true,
     'Output disk must start blank');
   new Uint8Array(emulator.options.hdb.buffer).set([0x55, 0xaa], 510);
-  for (const character of 'NANBUILD OK\\n') {
+  for (const character of 'NANBUILD OK\n') {
     emulator.listeners['serial0-output-byte'](character.charCodeAt(0));
   }
   assert.equal(elements['download-replica'].disabled, false,
