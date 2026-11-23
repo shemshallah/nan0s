@@ -17,6 +17,7 @@
 #include <math.h>
 #include <semaphore.h>
 #include <glob.h>
+#include "nan16_pow10.h"
 
 int errno;
 
@@ -290,36 +291,98 @@ extern unsigned long long __nan16_dmul(unsigned long long, unsigned long long);
 extern unsigned long long __nan16_dadd(unsigned long long, unsigned long long);
 extern unsigned long long __nan16_i2d(int);
 extern unsigned long long __nan16_ll2d(long long);
+extern unsigned long long __nan16_ull2d(unsigned long long);
 extern long long __nan16_d2ll(unsigned long long);
 extern unsigned long long __nan16_ddiv(unsigned long long, unsigned long long);
 
+/* Decimal to binary64.  Keep at most 19 significant digits in a 64-bit
+   mantissa (the exact limit before unsigned overflow would lose digits),
+   remember the discarded digits for round-to-nearest-even, then apply one
+   correctly rounded power of ten.  The old implementation accumulated
+   every integer digit without an overflow check, so 2^64 and 2^96 wrapped
+   to zero, and repeated multiplication by ten lost the low bits of
+   values like DBL_MAX. */
 double strtod(const char *s, char **end)
 {
     unsigned long long mant = 0;
-    int neg = 0, any = 0, exp = 0, edig = 0, esign = 1, i;
-    unsigned long long d = __nan16_i2d(0);
-    unsigned long long ten = __nan16_ll2d(10);
-    while (isspace((unsigned char)*s)) s++;
-    if (*s == '+' || *s == '-') { neg = *s == '-'; s++; }
-    while (isdigit((unsigned char)*s)) { mant = mant * 10 + (*s - '0'); any = 1; s++; }
-    if (*s == '.') {
-        s++;
-        while (isdigit((unsigned char)*s)) {
-            if (mant < 100000000000000000ULL) { mant = mant * 10 + (*s - '0'); exp--; }
-            any = 1; s++;
+    unsigned long long d;
+    int neg = 0, any = 0, sig = 0, frac = 0;
+    int kept = 0, dropped = 0, frac_digits = 0;
+    int exp = 0, edig = 0, esign = 1;
+    int first_drop = 0, sticky = 0;
+    int dexp, k;
+    const char *p = s;
+
+    while (isspace((unsigned char)*p)) p++;
+    if (*p == '+' || *p == '-') { neg = *p == '-'; p++; }
+
+    while (isdigit((unsigned char)*p) || *p == '.') {
+        int c = *p;
+        if (c == '.') {
+            if (frac) break;
+            frac = 1;
+            p++;
+            continue;
+        }
+        any = 1;
+        if (frac) frac_digits++;
+        if (sig || c != '0') {
+            sig = 1;
+            if (kept < 19) {
+                mant = mant * 10 + (unsigned)(c - '0');
+                kept++;
+            } else {
+                if (!dropped) first_drop = c;
+                else if (c != '0') sticky = 1;
+                dropped++;
+            }
+        }
+        p++;
+    }
+    if (any && (*p == 'e' || *p == 'E')) {
+        p++;
+        if (*p == '+' || *p == '-') { esign = (*p == '+') ? 1 : -1; p++; }
+        while (isdigit((unsigned char)*p)) {
+            if (edig < 100000) edig = edig * 10 + (*p - '0');
+            p++;
+        }
+        exp = esign * edig;
+    }
+    if (end) *end = (char *)p;
+    if (!any) return 0.0;
+    if (!sig) {
+        d = 0;
+        if (neg) d ^= 0x8000000000000000ULL;
+        return *(double *)&d;
+    }
+
+    if (first_drop) {
+        if (first_drop > '5'
+            || (first_drop == '5' && (sticky || (mant & 1))))
+            mant++;
+    }
+
+    dexp = exp - frac_digits + dropped;
+    d = __nan16_ull2d(mant);
+    if (dexp >= 0) {
+        if (dexp > 308) {
+            d = 0x7FF0000000000000ULL;
+        } else {
+            d = __nan16_dmul(d, nan16_pow10_bits[dexp]);
+        }
+    } else {
+        k = -dexp;
+        if (k > 308) {
+            d = __nan16_ddiv(d, nan16_pow10_bits[308]);
+            k -= 308;
+            if (k <= 308)
+                d = __nan16_ddiv(d, nan16_pow10_bits[k]);
+            else
+                d = 0;
+        } else {
+            d = __nan16_ddiv(d, nan16_pow10_bits[k]);
         }
     }
-    if (any && (*s == 'e' || *s == 'E')) {
-        s++;
-        if (*s == '+' || *s == '-') { esign = *s == '+'; s++; }
-        while (isdigit((unsigned char)*s)) { edig = edig * 10 + (*s - '0'); s++; }
-        exp += esign ? edig : -edig;
-    }
-    if (end) *end = (char *)s;
-    if (!any) return 0.0;
-    d = __nan16_ll2d((long long)mant);
-    if (exp > 0) { for (i = 0; i < exp; i++) d = __nan16_dmul(d, ten); }
-    else if (exp < 0) { for (i = 0; i < -exp; i++) d = __nan16_ddiv(d, ten); }
     if (neg) d ^= 0x8000000000000000ULL;
     return *(double *)&d;
 }

@@ -367,7 +367,26 @@
     "    }\n" \
     "    return ((u64)sign << 63) | ((u64)(n + 1023) << 52) | frac;\n" \
     "}\n" \
-    "u64 __nan16_ull2d(u64 a) { return __nan16_ll2d(a & 0x7FFFFFFFFFFFFFFFULL); }\n" \
+    "u64 __nan16_ull2d(u64 v)\n" \
+    "{\n" \
+    "    int n = 63;\n" \
+    "    u64 p = 1ULL << 63, frac;\n" \
+    "    if (v == 0) return 0;\n" \
+    "    while (!(v & p)) { p >>= 1; n--; }\n" \
+    "    if (n <= 52) {\n" \
+    "        frac = (v << (52 - n)) & DMASK52;\n" \
+    "    } else {\n" \
+    "        int sh = n - 52;\n" \
+    "        u64 rem = v & ((1ULL << sh) - 1);\n" \
+    "        u64 half = 1ULL << (sh - 1);\n" \
+    "        frac = (v >> sh) & DMASK52;\n" \
+    "        if (rem > half || (rem == half && (frac & 1))) {\n" \
+    "            frac++;\n" \
+    "            if (frac == (1ULL << 52)) { frac = 0; n++; }\n" \
+    "        }\n" \
+    "    }\n" \
+    "    return ((u64)(n + 1023) << 52) | frac;\n" \
+    "}\n" \
     "\n" \
     "u64 __nan16_d2ll(u64 d)\n" \
     "{\n" \

@@ -206,6 +206,14 @@ cat > "$T/dblptr.c" <<'EOC'
 double addp(double s, double *p){ return s + *p; }
 int main(void){ double x = 21.5; return (int)addp(20.5, &x); }
 EOC
+cat > "$T/dblull.c" <<'EOC'
+int main(void)
+{
+    unsigned long long u = 18446744073709551615ULL;
+    double d = (double)u;
+    return (int)(d / 18446744073709551616.0);
+}
+EOC
 
 "$T/tcc_nan16" -c "$T/ret42.c" -o "$T/ret42.bin"
 "$T/tcc_nan16" -c "$T/call.c" -o "$T/call.bin"
@@ -243,12 +251,13 @@ EOC
 "$T/tcc_nan16" -c "$T/dblprec.c" -o "$T/dblprec.bin"
 "$T/tcc_nan16" -c "$T/dblnan.c" -o "$T/dblnan.bin"
 "$T/tcc_nan16" -c "$T/dblptr.c" -o "$T/dblptr.bin"
-for b in ret42 call loop global larray garray fact sw ptr str struct gstruct fnptr lladd llfact llg llsh sbv sret lldiv lldivneg llmod llshv llshrv llcmp va vall dblarith dblargs dblcmp dblva dblconv dblstruct dblprec dblnan dblptr; do
+"$T/tcc_nan16" -c "$T/dblull.c" -o "$T/dblull.bin"
+for b in ret42 call loop global larray garray fact sw ptr str struct gstruct fnptr lladd llfact llg llsh sbv sret lldiv lldivneg llmod llshv llshrv llcmp va vall dblarith dblargs dblcmp dblva dblconv dblstruct dblprec dblnan dblptr dblull; do
   [ -s "$T/$b.bin" ] || { echo "tcc_nan16_smoke: FAIL (empty $b object)"; exit 1; }
 done
 
 
-for p in ret42 call loop global larray garray fact sw ptr str struct gstruct fnptr lladd llfact llg llsh sbv sret lldiv lldivneg llmod llshv llshrv llcmp va vall dblarith dblargs dblcmp dblva dblconv dblstruct dblprec dblnan dblptr; do
+for p in ret42 call loop global larray garray fact sw ptr str struct gstruct fnptr lladd llfact llg llsh sbv sret lldiv lldivneg llmod llshv llshrv llcmp va vall dblarith dblargs dblcmp dblva dblconv dblstruct dblprec dblnan dblptr dblull; do
   "$CLI" --img "$T/$p.bin" --mem 16 --steps 300000 --serial --peek 0x100:1 \
       > "$T/$p.out" 2> "$T/$p.err" || true
   want=0000002A
@@ -265,6 +274,7 @@ for p in ret42 call loop global larray garray fact sw ptr str struct gstruct fnp
     llcmp|dblarith|dblcmp) want=00000003 ;;
     dblstruct) want=00000029 ;;
     dblconv) want=0000002F ;;
+    dblull) want=00000001 ;;
   esac
   if ! grep -qx "$want" "$T/$p.out"; then
     echo "tcc_nan16_smoke: FAIL ($p did not return $want)"

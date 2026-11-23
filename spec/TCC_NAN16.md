@@ -1,6 +1,6 @@
 # TCC -> NaN16: self-hosting and the verified compiler chain
 
-Status: P0.7, **tcc1 reached**. TCC source is vendored at
+Status: P0.7, **tcc1 and tcc2 reached** (byte-identical fixpoint). TCC source is vendored at
 `third_party/tinycc` (upstream `5cef7f3f85b0fbbd4663fd3518ba097d7fe3d738`,
 imported tree `dcb896d1c7ae2e64114c55c93f5223f92280bbdf`; see
 `third_party/tinycc/VENDOR`).
@@ -42,10 +42,10 @@ dynamic per-function frames, `.rodata`, `.data.ro`, `.data`, `.bss`,
 (`0x300000` words), loads `main` as a 32-bit address, calls it with
 `CALLR`, stores the result at 0x100 and halts.
 
-## Self-host harness (tcc1)
+## Self-host harness (tcc1 and tcc2)
 
 `tools/tcc_nan16_selfhost.sh` preprocesses `libtcc.c`, links it with the
-minimal NaN16 libc (`third_party/nan16-libc`) and a driver into a ~1.88 MB
+minimal NaN16 libc (`third_party/nan16-libc`) and a driver into a ~1.89 MB
 cartridge (`self1`).  The libc supplies a heap, strings, `printf`, `strtod`,
 math helpers, setjmp/system stubs and a flat in-memory VFS.  The driver
 registers `test.c`, calls `tcc_new`/`tcc_add_file`/`tcc_output_file`, reads
@@ -86,30 +86,50 @@ Other fixes required for tcc1:
 - VFS file descriptors start at 3, so writes to the first files do not alias
   stdout/stderr (fd 1/2).
 
-Next: tcc1 -> tcc2.  The flat writer, sections, relocations and 24-bit branch
-model are in place; the next step is to compile the TCC sources with the
-self-hosted libtcc and compare the resulting compiler with self1.  The
-softfloat runtime supplies IEEE binary64 add/sub/mul/div, comparison and
+Result: self1 compiles the TCC sources with the self-hosted libtcc to a
+byte-identical self2 (1,891,544 bytes), and self2 compiles `test.c` to 42.
+The softfloat runtime supplies IEEE binary64 add/sub/mul/div, comparison and
 conversion helpers, plus `__divdi3`, `__udivdi3`, `__moddi3`, `__umoddi3`,
 `__ashldi3`, `__ashrdi3` and `__lshrdi3`.
 
-### tcc2 fixpoint plan
+### tcc2 fixpoint
 
 The first tcc2 attempt compiles preprocessed sources (`libc.i`, `libtcc.i`,
 `driver.i`) with self1, extracts `self2`, runs it on `test.c`, and compares
 `self1` with `self2`.  Preprocessed input keeps the guest from needing the
 host sysroot; raw-source compilation with a VFS include path is a later gate.
 
-The selfcompile driver writes progress markers at guest byte `0x03100300`
+The selfcompile driver writes progress markers at guest byte `0x03F00000`
 (1=VFS setup, 2=tcc_new, 3..5=adding libc/libtcc/driver, 6=runtime compiled,
-7..9=finished), so a budget-limited run identifies the active source.  It must
-also compile `NAN16_RUNTIME_SRC` after the three input files, exactly like
-`tcc.c`; otherwise the full TCC source's `__nan16_i2d`/`__nan16_dadd`/division
-helpers are unresolved and `tcc_output_file` fails with
-`nan16: unresolved address '__nan16_i2d'`.  The guest compiler's `init_assert`
-was rewritten with explicit branches: the compound ternary/`&&` form was
-miscompiled and fired with `offset=5 > data_offset=6`, a false positive that
-aborted the libc.i compile at ~80M steps.
+7..9=finished), so a budget-limited run identifies the active source.  The
+marker is deliberately outside the `0x03000000` output-copy buffer; at
+`0x03100300` the final marker write corrupted four bytes of the copied
+cartridge.  A checkpoint taken when the size word at `0x02FFFFF0` becomes
+nonzero can still be mid-copy; wait for marker 9 before extracting.
+
+The driver must compile `NAN16_RUNTIME_SRC` after the three input files,
+exactly like `tcc.c`; otherwise the full TCC source's
+`__nan16_i2d`/`__nan16_dadd`/division helpers are unresolved and
+`tcc_output_file` fails with `nan16: unresolved address '__nan16_i2d'`.
+The guest compiler's `init_assert` was rewritten with explicit branches: the
+compound ternary/`&&` form was miscompiled and fired with
+`offset=5 > data_offset=6`, a false positive that aborted the libc.i compile
+at ~80M steps.
+
+The last byte-level fixpoint difference was the guest libc's `strtod`.  It
+accumulated integer digits in a 64-bit `mant` without an overflow check, so
+`2^64` and `2^96` wrapped to zero, and it built DBL_MAX by 292 successive
+multiplications, losing the low bits.  It now keeps 19 significant digits,
+tracks the discarded digits for round-to-nearest-even, and applies one
+correctly rounded power of ten from a generated table
+(`third_party/nan16-libc/src/nan16_pow10.h`).  self1 and tcc0 emit
+byte-identical cartridges for a test using DBL_MAX, 2^64 and 2^96.  The
+fixpoint run then completes at 3,777,870,888 steps: `self1` and `self2` are
+both 1,891,544 bytes and byte-identical, and self2 compiles `test.c` to a
+144-byte cartridge whose `main` returns 42.  The fixed-point image SHA-256 is
+`9af0d6030541fc806c84663920e91048100fdfb0727e3f7f6b7a252be8d204c1`
+for this tree and the documented build commands; the scratch harness and
+`tools/tcc_nan16_tcc2.sh` reproduce the same bytes.
 
 Fixpoint hazards to control before calling a mismatch a compiler bug:
 
@@ -129,13 +149,13 @@ from a compiler-correctness proof.
 
 ## The milestone
 
-`tcc1` is reached: TCC compiled by TCC on NaN16, compiling `test.c` to a
-cartridge that returns 42.  `tcc2` is the next moment: `tcc1` compiles the TCC
-sources again to a byte-identical executable.  At that point NaN16 is not "a
-VM that runs demos"; it is a self-hosting platform with its own C compiler,
-libc, VFS and linker.  The SQLite gate remains deferred until the tcc2
-fixpoint is stable.  The verified-chain gate is scoped in its own section
-below.
+`tcc1` and `tcc2` are reached.  `tcc1` is TCC compiled by TCC on NaN16; it
+compiles `test.c` to a cartridge that returns 42.  `tcc2` is self1 compiling
+the TCC sources again to a byte-identical 1,891,544-byte self2, which also
+compiles `test.c` to 42.  NaN16 is now a self-hosting platform with its own C
+compiler, libc, VFS and linker.  The fixpoint completes at 3,777,870,888 VM
+steps.  The SQLite gate remains deferred; the verified-chain gate is scoped
+in its own section below.
 
 ## Port shape
 
@@ -181,9 +201,9 @@ New target files:
 2. **tcc1 (reached)**: `tcc0` compiles the TCC sources on the VM, and the
    resulting self1 cartridge compiles `test.c` to a working cartridge.
    `tcc_nan16_selfhost --run` checks this end to end.
-3. **tcc2 (next)**: `tcc1` compiles the TCC sources again. The gate requires a
-   fixpoint: `tcc1` and `tcc2` byte-identical, or a documented canonical
-   difference with a semantic equivalence check.
+3. **tcc2 (reached)**: `tcc1` compiles the TCC sources again to a
+   byte-identical `self2` (1,891,544 bytes).  The gate runs `self2` on
+   `test.c` (inner `main` returns 42) and checks `self1 == self2`.
 4. **SQLite (deferred)**: `tcc2` compiles `sqlite3.c` (amalgamation), links the
    shell, and runs a query suite. This exercises the preprocessor, varargs,
    64-bit integers, file I/O, allocator, libc and the linker at real scale.
@@ -226,9 +246,10 @@ gates, not assumptions.
 - `tools/tcc_nan16_selfhost.sh --run`: tcc0 builds self1; self1 compiles
   `test.c`, emits an inner cartridge, and the inner returns 42. Passing and
   wired into `presqlite_gate`.
-- tcc2 mode (next): self1 compiles the TCC sources and the resulting self2 is
-  compared with self1 (byte-identical fixpoint, or a documented canonical
-  difference plus semantic checks).
+- `tools/tcc_nan16_tcc2.sh`: self1 compiles the TCC sources to a
+  byte-identical self2 (1,891,544 bytes); self2 also compiles `test.c` to a
+  144-byte cartridge whose `main` returns 42.  Passing (~3.78B VM steps,
+  resumable in slices).
 - `tools/tcc_sqlite.sh` (deferred): SQLite amalgamation + query suite.
 - `tools/tcc_verified.sh` (planned): finite opcode-lowering lemmas, UTM trace
   checks for small witnesses, and a scoped compiler-correctness or
@@ -253,10 +274,11 @@ TCC cannot precede the ABI and memory work:
 2. [x] Flat cartridge writer, 24-bit branches, 32-bit direct calls, sections,
    relocations and the entry prelude.
 3. [x] tcc1: self1 compiles `test.c`; the inner cartridge returns 42.
-4. [ ] tcc2: embed the TCC sources in a compile driver, have self1 produce
-   self2, run self2, and compare self1/self2.
-5. [ ] Enlarge the self-host corpus (fib/loops/structs/printf) before the full
-   TCC source.
+4. [x] tcc2: self1 compiles the TCC sources to a byte-identical 1,891,544-byte
+   self2; self2 compiles `test.c` to 42.
+5. [ ] Broaden the guest-compiler/program corpus (printf, libm, struct-heavy
+   and varargs programs) beyond add/fib/loops/structs/switch and the
+   double-constant test.
 6. [ ] ncc <-> TCC bidirectional call test and the 8-byte `double` ABI audit.
 7. [ ] Verified chain: opcode-lowering lemmas plus small UTM traces; scope the
    compiler-correctness statement honestly.

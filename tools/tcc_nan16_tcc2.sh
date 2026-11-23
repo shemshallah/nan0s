@@ -44,7 +44,7 @@ echo "tcc2: build self1 and selfcompile"
 python3 tools/nan16_embed.py "$T/compiler_src.h" \
     compiler_libc="$T/libc.i" compiler_libtcc="$T/libtcc.i" \
     compiler_driver="$T/driver.i"
-"$T/tcc0" -nostdlib -DHEAP_SIZE=134217728 -o "$T/selfcompile.bin" $INC \
+"$T/tcc0" -nostdlib -DHEAP_SIZE=134217728 -o "$T/selfcompile.bin" $INC -I"$T" \
     "$LIBC/src/libc.c" "$T/libtcc.i" "$LIBC/src/selfhost_compile_driver.c"
 
 run_test() { # run_test IMAGE LABEL -> requires inner main == 42
@@ -72,15 +72,16 @@ while [ "$target" -le "$LIMIT" ]; do
     if [ -z "$state" ]; then img="$T/selfcompile.bin"; else img="$state"; fi
     next="$T/state$n.nan1"
     "$CLI" --img "$img" --mem 512 --steps "$target" --state-out "$next" \
-        --dump-bytes "0x03100300:4:$T/prog$n.bin" \
+        --dump-bytes "0x03F00000:4:$T/prog$n.bin" \
         --peek '0x0BFFFFC:1' > "$T/size$n.txt" 2> "$T/slice$n.err" || true
     size_hex=$(tail -n 1 "$T/size$n.txt")
     prog=$(python3 -c "import struct;print(struct.unpack('<I',open('$T/prog$n.bin','rb').read(4))[0])")
     echo "tcc2: slice $n target=$target size=$size_hex progress=$prog"
-    if [ "$size_hex" != "00000000" ]; then
+    # 9 is set only after the driver's memcpy of self2 to 0x03000000; the
+    # size at 0x02FFFFF0 is stored before that copy starts.
+    if [ "$prog" -ge 9 ]; then
         final_state="$next"; final_size=$((0x$size_hex)); break
     fi
-    if [ "$prog" -ge 7 ]; then final_state="$next"; break; fi
     state="$next"; target=$((target + SLICE))
 done
 [ -n "$final_state" ] || { echo "tcc2: FAIL (not finished within $LIMIT steps)"; exit 1; }

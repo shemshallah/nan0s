@@ -10,8 +10,9 @@
 extern int nan16_vfs_add(const char *, const void *, unsigned);
 extern int nan16_vfs_get(const char *, unsigned char **, unsigned *);
 
-/* Progress marker used by the resumable gate (1..9). */
-#define NAN16_PROGRESS (*(volatile unsigned *)0x03100300u)
+/* Progress marker used by the resumable gate (1..9).  Keep it outside the
+   0x03000000 output-copy buffer (self2 is ~1.9 MB). */
+#define NAN16_PROGRESS (*(volatile unsigned *)0x03F00000u)
 
 int main(void)
 {
