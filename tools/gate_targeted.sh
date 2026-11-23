@@ -31,7 +31,7 @@ if [ -z "$FILES" ]; then
   exit 0
 fi
 
-COMPILER="ncc_alloc ncc_heap ncc_aligned ncc_headers ncc_ppexpr ncc_torture ncc_donut_exact ncc_macro_text ncc_include ncc_libm_exact ncc_iso_c ncc_ctests ncc_dp4b"
+COMPILER="ncc_abi_sizes ncc_alloc ncc_heap ncc_aligned ncc_headers ncc_ppexpr ncc_torture ncc_donut_exact ncc_macro_text ncc_include ncc_libm_exact ncc_iso_c ncc_ctests ncc_dp4b"
 m=1
 while [ "$m" -le 62 ]; do
   [ -f "tools/ncc_m$m.sh" ] && COMPILER="$COMPILER ncc_m$m"
