@@ -33,16 +33,30 @@ flat cartridge directly in `nan_cli`.  Passing:
 
 Coverage: byte-addressed C pointers (locals/params `SP*4+ci`/`FP*4+ci`,
 data `section_word*4+offset`), size-aware LDB/STB/LD/ST, stack arguments,
-callee-saved frame pointer, absolute jump/call relocations, `.rodata`,
-`.data.ro`, `.data`, `.bss`, `.rel.data`, and the 4-word entry prelude
-(`MOVI r14,0x8000; CALL main; ST r1,r0,0x100; HALT`).
+callee-saved frame pointer, 32-bit `CALLR` call/address relocations,
+dynamic per-function frames, `.rodata`, `.data.ro`, `.data`, `.bss`,
+`.rel.data`, and a 7-word entry prelude that sets the guest stack
+(`0x300000` words), loads `main` as a 32-bit address, calls it with
+`CALLR`, stores the result at 0x100 and halts.
 
-Open before tcc1: external libc/libtcc1 and the VFS.  The softfloat runtime
-supplies IEEE binary64 add/sub/mul/div, comparison and conversion helpers.
-`printf`/`strtod` formatting for `double` belongs to the libc/VFS step (TCC
-programs currently have no C library).  The same runtime also supplies
-`__divdi3`, `__udivdi3`, `__moddi3`, `__umoddi3`, `__ashldi3`, `__ashrdi3`
-and `__lshrdi3`.
+## Self-host harness
+
+`tools/tcc_nan16_selfhost.sh` preprocesses `libtcc.c`, links it with the
+minimal NaN16 libc (`third_party/nan16-libc`) and a driver into a ~1.8 MB
+cartridge.  The libc supplies a heap, strings, `printf`, `strtod`, math
+helpers, setjmp/system stubs and a flat in-memory VFS, so the driver can
+register `test.c` and retrieve `out.bin`.  The cartridge builds and runs to
+HALT, but the driver currently returns 0 with an empty output: the generated
+libtcc's `tcc_new`/`tcc_mallocz` call and function-symbol alignment is not
+yet correct, so `tcc_add_file`/`tcc_output_file` do not produce a program.
+Fixing that call/symbol layout is the next tcc1 step.
+
+Open before tcc1: fix the generated libtcc call/symbol alignment (the
+self-host driver currently returns no output), finish the VFS/headers, and
+run tcc1 -> tcc2.  The softfloat runtime supplies IEEE binary64
+add/sub/mul/div, comparison and conversion helpers.  The same runtime also
+supplies `__divdi3`, `__udivdi3`, `__moddi3`, `__umoddi3`, `__ashldi3`,
+`__ashrdi3` and `__lshrdi3`.
 
 ## The milestone
 

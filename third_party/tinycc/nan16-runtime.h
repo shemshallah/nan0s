@@ -390,6 +390,7 @@
     "    if (sign) r = 0ULL - r;\n" \
     "    return r;\n" \
     "}\n" \
+    "u64 __nan16_d2ull(u64 d) { return __nan16_d2ll(d); }\n" \
     "int __nan16_d2i(u64 d) { return (int)__nan16_d2ll(d); }\n" \
     "u32 __nan16_d2u(u64 d) { return (u32)__nan16_d2ll(d); }\n" \
     "u64 __nan16_ll2f(u64 v) { return (u64)__nan16_d2f(__nan16_ll2d(v)); }\n" \

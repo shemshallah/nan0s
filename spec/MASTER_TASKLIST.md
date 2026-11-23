@@ -147,14 +147,15 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done and gated.
       (`nan16-enc.c/.h`) and a runnable `MOVI/ST/HALT` smoke test
       (`tcc_nan16_enc`, raw words and `.nan` text).
 - [x] `TCC_TARGET_NAN16` builds (`nan16-gen.c`, `nan16-link.c`, `tcc.h`,
-      `libtcc.c`, `tccelf.c` hooks).  tcc0 compiles and runs 13 C programs
+      `libtcc.c`, `tccelf.c` hooks).  tcc0 compiles and runs 37 C programs
       (`tcc_nan16_smoke`): returns, calls, loops, arrays, recursion,
       switch, pointers, strings, structs, function pointers, `long long`
-      pairs and struct-by-value arguments (19 programs).
-- [ ] Before tcc1: external libc/libtcc1 and VFS (including `printf`/
-      `strtod` formatting).  8-byte binary64 `double`/`long double`,
-      64-bit division/modulo, variable shifts, struct returns/arguments
-      and stack varargs work; the TCC gate runs 37 programs.
+      pairs, struct args/returns, 64-bit division/shifts, varargs and
+      8-byte binary64 `double`/`long double`.
+- [ ] Before tcc1: fix the generated libtcc call/symbol alignment.  The
+      self-host harness (`tools/tcc_nan16_selfhost.sh`) builds a 1.8 MB
+      libtcc+libc cartridge; it runs but returns empty output.  The minimal
+      libc/VFS is in `third_party/nan16-libc`; `printf`/`strtod` are in place.
 - [ ] NaN16 output: flat cartridge/executable writer, relocations, sections,
       entry point, symbol table.
 - [ ] ABI parity with ncc: args/returns, stack frames, varargs, structs,

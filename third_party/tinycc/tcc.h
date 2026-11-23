@@ -25,6 +25,21 @@
 #define _DARWIN_C_SOURCE
 #include "config.h"
 
+#ifdef TCC_TARGET_NAN16
+# ifndef CONFIG_TCC_SYSINCLUDEPATHS
+#  define CONFIG_TCC_SYSINCLUDEPATHS "{B}/include"
+# endif
+# ifndef CONFIG_TCC_LIBPATHS
+#  define CONFIG_TCC_LIBPATHS "{B}"
+# endif
+# ifndef CONFIG_TCC_CRTPREFIX
+#  define CONFIG_TCC_CRTPREFIX "{B}"
+# endif
+# ifndef CONFIG_TRIPLET
+#  define CONFIG_TRIPLET "nan16"
+# endif
+#endif
+
 #include <stdarg.h>
 #include <stdlib.h>
 #include <stdio.h>

@@ -21,17 +21,20 @@
 
 /* 16-bit word-index relocations recorded by the code generator. */
 typedef struct { int pos; char name[64]; int addend; } NanReloc;
-static NanReloc nan_relocs[8192];
-static int nan_nrelocs;
+static NanReloc *nan_relocs;
+static int nan_nrelocs, nan_reloc_cap;
 
 typedef struct { int lo, hi; char name[64]; int addend; } NanAddrReloc;
-static NanAddrReloc nan_addr_relocs[8192];
-static int nan_naddr_relocs;
+static NanAddrReloc *nan_addr_relocs;
+static int nan_naddr_relocs, nan_addr_reloc_cap;
 
 void nan16_add_reloc(int pos, Sym *sym, int addend)
 {
-    if (nan_nrelocs >= (int)(sizeof nan_relocs / sizeof nan_relocs[0]))
-        tcc_error("nan16: too many relocations");
+    if (nocode_wanted) return;
+    if (nan_nrelocs >= nan_reloc_cap) {
+        nan_reloc_cap = nan_reloc_cap ? nan_reloc_cap * 2 : 1024;
+        nan_relocs = tcc_realloc(nan_relocs, nan_reloc_cap * sizeof *nan_relocs);
+    }
     nan_relocs[nan_nrelocs].pos = pos;
     nan_relocs[nan_nrelocs].addend = addend;
     if (!sym || strlen(get_tok_str(sym->v, NULL)) >= sizeof nan_relocs[0].name)
@@ -42,8 +45,12 @@ void nan16_add_reloc(int pos, Sym *sym, int addend)
 
 void nan16_add_addr_reloc(int lo, int hi, Sym *sym, int addend)
 {
-    if (nan_naddr_relocs >= (int)(sizeof nan_addr_relocs / sizeof nan_addr_relocs[0]))
-        tcc_error("nan16: too many address relocations");
+    if (nocode_wanted) return;
+    if (nan_naddr_relocs >= nan_addr_reloc_cap) {
+        nan_addr_reloc_cap = nan_addr_reloc_cap ? nan_addr_reloc_cap * 2 : 1024;
+        nan_addr_relocs = tcc_realloc(nan_addr_relocs,
+                                      nan_addr_reloc_cap * sizeof *nan_addr_relocs);
+    }
     nan_addr_relocs[nan_naddr_relocs].lo = lo;
     nan_addr_relocs[nan_naddr_relocs].hi = hi;
     nan_addr_relocs[nan_naddr_relocs].addend = addend;
@@ -156,7 +163,7 @@ int nan16_output_file(TCCState *s1, const char *filename)
         ElfSym *me = &((ElfSym *)s1->symtab->data)[main_sym];
         if (me->st_shndx) has_main = 1;
     }
-    pre = has_main ? 4 : 0;
+    pre = has_main ? 7 : 0;
 
     text_words = pre + (text->data_offset + 7) / 8;
     total_words = text_words;
@@ -166,7 +173,6 @@ int nan16_output_file(TCCState *s1, const char *filename)
     }
 
     if (pre) nan16_shift_jumps(text, pre);
-
     for (i = 0; i < nan_nrelocs; i++) {
         NanReloc *r = &nan_relocs[i];
         int si = nan16_sym_index(s1, r->name);
@@ -203,7 +209,9 @@ int nan16_output_file(TCCState *s1, const char *filename)
             addr = nan16_flat_addr(sec, (int)es->st_value, text_words,
                                    ds, dbase, nd, 0) + r->addend;
         if (addr < 0 || addr > 0xFFFFFFFF) {
-            fprintf(stderr, "nan16: address out of range for '%s'\n", r->name);
+            fprintf(stderr, "nan16: address out of range for '%s' (st=%d shndx=%d add=%d addr=%d)\n",
+                    r->name, es ? (int)es->st_value : -1,
+                    es ? (int)es->st_shndx : -1, r->addend, addr);
             return -1;
         }
         text->data[r->lo] = addr & 0xFF;
@@ -246,8 +254,11 @@ int nan16_output_file(TCCState *s1, const char *filename)
     if (!f) return -1;
     if (has_main) {
         int mword = ((ElfSym *)s1->symtab->data)[main_sym].st_value / 8 + pre;
-        nan16_write_word(f, nan16_mkword(0x01E08000u, 15));
-        nan16_write_word(f, nan16_mkword(0x0B000000u | (mword & 0xFFFF), 15));
+        nan16_write_word(f, nan16_mkword(0x01E00000u, 15));
+        nan16_write_word(f, nan16_mkword(0x02E00030u, 15));
+        nan16_write_word(f, nan16_mkword(0x01A00000u | (mword & 0xFFFF), 15));
+        nan16_write_word(f, nan16_mkword(0x02A00000u | ((mword >> 16) & 0xFFFF), 15));
+        nan16_write_word(f, nan16_mkword(0x2C0A0000u, 15));
         nan16_write_word(f, nan16_mkword(0x09100100u, 15));
         nan16_write_word(f, nan16_mkword(0xFF000000u, 15));
     }

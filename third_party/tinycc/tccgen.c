@@ -1144,7 +1144,9 @@ ST_FUNC Sym *get_sym_ref(CType *type, Section *sec, unsigned long offset, unsign
     v = anon_sym++;
     sym = sym_push(v, type, VT_CONST | VT_SYM, 0);
     sym->type.t |= VT_STATIC;
-    put_extern_sym(sym, sec, offset, size);
+    /* Section references must exist even if they were first seen while
+       parsing sizeof/typeof; a later real use may still need the symbol. */
+    put_extern_sym2(sym, sec ? sec->sh_num : SHN_UNDEF, offset, size, 1);
     return sym;
 }
 
