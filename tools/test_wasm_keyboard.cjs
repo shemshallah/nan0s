@@ -37,17 +37,21 @@ async function main() {
      'zoom-out', 'zoom-in', 'zoom-fit', 'zoom-level', 'image-fingerprint']
       .map(id => [id, new Element()])
   );
+  elements.screen_container.clientWidth = 360;
   const document = { getElementById(id) { assert.ok(elements[id], 'Missing mock element ' + id); return elements[id]; } };
+  const window = { matchMedia() { return { matches: true }; } };
   let emulator;
   class V86 {
     constructor(opts) {
       this.options = opts;
       this.listeners = {};
       this.codes = [];
+      this.scales = [];
       emulator = this;
     }
     add_listener(type, handler) { this.listeners[type] = handler; }
     keyboard_send_scancodes(codes) { this.codes.push(...codes); }
+    screen_set_scale(x, y) { this.scales.push([x, y]); }
     keyboard_set_enabled() { throw Error('PS/2 delivery must not be disabled by text field focus'); }
   }
   const disk = new Uint8Array(1474560);
@@ -57,7 +61,7 @@ async function main() {
     fetches.push({ url, opts });
     return { ok: true, arrayBuffer: async () => disk.buffer };
   };
-  vm.runInNewContext(code, { document, fetch, V86, setInterval() {}, console }, { filename: 'docs/index.html' });
+  vm.runInNewContext(code, { document, window, fetch, V86, setInterval() {}, console }, { filename: 'docs/index.html' });
   // Let fetchImage().then(boot) run.
   for (let i = 0; i < 10 && !emulator; ++i) await new Promise(resolve => setImmediate(resolve));
   assert.ok(emulator, 'Browser did not boot after image fetch');
@@ -73,6 +77,18 @@ async function main() {
   assert.equal(elements['zoom-out'].disabled, false);
   assert.equal(elements['zoom-fit'].disabled, false);
   assert.ok(emulator.options.fda && emulator.options.hda, 'Full system must use floppy and IDE');
+  assert.deepEqual(emulator.scales.at(-1), [1.5, 1.5],
+    'Touch devices must start zoomed in to make the guest readable');
+  elements['zoom-out'].dispatch('click');
+  assert.deepEqual(emulator.scales.at(-1), [1.2, 1.2], 'Zoom out must scale the guest');
+  elements['zoom-in'].dispatch('click');
+  assert.deepEqual(emulator.scales.at(-1), [1.5, 1.5], 'Zoom in must scale the guest');
+  elements['zoom-fit'].dispatch('click');
+  assert.deepEqual(emulator.scales.at(-1), [0.375, 0.375],
+    'Fit must respect the minimum readable scale without changing guest mode');
+  emulator.listeners['screen-set-size']([1024, 768]);
+  assert.deepEqual(emulator.scales.at(-1), [0.375, 0.375],
+    'Mode switches must preserve the current user-selected zoom');
 
   const input = elements.type;
   function clear() {
