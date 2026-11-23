@@ -110,7 +110,7 @@ static int nan_jump_new(int pos, int next)
 
 static void nan_patch16(int pos, uint16_t v)
 {
-    if (pos < 0 || pos + 1 >= cur_text_section->data_offset) return;
+    if (pos < 0) return;
     cur_text_section->data[pos] = v & 0xFF;
     cur_text_section->data[pos + 1] = v >> 8;
 }
@@ -208,8 +208,8 @@ ST_FUNC void load(int r, SValue *sv)
             tcc_error("nan16: symbol constants are not implemented");
         nan_movi32(r, (uint32_t)sv->c.i);
     } else if (v == VT_LOCAL) {
-        int off = sv->c.i >= 0 ? sv->c.i / 4
-                               : nan_nparams + 2 - sv->c.i / 4;
+        int ci = (int)sv->c.i;
+        int off = ci >= 0 ? ci / 4 : nan_nparams + 2 - ci / 4;
         nan_op(0x08, r, 12, off);
     } else if (sv->r & VT_LVAL) {
         nan_op(0x08, r, v, 0);
@@ -222,8 +222,8 @@ ST_FUNC void store(int r, SValue *sv)
 {
     int v = sv->r & VT_VALMASK;
     if (v == VT_LOCAL) {
-        int off = sv->c.i >= 0 ? sv->c.i / 4
-                               : nan_nparams + 2 - sv->c.i / 4;
+        int ci = (int)sv->c.i;
+        int off = ci >= 0 ? ci / 4 : nan_nparams + 2 - ci / 4;
         nan_op(0x09, r, 12, off);
     } else if (sv->r & VT_LVAL) {
         nan_op(0x09, r, v, 0);
