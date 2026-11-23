@@ -21,6 +21,16 @@ The first run caches the **same SeaBIOS and VGA BIOS used by the web demo** in
 
 ## Each local iteration
 
+The shortest workflow is a single command (it rebuilds the raw NaN16 guest
+before running the real WASM test):
+
+```sh
+sh tools/wasm_loop.sh              # full image replication + second boot
+sh tools/wasm_loop.sh --boot-only  # lightweight boot/keyboard smoke
+```
+
+Equivalent explicit commands:
+
 ```sh
 # Recompile edited .nas source and generate build/nan0s.img:
 sh tools/build.sh
