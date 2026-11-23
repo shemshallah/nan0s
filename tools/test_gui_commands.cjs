@@ -29,4 +29,23 @@ const controls = block('term_key:', 'tk_id:');
 assert.match(controls, /MOVI r4,13\s*\nCMP r3,r4\s*\nJMP\[EQ\] @tk_enter/,
   'the key n by itself must remain ordinary printable text, not a command');
 
-console.log('PASS: n -> NaNNet (5), b -> browser (7), safe window ID, printable-key semantics');
+const dispatch = block('fs_dispatch:', 'fs_d_build:');
+assert.match(dispatch, /LA r2,@fs_s_build_head\s*\nCALL @fs_prefix/,
+  'The build command family must be recognized by raw NaN16 before one-letter fallback');
+assert.match(dispatch, /LA r2,@fs_s_build\s*\nCALL @fs_exact/,
+  'Full bootable-image building requires an exact command match');
+assert.match(dispatch, /JMP\[NE\] @fs_d_build\s*\nJMP @fs_d_build_help/,
+  'Bare build and invalid arguments must display help instead of launching browser');
+
+const exact = block('fs_exact:', 'fs_dispatch:');
+assert.match(exact, /LDB r3,r1,0[\s\S]*?LDB r4,r2,0[\s\S]*?CMP r3,r4/,
+  'The exact match must compare the whole command including NUL');
+const help = block('fs_d_build_help:', 'fs_d_cc:');
+assert.match(help, /CALL @vc_puts[\s\S]*?CALL @sb_serial/,
+  'The raw NaN16 build help must be printed in the terminal and on serial');
+const build = block('fs_d_build:', 'fs_d_build_help:');
+assert.match(build, /CALL @sb_build/, 'Only build nan0s launches native image building');
+assert.match(source, /fs_s_build_head:\s*\n\.str "build"\s*\nfs_s_build:\s*\n\.str "build nan0s"/,
+  'The build family and full command must be declared independently');
+
+console.log('PASS: n -> NaNNet; b -> browser; build -> help; build nan0s -> exact raw NaN16 disk builder');
