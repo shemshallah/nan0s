@@ -22,7 +22,9 @@ int errno;
 
 /* ---------------------------------------------------------------- memory */
 #define HEAP_BASE ((unsigned char *)0x04000000u)
+#ifndef HEAP_SIZE
 #define HEAP_SIZE (64u * 1024u * 1024u)
+#endif
 #define HDR_ALIGN 16u
 
 typedef struct Block {
@@ -375,6 +377,7 @@ int system(const char *s) { (void)s; return 0; }
 /* ---------------------------------------------------------------- stdio/VFS */
 #define MAXFILES 64
 #define MAXSTREAMS 16
+#define FD_VFS_BASE 3
 typedef struct MemFile {
     char name[64];
     unsigned char *data;
@@ -384,7 +387,7 @@ typedef struct MemFile {
 static MemFile files[MAXFILES];
 
 typedef struct NFile {
-    int fd;       /* 1..MAXFILES, or -1 for stdout/stderr */
+    int fd;       /* 3.. or -1 for stdout/stderr */
     int is_err;
     int eof;
 } NFile;
@@ -465,21 +468,21 @@ int open(const char *name, int flags, ...)
     }
     if (flags & O_TRUNC) { f->size = 0; f->pos = 0; }
     for (i = 0; i < MAXFILES; i++)
-        if (&files[i] == f) { f->pos = 0; return i + 1; }
+        if (&files[i] == f) { f->pos = 0; return i + FD_VFS_BASE; }
     return -1;
 }
 int creat(const char *name, int mode) { (void)mode; return open(name, O_CREAT | O_WRONLY | O_TRUNC); }
 int close(int fd)
 {
-    if (fd >= 1 && fd <= MAXFILES) files[fd - 1].pos = 0;
+    if (fd >= FD_VFS_BASE && fd < FD_VFS_BASE + MAXFILES) files[fd - FD_VFS_BASE].pos = 0;
     return 0;
 }
 ssize_t read(int fd, void *buf, size_t n)
 {
     MemFile *f;
     unsigned avail;
-    if (fd < 1 || fd > MAXFILES) return -1;
-    f = &files[fd - 1];
+    if (fd < FD_VFS_BASE || fd >= FD_VFS_BASE + MAXFILES) return -1;
+    f = &files[fd - FD_VFS_BASE];
     if (!f->used) return -1;
     avail = f->size - f->pos;
     if (n > avail) n = avail;
@@ -497,8 +500,8 @@ ssize_t write(int fd, const void *buf, size_t n)
             else outcap(&nan16_stderr_data, &nan16_stderr_len, &nan16_stderr_cap, ((const unsigned char *)buf)[i]);
         return n;
     }
-    if (fd < 1 || fd > MAXFILES) return -1;
-    f = &files[fd - 1];
+    if (fd < FD_VFS_BASE || fd >= FD_VFS_BASE + MAXFILES) return -1;
+    f = &files[fd - FD_VFS_BASE];
     if (!f->used) return -1;
     if (f->pos + n > f->cap) {
         unsigned nc = f->cap ? f->cap : 256;
@@ -518,8 +521,8 @@ off_t lseek(int fd, off_t off, int whence)
 {
     MemFile *f;
     long np;
-    if (fd < 1 || fd > MAXFILES) return -1;
-    f = &files[fd - 1];
+    if (fd < FD_VFS_BASE || fd >= FD_VFS_BASE + MAXFILES) return -1;
+    f = &files[fd - FD_VFS_BASE];
     if (!f->used) return -1;
     if (whence == SEEK_SET) np = off;
     else if (whence == SEEK_CUR) np = (long)f->pos + off;
@@ -761,9 +764,9 @@ int stat(const char *name, struct stat *st)
 }
 int fstat(int fd, struct stat *st)
 {
-    if (fd < 1 || fd > MAXFILES) return -1;
+    if (fd < FD_VFS_BASE || fd >= FD_VFS_BASE + MAXFILES) return -1;
     memset(st, 0, sizeof *st);
-    st->st_size = files[fd - 1].size;
+    st->st_size = files[fd - FD_VFS_BASE].size;
     st->st_mode = S_IFREG | 0644;
     return 0;
 }
@@ -777,7 +780,8 @@ char *realpath(const char *p, char *out) { if (out) { strcpy(out, p); return out
 void *mmap(void *a, size_t n, int p, int f, int fd, off_t o)
 {
     (void)a; (void)n; (void)p; (void)f; (void)o;
-    if (fd >= 1 && fd <= MAXFILES && files[fd - 1].used) return files[fd - 1].data;
+    if (fd >= FD_VFS_BASE && fd < FD_VFS_BASE + MAXFILES && files[fd - FD_VFS_BASE].used)
+        return files[fd - FD_VFS_BASE].data;
     return (void *)-1;
 }
 int munmap(void *a, size_t n) { (void)a; (void)n; return 0; }

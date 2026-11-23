@@ -47,7 +47,7 @@ full=0
 for f in $FILES; do
   case "$f" in
     third_party/tinycc/nan16-gen.c|third_party/tinycc/nan16-link.c|third_party/tinycc/tcc.h|third_party/tinycc/libtcc.c|third_party/tinycc/libtcc.h|third_party/tinycc/tccelf.c|tools/tcc_nan16_smoke.sh)
-      add "tcc_nan16_smoke tcc_nan16_enc" ;;
+      add "tcc_nan16_smoke tcc_nan16_enc tcc_nan16_selfhost" ;;
     third_party/tinycc/nan16-*|tools/tcc_nan16_enc.sh)
       add "tcc_nan16_enc" ;;
     spec/*|third_party/*|*.md|build/*|aarch64/android/app/src/main/assets/*)
@@ -147,7 +147,7 @@ gate_files() {
       echo "src/lib/*.nas src/prog/nasm0_tables.nas src/tools/disasm.nas src/tests/ncc_*.nas src/tests/ctests/* aarch64/android/core/*.c aarch64/android/core/*.h aarch64/android/tests/*.c aarch64/android/tools/nan_cli.c aarch64/android/Makefile tools/nmk.awk tools/ncc_*.sh"
       ;;
     tcc_nan16_*)
-      echo "third_party/tinycc/nan16-* third_party/tinycc/tcc.h third_party/tinycc/libtcc.c third_party/tinycc/libtcc.h third_party/tinycc/tccelf.c tools/tcc_nan16_*.sh"
+      echo "third_party/tinycc/nan16-* third_party/tinycc/tcc.h third_party/tinycc/libtcc.c third_party/tinycc/libtcc.h third_party/tinycc/tccelf.c third_party/nan16-libc/src/* third_party/nan16-libc/include/* aarch64/android/tools/nan_cli.c aarch64/android/core/* tools/tcc_nan16_*.sh"
       ;;
     *)
       echo "src/native/*.xa src/native/*.nan src/native64/* x86/native/* x86/boot/* src/translate/*.nas src/tests/*.nas tools/mkimg.awk tools/nmk.awk tools/mkall.sh tools/xgold.sh tools/nan_*.sh tools/xlate_x86.sh tools/qgate*.sh tools/mkproof.sh"
@@ -175,6 +175,7 @@ run_gate() {
   case "$g" in
     c_core_test) ( cd aarch64/android && timeout "$LONG_TIMEOUT" make -s test ) ;;
     mkproof) timeout "$LONG_TIMEOUT" sh tools/mkproof.sh src/tests/key_test.nas ;;
+    tcc_nan16_selfhost) timeout "$LONG_TIMEOUT" sh tools/tcc_nan16_selfhost.sh --run ;;
     mkall|qgate|qgate_gui|xmemgate) timeout "$LONG_TIMEOUT" sh "tools/$g.sh" ;;
     *) timeout "$TIMEOUT" sh "tools/$g.sh" ;;
   esac

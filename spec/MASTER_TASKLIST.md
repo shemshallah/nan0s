@@ -142,39 +142,53 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done and gated.
 - [ ] Fuzzing gates for parsers and syscalls.
 
 ## P0.7 TCC self-hosting and the verified compiler chain
-- [x] Vendor TCC at `third_party/tinycc` (commit 5cef7f3, LGPL-2.1).
+- [x] Vendor TCC at `third_party/tinycc` (upstream `5cef7f3`, imported tree
+      `dcb896d1c7ae2e64114c55c93f5223f92280bbdf`, LGPL-2.1); machine-readable
+      provenance in `third_party/tinycc/VENDOR`.
 - [x] NaN16 ABI contract (`nan16-abi.h`), host word encoder
       (`nan16-enc.c/.h`) and a runnable `MOVI/ST/HALT` smoke test
       (`tcc_nan16_enc`, raw words and `.nan` text).
-- [x] `TCC_TARGET_NAN16` builds (`nan16-gen.c`, `nan16-link.c`, `tcc.h`,
-      `libtcc.c`, `tccelf.c` hooks).  tcc0 compiles and runs 37 C programs
-      (`tcc_nan16_smoke`): returns, calls, loops, arrays, recursion,
-      switch, pointers, strings, structs, function pointers, `long long`
-      pairs, struct args/returns, 64-bit division/shifts, varargs and
+- [x] tcc0: `TCC_TARGET_NAN16` builds (`nan16-gen.c`, `nan16-link.c`, `tcc.h`,
+      `libtcc.c`, `tccelf.c` hooks) and compiles/runs 37 C programs
+      (`tcc_nan16_smoke`), including 64-bit pairs, structs, varargs and
       8-byte binary64 `double`/`long double`.
-- [ ] Before tcc1: fix the generated libtcc call/symbol/frame layout.  The
-      self-host harness (`tools/tcc_nan16_selfhost.sh`) builds a 1.8 MB
-      libtcc+libc cartridge; it traps in the first calls after ~7k steps.
-      The minimal libc/VFS is in `third_party/nan16-libc`; `printf`/`strtod`
-      are in place.
-- [ ] NaN16 output: flat cartridge/executable writer, relocations, sections,
-      entry point, symbol table.
+- [x] tcc1: `tools/tcc_nan16_selfhost.sh --run` builds self1 (~1.88 MB),
+      self1 compiles `test.c`, emits a 144-byte inner cartridge, and the
+      inner `main` returns 42.  Wired into `presqlite_gate`.
+- [x] Guest compiler direct calls: whole-`SymAttr` bitfield copies were
+      replaced with 2-byte `memcpy`s (a 4-byte bitfield-unit copy zeroed
+      `Sym.r` and sent calls to `FP*4+2`).  The guest compiler now passes
+      `add(20,22)`, recursive `fib(10)` (55) and a loops/arrays/structs/
+      switch test (19).
+- [x] NaN16 output: flat cartridge/executable writer, sections, 24-bit
+      absolute far branches (`0x38`), 32-bit direct `MOVI/MOVHI`+`CALLR`
+      calls, address/data relocations and the entry prelude.  Text-only audit
+      of self1: 9,000 far jumps, 5,781 with targets >64k words, zero 16-bit
+      branch instructions.
+- [~] tcc2: compile the TCC sources with self1 and compare self1/self2
+      byte-for-byte (or a documented canonical difference plus semantic
+      checks).  The selfcompile run is in progress; it compiles the input
+      files and then `NAN16_RUNTIME_SRC` (the host `tcc.c` injection), which
+      resolves `__nan16_i2d` and the other softfloat/64-bit helpers.
+- [ ] Enlarge the self-host corpus before the full TCC source: fib/loops/
+      structs/printf and libtcc subsets.
 - [ ] ABI parity with ncc: args/returns, stack frames, varargs, structs,
-      64-bit pairs, f32/f64; bidirectional call tests.
-- [ ] VFS and headers for `#include`, source and model/SQLite files.
-- [ ] NaN16 `libtcc1` runtime: 64-bit arithmetic, float helpers, alloca,
-      setjmp, mem/str primitives.
-- [ ] tcc0: host cross-build emits NaN16.
-- [ ] tcc1: tcc0 compiles TCC on the VM.
-- [ ] tcc2: tcc1 compiles TCC again; tcc1 == tcc2 byte-for-byte fixpoint.
-- [ ] SQLite: tcc2 compiles the amalgamation, links the shell, runs a query
-      suite (schema, insert, select, join, index, transaction, file reopen).
-- [ ] Verified chain: NaN16 binary -> Binary TM -> Minsky UTM -> Coq trace.
-- [ ] Compiler-correctness bridge: checked relation from TCC output to the
-      executed Binary TM, so "the C you compiled is the code that ran" is an
-      artifact.
-- [ ] Gates: `tools/tcc_build.sh`, `tools/tcc_selfhost.sh`,
-      `tools/tcc_sqlite.sh`, `tools/tcc_verified.sh`, all in presqlite.
+      64-bit pairs, f32/f64; bidirectional call tests.  This is a separate
+      gate: do not link ncc- and tcc-compiled objects until ncc's `double`
+      is 8 bytes and the mixed `printf` test passes.
+- [ ] VFS and headers completeness for `#include`, source and model/SQLite
+      files.
+- [~] NaN16 `libtcc1` runtime: 64-bit arithmetic, shifts and binary64 helpers
+      are in place; `alloca`, `setjmp` and full mem/str coverage remain open.
+- [ ] SQLite (deferred until tcc2): tcc2 compiles the amalgamation, links the
+      shell, runs a query suite (schema, insert, select, join, index,
+      transaction, file reopen).
+- [ ] Verified chain: finite per-opcode/block lowering lemmas plus small UTM
+      trace checks; scope the compiler-correctness/translation-validation
+      claim honestly (a trace does not by itself prove the binary implements
+      the C source).
+- [ ] Gates: `tcc_nan16_smoke`, `tcc_nan16_selfhost`, `tcc_nan16_enc` are in
+      `presqlite_gate`; `tcc_sqlite` and `tcc_verified` remain future gates.
 
 The TCC port contract, ABI, bootstrap stages and proof chain are detailed in
 `spec/TCC_NAN16.md`. TCC and SQLite are C; the C++17 track is only a dependency

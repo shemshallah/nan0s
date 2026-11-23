@@ -25,7 +25,7 @@
 #define PTR_SIZE 4
 #define LDOUBLE_SIZE 8
 #define LDOUBLE_ALIGN 8
-#define MAX_ALIGN 8
+#define MAX_ALIGN 16
 #define TCC_TARGET_NATIVE_STRUCT_COPY
 ST_FUNC void gen_struct_copy(int size);
 
@@ -123,6 +123,12 @@ static void nan_pred_op(int op, int d, int a, int imm, int pred)
              | ((uint32_t)(a & 15) << 16) | (imm & 0xFFFF), pred);
 }
 
+/* Absolute far jump/call: the 24-bit target occupies the d/a/imm fields. */
+static void nan_far_op(int op, uint32_t target, int pred)
+{
+    nan_pred_op(op, (target >> 20) & 15, (target >> 16) & 15, target & 0xFFFF, pred);
+}
+
 static void nan_patch16(int pos, uint16_t v);
 static void nan_patch_jump(int pos, int target_word);
 
@@ -132,7 +138,7 @@ static void nan_cap_carry(int pred)
 {
     int pos;
     nan_op(0x01, 11, 0, 1);            /* MOVI r11,1 */
-    nan_pred_op(0x0A, 0, 0, 0, pred);  /* JMP[pred] over the zero */
+    nan_far_op(0x38, 0, pred);         /* JMP[pred] over the zero */
     pos = ind - 6;
     nan_op(0x01, 11, 0, 0);            /* MOVI r11,0 */
     nan_patch_jump(pos, ind / 8);
@@ -169,21 +175,29 @@ static void nan_patch16(int pos, uint16_t v)
     cur_text_section->data[pos + 1] = v >> 8;
 }
 
-/* Patch a jump immediate and record its position so that the linker's
+static void nan_patch24(int pos, uint32_t v)
+{
+    if (pos < 0) return;
+    cur_text_section->data[pos] = v & 0xFF;
+    cur_text_section->data[pos + 1] = (v >> 8) & 0xFF;
+    cur_text_section->data[pos + 2] = (v >> 16) & 0xFF;
+}
+
+/* Patch a jump target (24-bit) and record its position so that the linker's
    entry-prelude shift (nan16_shift_jumps) adjusts the target too. */
 static void nan_patch_jump(int pos, int target_word)
 {
     if (nocode_wanted) return;
-    nan_patch16(pos, (uint16_t)target_word);
+    nan_patch24(pos, (uint32_t)target_word & 0xFFFFFF);
     nan_jump_new(pos, 0);
 }
 
 ST_FUNC void gsym_addr(int t, int a)
 {
-    int target = (a / 8) & 0xFFFF;
+    uint32_t target = ((uint32_t)a / 8) & 0xFFFFFF;
     while (t) {
         NanJump *j = &nan_jumps[t - 1];
-        nan_patch16(j->pos, target);
+        nan_patch24(j->pos, target);
         t = j->next;
     }
 }
@@ -203,15 +217,15 @@ ST_FUNC int gjmp(int t)
 {
     int pos;
     if (nocode_wanted) return t;
-    nan_op(0x0A, 0, 0, 0);
-    pos = ind - 6;             /* imm16 is bytes 2..3 of the 8-byte word */
+    nan_far_op(0x38, 0, 15);
+    pos = ind - 6;             /* target bytes are 2..4 of the 8-byte word */
     return nan_jump_new(pos, t);
 }
 
 ST_FUNC void gjmp_addr(int a)
 {
     int pos;
-    nan_op(0x0A, 0, 0, (a / 8) & 0xFFFF);
+    nan_far_op(0x38, (uint32_t)(a / 8), 15);
     pos = ind - 6;
     nan_jump_new(pos, 0);
 }
@@ -222,10 +236,13 @@ void nan16_shift_jumps(Section *text, int pre)
     int i;
     for (i = 0; i < nan_njumps; i++) {
         int pos = nan_jumps[i].pos;
-        uint16_t t = (uint16_t)(text->data[pos] | (text->data[pos + 1] << 8));
-        t = (uint16_t)(t + pre);
+        uint32_t t = (uint32_t)text->data[pos]
+                   | ((uint32_t)text->data[pos + 1] << 8)
+                   | ((uint32_t)text->data[pos + 2] << 16);
+        t += (uint32_t)pre;
         text->data[pos] = t & 0xFF;
-        text->data[pos + 1] = t >> 8;
+        text->data[pos + 1] = (t >> 8) & 0xFF;
+        text->data[pos + 2] = (t >> 16) & 0xFF;
     }
 }
 
@@ -257,7 +274,7 @@ ST_FUNC int gjmp_cond(int op, int t)
     int pos;
     if (nocode_wanted) return t;
     nan_emit_cmp();
-    nan_pred_op(0x0A, 0, 0, 0, nan_pred_for(op));
+    nan_far_op(0x38, 0, nan_pred_for(op));
     pos = ind - 6;
     return nan_jump_new(pos, t);
 }
@@ -322,6 +339,18 @@ static void nan_load_indirect(int r, int size, int sign)
             nan_op(0x05, r, r, 24);
             nan_op(0x27, r, r, 24);
         }
+    } else if (size == 2) {
+        int t = (r == 10) ? 11 : 10;
+        nan_op(0x03, t, r, 0);          /* t = byte address */
+        nan_op(0x29, t, t, 1);          /* t = address + 1 */
+        nan_op(0x2A, r, r, 0);          /* low byte */
+        nan_op(0x2A, t, t, 0);          /* high byte */
+        nan_op(0x05, t, t, 8);          /* high << 8 */
+        nan_pred_op(0x00, r, r, t, 14); /* r |= high */
+        if (sign) {
+            nan_op(0x05, r, r, 16);
+            nan_op(0x27, r, r, 16);
+        }
     } else {
         nan_op(0x06, r, r, 2);          /* SHR r,2 */
         nan_op(0x08, r, r, 0);          /* LD r,[r] */
@@ -333,6 +362,11 @@ static void nan_store_indirect(int r, int size, int addr_reg)
     int t = 10;
     if (size == 1) {
         nan_op(0x2B, r, addr_reg, 0);   /* STB */
+    } else if (size == 2) {
+        int v = (addr_reg == 10) ? 11 : 10;
+        nan_op(0x2B, r, addr_reg, 0);   /* low byte */
+        nan_op(0x06, v, r, 8);          /* v = value >> 8 */
+        nan_op(0x2B, v, addr_reg, 1);   /* high byte at address+1 */
     } else {
         nan_op(0x06, t, addr_reg, 2);   /* SHR t,addr,2 */
         nan_op(0x09, r, t, 0);          /* ST */
@@ -371,7 +405,7 @@ ST_FUNC void load(int r, SValue *sv)
                 nan16_add_addr_reloc(lo, hi, sv->sym, (int)sv->c.i);
             if (sv->r & VT_LVAL) {
                 size = nan_size(&sv->type);
-                sign = !(sv->type.t & VT_UNSIGNED) && size == 1;
+                sign = !(sv->type.t & VT_UNSIGNED) && (size == 1 || size == 2);
                 nan_load_indirect(r, size, sign);
             }
         } else {
@@ -382,7 +416,7 @@ ST_FUNC void load(int r, SValue *sv)
         nan_local_addr(r, ci);
         if (sv->r & VT_LVAL) {
             size = nan_size(&sv->type);
-            sign = !(sv->type.t & VT_UNSIGNED) && size == 1;
+            sign = !(sv->type.t & VT_UNSIGNED) && (size == 1 || size == 2);
             nan_load_indirect(r, size, sign);
         }
     } else if (v == VT_LLOCAL) {
@@ -392,12 +426,12 @@ ST_FUNC void load(int r, SValue *sv)
         nan_op(0x08, r, r, 0);          /* load the pointer */
         if (sv->r & VT_LVAL) {
             size = nan_size(&sv->type);
-            sign = !(sv->type.t & VT_UNSIGNED) && size == 1;
+            sign = !(sv->type.t & VT_UNSIGNED) && (size == 1 || size == 2);
             nan_load_indirect(r, size, sign);
         }
     } else if (sv->r & VT_LVAL) {
         size = nan_size(&sv->type);
-        sign = !(sv->type.t & VT_UNSIGNED) && size == 1;
+        sign = !(sv->type.t & VT_UNSIGNED) && (size == 1 || size == 2);
         if (r != v)
             nan_op(0x03, r, v, 0);
         nan_load_indirect(r, size, sign);
@@ -407,7 +441,7 @@ ST_FUNC void load(int r, SValue *sv)
         int pos;
         nan_emit_cmp();
         nan_movi32(r, 1);
-        nan_pred_op(0x0A, 0, 0, 0, nan_pred_for(op));
+        nan_far_op(0x38, 0, nan_pred_for(op));
         pos = ind - 6;
         nan_movi32(r, 0);
         nan_patch_jump(pos, ind / 8);
@@ -416,7 +450,7 @@ ST_FUNC void load(int r, SValue *sv)
         int t = v & 1;
         int pos;
         nan_movi32(r, t);
-        nan_op(0x0A, 0, 0, 0);
+        nan_far_op(0x38, 0, 15);
         pos = ind - 6;
         gsym((int)sv->c.i);
         nan_movi32(r, t ^ 1);
@@ -501,15 +535,16 @@ ST_FUNC void gen_opi(int op)
         gv2(RC_INT, RC_INT);
         a = vtop[-1].r & VT_VALMASK;
         b = vtop[0].r & VT_VALMASK;
-        nan_pred_op(0x00, b, b, 31, 8);      /* shift count &= 31 */
+        nan_op(0x01, 10, 0, 31);             /* r10 = 31 */
+        nan_pred_op(0x00, b, b, 10, 8);      /* shift count &= 31 */
         start = ind;
         nan_op(0x07, 0, b, 0);               /* CMP b,0 */
-        nan_pred_op(0x0A, 0, 0, 0, 4);       /* JMP[EQ] done */
+        nan_far_op(0x38, 0, 4);              /* JMP[EQ] done */
         done = ind - 6;
         nan_op(op == TOK_SHL ? 0x05 : op == TOK_SHR ? 0x06 : 0x27,
                a, a, 1);
         nan_op(0x29, b, b, -1);              /* b-- */
-        nan_op(0x0A, 0, 0, 0);
+        nan_far_op(0x38, 0, 15);
         back = ind - 6;
         nan_patch_jump(back, start / 8);
         nan_patch_jump(done, ind / 8);

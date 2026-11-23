@@ -57,7 +57,7 @@ static uint32_t words_for_mb(unsigned long mb) {
   return p;
 }
 int main(int argc, char **argv) {
-  const char *vga = NULL, *img = NULL, *keys = NULL, *ppm = NULL, *disk = NULL, *peek = NULL, *corpus = NULL, *candidate_out = NULL; uint64_t steps = 50000000ull, per_ms = 1000;
+  const char *vga = NULL, *img = NULL, *keys = NULL, *ppm = NULL, *disk = NULL, *peek = NULL, *dump_bytes = NULL, *state_out = NULL, *corpus = NULL, *candidate_out = NULL; uint64_t steps = 50000000ull, per_ms = 1000;
   unsigned long mem_mb = 0;
   int train_mode = 0;
   int dump_text = 0, serial = 0, trim = 1;
@@ -73,11 +73,13 @@ int main(int argc, char **argv) {
     else if (!strcmp(argv[i], "--dump-vga") && i + 1 < argc) vga = argv[++i];
     else if (!strcmp(argv[i], "--disk") && i + 1 < argc) disk = argv[++i];
     else if (!strcmp(argv[i], "--peek") && i + 1 < argc) peek = argv[++i];
+    else if (!strcmp(argv[i], "--dump-bytes") && i + 1 < argc) dump_bytes = argv[++i];
+    else if (!strcmp(argv[i], "--state-out") && i + 1 < argc) state_out = argv[++i];
     else if (!strcmp(argv[i], "--clock") && i + 1 < argc) { const char *c = argv[++i]; if (!strncmp(c, "steps:", 6)) per_ms = strtoull(c + 6, 0, 0); }
     else if (!strcmp(argv[i], "--dump-text")) dump_text = 1;
     else if (!strcmp(argv[i], "--no-trim")) trim = 0;
     else if (!strcmp(argv[i], "--serial")) serial = 1;
-    else { fprintf(stderr, "usage: nan_cli [--img f] [--mem MB] [--nannet-train [corpus.txt]] [--candidate-out state.nan1] [--steps N] [--keys \"1,ESC,~,@5000000\"] [--serial] [--dump-text] [--dump-ppm f] [--peek ADDR[:LEN]] [--disk f] [--clock steps:N]\n"); return 2; }
+    else { fprintf(stderr, "usage: nan_cli [--img f] [--mem MB] [--nannet-train [corpus.txt]] [--candidate-out state.nan1] [--state-out state.nan1] [--steps N] [--keys \"1,ESC,~,@5000000\"] [--serial] [--dump-text] [--dump-ppm f] [--peek ADDR[:LEN]] [--dump-bytes ADDR:LEN:FILE] [--disk f] [--clock steps:N]\n"); return 2; }
   }
   if (!img && !train_mode) { fprintf(stderr, "need --img or --nannet-train\n"); return 2; }
   size_t len = 0;
@@ -155,6 +157,21 @@ int main(int argc, char **argv) {
     }
     free(spec);
   }
+  if (dump_bytes) { /* --dump-bytes ADDR:LEN:FILE: copy guest payload bytes */
+    char *spec = strdup(dump_bytes), *sv = NULL;
+    char *a = strtok_r(spec, ":", &sv), *n = strtok_r(NULL, ":", &sv), *fn = strtok_r(NULL, ":", &sv);
+    if (a && n && fn) {
+      unsigned long addr = strtoul(a, NULL, 0), len2 = strtoul(n, NULL, 0);
+      uint8_t *buf = malloc(len2 ? len2 : 1);
+      if (buf && nan_read_bytes(v, (uint32_t)addr, buf, len2) == 0) {
+        FILE *f = fopen(fn, "wb");
+        if (f) { fwrite(buf, 1, len2, f); fclose(f); }
+        else perror(fn);
+      } else fprintf(stderr, "dump-bytes: read failed\n");
+      free(buf);
+    } else fprintf(stderr, "dump-bytes: expected ADDR:LEN:FILE\n");
+    free(spec);
+  }
   if (vga) { FILE *f = fopen(vga, "wb"); if (f) { for (int i = 0; i < 2000; i++) { uint16_t c = nan_text_cell(v, i); fputc(c & 255, f); fputc(c >> 8, f); } fclose(f); } }
   if (ppm) {
     int w, h; nan_display_size(v, &w, &h);
@@ -166,6 +183,18 @@ int main(int argc, char **argv) {
       }
       if (f) fclose(f); free(px);
     } else fprintf(stderr, "(text mode: no PPM written)\n");
+  }
+  if (state_out) { /* --state-out FILE: checkpoint for a resumable run */
+    size_t state_len = nan_state_size(v);
+    uint8_t *state = (uint8_t *)malloc(state_len ? state_len : 1);
+    if (state && state_len && nan_save_state(v, state, state_len) == state_len) {
+      FILE *out = fopen(state_out, "wb");
+      if (out) {
+        if (fwrite(state, 1, state_len, out) != state_len) perror(state_out);
+        fclose(out);
+      } else perror(state_out);
+    } else fprintf(stderr, "could not serialize VM state\n");
+    free(state);
   }
   fprintf(stderr, "[nan_cli] %s: %llu steps, rc=%d, pc=%u, trap='%s'\n", kind, (unsigned long long)nan_steps(v), rc, nan_pc(v), nan_trap_text(v));
   int train_ok = !train_mode || (rc == NAN_HALTED && (uint32_t)(nan_word(v, 8449u) >> 16) != 0);

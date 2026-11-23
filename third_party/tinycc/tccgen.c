@@ -1389,7 +1389,7 @@ static Sym *external_sym(int v, CType *type, int r, AttributeDef *ad)
         /* push forward reference */
         s = global_identifier_push(v, type->t, 0);
         s->r |= r;
-        s->a = ad->a;
+        memcpy(&s->a, &ad->a, sizeof(s->a));
         s->asm_label = ad->asm_label;
         s->type.ref = type->ref;
     } else {
@@ -4796,7 +4796,7 @@ do_decl:
 		    }
                     if (v) {
                         ss = sym_push(v | SYM_FIELD, &type1, 0, 0);
-                        ss->a = ad1.a;
+                        memcpy(&ss->a, &ad1.a, sizeof(ss->a));
                         *ps = ss;
                         ps = &ss->next;
                     }
@@ -5265,7 +5265,7 @@ static int post_type(CType *type, AttributeDef *ad, int storage, int td)
         ad->f.func_args = arg_size;
         ad->f.func_type = l;
         sr->type = *type, s = sr;
-        s->a = ad->a;
+        memcpy(&s->a, &ad->a, sizeof(s->a));
         s->f = ad->f;
         s->next = first;
         type->t = VT_FUNC;
@@ -7817,9 +7817,17 @@ static void parse_init_elem(int expr_type)
 #if 1
 static void init_assert(init_params *p, int offset)
 {
-    if (p->sec ? !NODATA_WANTED && offset > p->sec->data_offset
-               : !nocode_wanted && offset > p->local_offset)
+    int bad = 0;
+    if (p->sec) {
+        if (!NODATA_WANTED && offset > p->sec->data_offset)
+            bad = 1;
+    } else {
+        if (!nocode_wanted && offset > p->local_offset)
+            bad = 1;
+    }
+    if (bad) {
         tcc_internal_error("initializer overflow");
+    }
 }
 #else
 #define init_assert(sec, offset)
@@ -8630,7 +8638,7 @@ static void decl_initializer_alloc(CType *type, AttributeDef *ad, int r,
 		cur_scope->cl.s = cls;
 	    }
 
-            sym->a = ad->a;
+            memcpy(&sym->a, &ad->a, sizeof(sym->a));
         } else {
             /* push local reference */
             vset(type, r, addr);
@@ -9167,7 +9175,7 @@ static int decl(int l)
                     } else {
                         sym = sym_push(v, &type, 0, 0);
                     }
-                    sym->a = ad.a;
+                    memcpy(&sym->a, &ad.a, sizeof(sym->a));
                     if ((type.t & VT_BTYPE) == VT_FUNC)
                       merge_funcattr(&sym->type.ref->f, &ad.f);
                     if (debug_modes)

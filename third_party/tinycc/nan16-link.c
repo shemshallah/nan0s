@@ -24,7 +24,7 @@ typedef struct { int pos; char name[64]; int addend; } NanReloc;
 static NanReloc *nan_relocs;
 static int nan_nrelocs, nan_reloc_cap;
 
-typedef struct { int lo, hi, sym_index; char name[64]; int addend; } NanAddrReloc;
+typedef struct { int lo, hi, sym_index; char name[64]; int addend; Section *sec; int value; } NanAddrReloc;
 static NanAddrReloc *nan_addr_relocs;
 static int nan_naddr_relocs, nan_addr_reloc_cap;
 
@@ -60,6 +60,15 @@ void nan16_add_addr_reloc(int lo, int hi, Sym *sym, int addend)
     if (!sym->c)
         put_extern_sym(sym, NULL, 0, 0);
     nan_addr_relocs[nan_naddr_relocs].sym_index = sym->c;
+    nan_addr_relocs[nan_naddr_relocs].sec = NULL;
+    nan_addr_relocs[nan_naddr_relocs].value = 0;
+    if (sym->c) {
+        ElfSym *e = elfsym(sym);
+        if (e->st_shndx && e->st_shndx < tcc_state->nb_sections) {
+            nan_addr_relocs[nan_naddr_relocs].sec = tcc_state->sections[e->st_shndx];
+            nan_addr_relocs[nan_naddr_relocs].value = (int)e->st_value;
+        }
+    }
     nan_naddr_relocs++;
 }
 
@@ -147,6 +156,35 @@ static int nan16_flat_addr(Section *sec, int st_value, int text_words,
     return -1;
 }
 
+/* Fail loudly instead of silently wrapping: the compiler emits only 24-bit
+   far branches (0x38/0x39), and every target must stay inside the text.  A
+   legacy 16-bit JMP/CALL (0x0A/0x0B) is rejected because it cannot reach
+   past word 65535. */
+static int nan16_audit_text(Section *text, int pre, int text_words)
+{
+    int i, n = (int)(text->data_offset / 8);
+    for (i = 0; i < n; i++) {
+        const unsigned char *q = text->data + i * 8;
+        uint32_t p = (uint32_t)q[2] | ((uint32_t)q[3] << 8)
+                   | ((uint32_t)q[4] << 16) | ((uint32_t)q[5] << 24);
+        uint32_t op = p >> 24;
+        if (op == 0x0A || op == 0x0B) {
+            fprintf(stderr, "nan16: legacy 16-bit branch 0x%02X at word %d\n",
+                    op, i + pre);
+            return -1;
+        }
+        if (op == 0x38 || op == 0x39) {
+            uint32_t target = p & 0xFFFFFF;
+            if (target >= (uint32_t)text_words) {
+                fprintf(stderr, "nan16: branch target %u outside text "
+                        "(%d words) at word %d\n", target, text_words, i + pre);
+                return -1;
+            }
+        }
+    }
+    return 0;
+}
+
 int nan16_output_file(TCCState *s1, const char *filename)
 {
     Section *text = find_section(s1, ".text");
@@ -176,6 +214,9 @@ int nan16_output_file(TCCState *s1, const char *filename)
     }
 
     if (pre) nan16_shift_jumps(text, pre);
+    if (nan16_audit_text(text, pre, text_words) < 0)
+        return -1;
+
     for (i = 0; i < nan_nrelocs; i++) {
         NanReloc *r = &nan_relocs[i];
         int si = nan16_sym_index(s1, r->name);
@@ -203,22 +244,50 @@ int nan16_output_file(TCCState *s1, const char *filename)
         ElfSym *es = (si > 0 && si < nsym) ? &((ElfSym *)s1->symtab->data)[si] : NULL;
         const char *inm = (es && strtab && es->st_name < strtab->data_offset)
                         ? (char *)strtab->data + es->st_name : "";
-        Section *sec;
-        int addr;
-        if (!es || !es->st_shndx || strcmp(inm, r->name)) {
+        Section *sec = NULL;
+        int addr = -1;
+
+        /* 1) The stored symbol index is still valid and names the same
+           symbol: use its final section/value (globals are updated after
+           tentative/forward references). */
+        if (es && es->st_shndx && !strcmp(inm, r->name)) {
+            sec = es->st_shndx < s1->nb_sections ? s1->sections[es->st_shndx] : NULL;
+            if (sec == text)
+                addr = (int)es->st_value / 8 + pre + r->addend / 8;
+            else
+                addr = nan16_flat_addr(sec, (int)es->st_value, text_words,
+                                       ds, dbase, nd, 0) + r->addend;
+        }
+
+        /* 2) Local literal names (L.0, L.1, ...) repeat across files and
+           their symtab indices can move.  The section/value captured at
+           emission is stable for those. */
+        if (addr < 0 && r->sec) {
+            if (r->sec == text) {
+                addr = r->value / 8 + pre + r->addend / 8;
+            } else {
+                int base = nan16_flat_addr(r->sec, r->value, text_words,
+                                           ds, dbase, nd, 0);
+                if (base >= 0)
+                    addr = base + r->addend;
+            }
+        }
+
+        /* 3) Last resort: resolve by name. */
+        if (addr < 0) {
             si = nan16_sym_index(s1, r->name);
             es = si ? &((ElfSym *)s1->symtab->data)[si] : NULL;
+            if (!es || !es->st_shndx) {
+                fprintf(stderr, "nan16: unresolved address '%s'\n", r->name);
+                return -1;
+            }
+            sec = es->st_shndx < s1->nb_sections ? s1->sections[es->st_shndx] : NULL;
+            if (sec == text)
+                addr = (int)es->st_value / 8 + pre + r->addend / 8;
+            else
+                addr = nan16_flat_addr(sec, (int)es->st_value, text_words,
+                                       ds, dbase, nd, 0) + r->addend;
         }
-        if (!es || !es->st_shndx) {
-            fprintf(stderr, "nan16: unresolved address '%s'\n", r->name);
-            return -1;
-        }
-        sec = es->st_shndx < s1->nb_sections ? s1->sections[es->st_shndx] : NULL;
-        if (sec == text)
-            addr = (int)es->st_value / 8 + pre + r->addend / 8;
-        else
-            addr = nan16_flat_addr(sec, (int)es->st_value, text_words,
-                                   ds, dbase, nd, 0) + r->addend;
         if (addr < 0 || addr > 0xFFFFFFFF) {
             fprintf(stderr, "nan16: address out of range for '%s' (st=%d shndx=%d add=%d addr=%d)\n",
                     r->name, es ? (int)es->st_value : -1,
