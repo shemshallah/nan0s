@@ -4439,18 +4439,48 @@ fs_pf_n:
 MOVI r1,0
 RET
 
+; fs_exact: r1=NUL-terminated byte string, r2=packed .str word address.
+; Return 1 only when both full strings match, including final NUL.
+; A prefix match must NEVER silently launch a disk build for extra arguments.
+fs_exact:
+SHL r2,r2,2
+fs_ex_l:
+LDB r3,r1,0
+LDB r4,r2,0
+CMP r3,r4
+JMP[NE] @fs_ex_n
+CMP r3,r0
+JMP[EQ] @fs_ex_y
+ADD r1,r1,r13
+ADD r2,r2,r13
+JMP @fs_ex_l
+fs_ex_y:
+MOVI r1,1
+RET
+fs_ex_n:
+MOVI r1,0
+RET
+
 ; fs_dispatch: command line in FNB -> r1=1 handled
 fs_dispatch:
 ST r15,r14,0
 ADD r14,r14,r13
-; Unlike the older one-letter demos, this command builds a complete
-; bootable disk entirely through in-guest NaN16 ATA PIO. The ATA master is
-; read-only, and the blank IDE slave is the distinct output artifact.
+; Any "build..." input is handled BEFORE legacy first-letter shortcuts.
+; "build" prints help rather than opening the b/browser window.
+; "build nan0s" is an EXACT, NUL-terminated match; misspelled options
+; can never trigger a disk rewrite. All build logic is raw NaN16 ATA.
 LA r1,#FNB
-LA r2,@fs_s_build
+LA r2,@fs_s_build_head
 CALL @fs_prefix
 CMP r1,r0
+JMP[EQ] @fs_chk_cc
+LA r1,#FNB
+LA r2,@fs_s_build
+CALL @fs_exact
+CMP r1,r0
 JMP[NE] @fs_d_build
+JMP @fs_d_build_help
+fs_chk_cc:
 LA r1,#FNB
 LA r2,@fs_s_cc
 CALL @fs_prefix
@@ -4500,6 +4530,15 @@ MOVI r1,0
 JMP @fs_disp_d
 fs_d_build:
 CALL @sb_build
+JMP @fs_disp_y
+fs_d_build_help:
+LD r1,r0,@tk_id
+MOVI r2,@fs_s_build_usage
+CALL @vc_puts
+; The test harness uses the real guest serial marker to verify that the
+; command parser displayed help, NOT the legacy b/browser shortcut.
+MOVI r1,@fs_s_build_help_serial
+CALL @sb_serial
 JMP @fs_disp_y
 fs_d_cc:
 LA r1,#FNB
@@ -4863,8 +4902,14 @@ SUB r14,r14,r13
 LD r15,r14,0
 RET
 
+fs_s_build_head:
+.str "build"
 fs_s_build:
 .str "build nan0s"
+fs_s_build_usage:
+.str "build: bootable-image replica (raw NaN16)\nusage: build nan0s\noutput: new IDE slave disk; download after verification\nsource-level self-bootstrap is still in development\n"
+fs_s_build_help_serial:
+.str "NANBUILD HELP\n"
 fs_s_cc:
 .str "cc "
 fs_s_run:
