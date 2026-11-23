@@ -255,7 +255,11 @@ static int R2_RET(int t)
 {
     t &= VT_BTYPE;
 #if PTR_SIZE == 4
-    if (t == VT_LLONG)
+    if (t == VT_LLONG
+#ifdef TCC_TARGET_NAN16
+        || t == VT_DOUBLE || t == VT_LDOUBLE
+#endif
+        )
         return REG_IRE2;
 #elif defined TCC_TARGET_X86_64
     if (t == VT_QLONG)
@@ -306,6 +310,10 @@ static int RC2_TYPE(int t, int rc)
 {
     if (!USING_TWO_WORDS(t))
         return 0;
+#ifdef TCC_TARGET_NAN16
+    if (rc == RC_INT || rc == RC_FLOAT)
+        return RC_INT;
+#endif
 #ifdef RC_IRE2
     if (rc == RC_IRET)
         return RC_IRE2;
@@ -3216,7 +3224,7 @@ op_err:
         gv(RC_TYPE(vtop->type.t));
 }
 
-#if defined TCC_TARGET_ARM64 || defined TCC_TARGET_RISCV64 || defined TCC_TARGET_ARM
+#if defined TCC_TARGET_ARM64 || defined TCC_TARGET_RISCV64 || defined TCC_TARGET_ARM || defined TCC_TARGET_NAN16
 #define gen_cvt_itof1 gen_cvt_itof
 #else
 /* generic itof for unsigned long long case */
@@ -3243,7 +3251,7 @@ static void gen_cvt_itof1(int t)
 }
 #endif
 
-#if defined TCC_TARGET_ARM64 || defined TCC_TARGET_RISCV64
+#if defined TCC_TARGET_ARM64 || defined TCC_TARGET_RISCV64 || defined TCC_TARGET_NAN16
 #define gen_cvt_ftoi1 gen_cvt_ftoi
 #else
 /* generic ftoi for unsigned long long case */

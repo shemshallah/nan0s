@@ -143,6 +143,69 @@ long long sumll(int n, ...)
 }
 int main(void){ return (int)sumll(2, 20LL, 22LL); }
 EOC
+cat > "$T/dblarith.c" <<'EOC'
+double d = 1.5;
+int main(void){ return (int)(d * 2.0); }
+EOC
+cat > "$T/dblargs.c" <<'EOC'
+double add(double a, double b){ return a + b; }
+int main(void){ return (int)add(20.5, 21.5); }
+EOC
+cat > "$T/dblcmp.c" <<'EOC'
+double d = 1.5;
+int main(void){ return (d < 2.0) + (d == 1.5) + (d != 2.0); }
+EOC
+cat > "$T/dblva.c" <<'EOC'
+typedef __builtin_va_list va_list;
+#define va_start(ap,last) __builtin_va_start(ap,last)
+#define va_arg(ap,t) __builtin_va_arg(ap,t)
+double sum(int n, ...)
+{
+    va_list ap;
+    double s = 0;
+    va_start(ap, n);
+    while (n-- > 0) { double v = va_arg(ap, double); s += v; }
+    return s;
+}
+int main(void){ return (int)sum(2, 20.5, 21.5); }
+EOC
+cat > "$T/dblconv.c" <<'EOC'
+int main(void){ double d = (double)42; long double e = 2.5L; return (int)d + (int)(e * 2.0L); }
+EOC
+cat > "$T/dblstruct.c" <<'EOC'
+struct S { double a; int b; };
+int main(void){ struct S s; s.a = 40.5; s.b = 1; return (int)s.a + s.b; }
+EOC
+cat > "$T/dblprec.c" <<'EOC'
+typedef union { double d; unsigned u[2]; } U;
+int main(void)
+{
+    U x; int r = 0;
+    x.d = 0.1 + 0.2;
+    if (x.u[0] != 0x33333334u || x.u[1] != 0x3FD33333u) r = 1;
+    x.d = 1.0 / 3.0;
+    if (x.u[0] != 0x55555555u || x.u[1] != 0x3FD55555u) r = 2;
+    x.d = 0.1 * 10.0;
+    if (x.u[0] != 0 || x.u[1] != 0x3FF00000u) r = 3;
+    x.d = 5.5 - 2.25;
+    if (x.u[0] != 0 || x.u[1] != 0x400A0000u) r = 4;
+    return r ? r : 42;
+}
+EOC
+cat > "$T/dblnan.c" <<'EOC'
+int main(void)
+{
+    double z = 0.0, o = 1.0; int r = 0;
+    if (z / z == z / z) r = 1;
+    if (!(z / z != z / z)) r = 2;
+    if (!(o / z > 1e308)) r = 3;
+    return r ? r : 42;
+}
+EOC
+cat > "$T/dblptr.c" <<'EOC'
+double addp(double s, double *p){ return s + *p; }
+int main(void){ double x = 21.5; return (int)addp(20.5, &x); }
+EOC
 
 "$T/tcc_nan16" -c "$T/ret42.c" -o "$T/ret42.bin"
 "$T/tcc_nan16" -c "$T/call.c" -o "$T/call.bin"
@@ -171,12 +234,21 @@ EOC
 "$T/tcc_nan16" -c "$T/llcmp.c" -o "$T/llcmp.bin"
 "$T/tcc_nan16" -c "$T/va.c" -o "$T/va.bin"
 "$T/tcc_nan16" -c "$T/vall.c" -o "$T/vall.bin"
-for b in ret42 call loop global larray garray fact sw ptr str struct gstruct fnptr lladd llfact llg llsh sbv sret lldiv lldivneg llmod llshv llshrv llcmp va vall; do
+"$T/tcc_nan16" -c "$T/dblarith.c" -o "$T/dblarith.bin"
+"$T/tcc_nan16" -c "$T/dblargs.c" -o "$T/dblargs.bin"
+"$T/tcc_nan16" -c "$T/dblcmp.c" -o "$T/dblcmp.bin"
+"$T/tcc_nan16" -c "$T/dblva.c" -o "$T/dblva.bin"
+"$T/tcc_nan16" -c "$T/dblconv.c" -o "$T/dblconv.bin"
+"$T/tcc_nan16" -c "$T/dblstruct.c" -o "$T/dblstruct.bin"
+"$T/tcc_nan16" -c "$T/dblprec.c" -o "$T/dblprec.bin"
+"$T/tcc_nan16" -c "$T/dblnan.c" -o "$T/dblnan.bin"
+"$T/tcc_nan16" -c "$T/dblptr.c" -o "$T/dblptr.bin"
+for b in ret42 call loop global larray garray fact sw ptr str struct gstruct fnptr lladd llfact llg llsh sbv sret lldiv lldivneg llmod llshv llshrv llcmp va vall dblarith dblargs dblcmp dblva dblconv dblstruct dblprec dblnan dblptr; do
   [ -s "$T/$b.bin" ] || { echo "tcc_nan16_smoke: FAIL (empty $b object)"; exit 1; }
 done
 
 
-for p in ret42 call loop global larray garray fact sw ptr str struct gstruct fnptr lladd llfact llg llsh sbv sret lldiv lldivneg llmod llshv llshrv llcmp va vall; do
+for p in ret42 call loop global larray garray fact sw ptr str struct gstruct fnptr lladd llfact llg llsh sbv sret lldiv lldivneg llmod llshv llshrv llcmp va vall dblarith dblargs dblcmp dblva dblconv dblstruct dblprec dblnan dblptr; do
   "$CLI" --img "$T/$p.bin" --mem 16 --steps 300000 --serial --peek 0x100:1 \
       > "$T/$p.out" 2> "$T/$p.err" || true
   want=0000002A
@@ -190,7 +262,9 @@ for p in ret42 call loop global larray garray fact sw ptr str struct gstruct fnp
     lldivneg) want=FFFFFFFB ;;
     llshrv) want=FFFFFFFF ;;
     llmod) want=00000002 ;;
-    llcmp) want=00000003 ;;
+    llcmp|dblarith|dblcmp) want=00000003 ;;
+    dblstruct) want=00000029 ;;
+    dblconv) want=0000002F ;;
   esac
   if ! grep -qx "$want" "$T/$p.out"; then
     echo "tcc_nan16_smoke: FAIL ($p did not return $want)"
@@ -198,4 +272,4 @@ for p in ret42 call loop global larray garray fact sw ptr str struct gstruct fnp
   fi
   grep -q 'rc=3' "$T/$p.err" || { echo "tcc_nan16_smoke: FAIL ($p did not halt)"; cat -v "$T/$p.err"; exit 1; }
 done
-echo "tcc_nan16_smoke: PASS (TCC emits NaN16: 28 programs incl. varargs)"
+echo "tcc_nan16_smoke: PASS (TCC emits NaN16: 37 programs incl. binary64 double/long double)"

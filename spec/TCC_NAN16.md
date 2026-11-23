@@ -9,7 +9,7 @@ encoder and executes raw-word and `.nan` programs in `nan_cli`.
 
 **tcc0 works.**  `third_party/tinycc/nan16-gen.c` and `nan16-link.c` implement
 the mandatory TCC generator/linker surface.  `tools/tcc_nan16_smoke.sh`
-builds TCC with `TCC_TARGET_NAN16`, compiles 28 C programs and runs each
+builds TCC with `TCC_TARGET_NAN16`, compiles 37 C programs and runs each
 flat cartridge directly in `nan_cli`.  Passing:
 
 - `return 42`; `add(20,22)`; a `for` loop (sum 0..9 = 45)
@@ -24,7 +24,12 @@ flat cartridge directly in `nan_cli`.  Passing:
 - 64-bit division/modulo (`5e9/1e9`, negative and unsigned) and variable
   shifts, via a C runtime injected into every link
 - comparisons as values and signed compares (`a == -5`, `a < 0`, `!x`)
-- stack varargs with `int` and `long long` (`sum(3,10,20,12)` = 42)
+- stack varargs with `int`, `long long` and `double`
+- 8-byte IEEE-754 binary64 `double`: globals/locals/arrays/structs,
+  arguments and returns, struct returns, function pointers, varargs,
+  comparisons (NaN-aware), int/long long/float conversions, and
+  add/sub/mul/div through a binary64 softfloat runtime
+- `long double` is 8-byte and aliases `double` (`TCC_USING_DOUBLE_FOR_LDOUBLE`)
 
 Coverage: byte-addressed C pointers (locals/params `SP*4+ci`/`FP*4+ci`,
 data `section_word*4+offset`), size-aware LDB/STB/LD/ST, stack arguments,
@@ -32,10 +37,12 @@ callee-saved frame pointer, absolute jump/call relocations, `.rodata`,
 `.data.ro`, `.data`, `.bss`, `.rel.data`, and the 4-word entry prelude
 (`MOVI r14,0x8000; CALL main; ST r1,r0,0x100; HALT`).
 
-Open before tcc1: 8-byte `double` (loads/stores, arithmetic, arguments,
-varargs, `printf`), external libc/libtcc1, and the VFS.  The NaN16 runtime
-injected by `tcc.c` currently supplies `__divdi3`, `__udivdi3`, `__moddi3`,
-`__umoddi3`, `__ashldi3`, `__ashrdi3` and `__lshrdi3`.
+Open before tcc1: external libc/libtcc1 and the VFS.  The softfloat runtime
+supplies IEEE binary64 add/sub/mul/div, comparison and conversion helpers.
+`printf`/`strtod` formatting for `double` belongs to the libc/VFS step (TCC
+programs currently have no C library).  The same runtime also supplies
+`__divdi3`, `__udivdi3`, `__moddi3`, `__umoddi3`, `__ashldi3`, `__ashrdi3`
+and `__lshrdi3`.
 
 ## The milestone
 
@@ -71,9 +78,9 @@ New target files:
 - `r0 = 0`, `r13 = 1`, `r14 = C stack pointer`, `r15 = link register`.
 - Scalar arguments and returns follow the ncc C ABI; the backend must be able
   to call ncc-compiled libc functions and be called by them.
-- 64-bit integers are `(lo,hi)` pairs; `double` becomes IEEE-754 binary64 (the
-  current ncc ABI is still 32-bit for `double` and pointers; the 64-bit ABI
-  work in P0.2/P0.4 is a dependency).
+- 64-bit integers are `(lo,hi)` pairs; TCC's `double` and `long double` are
+  8-byte IEEE-754 binary64 values moved as two 32-bit words.  The ncc-side
+  `double` is still being brought to the same layout (P0.2/P0.4).
 - Structs by value, varargs and alignment must match the same ABI, not a
   TCC-private variant.
 - The C stack and heap are NaN16 guest memory; no host C stack is used in the

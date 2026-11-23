@@ -151,10 +151,10 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done and gated.
       (`tcc_nan16_smoke`): returns, calls, loops, arrays, recursion,
       switch, pointers, strings, structs, function pointers, `long long`
       pairs and struct-by-value arguments (19 programs).
-- [ ] Before tcc1: `double` (loads/stores, arithmetic, args, varargs,
-      `printf`), external libc/libtcc1, VFS.  64-bit division/modulo,
-      variable shifts, struct returns/arguments and stack varargs work; the
-      TCC gate runs 28 programs.
+- [ ] Before tcc1: external libc/libtcc1 and VFS (including `printf`/
+      `strtod` formatting).  8-byte binary64 `double`/`long double`,
+      64-bit division/modulo, variable shifts, struct returns/arguments
+      and stack varargs work; the TCC gate runs 37 programs.
 - [ ] NaN16 output: flat cartridge/executable writer, relocations, sections,
       entry point, symbol table.
 - [ ] ABI parity with ncc: args/returns, stack frames, varargs, structs,

@@ -469,13 +469,21 @@ ST_FUNC void gen_opi(int op)
         nan_op(0x04, a, a, b);
         nan_op(0x04, a, a, 11);
         break;
-    case TOK_UMULL:
-        nan_op(0x20, a, a, b);      /* low 32 */
-        nan_op(0x22, 11, a, b);     /* high 32 into r11 */
+    case TOK_UMULL: {
+        int lo, h;
+        /* Keep both inputs intact: the generic long-long multiply still
+           needs them for the cross terms after UMULL. */
+        nan_op(0x22, 11, a, b);     /* high 32 into scratch */
+        nan_op(0x20, 10, a, b);     /* low 32 into scratch */
+        lo = get_reg(RC_INT);
         vtop--;
-        vtop->r = a;
-        vtop->r2 = 11;
+        vtop->r = lo;
+        nan_op(0x03, lo, 10, 0);
+        h = get_reg(RC_INT);
+        nan_op(0x03, h, 11, 0);
+        vtop->r2 = h;
         return;
+    }
     default:
         tcc_error("nan16: unimplemented integer operator %s",
                   get_tok_str(op, NULL));
@@ -485,8 +493,56 @@ ST_FUNC void gen_opi(int op)
 }
 
 /* ----------------------------------------------------------------- float ops */
+static void nan_helper_call(const char *name, int nargs, int result_ty,
+                            int result_pair)
+{
+    vpush_helper_func(tok_alloc_const(name));
+    vrott(nargs + 1);
+    gfunc_call(nargs);
+    vpushi(0);
+    vtop->r = REG_IRET;
+    vtop->r2 = result_pair ? REG_IRE2 : VT_CONST;
+    vtop->type.t = result_ty;
+}
+
+static const char *nan_double_cmp(int op)
+{
+    switch (op) {
+    case TOK_EQ: return "__nan16_deq";
+    case TOK_NE: return "__nan16_dne";
+    case TOK_LT: case TOK_ULT: return "__nan16_dlt";
+    case TOK_LE: case TOK_ULE: return "__nan16_dle";
+    case TOK_GT: case TOK_UGT: return "__nan16_dgt";
+    default: return "__nan16_dge";
+    }
+}
+
 ST_FUNC void gen_opf(int op)
 {
+    int bt = vtop[-1].type.t & VT_BTYPE;
+    if (op == TOK_NEG)
+        bt = vtop->type.t & VT_BTYPE;
+    if (bt == VT_DOUBLE || bt == VT_LDOUBLE) {
+        int ty = (op == TOK_NEG) ? vtop->type.t : vtop[-1].type.t;
+        if (op == TOK_NEG) {
+            nan_helper_call("__nan16_dneg", 1, ty, 1);
+        } else if (op >= TOK_ULT && op <= TOK_GT) {
+            nan_helper_call(nan_double_cmp(op), 2, VT_INT, 0);
+            vpushi(0);
+            gen_opi(TOK_NE);
+        } else {
+            const char *name = op == '+' ? "__nan16_dadd"
+                             : op == '-' ? "__nan16_dsub"
+                             : op == '*' ? "__nan16_dmul"
+                             : op == '/' ? "__nan16_ddiv" : NULL;
+            if (!name)
+                tcc_error("nan16: unsupported double operator %s",
+                          get_tok_str(op, NULL));
+            nan_helper_call(name, 2, ty, 1);
+        }
+        return;
+    }
+
     int a, b;
     if (op >= TOK_ULT && op <= TOK_GT) {
         gv2(RC_FLOAT, RC_FLOAT);
@@ -514,9 +570,71 @@ ST_FUNC void gen_opf(int op)
     vtop->r = a;
 }
 
-ST_FUNC void gen_cvt_itof(int t) { (void)t; nan_op(0x36, vtop->r & VT_VALMASK, vtop->r & VT_VALMASK, 0); }
-ST_FUNC void gen_cvt_ftoi(int t) { (void)t; nan_op(0x37, vtop->r & VT_VALMASK, vtop->r & VT_VALMASK, 0); }
-ST_FUNC void gen_cvt_ftof(int t) { (void)t; }
+ST_FUNC void gen_cvt_itof(int t)
+{
+    int sbt = vtop->type.t & VT_BTYPE;
+    int uns = vtop->type.t & VT_UNSIGNED;
+    int r;
+    if ((t & VT_BTYPE) == VT_DOUBLE || (t & VT_BTYPE) == VT_LDOUBLE) {
+        const char *name;
+        if (sbt == VT_LLONG)
+            name = uns ? "__nan16_ull2d" : "__nan16_ll2d";
+        else {
+            gv(RC_INT);
+            name = uns ? "__nan16_u2d" : "__nan16_i2d";
+        }
+        nan_helper_call(name, 1, t, 1);
+        return;
+    }
+    if (sbt == VT_LLONG) {
+        const char *name = uns ? "__nan16_ull2f" : "__nan16_ll2f";
+        nan_helper_call(name, 1, VT_FLOAT, 0);
+        return;
+    }
+    gv(RC_INT);
+    r = vtop->r & VT_VALMASK;
+    nan_op(0x36, r, r, 0);              /* CVTIF */
+    vtop->r = r;
+}
+
+ST_FUNC void gen_cvt_ftoi(int t)
+{
+    int sbt = vtop->type.t & VT_BTYPE;
+    int uns = t & VT_UNSIGNED;
+    int want_ll = ((t & VT_BTYPE) == VT_LLONG);
+    int r;
+    if (sbt == VT_DOUBLE || sbt == VT_LDOUBLE) {
+        const char *name;
+        if (want_ll)
+            name = uns ? "__nan16_d2ull" : "__nan16_d2ll";
+        else
+            name = uns ? "__nan16_d2u" : "__nan16_d2i";
+        nan_helper_call(name, 1, t, want_ll);
+        return;
+    }
+    if (sbt == VT_FLOAT && want_ll) {
+        const char *name = uns ? "__nan16_f2ull" : "__nan16_f2ll";
+        nan_helper_call(name, 1, t, 1);
+        return;
+    }
+    gv(RC_FLOAT);
+    r = vtop->r & VT_VALMASK;
+    nan_op(0x37, r, r, 0);              /* CVTFI */
+    vtop->r = r;
+}
+
+ST_FUNC void gen_cvt_ftof(int t)
+{
+    int sbt = vtop->type.t & VT_BTYPE;
+    int dbt = t & VT_BTYPE;
+    if (sbt == dbt)
+        return;
+    if (sbt == VT_FLOAT && (dbt == VT_DOUBLE || dbt == VT_LDOUBLE)) {
+        nan_helper_call("__nan16_f2d", 1, t, 1);
+    } else if ((sbt == VT_DOUBLE || sbt == VT_LDOUBLE) && dbt == VT_FLOAT) {
+        nan_helper_call("__nan16_d2f", 1, VT_FLOAT, 0);
+    }
+}
 
 /* --------------------------------------------------------------- functions */
 ST_FUNC int gfunc_sret(CType *vt, int variadic, CType *ret,
@@ -618,25 +736,42 @@ static void nan_push_arg(SValue *arg, int *words)
     int size = type_size(&arg->type, &align);
     if (size == 8) {
         SValue hi = *arg;
-        load(1, arg);
-        nan_op(0x09, 1, 14, 0);
+        load(10, arg);                  /* reserved scratch: no arg clobber */
+        nan_op(0x09, 10, 14, 0);
         nan_op(0x29, 14, 14, 1);
         if ((hi.r & VT_VALMASK) == VT_CONST && !(hi.r & VT_SYM)) {
             hi.c.i = (uint64_t)hi.c.i >> 32;
+            load(10, &hi);
         } else if (hi.r & VT_LVAL) {
-            hi.c.i = (int)hi.c.i + 4;
+            int base = hi.r & VT_VALMASK;
+            if (base == VT_LOCAL || base == VT_CONST) {
+                hi.c.i = (int)hi.c.i + 4;
+                load(10, &hi);
+            } else if (base == VT_LLOCAL) {
+                /* pointer is stored in a local; advance the pointee */
+                nan_local_addr(10, (int)hi.c.i);
+                nan_op(0x06, 10, 10, 2);
+                nan_op(0x08, 10, 10, 0);
+                nan_op(0x29, 10, 10, 4);
+                nan_load_indirect(10, 8, 0);
+            } else {
+                /* register base pointer */
+                nan_op(0x03, 10, base, 0);
+                nan_op(0x29, 10, 10, 4);
+                nan_load_indirect(10, 8, 0);
+            }
         } else if (hi.r2 && hi.r2 < VT_CONST) {
             hi.r = hi.r2;
+            load(10, &hi);
         } else {
             tcc_error("nan16: cannot pass 64-bit value from this location");
         }
-        load(2, &hi);
-        nan_op(0x09, 2, 14, 0);
+        nan_op(0x09, 10, 14, 0);
         nan_op(0x29, 14, 14, 1);
         *words += 2;
     } else if (size <= 4) {
-        load(1, arg);
-        nan_op(0x09, 1, 14, 0);
+        load(10, arg);
+        nan_op(0x09, 10, 14, 0);
         nan_op(0x29, 14, 14, 1);
         (*words)++;
     } else {
@@ -667,10 +802,10 @@ ST_FUNC void gfunc_call(int nb_args)
         /* Variadic arguments go below the named ones.  The hidden pointer
            to the first variadic argument is pushed after them, so it sits
            at FP-1; the named arguments follow at FP..FP+paramwords-1. */
-        nan_op(0x03, 10, 14, 0);          /* r10 = first variadic word */
+        nan_op(0x03, 11, 14, 0);          /* r11 = first variadic word */
         for (i = nn; i < nb_args; i++)
             nan_push_arg(&vtop[-(nb_args - 1 - i)], &words);
-        nan_op(0x09, 10, 14, 0);          /* hidden varargs pointer */
+        nan_op(0x09, 11, 14, 0);          /* hidden varargs pointer */
         nan_op(0x29, 14, 14, 1);
         words++;
         for (i = 0; i < nn; i++)

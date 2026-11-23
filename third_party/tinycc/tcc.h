@@ -237,9 +237,11 @@ extern long double strtold (const char *__nptr, char **__endptr);
 #endif
 
 /* No ten-byte long doubles on window and macos except in
-   cross-compilers made by a mingw-GCC */
+   cross-compilers made by a mingw-GCC.  NaN16 has an 8-byte
+   long double, so it is exactly the binary64 double. */
 #if defined TCC_TARGET_PE \
-    || (defined TCC_TARGET_MACHO && defined TCC_TARGET_ARM64)
+    || (defined TCC_TARGET_MACHO && defined TCC_TARGET_ARM64) \
+    || defined TCC_TARGET_NAN16
 # define TCC_USING_DOUBLE_FOR_LDOUBLE 1
 #endif
 
