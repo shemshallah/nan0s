@@ -1,0 +1,33 @@
+name: NaN16 complete boot-image self-replication gate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/lib/bootbuild.nas"
+      - "src/exhibits/gui_cart.nas"
+      - "tools/qgate_nanbuild.sh"
+      - ".github/workflows/nanbuild-proof.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nan0s-self-replication-proof
+  cancel-in-progress: false
+
+jobs:
+  replica:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install native boot test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gawk xxd qemu-system-x86 ffmpeg
+      - name: Assemble raw NaN16 guest and bootable image
+        run: sh tools/build.sh
+      - name: Build whole disk inside NaN16, verify, and reboot resulting disk
+        run: bash tools/qgate_nanbuild.sh
