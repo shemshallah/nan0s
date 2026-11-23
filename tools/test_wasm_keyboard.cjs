@@ -62,7 +62,10 @@ async function main() {
     fetches.push({ url, opts });
     return { ok: true, arrayBuffer: async () => disk.buffer };
   };
-  vm.runInNewContext(code, { document, window, fetch, V86, setInterval() {}, console }, { filename: 'docs/index.html' });
+  const frames = [];
+  const requestAnimationFrame = callback => frames.push(callback);
+  vm.runInNewContext(code, { document, window, fetch, V86, setInterval() {}, requestAnimationFrame, console },
+    { filename: 'docs/index.html' });
   // Let fetchImage().then(boot) run.
   for (let i = 0; i < 10 && !emulator; ++i) await new Promise(resolve => setImmediate(resolve));
   assert.ok(emulator, 'Browser did not boot after image fetch');
@@ -118,6 +121,11 @@ async function main() {
     'Pinching back restores the original guest scale');
   assert.equal(screen.scrollLeft, 120, 'Returning fingers restores horizontal pan');
   assert.equal(screen.scrollTop, 80, 'Returning fingers restores vertical pan');
+  // The first queued frame refers to obsolete gesture coordinates; it must
+  // never pull the viewport back to the earlier (225%) pinch location.
+  for (const frame of frames.splice(0)) frame();
+  assert.equal(screen.scrollLeft, 120, 'Stale RAF callback must not undo the newest pinch X');
+  assert.equal(screen.scrollTop, 80, 'Stale RAF callback must not undo the newest pinch Y');
   screen.dispatch('touchend', { touches: [first[0]] });
   const oneMove = screen.dispatch('touchmove', { touches: [first[0]], cancelable: true });
   assert.equal(oneMove.defaultPrevented, false, 'Single-finger panning remains native');
