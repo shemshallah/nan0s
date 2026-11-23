@@ -8,7 +8,7 @@ const vm = require('node:vm');
 
 async function main() {
   const html = fs.readFileSync(path.join(__dirname, '../docs/index.html'), 'utf8');
-  const scripts = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)];
+  const scripts = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].filter(match => match[1].trim());
   assert.equal(scripts.length, 1, 'Expected a single inline browser-player script');
   const code = scripts[0][1];
 
