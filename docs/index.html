@@ -110,8 +110,9 @@
     <span id="zoom-level" class="hint">100%</span>
     <button id="zoom-in" type="button" disabled aria-label="Zoom in guest screen">+</button>
     <button id="zoom-fit" type="button" disabled>Fit</button>
+    <button id="download-replica" type="button" disabled title="Enabled after build nan0s verifies the full secondary IDE disk">Download rebuilt .img</button>
     <span class="hint" id="image-fingerprint" aria-live="polite" title="SHA-256 of the exact guest image fetched by this browser">guest disk: loading…</span>
-    <span class="hint">boots the complete guest (floppy + primary IDE) to the desktop with one terminal · <b>q</b> quits the GUI → museum menu (<b>1–8</b>, <b>ESC</b> back) · tap the keys below or the text bar to type</span>
+    <span class="hint">In the terminal type <b>build nan0s</b> and Enter to replicate the entire boot disk onto an independent IDE slave. The guest verifies every sector, then enables the image download. · boots the complete guest (floppy + primary IDE) to the desktop with one terminal · <b>q</b> quits the GUI → museum menu (<b>1–8</b>, <b>ESC</b> back) · tap the keys below or the text bar to type</span>
   </div>
   <div class="typebar">
     <label for="type" class="hint">Phone keyboard → NaN/0S PS/2 keyboard</label>
@@ -176,6 +177,7 @@
   var zoomOutBtn = document.getElementById("zoom-out");
   var zoomInBtn = document.getElementById("zoom-in");
   var zoomFitBtn = document.getElementById("zoom-fit");
+  var replicaBtn = document.getElementById("download-replica");
   var zoomLevelEl = document.getElementById("zoom-level");
   var imageFingerprintEl = document.getElementById("image-fingerprint");
   var isTouchView = typeof window !== "undefined" && !!(window.matchMedia && window.matchMedia("(pointer: coarse), (max-width: 760px)").matches);
@@ -185,6 +187,8 @@
   var typeEl = document.getElementById("type");
   var clearTypeBtn = document.getElementById("clear-type");
   var emulator = null;
+  var outputDisk = null;
+  var replicaReady = false;
   var serialBuf = "";
   var serialDirty = false;
 
@@ -268,7 +272,12 @@
 
   var bootBannerSeen = false;
   function boot(image) {
-    status("starting v86 with floppy and primary IDE disk …");
+    status("starting v86 with source IDE master and blank independent build output …");
+    replicaReady = false;
+    replicaBtn.disabled = true;
+    // Only the guest NaN16 ATA driver writes this destination buffer.
+    // Never expose the original source image as the build target.
+    outputDisk = new ArrayBuffer(image.byteLength);
     // The IDE disk must have an independent backing buffer: the guest can write to it
     // without corrupting the boot floppy. Both contain the exact same built system.
     var ideImage = image.slice(0);
@@ -278,7 +287,8 @@
       vga_bios: { url: BIOS_CDN + "vgabios.bin" },
       boot_order: 0x321, // floppy, hard disk, CD-ROM (matches QEMU -boot order=a)
       fda: { buffer: image },
-      hda: { buffer: ideImage }, // primary IDE master, required by native ATA guest loader
+      hda: { buffer: ideImage }, // immutable logical source (guest reads)
+      hdb: { buffer: outputDisk }, // blank IDE slave: guest writes full bootable output
       memory_size: 128 * 1024 * 1024,
       vga_memory_size: 2 * 1024 * 1024,
       autostart: true,
@@ -303,6 +313,18 @@
     emulator.add_listener("serial0-output-byte", function (b) {
       serialBuf += String.fromCharCode(b);
       serialDirty = true;
+      // A guest-owned verification marker is emitted only after all 2880
+      // sectors have been written and read back on the secondary IDE drive.
+      if (!replicaReady && serialBuf.indexOf("NANBUILD OK\\n") !== -1) {
+        var bytes = new Uint8Array(outputDisk);
+        if (bytes.length === 1474560 && bytes[510] === 0x55 && bytes[511] === 0xAA) {
+          replicaReady = true;
+          replicaBtn.disabled = false;
+          status("NaN/0S verified a complete 1.44 MiB bootable replica. Download rebuilt .img.");
+        } else {
+          status("Guest reported success but output disk image is incomplete; download disabled.", true);
+        }
+      }
       if (serialBuf.indexOf("NaN/0S") !== -1 && !bootBannerSeen) {
         bootBannerSeen = true;
         status("NaN/0S boot banner detected — full-system IDE disk attached");
@@ -323,6 +345,22 @@
   zoomOutBtn.addEventListener("click", function () { updateGuestZoom(zoom / 1.25); });
   zoomInBtn.addEventListener("click", function () { updateGuestZoom(zoom * 1.25); });
   zoomFitBtn.addEventListener("click", fitGuestScreen);
+  replicaBtn.addEventListener("click", function () {
+    if (!replicaReady || !outputDisk) return;
+    var bytes = new Uint8Array(outputDisk);
+    if (bytes.length !== 1474560 || bytes[510] !== 0x55 || bytes[511] !== 0xAA) {
+      status("Build output failed boot-signature validation; download blocked.", true);
+      return;
+    }
+    var url = URL.createObjectURL(new Blob([outputDisk], { type: "application/octet-stream" }));
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = "nan0s-replica.img";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  });
 
   // On-screen keypad: every button is a make+break PS/2 scancode pair. Works on touch
   // (numbers/ESC/arrows are tappable) and with a mouse, no keyboard required.
