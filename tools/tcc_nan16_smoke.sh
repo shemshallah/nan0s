@@ -66,6 +66,22 @@ cat > "$T/fnptr.c" <<'EOC'
 int add(int a, int b){ return a + b; }
 int main(void){ int (*f)(int,int) = add; return f(20, 22); }
 EOC
+cat > "$T/lladd.c" <<'EOC'
+long long addll(long long a, long long b){ return a + b; }
+int main(void){ return (int)addll(20, 22); }
+EOC
+cat > "$T/llfact.c" <<'EOC'
+long long fact(long long n){ return n < 2 ? 1 : n * fact(n - 1); }
+int main(void){ return (int)fact(5); }
+EOC
+cat > "$T/llg.c" <<'EOC'
+long long x = 5000000000LL;
+int main(void){ return (int)(x - 4999999958LL); }
+EOC
+cat > "$T/llsh.c" <<'EOC'
+long long a = 1LL << 40;
+int main(void){ return (int)(a >> 32); }
+EOC
 
 "$T/tcc_nan16" -c "$T/ret42.c" -o "$T/ret42.bin"
 "$T/tcc_nan16" -c "$T/call.c" -o "$T/call.bin"
@@ -80,20 +96,25 @@ EOC
 "$T/tcc_nan16" -c "$T/struct.c" -o "$T/struct.bin"
 "$T/tcc_nan16" -c "$T/gstruct.c" -o "$T/gstruct.bin"
 "$T/tcc_nan16" -c "$T/fnptr.c" -o "$T/fnptr.bin"
-for b in ret42 call loop global larray garray fact sw ptr str struct gstruct fnptr; do
+"$T/tcc_nan16" -c "$T/lladd.c" -o "$T/lladd.bin"
+"$T/tcc_nan16" -c "$T/llfact.c" -o "$T/llfact.bin"
+"$T/tcc_nan16" -c "$T/llg.c" -o "$T/llg.bin"
+"$T/tcc_nan16" -c "$T/llsh.c" -o "$T/llsh.bin"
+for b in ret42 call loop global larray garray fact sw ptr str struct gstruct fnptr lladd llfact llg llsh; do
   [ -s "$T/$b.bin" ] || { echo "tcc_nan16_smoke: FAIL (empty $b object)"; exit 1; }
 done
 
 
-for p in ret42 call loop global larray garray fact sw ptr str struct gstruct fnptr; do
+for p in ret42 call loop global larray garray fact sw ptr str struct gstruct fnptr lladd llfact llg llsh; do
   "$CLI" --img "$T/$p.bin" --mem 16 --steps 4000 --serial --peek 0x100:1 \
       > "$T/$p.out" 2> "$T/$p.err" || true
   want=0000002A
   case "$p" in
     loop) want=0000002D ;;
     garray) want=00000004 ;;
-    fact) want=00000078 ;;
+    fact|llfact) want=00000078 ;;
     str) want=00006869 ;;
+    llsh) want=00000100 ;;
   esac
   if ! grep -qx "$want" "$T/$p.out"; then
     echo "tcc_nan16_smoke: FAIL ($p did not return $want)"
@@ -101,4 +122,4 @@ for p in ret42 call loop global larray garray fact sw ptr str struct gstruct fnp
   fi
   grep -q 'rc=3' "$T/$p.err" || { echo "tcc_nan16_smoke: FAIL ($p did not halt)"; cat -v "$T/$p.err"; exit 1; }
 done
-echo "tcc_nan16_smoke: PASS (TCC emits NaN16: ret42, calls, loop, globals, arrays, recursion, switch, strings, structs, fnptr)"
+echo "tcc_nan16_smoke: PASS (TCC emits NaN16: 18 programs incl. long long pairs)"

@@ -10,7 +10,7 @@
  */
 #ifdef TARGET_DEFS_ONLY
 
-#define NB_REGS 12              /* r1..r11 are values; r12 is the frame ptr */
+#define NB_REGS 10              /* r1..r9 values; r10 scratch; r11 carry; r12 FP */
 #define RC_INT   0x01
 #define RC_FLOAT 0x02
 #define RC_R(n)  (1 << (2 + (n)))
@@ -35,6 +35,7 @@
 
 #define NAN_FRAME 256
 static int nan_nparams;
+static int nan_paramwords;
 
 void nan16_add_reloc(int pos, Sym *sym, int addend);
 void nan16_add_addr_reloc(int lo, int hi, Sym *sym, int addend);
@@ -53,8 +54,7 @@ ST_DATA const int reg_classes[NB_REGS] = {
     RC_INT | RC_FLOAT | RC_R(3), RC_INT | RC_FLOAT | RC_R(4),
     RC_INT | RC_FLOAT | RC_R(5), RC_INT | RC_FLOAT | RC_R(6),
     RC_INT | RC_FLOAT | RC_R(7), RC_INT | RC_FLOAT | RC_R(8),
-    RC_INT | RC_FLOAT | RC_R(9), RC_INT | RC_FLOAT | RC_R(10),
-    RC_INT | RC_FLOAT | RC_R(11),
+    RC_INT | RC_FLOAT | RC_R(9),
 };
 
 /* ---------------------------------------------------------------- emission */
@@ -87,6 +87,20 @@ static void nan_pred_op(int op, int d, int a, int imm, int pred)
 {
     nan_word(((uint32_t)op << 24) | ((uint32_t)(d & 15) << 20)
              | ((uint32_t)(a & 15) << 16) | (imm & 0xFFFF), pred);
+}
+
+static void nan_patch16(int pos, uint16_t v);
+
+/* After ADD/SUB, materialise the carry/borrow flag into r11.  n is the
+   NaN predicate mask for the carry state (k=1 and, for ADD, k=3). */
+static void nan_cap_carry(int pred)
+{
+    int pos;
+    nan_op(0x01, 11, 0, 1);            /* MOVI r11,1 */
+    nan_pred_op(0x0A, 0, 0, 0, pred);  /* JMP[pred] over the zero */
+    pos = ind - 6;
+    nan_op(0x01, 11, 0, 0);            /* MOVI r11,0 */
+    nan_patch16(pos, (uint16_t)(ind / 8));
 }
 
 static void nan_movi32(int r, uint32_t v)
@@ -241,7 +255,7 @@ static void nan_load_indirect(int r, int size, int sign)
 
 static void nan_store_indirect(int r, int size, int addr_reg)
 {
-    int t = (r == 11) ? 10 : 11;
+    int t = 10;
     if (size == 1) {
         nan_op(0x2B, r, addr_reg, 0);   /* STB */
     } else {
@@ -258,7 +272,7 @@ static void nan_local_addr(int r, int ci)
     /* Locals live below SP but their address must not move when arguments
        are pushed, so address them from FP.  Local ci<0 maps to
        FP + (n+2+FRAME) + ci/4 words; parameters ci>=0 map to FP + ci/4. */
-    int off = ci < 0 ? (nan_nparams + 2 + NAN_FRAME) * 4 + ci : ci;
+    int off = ci < 0 ? (nan_paramwords + 2 + NAN_FRAME) * 4 + ci : ci;
     nan_op(0x05, r, 12, 2);             /* SHL r,FP,2 */
     nan_op(0x29, r, r, off);
 }
@@ -305,14 +319,9 @@ ST_FUNC void load(int r, SValue *sv)
     } else if (sv->r & VT_LVAL) {
         size = nan_size(&sv->type);
         sign = !(sv->type.t & VT_UNSIGNED) && size == 1;
-        if (r != v && size != 1) {
-            /* keep the address in r, then load through it */
+        if (r != v)
             nan_op(0x03, r, v, 0);
-            nan_load_indirect(r, size, sign);
-        } else {
-            nan_op(0x03, r, v, 0);
-            nan_load_indirect(r, size, sign);
-        }
+        nan_load_indirect(r, size, sign);
     } else {
         nan_op(0x03, r, v, 0);
     }
@@ -324,12 +333,12 @@ ST_FUNC void store(int r, SValue *sv)
     int size = nan_size(&sv->type);
     if (v == VT_LOCAL) {
         int ci = (int)sv->c.i;
-        int t = (r == 11) ? 10 : 11;
+        int t = 10;
         nan_local_addr(t, ci);
         nan_store_indirect(r, size, t);
     } else if (v == VT_LLOCAL) {
         int ci = (int)sv->c.i;
-        int t = (r == 11) ? 10 : 11;
+        int t = 10;
         nan_local_addr(t, ci);
         nan_op(0x06, t, t, 2);
         nan_op(0x08, t, t, 0);
@@ -386,6 +395,29 @@ ST_FUNC void gen_opi(int op)
     case '&': nan_pred_op(0x00, a, a, b, 8); break;
     case '^': nan_pred_op(0x00, a, a, b, 6); break;
     case '|': nan_pred_op(0x00, a, a, b, 14); break;
+    case TOK_ADDC1:
+        nan_op(0x03, a, a, b);
+        nan_cap_carry(10);             /* k=1 or k=3 */
+        break;
+    case TOK_SUBC1:
+        nan_op(0x04, a, a, b);
+        nan_cap_carry(2);              /* borrow is k=1 */
+        break;
+    case TOK_ADDC2:
+        nan_op(0x03, a, a, b);
+        nan_op(0x03, a, a, 11);
+        break;
+    case TOK_SUBC2:
+        nan_op(0x04, a, a, b);
+        nan_op(0x04, a, a, 11);
+        break;
+    case TOK_UMULL:
+        nan_op(0x20, a, a, b);      /* low 32 */
+        nan_op(0x22, 11, a, b);     /* high 32 into r11 */
+        vtop--;
+        vtop->r = a;
+        vtop->r2 = 11;
+        return;
     default:
         tcc_error("nan16: unimplemented integer operator %s",
                   get_tok_str(op, NULL));
@@ -446,25 +478,29 @@ ST_FUNC void gfunc_prolog(Sym *func_sym)
     sym = func_type->ref->next;
     nan_nparams = n;
 
-    /* FP = first pushed argument; link at FP+n; saved caller FP at FP+n+1;
-       locals at FP+n+2..; SP is kept above the fixed local area. */
-    nan_op(0x09, 12, 14, 1);
-    nan_op(0x29, 12, 14, -n);
-    nan_op(0x09, 15, 12, n);
-    nan_op(0x29, 14, 12, n + 2 + NAN_FRAME);
+    /* FP = first pushed argument; link at FP+paramwords; saved caller FP
+       at FP+paramwords+1; locals above. */
+    byteoff = 0;
     for (i = 0; i < n; i++, sym = sym->next) {
-        byteoff = i * 4;
+        int align, sz;
         gfunc_set_param(sym, byteoff, 0);
+        sz = type_size(&sym->type, &align);
+        byteoff += sz < 4 ? 4 : sz;
     }
+    nan_paramwords = (byteoff + 3) / 4;
+    nan_op(0x09, 12, 14, 1);
+    nan_op(0x29, 12, 14, -nan_paramwords);
+    nan_op(0x09, 15, 12, nan_paramwords);
+    nan_op(0x29, 14, 12, nan_paramwords + 2 + NAN_FRAME);
 }
 
 ST_FUNC void gfunc_epilog(void)
 {
     if (-loc / 4 > NAN_FRAME)
         tcc_error("nan16: frame too large (%d bytes)", -loc);
-    nan_op(0x08, 15, 12, nan_nparams);
-    nan_op(0x08, 11, 12, nan_nparams + 1);
-    nan_op(0x29, 14, 12, nan_nparams);
+    nan_op(0x08, 15, 12, nan_paramwords);
+    nan_op(0x08, 11, 12, nan_paramwords + 1);
+    nan_op(0x29, 14, 12, nan_paramwords);
     nan_op(0x03, 12, 11, 0);
     nan_op(0x0C, 0, 0, 0);
 }
@@ -472,18 +508,39 @@ ST_FUNC void gfunc_epilog(void)
 ST_FUNC void gfunc_call(int nb_args)
 {
     SValue *fn = &vtop[-nb_args];
-    int i, pos;
+    int i, pos, words = 0;
 
-    save_regs(nb_args);
+    save_regs(nb_args + 1);
     for (i = 0; i < nb_args; i++) {
         SValue *arg = &vtop[-(nb_args - 1 - i)];
         int align;
         int size = type_size(&arg->type, &align);
-        if (size > 4)
-            tcc_error("nan16: arguments larger than 32 bits are not implemented");
-        load(1, arg);
-        nan_op(0x09, 1, 14, 0);
-        nan_op(0x29, 14, 14, 1);
+        if (size == 8) {
+            SValue hi = *arg;
+            load(1, arg);
+            nan_op(0x09, 1, 14, 0);
+            nan_op(0x29, 14, 14, 1);
+            if ((hi.r & VT_VALMASK) == VT_CONST && !(hi.r & VT_SYM)) {
+                hi.c.i = (uint64_t)hi.c.i >> 32;
+            } else if (hi.r & VT_LVAL) {
+                hi.c.i = (int)hi.c.i + 4;
+            } else if (hi.r2 && hi.r2 < VT_CONST) {
+                hi.r = hi.r2;
+            } else {
+                tcc_error("nan16: cannot pass 64-bit value from this location");
+            }
+            load(2, &hi);
+            nan_op(0x09, 2, 14, 0);
+            nan_op(0x29, 14, 14, 1);
+            words += 2;
+        } else if (size <= 4) {
+            load(1, arg);
+            nan_op(0x09, 1, 14, 0);
+            nan_op(0x29, 14, 14, 1);
+            words++;
+        } else {
+            tcc_error("nan16: struct arguments are not implemented");
+        }
     }
     if ((fn->r & VT_VALMASK) == VT_CONST && (fn->r & VT_SYM)) {
         nan_op(0x0B, 0, 0, 0);
@@ -493,8 +550,8 @@ ST_FUNC void gfunc_call(int nb_args)
         load(1, fn);
         nan_op(0x2C, 0, 1, 0);
     }
-    if (nb_args)
-        nan_op(0x29, 14, 14, -nb_args);
+    if (words)
+        nan_op(0x29, 14, 14, -words);
     vtop -= nb_args + 1;        /* pop args and the function slot */
 }
 
