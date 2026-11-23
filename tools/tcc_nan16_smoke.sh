@@ -1,9 +1,9 @@
 #!/bin/sh
 # tools/tcc_nan16_smoke.sh - tcc0 NaN16 backend smoke test.
-# Builds the vendored TCC with TCC_TARGET_NAN16, compiles two C programs,
-# prepends the SP/CALL/ST/HALT entry stub and executes the result in nan_cli:
-#   int main(void){return 42;}
-#   int add(int,int); int main(void){return add(20,22);} int add(...){...}
+# Builds the vendored TCC with TCC_TARGET_NAN16, compiles 40 C programs, and
+# executes every flat cartridge in nan_cli.  Coverage includes calls, loops,
+# arrays, structs, 64-bit pairs, varargs, binary64 doubles, the saved-VT_CMP
+# ternary path, constant-address lvalues and unaligned bit-field containers.
 set -e; cd "$(dirname "$0")/.."; export LC_ALL=C
 T="${TMPDIR:-/tmp}/tccnan16smoke.$$"; mkdir -p "$T"; trap 'rm -rf "$T"' EXIT
 CC=${HOST_CC:-cc}
@@ -214,6 +214,90 @@ int main(void)
     return (int)(d / 18446744073709551616.0);
 }
 EOC
+cat > "$T/constaddr.c" <<'EOC'
+int main(void)
+{
+    *(volatile unsigned char *)0x00040000u = 42;
+    return *(volatile unsigned char *)0x00040000u;
+}
+EOC
+cat > "$T/ternary.c" <<'EOC'
+typedef long long i64;
+struct CI { i64 key; };
+static int t32(int eq, int a, int b) { return eq ? (a > b) : (a >= b); }
+static int t64(int eq, long long a, long long b)
+{
+    return eq ? (a > b) : (a >= b);
+}
+static int check(void *p, unsigned pg, i64 *out, i64 bound)
+{
+    struct CI ci;
+    int eq = 1;
+    (void)p; (void)pg;
+    ci.key = 443;
+    if (eq ? (ci.key > bound) : (ci.key >= bound))
+        return 1;
+    *out = ci.key;
+    return 0;
+}
+static volatile int gv = 3;
+static volatile long long gl = 443;
+int main(void)
+{
+    i64 m = 0;
+    int r = 0;
+    if (t32(1, gv, gv) != 0) r |= 1;
+    if (t32(1, gv, gv + 1) != 0) r |= 2;
+    if (t32(1, gv + 1, gv) != 1) r |= 4;
+    if (t32(0, gv, gv) != 1) r |= 8;
+    if (t32(0, gv, gv + 1) != 0) r |= 16;
+    if (t32(0, gv + 1, gv) != 1) r |= 32;
+    if (t64(1, gl, gl) != 0) r |= 64;
+    if (t64(1, gl, gl + 1) != 0) r |= 128;
+    if (t64(1, gl + 1, gl) != 1) r |= 256;
+    if (t64(0, gl, gl) != 1) r |= 512;
+    if (t64(0, gl, gl + 1) != 0) r |= 1024;
+    if (t64(0, gl + 1, gl) != 1) r |= 2048;
+    if (check((void *)0, 16, &m, 443) != 0) r |= 4096;
+    if (m != 443) r |= 8192;
+    return r ? r : 42;
+}
+EOC
+cat > "$T/bitfield.c" <<'EOC'
+struct S {
+    unsigned newTnum;
+    unsigned char iDb;
+    unsigned char busy;
+    unsigned orphanTrigger : 1;
+    unsigned imposterTable : 2;
+    unsigned reopenMemdb : 1;
+    const char **azInit;
+};
+int main(void)
+{
+    struct S s;
+    s.newTnum = 1;
+    s.iDb = 1;
+    s.busy = 1;
+    s.orphanTrigger = 0;
+    s.imposterTable = 0;
+    s.reopenMemdb = 0;
+    s.azInit = 0;
+    if (s.iDb != 1 || s.busy != 1) return 1;
+    s.orphanTrigger = 1;
+    if (s.iDb != 1 || s.busy != 1) return 2;
+    if (s.orphanTrigger != 1) return 3;
+    s.imposterTable = 3;
+    s.reopenMemdb = 1;
+    if (s.imposterTable != 3 || s.reopenMemdb != 1) return 4;
+    if (s.iDb != 1 || s.busy != 1) return 5;
+    s.orphanTrigger = 0;
+    s.imposterTable = 0;
+    s.reopenMemdb = 0;
+    if (s.iDb != 1 || s.busy != 1) return 6;
+    return 42;
+}
+EOC
 
 "$T/tcc_nan16" -c "$T/ret42.c" -o "$T/ret42.bin"
 "$T/tcc_nan16" -c "$T/call.c" -o "$T/call.bin"
@@ -252,12 +336,15 @@ EOC
 "$T/tcc_nan16" -c "$T/dblnan.c" -o "$T/dblnan.bin"
 "$T/tcc_nan16" -c "$T/dblptr.c" -o "$T/dblptr.bin"
 "$T/tcc_nan16" -c "$T/dblull.c" -o "$T/dblull.bin"
-for b in ret42 call loop global larray garray fact sw ptr str struct gstruct fnptr lladd llfact llg llsh sbv sret lldiv lldivneg llmod llshv llshrv llcmp va vall dblarith dblargs dblcmp dblva dblconv dblstruct dblprec dblnan dblptr dblull; do
+"$T/tcc_nan16" -c "$T/constaddr.c" -o "$T/constaddr.bin"
+"$T/tcc_nan16" -c "$T/bitfield.c" -o "$T/bitfield.bin"
+"$T/tcc_nan16" -c "$T/ternary.c" -o "$T/ternary.bin"
+for b in ret42 call loop global larray garray fact sw ptr str struct gstruct fnptr lladd llfact llg llsh sbv sret lldiv lldivneg llmod llshv llshrv llcmp va vall dblarith dblargs dblcmp dblva dblconv dblstruct dblprec dblnan dblptr dblull constaddr bitfield ternary; do
   [ -s "$T/$b.bin" ] || { echo "tcc_nan16_smoke: FAIL (empty $b object)"; exit 1; }
 done
 
 
-for p in ret42 call loop global larray garray fact sw ptr str struct gstruct fnptr lladd llfact llg llsh sbv sret lldiv lldivneg llmod llshv llshrv llcmp va vall dblarith dblargs dblcmp dblva dblconv dblstruct dblprec dblnan dblptr dblull; do
+for p in ret42 call loop global larray garray fact sw ptr str struct gstruct fnptr lladd llfact llg llsh sbv sret lldiv lldivneg llmod llshv llshrv llcmp va vall dblarith dblargs dblcmp dblva dblconv dblstruct dblprec dblnan dblptr dblull constaddr bitfield ternary; do
   "$CLI" --img "$T/$p.bin" --mem 16 --steps 300000 --serial --peek 0x100:1 \
       > "$T/$p.out" 2> "$T/$p.err" || true
   want=0000002A
@@ -282,4 +369,4 @@ for p in ret42 call loop global larray garray fact sw ptr str struct gstruct fnp
   fi
   grep -q 'rc=3' "$T/$p.err" || { echo "tcc_nan16_smoke: FAIL ($p did not halt)"; cat -v "$T/$p.err"; exit 1; }
 done
-echo "tcc_nan16_smoke: PASS (TCC emits NaN16: 37 programs incl. binary64 double/long double)"
+echo "tcc_nan16_smoke: PASS (TCC emits NaN16: 40 programs incl. binary64 double/long double)"

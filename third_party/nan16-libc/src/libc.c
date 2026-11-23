@@ -32,6 +32,7 @@ typedef struct Block {
     unsigned size;
     int free;
     struct Block *next;
+    unsigned pad;       /* 16-byte header: keep the payload 16-byte aligned */
 } Block;
 
 static Block *heap_head;
@@ -434,6 +435,21 @@ int nan16_exit_code;
 void exit(int code) { nan16_exit_code = code; for (;;) ; }
 void _Exit(int code) { exit(code); }
 void abort(void) { exit(134); }
+
+#ifdef NAN16_ASSERT_DIAG
+void __nan16_assert_fail(const char *expr, const char *file, int line)
+{
+    volatile char *d = (volatile char *)0x03000400u;
+    int i, n = 0;
+    for (i = 0; expr && expr[i] && n < 100; i++) d[n++] = expr[i];
+    d[n++] = 0;
+    for (i = 0; file && file[i] && n < 200; i++) d[n++] = file[i];
+    d[n++] = 0;
+    *(volatile unsigned *)0x03000500u = (unsigned)line;
+    *(volatile unsigned *)0x02FFFFF0u = 0xAB0B0000u;
+    for (;;) ;
+}
+#endif
 int atexit(void (*fn)(void)) { (void)fn; return 0; }
 int system(const char *s) { (void)s; return 0; }
 

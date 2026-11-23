@@ -246,8 +246,12 @@ void nan16_shift_jumps(Section *text, int pre)
     }
 }
 
-/* comparison state for deferred VT_CMP branches */
-static int nan_cmp_a, nan_cmp_b, nan_cmp_signed, nan_cmp_pending;
+/* A VT_CMP may be saved and restored while other expressions are generated
+   (the ?: branch merging in tccgen does this).  The comparison operands
+   therefore travel in SValue.cmp_r, encoded as a | b<<4 | signed<<8, and
+   the CMP instruction is emitted only when the branch is finally generated.
+   0xFFFF means the flags were already set by an immediate compare (float). */
+#define NAN16_CMP_FLAGS_ONLY 0xFFFFu
 
 static int nan_pred_for(int op)
 {
@@ -262,18 +266,17 @@ static int nan_pred_for(int op)
     return 4;
 }
 
-static void nan_emit_cmp(void)
+static void nan_emit_cmp(unsigned cr)
 {
-    if (!nan_cmp_pending) return;
-    nan_op(nan_cmp_signed ? 0x28 : 0x07, 0, nan_cmp_a, nan_cmp_b);
-    nan_cmp_pending = 0;
+    if (cr == NAN16_CMP_FLAGS_ONLY) return;
+    nan_op((cr & 0x100) ? 0x28 : 0x07, 0, cr & 15, (cr >> 4) & 15);
 }
 
 ST_FUNC int gjmp_cond(int op, int t)
 {
     int pos;
     if (nocode_wanted) return t;
-    nan_emit_cmp();
+    nan_emit_cmp(vtop->cmp_r);
     nan_far_op(0x38, 0, nan_pred_for(op));
     pos = ind - 6;
     return nan_jump_new(pos, t);
@@ -410,6 +413,11 @@ ST_FUNC void load(int r, SValue *sv)
             }
         } else {
             nan_movi32(r, (uint32_t)sv->c.i);
+            if (sv->r & VT_LVAL) {
+                size = nan_size(&sv->type);
+                sign = !(sv->type.t & VT_UNSIGNED) && (size == 1 || size == 2);
+                nan_load_indirect(r, size, sign);
+            }
         }
     } else if (v == VT_LOCAL) {
         int ci = (int)sv->c.i;
@@ -434,12 +442,14 @@ ST_FUNC void load(int r, SValue *sv)
         sign = !(sv->type.t & VT_UNSIGNED) && (size == 1 || size == 2);
         if (r != v)
             nan_op(0x03, r, v, 0);
+        if (sv->c.i && !(sv->r & VT_SYM))
+            nan_op(0x29, r, r, (int)sv->c.i);
         nan_load_indirect(r, size, sign);
     } else if (v == VT_CMP) {
         /* materialise a deferred comparison as 0/1 */
-        int op = (int)sv->c.i;
+        int op = (int)sv->cmp_op;
         int pos;
-        nan_emit_cmp();
+        nan_emit_cmp(sv->cmp_r);
         nan_movi32(r, 1);
         nan_far_op(0x38, 0, nan_pred_for(op));
         pos = ind - 6;
@@ -502,15 +512,17 @@ ST_FUNC void store(int r, SValue *sv)
 /* --------------------------------------------------------------- integer ops */
 static void nan_gen_cmp(int op)
 {
+    int a, b, sign;
     gv2(RC_INT, RC_INT);
-    nan_cmp_a = vtop[-1].r & VT_VALMASK;
-    nan_cmp_b = vtop[0].r & VT_VALMASK;
-    nan_cmp_signed = (op == TOK_LT || op == TOK_GE
-                      || op == TOK_LE || op == TOK_GT);
-    nan_cmp_pending = 1;
+    a = vtop[-1].r & VT_VALMASK;
+    b = vtop[0].r & VT_VALMASK;
+    sign = (op == TOK_LT || op == TOK_GE
+            || op == TOK_LE || op == TOK_GT);
     vtop -= 2;
     vtop++;
     vset_VT_CMP(op);
+    vtop->cmp_r = (unsigned short)((a & 15) | ((b & 15) << 4)
+                                   | (sign ? 0x100 : 0));
 }
 
 ST_FUNC void gen_opi(int op)
@@ -561,6 +573,7 @@ ST_FUNC void gen_opi(int op)
     case '-': nan_op(0x04, a, a, b); break;
     case '*': nan_op(0x20, a, a, b); break;
     case '/': nan_op(0x23, a, a, b); break;
+    case TOK_PDIV: nan_op(0x23, a, a, b); break;
     case TOK_UDIV: nan_op(0x25, a, a, b); break;
     case '%': nan_op(0x24, a, a, b); break;
     case TOK_UMOD: nan_op(0x26, a, a, b); break;
@@ -661,10 +674,10 @@ ST_FUNC void gen_opf(int op)
     if (op >= TOK_ULT && op <= TOK_GT) {
         gv2(RC_FLOAT, RC_FLOAT);
         nan_op(0x35, 0, vtop[-1].r & VT_VALMASK, vtop[0].r & VT_VALMASK);
-        nan_cmp_pending = 0;
         vtop -= 2;
         vtop++;
-        vset_VT_CMP(op);
+        vset_VT_CMP(op);            /* FCMP already set the flags */
+        vtop->cmp_r = NAN16_CMP_FLAGS_ONLY;
         return;
     }
     gv2(RC_FLOAT, RC_FLOAT);

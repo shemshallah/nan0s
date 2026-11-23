@@ -1,0 +1,33 @@
+SQLite 3.54.1 amalgamation
+==========================
+
+Upstream:  https://www.sqlite.org/2026/sqlite-amalgamation-3540100.zip
+Version:   SQLITE_VERSION "3.54.1"
+Fetched:   2026-11-23
+
+SHA-256:
+  0a9c8e34352dad46006aa82836d5383bff9dc6bc9ce5a60553c05aa30e6ad1f9  sqlite-amalgamation-3540100.zip
+  0c657666d819f261cc4007526ad57e1669de9949df7a8ea847aa284a2bf0ee52  sqlite3.c
+  d6c84557261893439b341d2e6c35187ae3ea24fbfd843ad94616f72d89242b8c  sqlite3.h
+  48963abfefb41ac329ef9d706acb5eadba952a99a748285c9ded6b5e0942721b  sqlite3ext.h
+
+Vendored files are the unmodified upstream amalgamation.  The NaN16 port
+adds nan16_vfs.c (an in-memory base VFS plus sqlite3_os_init/os_end) and
+builds with:
+
+  -DSQLITE_OS_OTHER=1
+  -DSQLITE_THREADSAFE=0
+  -DSQLITE_OMIT_LOAD_EXTENSION
+  -DSQLITE_TEMP_STORE=3
+  -DSQLITE_OMIT_WAL
+  -DSQLITE_OMIT_LOCALTIME
+  -DSQLITE_OMIT_DEPRECATED
+  -DSQLITE_DQS=0
+  -DSQLITE_OMIT_SHARED_CACHE
+  -DSQLITE_MAX_MMAP_SIZE=0
+  -DNDEBUG
+
+The VFS keeps databases in named byte arrays inside the guest.  Closing and
+reopening a database exercises the normal pager/schema-reload path, but the
+data is not persisted across VM runs.  No SQLite field sizes or allocator
+layouts are patched.

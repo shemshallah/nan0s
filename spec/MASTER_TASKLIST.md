@@ -149,9 +149,10 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done and gated.
       (`nan16-enc.c/.h`) and a runnable `MOVI/ST/HALT` smoke test
       (`tcc_nan16_enc`, raw words and `.nan` text).
 - [x] tcc0: `TCC_TARGET_NAN16` builds (`nan16-gen.c`, `nan16-link.c`, `tcc.h`,
-      `libtcc.c`, `tccelf.c` hooks) and compiles/runs 37 C programs
-      (`tcc_nan16_smoke`), including 64-bit pairs, structs, varargs and
-      8-byte binary64 `double`/`long double`.
+      `libtcc.c`, `tccelf.c` hooks) and compiles/runs 40 C programs
+      (`tcc_nan16_smoke`), including 64-bit pairs, structs, varargs,
+      8-byte binary64 `double`/`long double`, comparison-valued `?:`,
+      constant-address lvalues and unaligned bit-field containers.
 - [x] tcc1: `tools/tcc_nan16_selfhost.sh --run` builds self1 (~1.89 MB),
       self1 compiles `test.c`, emits a 144-byte inner cartridge, and the
       inner `main` returns 42.  Wired into `presqlite_gate`.
@@ -172,8 +173,15 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done and gated.
       was the last self1/self2 difference.
 - [x] tcc2: self1 compiles the preprocessed TCC sources plus
       `NAN16_RUNTIME_SRC` to self2; `self1 == self2` byte-for-byte
-      (1,891,544 bytes) at 3,777,870,888 VM steps.  self2 compiles `test.c`
-      to a 144-byte inner cartridge whose `main` returns 42.
+      (1,897,248 bytes) within the 4.0B-step gate budget.  self2 compiles
+      `test.c` to a 144-byte inner cartridge whose `main` returns 42.
+      SHA-256 `ec54537a4e43d88bc5e96b71533115fb47f71bb6352c03926bd263550c197307`.
+- [x] SQLite-driven compiler corrections (no SQLite field/allocator hacks):
+      natural-alignment fallback for unaligned bit-field containers;
+      per-`VT_CMP` operands in `SValue.cmp_r` so `?:` can save/restore
+      comparisons; dereference in the non-symbol constant-lvalue load;
+      `VT_LLOCAL`/member-offset materialisation; 16-byte allocator header for
+      eight-byte payload alignment; `INT*_C`/`UINT*_C` and `NDEBUG` headers.
 - [ ] Broaden the guest-compiler/program corpus beyond add/fib/loops/arrays/
       structs/switch and the double-constant test: printf, libm, varargs and
       libtcc subsets.
@@ -181,20 +189,29 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done and gated.
       64-bit pairs, f32/f64; bidirectional call tests.  This is a separate
       gate: do not link ncc- and tcc-compiled objects until ncc's `double`
       is 8 bytes and the mixed `printf` test passes.
-- [ ] VFS and headers completeness for `#include`, source and model/SQLite
-      files.
+- [~] VFS and headers completeness for `#include`, source and model/SQLite
+      files: the guest libc VFS handles includes/sources; a named in-memory
+      SQLite base VFS is in `third_party/sqlite/nan16_vfs.c`; host-file
+      persistence remains separate.
 - [~] NaN16 `libtcc1` runtime: 64-bit arithmetic, shifts and binary64 helpers
       are in place; `alloca`, `setjmp` and full mem/str coverage remain open.
-- [ ] SQLite (deferred by user request; tcc2 is now available): tcc2
-      compiles the amalgamation, links the shell, runs a query suite (schema,
-      insert, select, join, index, transaction, file reopen).
+- [x] SQLite 3.54.1: vendored unmodified in `third_party/sqlite` with
+      `VENDOR` hashes; tcc0 cross-compiles it with `SQLITE_OS_OTHER=1`,
+      `SQLITE_THREADSAFE=0`, `SQLITE_TEMP_STORE=3`, no WAL, and the in-memory
+      VFS.  `tools/tcc_sqlite.sh` requires bit-identical guest/native results
+      for a 96-result suite and a 256-result 500-row stress database
+      (multi-page btrees, overflow blobs, joins, indexes, transactions,
+      `VACUUM`, close/reopen), plus a `SQLITE_DEBUG` assertion build.
+      Guest `tcc2` compiling the 9.2 MB amalgamation remains a larger
+      budget gate.
 - [ ] Verified chain: finite per-opcode/block lowering lemmas plus small UTM
       trace checks; scope the compiler-correctness/translation-validation
       claim honestly (a trace does not by itself prove the binary implements
       the C source).
 - [x] Gates: `tcc_nan16_smoke`, `tcc_nan16_selfhost`, `tcc_nan16_enc` are in
       `presqlite_gate`; `tcc_nan16_tcc2` is a standalone resumable gate.
-      `tcc_sqlite` and `tcc_verified` remain future gates.
+      `tcc_sqlite` is now a passing standalone differential gate.
+      `tcc_verified` remains the future verified-chain gate.
 
 The TCC port contract, ABI, bootstrap stages and proof chain are detailed in
 `spec/TCC_NAN16.md`. TCC and SQLite are C; the C++17 track is only a dependency

@@ -50,6 +50,8 @@ for f in $FILES; do
       add "tcc_nan16_smoke tcc_nan16_enc tcc_nan16_selfhost" ;;
     third_party/tinycc/nan16-*|tools/tcc_nan16_enc.sh)
       add "tcc_nan16_enc" ;;
+    third_party/sqlite/*|src/tests/sqlite/*|tools/tcc_sqlite.sh)
+      add "tcc_sqlite" ;;
     spec/*|third_party/*|*.md|build/*|aarch64/android/app/src/main/assets/*)
       ;;
     src/lib/ncc.nas|src/lib/ppexpr.nas|src/lib/mpp.nas|src/lib/wide*.nas|src/lib/vscanf.nas|src/lib/iso*.nas|src/lib/mathx.nas|src/prog/nasm0_tables.nas|src/tools/disasm.nas|src/tests/ctests/*|src/tests/ncc_*)
@@ -149,6 +151,9 @@ gate_files() {
     tcc_nan16_*)
       echo "third_party/tinycc/nan16-* third_party/tinycc/tcc.h third_party/tinycc/libtcc.c third_party/tinycc/libtcc.h third_party/tinycc/tccelf.c third_party/nan16-libc/src/* third_party/nan16-libc/include/* aarch64/android/tools/nan_cli.c aarch64/android/core/* tools/tcc_nan16_*.sh"
       ;;
+    tcc_sqlite)
+      echo "third_party/sqlite/* third_party/tinycc/nan16-* third_party/tinycc/tcc.h third_party/tinycc/libtcc.c third_party/tinycc/libtcc.h third_party/tinycc/tccelf.c third_party/nan16-libc/src/* third_party/nan16-libc/include/* src/tests/sqlite/* aarch64/android/tools/nan_cli.c aarch64/android/core/* tools/tcc_sqlite.sh"
+      ;;
     *)
       echo "src/native/*.xa src/native/*.nan src/native64/* x86/native/* x86/boot/* src/translate/*.nas src/tests/*.nas tools/mkimg.awk tools/nmk.awk tools/mkall.sh tools/xgold.sh tools/nan_*.sh tools/xlate_x86.sh tools/qgate*.sh tools/mkproof.sh"
       ;;
@@ -161,7 +166,8 @@ gate_key() {
 COMPILER_KEY=$(gate_key ncc_m1)
 NATIVE_KEY=$(gate_key xlate_x86)
 TCC_KEY=$(gate_key tcc_nan16_smoke)
-key_for() { case "$1" in c_core_test|ncc_*) echo "$COMPILER_KEY" ;; tcc_nan16_*) echo "$TCC_KEY" ;; *) echo "$NATIVE_KEY" ;; esac; }
+SQLITE_KEY=$(gate_key tcc_sqlite)
+key_for() { case "$1" in c_core_test|ncc_*) echo "$COMPILER_KEY" ;; tcc_nan16_*) echo "$TCC_KEY" ;; tcc_sqlite) echo "$SQLITE_KEY" ;; *) echo "$NATIVE_KEY" ;; esac; }
 is_cached() {
   [ "${NO_CACHE:-0}" = 1 ] && return 1
   [ -f "$CACHE/$1.sha" ] || return 1
@@ -176,6 +182,7 @@ run_gate() {
     c_core_test) ( cd aarch64/android && timeout "$LONG_TIMEOUT" make -s test ) ;;
     mkproof) timeout "$LONG_TIMEOUT" sh tools/mkproof.sh src/tests/key_test.nas ;;
     tcc_nan16_selfhost) timeout "$LONG_TIMEOUT" sh tools/tcc_nan16_selfhost.sh --run ;;
+    tcc_sqlite) timeout "$LONG_TIMEOUT" sh tools/tcc_sqlite.sh ;;
     mkall|qgate|qgate_gui|xmemgate) timeout "$LONG_TIMEOUT" sh "tools/$g.sh" ;;
     *) timeout "$TIMEOUT" sh "tools/$g.sh" ;;
   esac

@@ -1,8 +1,10 @@
 # TCC -> NaN16: self-hosting and the verified compiler chain
 
-Status: P0.7, **tcc1 and tcc2 reached** (byte-identical fixpoint). TCC source is vendored at
-`third_party/tinycc` (upstream `5cef7f3f85b0fbbd4663fd3518ba097d7fe3d738`,
-imported tree `dcb896d1c7ae2e64114c55c93f5223f92280bbdf`; see
+Status: P0.7, **tcc1 and tcc2 reached** (byte-identical fixpoint).
+SQLite 3.54.1 is vendored and runs as a raw NaN16 cartridge. TCC source is
+vendored at `third_party/tinycc` (upstream
+`5cef7f3f85b0fbbd4663fd3518ba097d7fe3d738`, imported tree
+`dcb896d1c7ae2e64114c55c93f5223f92280bbdf`; see
 `third_party/tinycc/VENDOR`).
 
 The ABI contract is in `third_party/tinycc/nan16-abi.h` and the host-side
@@ -11,7 +13,7 @@ encoder and executes raw-word and `.nan` programs in `nan_cli`.
 
 **tcc0 works.**  `third_party/tinycc/nan16-gen.c` and `nan16-link.c` implement
 the mandatory TCC generator/linker surface.  `tools/tcc_nan16_smoke.sh`
-builds TCC with `TCC_TARGET_NAN16`, compiles 37 C programs and runs each
+builds TCC with `TCC_TARGET_NAN16`, compiles 40 C programs and runs each
 flat cartridge directly in `nan_cli`.  Passing:
 
 - `return 42`; `add(20,22)`; a `for` loop (sum 0..9 = 45)
@@ -32,6 +34,12 @@ flat cartridge directly in `nan_cli`.  Passing:
   comparisons (NaN-aware), int/long long/float conversions, and
   add/sub/mul/div through a binary64 softfloat runtime
 - `long double` is 8-byte and aliases `double` (`TCC_USING_DOUBLE_FOR_LDOUBLE`)
+- `?:` with comparison-valued arms, including a saved and later merged
+  `VT_CMP` (32-bit and 64-bit `>`/`>=`/`==`/`!=`)
+- constant-address lvalues: `*(volatile T *)ADDR` dereferences instead of
+  returning `ADDR`
+- bit-field runs whose declared container is not naturally aligned (the
+  SQLite `sqlite3InitInfo` layout)
 
 Coverage: byte-addressed C pointers (locals/params `SP*4+ci`/`FP*4+ci`,
 data `section_word*4+offset`), size-aware LDB/STB/LD/ST and byte-composed
@@ -87,7 +95,7 @@ Other fixes required for tcc1:
   stdout/stderr (fd 1/2).
 
 Result: self1 compiles the TCC sources with the self-hosted libtcc to a
-byte-identical self2 (1,891,544 bytes), and self2 compiles `test.c` to 42.
+byte-identical self2 (1,897,248 bytes), and self2 compiles `test.c` to 42.
 The softfloat runtime supplies IEEE binary64 add/sub/mul/div, comparison and
 conversion helpers, plus `__divdi3`, `__udivdi3`, `__moddi3`, `__umoddi3`,
 `__ashldi3`, `__ashrdi3` and `__lshrdi3`.
@@ -111,10 +119,11 @@ The driver must compile `NAN16_RUNTIME_SRC` after the three input files,
 exactly like `tcc.c`; otherwise the full TCC source's
 `__nan16_i2d`/`__nan16_dadd`/division helpers are unresolved and
 `tcc_output_file` fails with `nan16: unresolved address '__nan16_i2d'`.
-The guest compiler's `init_assert` was rewritten with explicit branches: the
-compound ternary/`&&` form was miscompiled and fired with
-`offset=5 > data_offset=6`, a false positive that aborted the libc.i compile
-at ~80M steps.
+The guest compiler's `init_assert` was rewritten with explicit branches after
+a compound ternary/`&&` form fired with `offset=5 > data_offset=6`, a false
+positive that aborted the libc.i compile at ~80M steps.  The underlying
+`?:`/`VT_CMP` bug is fixed now (see the SQLite section); the explicit form is
+retained for clearer diagnostics.
 
 The last byte-level fixpoint difference was the guest libc's `strtod`.  It
 accumulated integer digits in a 64-bit `mant` without an overflow check, so
@@ -124,12 +133,15 @@ tracks the discarded digits for round-to-nearest-even, and applies one
 correctly rounded power of ten from a generated table
 (`third_party/nan16-libc/src/nan16_pow10.h`).  self1 and tcc0 emit
 byte-identical cartridges for a test using DBL_MAX, 2^64 and 2^96.  The
-fixpoint run then completes at 3,777,870,888 steps: `self1` and `self2` are
-both 1,891,544 bytes and byte-identical, and self2 compiles `test.c` to a
-144-byte cartridge whose `main` returns 42.  The fixed-point image SHA-256 is
-`9af0d6030541fc806c84663920e91048100fdfb0727e3f7f6b7a252be8d204c1`
+fixpoint run then completes within the 4,000,000,000-step gate budget:
+`self1` and `self2` are both 1,897,248 bytes and byte-identical, and self2
+compiles `test.c` to a 144-byte cartridge whose `main` returns 42.  The
+fixed-point image SHA-256 is
+`ec54537a4e43d88bc5e96b71533115fb47f71bb6352c03926bd263550c197307`
 for this tree and the documented build commands; the scratch harness and
-`tools/tcc_nan16_tcc2.sh` reproduce the same bytes.
+`tools/tcc_nan16_tcc2.sh` reproduce the same bytes.  The earlier
+1,891,544-byte / `9af0d603...` fixpoint predates the SQLite-driven compiler
+corrections and is superseded by this hash.
 
 Fixpoint hazards to control before calling a mismatch a compiler bug:
 
@@ -151,11 +163,11 @@ from a compiler-correctness proof.
 
 `tcc1` and `tcc2` are reached.  `tcc1` is TCC compiled by TCC on NaN16; it
 compiles `test.c` to a cartridge that returns 42.  `tcc2` is self1 compiling
-the TCC sources again to a byte-identical 1,891,544-byte self2, which also
+the TCC sources again to a byte-identical 1,897,248-byte self2, which also
 compiles `test.c` to 42.  NaN16 is now a self-hosting platform with its own C
-compiler, libc, VFS and linker.  The fixpoint completes at 3,777,870,888 VM
-steps.  The SQLite gate remains deferred; the verified-chain gate is scoped
-in its own section below.
+compiler, libc, VFS and linker.  The fixpoint completes within the
+4,000,000,000-step gate budget.  SQLite 3.54.1 also runs on the VM; the
+verified-chain gate remains scoped in its own section below.
 
 ## Port shape
 
@@ -175,7 +187,8 @@ New target files:
 | `nan16-link.c` | relocation types and the flat cartridge/executable writer |
 | `nan16-asm.c`, `nan16-tok.h` | inline assembler (optional until TCC needs it) |
 | `nan16-abi.h` | register/stack/argument/return contract shared with ncc |
-| `nan16-vfs.c` | `#include`, source files, model/SQLite files through the VFS |
+| `nan16-vfs.c` | `#include`, source files, model files through the VFS |
+| `third_party/sqlite/nan16_vfs.c` | SQLite base VFS and `sqlite3_os_init/os_end`; named in-memory files |
 
 ## ABI contract (must match the ncc runtime)
 
@@ -202,11 +215,67 @@ New target files:
    resulting self1 cartridge compiles `test.c` to a working cartridge.
    `tcc_nan16_selfhost --run` checks this end to end.
 3. **tcc2 (reached)**: `tcc1` compiles the TCC sources again to a
-   byte-identical `self2` (1,891,544 bytes).  The gate runs `self2` on
+   byte-identical `self2` (1,897,248 bytes).  The gate runs `self2` on
    `test.c` (inner `main` returns 42) and checks `self1 == self2`.
-4. **SQLite (deferred)**: `tcc2` compiles `sqlite3.c` (amalgamation), links the
-   shell, and runs a query suite. This exercises the preprocessor, varargs,
-   64-bit integers, file I/O, allocator, libc and the linker at real scale.
+4. **SQLite (reached)**: host `tcc0` cross-compiles the vendored 3.54.1
+   amalgamation with `SQLITE_OS_OTHER=1` and `third_party/sqlite/nan16_vfs.c`
+   into a raw NaN16 cartridge.  `tools/tcc_sqlite.sh` runs a 96-result suite
+   (schema, binds, aggregates, index, join, update/delete, transaction
+   rollback/commit, type round-trips, close/reopen) plus a 256-result 500-row
+   stress database (multi-page btrees, overflow blobs, `GROUP BY`, `VACUUM`,
+   reopen).  Every result word matches the native build, and a
+   `SQLITE_DEBUG` build with all SQLite assertions enabled also matches and
+   finishes.  The current path is `tcc0`; compiling the 9.2 MB amalgamation
+   with the guest `tcc2` is a separate, much larger budget gate.
+
+## SQLite bring-up (compiler corrections)
+
+The SQLite port was also the best compiler test in the tree: a 9.2 MB C
+program with varargs, 64-bit integers, floating point, large frames, unions,
+bit-fields and heavy preprocessing.  Six real defects were found and fixed in
+the compiler/libc, not worked around in SQLite:
+
+- **Unaligned bit-field containers.**  NaN16 memory is word-addressed.
+  TCC's generic bit-field path may use the declared `unsigned` container even
+  when a bit-field run starts at a non-natural byte offset (SQLite's
+  `newTnum`/`iDb`/`busy`/bit-fields layout starts one at byte 6).  The backend
+  truncated the address to the containing word and applied the mask at bit 0,
+  so `db->init.orphanTrigger = 0` cleared `iDb` (and nearly cleared `busy`).
+  `check_fields()` now applies the same natural-alignment rule already used by
+  the ARM targets: bit-fields on NaN16 use a naturally aligned byte/short/int
+  container or the byte-wise fallback.
+- **`VT_CMP` lifetime.**  The backend kept one global pending comparison.
+  `?:` saves a comparison, generates the other arm (replacing the globals),
+  then restores the saved value; its operands were lost and the branch tested
+  stale flags from the wrong comparison.  `SValue.cmp_r` now carries the
+  register pair and signedness (`a | b<<4 | signed<<8`), and `gjmp_cond`/
+  `load` re-emit the `CMP` when the value is finally consumed.  This fixed
+  `eq ? (a > b) : (a >= b)` (wrong for `a == b`) and SQLite's
+  `checkTreePage()` false `Rowid ... out of order` reports.  The raw database
+  image was byte-identical to native all along.
+- **Constant-address lvalues.**  The non-symbol `VT_CONST` load path
+  materialised the address but skipped the dereference, so
+  `*(volatile T *)ADDR` read the address.  The `VT_LVAL` case now emits the
+  size-aware load.
+- **Member offsets through saved lvalues.**  `gaddrof()` on a `VT_LLOCAL`
+  base converted it to `VT_LOCAL|VT_LVAL`, which made the backend treat the
+  member offset in `c.i` as a stack-slot index.  It now materialises the
+  saved pointer in a register.  Field addresses in registers clear `c.i`;
+  genuine register-lvalue displacements are still honoured.
+- **Allocator alignment.**  The free-list header was 12 bytes, so payloads
+  were only 4-byte aligned; SQLite's `EIGHT_BYTE_ALIGNMENT` assertion fired.
+  The header is padded to 16 bytes.  The temporary bump allocator used during
+  bring-up was removed.
+- **Headers/diagnostics.**  `stdint.h` gained the C99 `INT*_C`/`UINT*_C`
+  macros, `assert.h` honours `NDEBUG`, and `NAN16_ASSERT_DIAG` reports a
+  failing SQLite assertion (expression/file/line) through fixed guest memory
+  for the debug gate.  `NAN16_MAP=1` emits a word-address symbol map from the
+  linker for VM watchpoint work.
+
+The SQLite build uses `SQLITE_OS_OTHER=1`, `SQLITE_THREADSAFE=0`,
+`SQLITE_TEMP_STORE=3`, `SQLITE_OMIT_WAL`, and the in-memory VFS.  No SQLite
+field sizes, page sizes or allocator layouts are patched; the vendored
+`sqlite3.c` hashes match upstream (see `third_party/sqlite/VENDOR`).
 
 ## Verified chain (scope)
 
@@ -242,15 +311,19 @@ gates, not assumptions.
 
 ## Acceptance gates
 
-- `tools/tcc_nan16_smoke.sh`: tcc0 compiles and runs 37 C programs. Passing.
+- `tools/tcc_nan16_smoke.sh`: tcc0 compiles and runs 40 C programs. Passing.
 - `tools/tcc_nan16_selfhost.sh --run`: tcc0 builds self1; self1 compiles
   `test.c`, emits an inner cartridge, and the inner returns 42. Passing and
   wired into `presqlite_gate`.
 - `tools/tcc_nan16_tcc2.sh`: self1 compiles the TCC sources to a
-  byte-identical self2 (1,891,544 bytes); self2 also compiles `test.c` to a
-  144-byte cartridge whose `main` returns 42.  Passing (~3.78B VM steps,
-  resumable in slices).
-- `tools/tcc_sqlite.sh` (deferred): SQLite amalgamation + query suite.
+  byte-identical self2 (1,897,248 bytes); self2 also compiles `test.c` to a
+  144-byte cartridge whose `main` returns 42.  Passing within the 4.0B-step
+  budget, resumable in slices.  SHA-256
+  `ec54537a4e43d88bc5e96b71533115fb47f71bb6352c03926bd263550c197307`.
+- `tools/tcc_sqlite.sh`: vendored SQLite 3.54.1 plus the NaN16 in-memory VFS;
+  suite, 500-row stress database, and `SQLITE_DEBUG` assertion build all
+  match native bit-for-bit.  Passing (standalone; the pre-SQLite battery stays
+  the 122-gate regression set).
 - `tools/tcc_verified.sh` (planned): finite opcode-lowering lemmas, UTM trace
   checks for small witnesses, and a scoped compiler-correctness or
   translation-validation statement.
@@ -274,11 +347,13 @@ TCC cannot precede the ABI and memory work:
 2. [x] Flat cartridge writer, 24-bit branches, 32-bit direct calls, sections,
    relocations and the entry prelude.
 3. [x] tcc1: self1 compiles `test.c`; the inner cartridge returns 42.
-4. [x] tcc2: self1 compiles the TCC sources to a byte-identical 1,891,544-byte
+4. [x] tcc2: self1 compiles the TCC sources to a byte-identical 1,897,248-byte
    self2; self2 compiles `test.c` to 42.
-5. [ ] Broaden the guest-compiler/program corpus (printf, libm, struct-heavy
+5. [x] SQLite 3.54.1: vendored, cross-compiled by tcc0, and exercised by
+   `tcc_sqlite` (suite/stress/assert builds match native).
+6. [ ] Broaden the guest-compiler/program corpus (printf, libm, struct-heavy
    and varargs programs) beyond add/fib/loops/structs/switch and the
    double-constant test.
-6. [ ] ncc <-> TCC bidirectional call test and the 8-byte `double` ABI audit.
-7. [ ] Verified chain: opcode-lowering lemmas plus small UTM traces; scope the
+7. [ ] ncc <-> TCC bidirectional call test and the 8-byte `double` ABI audit.
+8. [ ] Verified chain: opcode-lowering lemmas plus small UTM traces; scope the
    compiler-correctness statement honestly.

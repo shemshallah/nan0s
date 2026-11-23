@@ -46,3 +46,4 @@ third_party/tinycc/tcc_nan16
 build/gate-*.log
 build/last-gate-log
 build/tcc2-gate-*.log
+build/tcc2-*.log

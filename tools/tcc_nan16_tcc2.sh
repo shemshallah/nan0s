@@ -95,6 +95,8 @@ echo "tcc2: extract self2 ($final_size bytes)"
 run_test "$T/self2.bin" self2
 
 if cmp -s "$T/self1.bin" "$T/self2.bin"; then
+    hash=$(sha256sum "$T/self1.bin" | cut -d' ' -f1)
+    echo "tcc2: sha256 $hash"
     echo "tcc2: PASS (tcc1 == tcc2, $(wc -c < "$T/self1.bin") bytes)"
 else
     echo "tcc2: DIFF (self1 != self2)"

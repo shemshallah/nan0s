@@ -207,6 +207,21 @@ int nan16_output_file(TCCState *s1, const char *filename)
     pre = has_main ? 7 : 0;
 
     text_words = pre + (text->data_offset + 7) / 8;
+    if (getenv("NAN16_MAP")) {
+        int nsym = s1->symtab->data_offset / sizeof(ElfSym);
+        Section *strtab = s1->symtab->link;
+        for (i = 1; i < nsym; i++) {
+            ElfSym *e = &((ElfSym *)s1->symtab->data)[i];
+            if (e->st_shndx && e->st_shndx < s1->nb_sections
+                && s1->sections[e->st_shndx] == text
+                && strtab && e->st_name < strtab->data_offset) {
+                const char *nm = (char *)strtab->data + e->st_name;
+                if (nm[0])
+                    fprintf(stderr, "MAP %u %s\n",
+                            (unsigned)(e->st_value / 8 + pre), nm);
+            }
+        }
+    }
     total_words = text_words;
     for (i = 0; i < nd; i++) {
         dbase[i] = total_words;
