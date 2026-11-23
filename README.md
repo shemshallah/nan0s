@@ -8,7 +8,7 @@
 
 *A different way to represent instructions. A machine that can inspect and rebuild itself.*
 
-[**Try the browser demo**](https://shemshallah.github.io/NaN0S/?live=1) · [**Get started**](#quick-start) · [**Explore the architecture**](#how-nan16-works) · [**Development status**](#project-status) · [**Support development**](#support-development)
+[**Try the browser demo**](https://shemshallah.github.io/nan0s/) · [**Get started**](#quick-start) · [**Explore the architecture**](#how-nan16-works) · [**Development status**](#project-status) · [**Support development**](#support-development)
 
 [![Android build and native tests](https://github.com/shemshallah/nan0s/actions/workflows/android.yml/badge.svg)](https://github.com/shemshallah/nan0s/actions/workflows/android.yml)
 [![Coq proofs](https://github.com/shemshallah/nan0s/actions/workflows/nan16-coq.yml/badge.svg)](https://github.com/shemshallah/nan0s/actions/workflows/nan16-coq.yml)
@@ -32,7 +32,7 @@ This is both a practical engineering project and an investigation into represent
 
 <div align="center">
 
-[![NaN/0S desktop preview](assets/nan0s-desktop.png)](https://shemshallah.github.io/NaN0S/?live=1)
+[![NaN/0S desktop preview](assets/nan0s-desktop.png)](https://shemshallah.github.io/nan0s/)
 
 *Desktop preview — select the image to open the browser-based v86 demonstration.*
 
@@ -63,7 +63,7 @@ This is both a practical engineering project and an investigation into represent
 
 ### Browser demonstration
 
-**[Launch NaN/0S in your browser](https://shemshallah.github.io/NaN0S/?live=1)**
+**[Launch NaN/0S in your browser](https://shemshallah.github.io/nan0s/)**
 
 The demonstration loads a real NaN/0S disk image through [v86](https://github.com/copy/v86), an x86 emulator compiled for the web. The NaN/0S **guest** does not require a conventional guest operating system; the browser and emulator are, of course, hosted software. This is a convenient exploration route, not a claim of native browser hardware execution.
 
@@ -360,6 +360,6 @@ Developed and maintained by [shemshallah](https://github.com/shemshallah).
 
 *Two faces. One word. A different machine.*
 
-[Explore the source](https://github.com/shemshallah/nan0s) · [Try the demo](https://shemshallah.github.io/NaN0S/?live=1) · [Support the project](#support-development)
+[Explore the source](https://github.com/shemshallah/nan0s) · [Try the demo](https://shemshallah.github.io/nan0s/) · [Support the project](#support-development)
 
 </div>
