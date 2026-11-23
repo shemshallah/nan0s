@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "src/exhibits/gui_cart.nas"
+      - "src/lib/bootbuild.nas"
       - "tools/build.sh"
       - ".github/workflows/rebuild-guest.yml"
   workflow_dispatch:
