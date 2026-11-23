@@ -11,7 +11,7 @@ From the repository root, in Termux or another Node.js development environment:
 
 ```sh
 # Node 22+ (prefer current Node 24); GNU awk and normal image build tools.
-npm install --no-save v86@0.5.473
+npm install --no-save --no-package-lock v86@0.5.473
 sh tools/build.sh
 ```
 
