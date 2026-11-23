@@ -315,7 +315,7 @@
       serialDirty = true;
       // A guest-owned verification marker is emitted only after all 2880
       // sectors have been written and read back on the secondary IDE drive.
-      if (!replicaReady && serialBuf.indexOf("NANBUILD OK\\n") !== -1) {
+      if (!replicaReady && serialBuf.indexOf("NANBUILD OK\n") !== -1) {
         var bytes = new Uint8Array(outputDisk);
         if (bytes.length === 1474560 && bytes[510] === 0x55 && bytes[511] === 0xAA) {
           replicaReady = true;
