@@ -28,36 +28,26 @@ EOC
 cat > "$T/loop.c" <<'EOC'
 int main(void){ int i, s = 0; for (i = 0; i < 10; i++) s += i; return s; }
 EOC
+cat > "$T/global.c" <<'EOC'
+int g = 40;
+int main(void){ return g + 2; }
+EOC
+cat > "$T/larray.c" <<'EOC'
+int main(void){ int a[3]; a[0] = 40; a[1] = 1; a[2] = 1; return a[0] + a[1] + a[2]; }
+EOC
 
 "$T/tcc_nan16" -c "$T/ret42.c" -o "$T/ret42.bin"
 "$T/tcc_nan16" -c "$T/call.c" -o "$T/call.bin"
 "$T/tcc_nan16" -c "$T/loop.c" -o "$T/loop.bin"
-[ -s "$T/ret42.bin" ] && [ -s "$T/call.bin" ] && [ -s "$T/loop.bin" ] || { echo "tcc_nan16_smoke: FAIL (empty object)"; exit 1; }
+"$T/tcc_nan16" -c "$T/global.c" -o "$T/global.bin"
+"$T/tcc_nan16" -c "$T/larray.c" -o "$T/larray.bin"
+for b in ret42 call loop global larray; do
+  [ -s "$T/$b.bin" ] || { echo "tcc_nan16_smoke: FAIL (empty $b object)"; exit 1; }
+done
 
-python3 - "$T" <<'PY'
-import struct,sys
-T=sys.argv[1]
-def mk(p,n=15):
-    h=[0x7FF1,0xFFF1,0x7FF8,0xFFF8]; far=h[n&3]; near=h[(n>>2)&3]
-    return ((far>>8)|((far&0xFF)<<8)) | (p<<16) | (near<<48)
-def pay(w): return (w>>16)&0xFFFFFFFF
-for name in ('ret42','call','loop'):
-    b=open(T+'/'+name+'.bin','rb').read()
-    assert len(b)%8==0 and b, name
-    ws=[struct.unpack('<Q',b[i:i+8])[0] for i in range(0,len(b),8)]
-    body=[]
-    for w in ws:
-        p=pay(w); op=p>>24; imm=p&0xFFFF
-        if op in (0x0A,0x0B) and 0 < imm < len(ws):
-            w=(w & ~(0xFFFF << 16)) | (((imm+4)&0xFFFF) << 16)
-        body.append(w)
-    pre=[mk(0x01E08000), mk(0x0B000004), mk(0x09100100), mk(0xFF000000)]
-    out=pre+body
-    open(T+'/'+name+'.run','wb').write(b''.join(struct.pack('<Q',w) for w in out))
-PY
 
-for p in ret42 call loop; do
-  "$CLI" --img "$T/$p.run" --mem 16 --steps 4000 --serial --peek 0x100:1 \
+for p in ret42 call loop global larray; do
+  "$CLI" --img "$T/$p.bin" --mem 16 --steps 4000 --serial --peek 0x100:1 \
       > "$T/$p.out" 2> "$T/$p.err" || true
   want=0000002A
   case "$p" in loop*) want=0000002D ;; esac
@@ -67,4 +57,4 @@ for p in ret42 call loop; do
   fi
   grep -q 'rc=3' "$T/$p.err" || { echo "tcc_nan16_smoke: FAIL ($p did not halt)"; cat -v "$T/$p.err"; exit 1; }
 done
-echo "tcc_nan16_smoke: PASS (TCC emits NaN16: return 42, add(20,22), loop sum 45)"
+echo "tcc_nan16_smoke: PASS (TCC emits NaN16: return 42, add(20,22), loop 45, global 42, local array 42)"

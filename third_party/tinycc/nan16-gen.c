@@ -37,6 +37,7 @@
 static int nan_nparams;
 
 void nan16_add_reloc(int pos, Sym *sym, int addend);
+void nan16_add_addr_reloc(int lo, int hi, Sym *sym, int addend);
 
 ST_DATA const char * const target_machine_defs =
     "__nan16\0"
@@ -146,7 +147,23 @@ ST_FUNC int gjmp(int t)
 
 ST_FUNC void gjmp_addr(int a)
 {
+    int pos;
     nan_op(0x0A, 0, 0, (a / 8) & 0xFFFF);
+    pos = ind - 6;
+    nan_jump_new(pos, 0);
+}
+
+/* Shift every recorded absolute jump by the entry-prelude word count. */
+void nan16_shift_jumps(Section *text, int pre)
+{
+    int i;
+    for (i = 0; i < nan_njumps; i++) {
+        int pos = nan_jumps[i].pos;
+        uint16_t t = (uint16_t)(text->data[pos] | (text->data[pos + 1] << 8));
+        t = (uint16_t)(t + pre);
+        text->data[pos] = t & 0xFF;
+        text->data[pos + 1] = t >> 8;
+    }
 }
 
 /* comparison state for deferred VT_CMP branches */
@@ -204,9 +221,19 @@ ST_FUNC void load(int r, SValue *sv)
 {
     int v = sv->r & VT_VALMASK;
     if (v == VT_CONST) {
-        if (sv->r & VT_SYM)
-            tcc_error("nan16: symbol constants are not implemented");
-        nan_movi32(r, (uint32_t)sv->c.i);
+        if (sv->r & VT_SYM) {
+            int p0 = ind, p1, lo, hi;
+            nan_op(0x01, r, 0, 0);
+            lo = p0 + 2;
+            p1 = ind;
+            nan_op(0x02, r, 0, 0);
+            hi = p1 + 2;
+            nan16_add_addr_reloc(lo, hi, sv->sym, (int)sv->c.i);
+            if (sv->r & VT_LVAL)
+                nan_op(0x08, r, r, 0);
+        } else {
+            nan_movi32(r, (uint32_t)sv->c.i);
+        }
     } else if (v == VT_LOCAL) {
         int ci = (int)sv->c.i;
         int off = ci >= 0 ? ci / 4 : nan_nparams + 2 - ci / 4;
