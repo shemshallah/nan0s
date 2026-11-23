@@ -217,9 +217,53 @@ ST_FUNC void gen_vla_alloc(CType *type, int align)
 }
 
 /* -------------------------------------------------------------- load/store */
+static int nan_size(CType *t)
+{
+    int align, sz = type_size(t, &align);
+    if ((t->t & VT_BTYPE) == VT_PTR || (t->t & VT_BTYPE) == VT_FUNC)
+        sz = PTR_SIZE;
+    return sz;
+}
+
+static void nan_load_indirect(int r, int size, int sign)
+{
+    if (size == 1) {
+        nan_op(0x2A, r, r, 0);          /* LDB r,[r] */
+        if (sign) {
+            nan_op(0x05, r, r, 24);
+            nan_op(0x27, r, r, 24);
+        }
+    } else {
+        nan_op(0x06, r, r, 2);          /* SHR r,2 */
+        nan_op(0x08, r, r, 0);          /* LD r,[r] */
+    }
+}
+
+static void nan_store_indirect(int r, int size, int addr_reg)
+{
+    int t = (r == 11) ? 10 : 11;
+    if (size == 1) {
+        nan_op(0x2B, r, addr_reg, 0);   /* STB */
+    } else {
+        nan_op(0x06, t, addr_reg, 2);   /* SHR t,addr,2 */
+        nan_op(0x09, r, t, 0);          /* ST */
+    }
+}
+
+/* Emit the byte address of a local/param into r.
+   locals: ci<0, byte address = SP*4 + ci
+   params: ci>=0, byte address = FP*4 + ci */
+static void nan_local_addr(int r, int ci)
+{
+    int base = ci < 0 ? 14 : 12;
+    nan_op(0x05, r, base, 2);           /* SHL r,base,2 */
+    nan_op(0x29, r, r, ci);
+}
+
 ST_FUNC void load(int r, SValue *sv)
 {
     int v = sv->r & VT_VALMASK;
+    int size, sign;
     if (v == VT_CONST) {
         if (sv->r & VT_SYM) {
             int p0 = ind, p1, lo, hi;
@@ -229,17 +273,43 @@ ST_FUNC void load(int r, SValue *sv)
             nan_op(0x02, r, 0, 0);
             hi = p1 + 2;
             nan16_add_addr_reloc(lo, hi, sv->sym, (int)sv->c.i);
-            if (sv->r & VT_LVAL)
-                nan_op(0x08, r, r, 0);
+            if (sv->r & VT_LVAL) {
+                size = nan_size(&sv->type);
+                sign = !(sv->type.t & VT_UNSIGNED) && size == 1;
+                nan_load_indirect(r, size, sign);
+            }
         } else {
             nan_movi32(r, (uint32_t)sv->c.i);
         }
     } else if (v == VT_LOCAL) {
         int ci = (int)sv->c.i;
-        int off = ci >= 0 ? ci / 4 : nan_nparams + 2 - ci / 4;
-        nan_op(0x08, r, 12, off);
+        nan_local_addr(r, ci);
+        if (sv->r & VT_LVAL) {
+            size = nan_size(&sv->type);
+            sign = !(sv->type.t & VT_UNSIGNED) && size == 1;
+            nan_load_indirect(r, size, sign);
+        }
+    } else if (v == VT_LLOCAL) {
+        int ci = (int)sv->c.i;
+        nan_local_addr(r, ci);
+        nan_op(0x06, r, r, 2);
+        nan_op(0x08, r, r, 0);          /* load the pointer */
+        if (sv->r & VT_LVAL) {
+            size = nan_size(&sv->type);
+            sign = !(sv->type.t & VT_UNSIGNED) && size == 1;
+            nan_load_indirect(r, size, sign);
+        }
     } else if (sv->r & VT_LVAL) {
-        nan_op(0x08, r, v, 0);
+        size = nan_size(&sv->type);
+        sign = !(sv->type.t & VT_UNSIGNED) && size == 1;
+        if (r != v && size != 1) {
+            /* keep the address in r, then load through it */
+            nan_op(0x03, r, v, 0);
+            nan_load_indirect(r, size, sign);
+        } else {
+            nan_op(0x03, r, v, 0);
+            nan_load_indirect(r, size, sign);
+        }
     } else {
         nan_op(0x03, r, v, 0);
     }
@@ -248,12 +318,21 @@ ST_FUNC void load(int r, SValue *sv)
 ST_FUNC void store(int r, SValue *sv)
 {
     int v = sv->r & VT_VALMASK;
+    int size = nan_size(&sv->type);
     if (v == VT_LOCAL) {
         int ci = (int)sv->c.i;
-        int off = ci >= 0 ? ci / 4 : nan_nparams + 2 - ci / 4;
-        nan_op(0x09, r, 12, off);
+        int t = (r == 11) ? 10 : 11;
+        nan_local_addr(t, ci);
+        nan_store_indirect(r, size, t);
+    } else if (v == VT_LLOCAL) {
+        int ci = (int)sv->c.i;
+        int t = (r == 11) ? 10 : 11;
+        nan_local_addr(t, ci);
+        nan_op(0x06, t, t, 2);
+        nan_op(0x08, t, t, 0);
+        nan_store_indirect(r, size, t);
     } else if (sv->r & VT_LVAL) {
-        nan_op(0x09, r, v, 0);
+        nan_store_indirect(r, size, v);
     } else {
         tcc_error("nan16: unsupported store");
     }

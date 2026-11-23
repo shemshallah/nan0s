@@ -110,22 +110,44 @@ static void nan16_write_data(FILE *f, Section *sec)
     }
 }
 
+static int nan16_flat_addr(Section *sec, int st_value, int text_words,
+                           Section **ds, int *dbase, int nd, int addend)
+{
+    int i;
+    for (i = 0; i < nd; i++)
+        if (ds[i] == sec)
+            return dbase[i] * 4 + st_value + addend;
+    return -1;
+}
+
 int nan16_output_file(TCCState *s1, const char *filename)
 {
     Section *text = find_section(s1, ".text");
-    Section *rodata = find_section(s1, ".rodata");
-    Section *data = find_section(s1, ".data");
-    Section *bss = find_section(s1, ".bss");
-    int main_sym, has_main = 0, pre = 0, i;
+    Section *ds[4], *bss = find_section(s1, ".bss");
+    int dbase[4], nd = 0, i, j;
+    int main_sym, has_main = 0, pre, text_words, total_words;
     FILE *f;
 
     if (!text) text = s1->sections[0];
+    ds[nd++] = find_section(s1, ".rodata");
+    ds[nd++] = find_section(s1, ".data.ro");
+    ds[nd++] = find_section(s1, ".data");
+    ds[nd++] = bss;
+
     main_sym = find_elf_sym(s1->symtab, "main");
     if (main_sym) {
         ElfSym *me = &((ElfSym *)s1->symtab->data)[main_sym];
         if (me->st_shndx) has_main = 1;
     }
     pre = has_main ? 4 : 0;
+
+    text_words = pre + (text->data_offset + 7) / 8;
+    total_words = text_words;
+    for (i = 0; i < nd; i++) {
+        dbase[i] = total_words;
+        if (ds[i]) total_words += (ds[i]->data_offset + 3) / 4;
+    }
+
     if (pre) nan16_shift_jumps(text, pre);
 
     for (i = 0; i < nan_nrelocs; i++) {
@@ -138,62 +160,78 @@ int nan16_output_file(TCCState *s1, const char *filename)
         if (value < 0 || value / 8 > 0xFFFF || (value & 7))
             tcc_error("nan16: call relocation out of range");
         value = value / 8 + pre;
-        if (value > 0xFFFF) tcc_error("nan16: call target out of range");
         text->data[r->pos] = value & 0xFF;
         text->data[r->pos + 1] = (value >> 8) & 0xFF;
     }
 
-    {
-        int text_words = pre + nan16_words(text, 8);
-        int rodata_words = nan16_words(rodata, 4);
-        int data_words = nan16_words(data, 4);
-        int bss_words = nan16_words(bss, 4);
-        for (i = 0; i < nan_naddr_relocs; i++) {
-            NanAddrReloc *r = &nan_addr_relocs[i];
-            int si = find_elf_sym(s1->symtab, r->name);
-            ElfSym *es = si ? &((ElfSym *)s1->symtab->data)[si] : NULL;
-            Section *sec;
-            int addr;
-            if (!es) tcc_error("nan16: unresolved address '%s'", r->name);
-            sec = es->st_shndx < s1->nb_sections ? s1->sections[es->st_shndx] : NULL;
-            if (sec == text)
-                addr = (int)es->st_value / 8 + pre + r->addend / 8;
-            else if (sec == rodata)
-                addr = text_words + (int)es->st_value / 4 + r->addend / 4;
-            else if (sec == data)
-                addr = text_words + rodata_words + (int)es->st_value / 4 + r->addend / 4;
-            else if (sec == bss)
-                addr = text_words + rodata_words + data_words
-                     + (int)es->st_value / 4 + r->addend / 4;
-            else
-                tcc_error("nan16: unsupported address section for '%s'", r->name);
-            (void)bss_words;
-            if (addr < 0 || addr > 0xFFFFFFFF)
-                tcc_error("nan16: address out of range");
-            text->data[r->lo] = addr & 0xFF;
-            text->data[r->lo + 1] = (addr >> 8) & 0xFF;
-            text->data[r->hi] = (addr >> 16) & 0xFF;
-            text->data[r->hi + 1] = (addr >> 24) & 0xFF;
-        }
-
-        f = fopen(filename, "wb");
-        if (!f) return -1;
-        if (has_main) {
-            nan16_write_word(f, nan16_mkword(0x01E08000u, 15)); /* MOVI r14,0x8000 */
-            nan16_write_word(f, nan16_mkword(0x0B000000u | (main_sym
-                ? (((int)((ElfSym *)s1->symtab->data)[main_sym].st_value / 8 + pre) & 0xFFFF)
-                : 0), 15));
-            nan16_write_word(f, nan16_mkword(0x09100100u, 15)); /* ST r1,r0,0x100 */
-            nan16_write_word(f, nan16_mkword(0xFF000000u, 15)); /* HALT */
-        }
-        if (text->data_offset)
-            fwrite(text->data, 1, text->data_offset, f);
-        nan16_write_data(f, rodata);
-        nan16_write_data(f, data);
-        for (i = 0; i < bss_words; i++)
-            nan16_write_word(f, nan16_mkword(0, 10));
-        fclose(f);
+    for (i = 0; i < nan_naddr_relocs; i++) {
+        NanAddrReloc *r = &nan_addr_relocs[i];
+        int si = find_elf_sym(s1->symtab, r->name);
+        ElfSym *es = si ? &((ElfSym *)s1->symtab->data)[si] : NULL;
+        Section *sec;
+        int addr;
+        if (!es) tcc_error("nan16: unresolved address '%s'", r->name);
+        sec = es->st_shndx < s1->nb_sections ? s1->sections[es->st_shndx] : NULL;
+        if (sec == text)
+            addr = (int)es->st_value / 8 + pre + r->addend / 8;
+        else
+            addr = nan16_flat_addr(sec, (int)es->st_value, text_words,
+                                   ds, dbase, nd, 0) + r->addend;
+        if (addr < 0 || addr > 0xFFFFFFFF)
+            tcc_error("nan16: address out of range for '%s'", r->name);
+        text->data[r->lo] = addr & 0xFF;
+        text->data[r->lo + 1] = (addr >> 8) & 0xFF;
+        text->data[r->hi] = (addr >> 16) & 0xFF;
+        text->data[r->hi + 1] = (addr >> 24) & 0xFF;
     }
+
+    /* Data relocations, e.g. char *s = "hi". */
+    for (i = 0; i < s1->nb_sections; i++) {
+        Section *rel = s1->sections[i];
+        Section *tgt;
+        int n;
+        if (!rel || rel->sh_type != SHT_RELX || !rel->data) continue;
+        tgt = rel->sh_info < s1->nb_sections ? s1->sections[rel->sh_info] : NULL;
+        if (!tgt || !tgt->data) continue;
+        n = rel->data_offset / sizeof(ElfW_Rel);
+        for (j = 0; j < n; j++) {
+            ElfW_Rel *rr = (ElfW_Rel *)rel->data + j;
+            int si = ELFW(R_SYM)(rr->r_info);
+            ElfSym *es = &((ElfSym *)s1->symtab->data)[si];
+            Section *sec = es->st_shndx < s1->nb_sections
+                         ? s1->sections[es->st_shndx] : NULL;
+            uint32_t addend = read32le(tgt->data + rr->r_offset);
+            int addr;
+            if (sec == text)
+                addr = (int)es->st_value / 8 + pre;
+            else
+                addr = nan16_flat_addr(sec, (int)es->st_value, text_words,
+                                       ds, dbase, nd, 0) + addend;
+            if (addr < 0) tcc_error("nan16: bad data relocation");
+            write32le(tgt->data + rr->r_offset, (uint32_t)addr);
+        }
+    }
+
+    f = fopen(filename, "wb");
+    if (!f) return -1;
+    if (has_main) {
+        int mword = ((ElfSym *)s1->symtab->data)[main_sym].st_value / 8 + pre;
+        nan16_write_word(f, nan16_mkword(0x01E08000u, 15));
+        nan16_write_word(f, nan16_mkword(0x0B000000u | (mword & 0xFFFF), 15));
+        nan16_write_word(f, nan16_mkword(0x09100100u, 15));
+        nan16_write_word(f, nan16_mkword(0xFF000000u, 15));
+    }
+    if (text->data_offset) fwrite(text->data, 1, text->data_offset, f);
+    for (i = 0; i < nd; i++) {
+        if (!ds[i]) continue;
+        if (ds[i] == bss) {
+            int n = (ds[i]->data_offset + 3) / 4, k;
+            for (k = 0; k < n; k++) nan16_write_word(f, nan16_mkword(0, 10));
+        } else {
+            nan16_write_data(f, ds[i]);
+        }
+    }
+    fclose(f);
     return 0;
 }
 #endif /* TARGET_DEFS_ONLY */

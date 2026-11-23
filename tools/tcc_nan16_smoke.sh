@@ -35,26 +35,65 @@ EOC
 cat > "$T/larray.c" <<'EOC'
 int main(void){ int a[3]; a[0] = 40; a[1] = 1; a[2] = 1; return a[0] + a[1] + a[2]; }
 EOC
+cat > "$T/garray.c" <<'EOC'
+int a[3] = {1, 2, 3};
+int main(void){ return a[0] + a[2]; }
+EOC
+cat > "$T/fact.c" <<'EOC'
+int fact(int n){ return n < 2 ? 1 : n * fact(n - 1); }
+int main(void){ return fact(5); }
+EOC
+cat > "$T/sw.c" <<'EOC'
+int main(void){ int x = 2; switch (x) { case 1: return 1; case 2: return 42; default: return 0; } }
+EOC
+cat > "$T/ptr.c" <<'EOC'
+int main(void){ int x = 42; int *p = &x; return *p; }
+EOC
+cat > "$T/str.c" <<'EOC'
+char *s = "hi";
+int main(void){ return s[0] * 256 + s[1]; }
+EOC
+cat > "$T/struct.c" <<'EOC'
+struct S { int a; int b; };
+int main(void){ struct S s; s.a = 40; s.b = 2; return s.a + s.b; }
+EOC
+cat > "$T/gstruct.c" <<'EOC'
+struct S { int a; char b; };
+struct S s = {40, 2};
+int main(void){ return s.a + s.b; }
+EOC
 
 "$T/tcc_nan16" -c "$T/ret42.c" -o "$T/ret42.bin"
 "$T/tcc_nan16" -c "$T/call.c" -o "$T/call.bin"
 "$T/tcc_nan16" -c "$T/loop.c" -o "$T/loop.bin"
 "$T/tcc_nan16" -c "$T/global.c" -o "$T/global.bin"
 "$T/tcc_nan16" -c "$T/larray.c" -o "$T/larray.bin"
-for b in ret42 call loop global larray; do
+"$T/tcc_nan16" -c "$T/garray.c" -o "$T/garray.bin"
+"$T/tcc_nan16" -c "$T/fact.c" -o "$T/fact.bin"
+"$T/tcc_nan16" -c "$T/sw.c" -o "$T/sw.bin"
+"$T/tcc_nan16" -c "$T/ptr.c" -o "$T/ptr.bin"
+"$T/tcc_nan16" -c "$T/str.c" -o "$T/str.bin"
+"$T/tcc_nan16" -c "$T/struct.c" -o "$T/struct.bin"
+"$T/tcc_nan16" -c "$T/gstruct.c" -o "$T/gstruct.bin"
+for b in ret42 call loop global larray garray fact sw ptr str struct gstruct; do
   [ -s "$T/$b.bin" ] || { echo "tcc_nan16_smoke: FAIL (empty $b object)"; exit 1; }
 done
 
 
-for p in ret42 call loop global larray; do
+for p in ret42 call loop global larray garray fact sw ptr str struct gstruct; do
   "$CLI" --img "$T/$p.bin" --mem 16 --steps 4000 --serial --peek 0x100:1 \
       > "$T/$p.out" 2> "$T/$p.err" || true
   want=0000002A
-  case "$p" in loop*) want=0000002D ;; esac
+  case "$p" in
+    loop*) want=0000002D ;;
+    garray*) want=00000004 ;;
+    fact*) want=00000078 ;;
+    str*) want=00006869 ;;
+  esac
   if ! grep -qx "$want" "$T/$p.out"; then
     echo "tcc_nan16_smoke: FAIL ($p did not return $want)"
     cat -v "$T/$p.out" "$T/$p.err"; exit 1
   fi
   grep -q 'rc=3' "$T/$p.err" || { echo "tcc_nan16_smoke: FAIL ($p did not halt)"; cat -v "$T/$p.err"; exit 1; }
 done
-echo "tcc_nan16_smoke: PASS (TCC emits NaN16: return 42, add(20,22), loop 45, global 42, local array 42)"
+echo "tcc_nan16_smoke: PASS (TCC emits NaN16: ret42, calls, loop, globals, arrays, recursion, switch, strings, structs)"
