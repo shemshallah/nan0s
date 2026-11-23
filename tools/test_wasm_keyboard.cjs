@@ -30,6 +30,7 @@ async function main() {
       return evt;
     }
     focus(options) { this.lastFocusOptions = options; }
+    getBoundingClientRect() { return { left: 10, top: 20 }; }
     querySelectorAll() { return []; }
   }
   const elements = Object.fromEntries(
@@ -91,15 +92,47 @@ async function main() {
     'Replicator must never write to live source IDE disk');
   assert.deepEqual(emulator.scales.at(-1), [1.5, 1.5],
     'Touch devices must start zoomed in to make the guest readable');
+
+  // Pinch the real WASM screen, not the HTML page. A moving midpoint must
+  // keep its guest pixel anchored; one finger must retain native panning.
+  const screen = elements.screen_container;
+  screen.clientLeft = 0;
+  screen.clientTop = 0;
+  screen.scrollLeft = 120;
+  screen.scrollTop = 80;
+  const first = [{ clientX: 110, clientY: 120 }, { clientX: 210, clientY: 120 }];
+  const expanded = [{ clientX: 95, clientY: 120 }, { clientX: 245, clientY: 120 }];
+  const single = screen.dispatch('touchstart', { touches: [first[0]], cancelable: true });
+  assert.equal(single.defaultPrevented, false, 'One-finger pan must not be intercepted');
+  const pinchStart = screen.dispatch('touchstart', { touches: first, cancelable: true });
+  assert.equal(pinchStart.defaultPrevented, true, 'Two-finger start blocks page zoom');
+  const pinchOut = screen.dispatch('touchmove', { touches: expanded, cancelable: true });
+  assert.equal(pinchOut.defaultPrevented, true, 'Pinch must block page scrolling and zoom');
+  assert.deepEqual(emulator.scales.at(-1), [2.25, 2.25],
+    'Spreading 1.5x must scale the NaN/0S desktop from 150% to 225%');
+  assert.equal(elements['zoom-level'].textContent, '225%', 'Pinch updates toolbar');
+  assert.equal(screen.scrollLeft, 245, 'Pinch must preserve the X content anchor');
+  assert.equal(screen.scrollTop, 170, 'Pinch must preserve the Y content anchor');
+  screen.dispatch('touchmove', { touches: first, cancelable: true });
+  assert.deepEqual(emulator.scales.at(-1), [1.5, 1.5],
+    'Pinching back restores the original guest scale');
+  assert.equal(screen.scrollLeft, 120, 'Returning fingers restores horizontal pan');
+  assert.equal(screen.scrollTop, 80, 'Returning fingers restores vertical pan');
+  screen.dispatch('touchend', { touches: [first[0]] });
+  const oneMove = screen.dispatch('touchmove', { touches: [first[0]], cancelable: true });
+  assert.equal(oneMove.defaultPrevented, false, 'Single-finger panning remains native');
+  screen.dispatch('touchcancel', { touches: [] });
+  assert.ok(!emulator.codes.length, 'Screen pinch must not inject keyboard input');
+
   elements['zoom-out'].dispatch('click');
   assert.deepEqual(emulator.scales.at(-1), [1.2, 1.2], 'Zoom out must scale the guest');
   elements['zoom-in'].dispatch('click');
   assert.deepEqual(emulator.scales.at(-1), [1.5, 1.5], 'Zoom in must scale the guest');
   elements['zoom-fit'].dispatch('click');
-  assert.deepEqual(emulator.scales.at(-1), [0.375, 0.375],
-    'Fit must respect the minimum readable scale without changing guest mode');
+  assert.deepEqual(emulator.scales.at(-1), [0.328125, 0.328125],
+    'Fit must show all 1024px even on a 360px phone');
   emulator.listeners['screen-set-size']([1024, 768]);
-  assert.deepEqual(emulator.scales.at(-1), [0.375, 0.375],
+  assert.deepEqual(emulator.scales.at(-1), [0.328125, 0.328125],
     'Mode switches must preserve the current user-selected zoom');
 
   const input = elements.type;
