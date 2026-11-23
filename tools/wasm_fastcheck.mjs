@@ -5,7 +5,7 @@
  * creation. The NaN16 code in src/lib/bootbuild.nas owns the disk build.
  *
  * One-time setup:
- *   npm install --no-save v86@0.5.473
+ *   npm install --no-save --no-package-lock v86@0.5.473
  *   sh tools/build.sh
  * Then:
  *   node tools/wasm_fastcheck.mjs
@@ -37,7 +37,7 @@ try {
     ({ V86 } = await import("v86"));
 }
 catch(error) {
-    console.error("Install local WASM emulator once: npm install --no-save v86@0.5.473");
+    console.error("Install local WASM emulator once: npm install --no-save --no-package-lock v86@0.5.473");
     throw error;
 }
 // Resolve through the module rather than relying on the current working dir.
@@ -149,6 +149,10 @@ try {
             "Source IDE master was modified by guest build");
         console.log("gen1 complete guest-built disk: PASS; SHA256=" + hash(clone));
 
+        // Free the first 128 MiB WASM machine before the second boot.
+        // This matters on Android phones, and the verified clone is preserved.
+        await emulator.destroy();
+        emulator = null;
         // Separate v86 instance boots from guest-generated, verified bytes.
         replicaBoot = new V86(options(bufferOf(clone), bufferOf(clone)));
         const second = track(replicaBoot, "generation 2");
