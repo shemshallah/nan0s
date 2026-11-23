@@ -60,6 +60,24 @@
     .typebar > label, .typebar > .hint { display: none; }
     .typebar input { font-size: 16px; padding: 8px 10px; min-height: 40px; }
     .typebar-row button { padding: 7px 10px; }
+    /*
+     * Never squeeze the native 1024x768 guest into the phone's width.
+     * Display at a readable pixel scale and let touch gestures pan the guest.
+     */
+    #screen_container {
+      width: 100%;
+      max-width: 100%;
+      height: clamp(260px, 62svh, 660px);
+      overflow: auto;
+      overscroll-behavior: contain;
+      touch-action: pan-x pan-y;
+      -webkit-overflow-scrolling: touch;
+    }
+    #screen_container canvas {
+      max-width: none !important;
+      height: auto;
+    }
+    #screen_container > div { width: max-content; }
   }
   .pad { display:flex; flex-wrap:wrap; gap:6px; justify-content:center; max-width:760px; margin:0 auto 8px; }
   .pad button { min-width:44px; padding:10px 0; font-size:15px; }
@@ -88,6 +106,10 @@
   <div class="controls">
     <button id="restart" disabled>Restart</button>
     <button id="fullscreen" disabled>Full screen</button>
+    <button id="zoom-out" type="button" disabled aria-label="Zoom out guest screen">−</button>
+    <span id="zoom-level" class="hint">100%</span>
+    <button id="zoom-in" type="button" disabled aria-label="Zoom in guest screen">+</button>
+    <button id="zoom-fit" type="button" disabled>Fit</button>
     <span class="hint">boots the complete guest (floppy + primary IDE) to the desktop with one terminal · <b>q</b> quits the GUI → museum menu (<b>1–8</b>, <b>ESC</b> back) · tap the keys below or the text bar to type</span>
   </div>
   <div class="typebar">
@@ -148,6 +170,13 @@
   var serialEl = document.getElementById("serial");
   var restartBtn = document.getElementById("restart");
   var fsBtn = document.getElementById("fullscreen");
+  var zoomOutBtn = document.getElementById("zoom-out");
+  var zoomInBtn = document.getElementById("zoom-in");
+  var zoomFitBtn = document.getElementById("zoom-fit");
+  var zoomLevelEl = document.getElementById("zoom-level");
+  var isTouchView = !!(window.matchMedia && window.matchMedia("(pointer: coarse), (max-width: 760px)").matches);
+  var guestWidth = 1024;
+  var zoom = isTouchView ? 1.5 : 1;
   var padEl = document.getElementById("pad");
   var typeEl = document.getElementById("type");
   var clearTypeBtn = document.getElementById("clear-type");
@@ -160,6 +189,19 @@
     if (!emulator) return;
     if (ext) emulator.keyboard_send_scancodes([0xE0, code, 0xE0, code | 0x80]);
     else emulator.keyboard_send_scancodes([code, code | 0x80]);
+  }
+
+  function updateGuestZoom(next) {
+    zoom = Math.max(0.375, Math.min(3, next));
+    zoomLevelEl.textContent = Math.round(zoom * 100) + "%";
+    if (emulator && typeof emulator.screen_set_scale === "function") {
+      emulator.screen_set_scale(zoom, zoom);
+    }
+  }
+
+  function fitGuestScreen() {
+    var available = Math.max(160, screenEl.clientWidth - 24);
+    updateGuestZoom(available / Math.max(320, guestWidth));
   }
 
   function setInputEnabled(on) {
@@ -224,7 +266,17 @@
       status("v86 ready — booting complete NaN/0S from floppy + IDE…");
       restartBtn.disabled = false;
       fsBtn.disabled = false;
+      zoomOutBtn.disabled = false;
+      zoomInBtn.disabled = false;
+      zoomFitBtn.disabled = false;
+      updateGuestZoom(zoom);
       setInputEnabled(true);
+    });
+    emulator.add_listener("screen-set-size", function (size) {
+      // When the guest switches from SeaBIOS text to 1024x768 graphics, keep
+      // the user's zoom rather than allowing the canvas to shrink to fit.
+      if (size && size[0] > 0) guestWidth = size[0];
+      updateGuestZoom(zoom);
     });
     emulator.add_listener("serial0-output-byte", function (b) {
       serialBuf += String.fromCharCode(b);
@@ -245,6 +297,10 @@
   fsBtn.addEventListener("click", function () {
     if (emulator) emulator.screen_go_fullscreen();
   });
+
+  zoomOutBtn.addEventListener("click", function () { updateGuestZoom(zoom / 1.25); });
+  zoomInBtn.addEventListener("click", function () { updateGuestZoom(zoom * 1.25); });
+  zoomFitBtn.addEventListener("click", fitGuestScreen);
 
   // On-screen keypad: every button is a make+break PS/2 scancode pair. Works on touch
   // (numbers/ESC/arrows are tappable) and with a mouse, no keyboard required.
