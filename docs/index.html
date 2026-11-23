@@ -242,12 +242,23 @@
       revision: 0
     };
     if (event.cancelable !== false) event.preventDefault();
+    // v86 registers touch handlers on window; do not forward a two-finger
+    // gesture as guest mouse movement.
+    event.stopPropagation();
   }
   screenEl.addEventListener("touchstart", function (event) {
     if (event.touches.length === 2) beginGuestPinch(event);
   }, { passive: false });
   screenEl.addEventListener("touchmove", function (event) {
-    if (event.touches.length !== 2 || !emulator || !isTouchView) return;
+    if (!emulator || !isTouchView) return;
+    if (event.touches.length === 1) {
+      // Let Chrome handle native one-finger scrolling, but not v86's
+      // window-level touch-to-mouse adapter (which calls preventDefault).
+      event.stopPropagation();
+      return;
+    }
+    if (event.touches.length !== 2) return;
+    event.stopPropagation();
     if (!pinch) beginGuestPinch(event);
     if (!pinch) return;
     if (event.cancelable !== false) event.preventDefault();
