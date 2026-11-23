@@ -174,7 +174,7 @@
   var zoomInBtn = document.getElementById("zoom-in");
   var zoomFitBtn = document.getElementById("zoom-fit");
   var zoomLevelEl = document.getElementById("zoom-level");
-  var isTouchView = !!(window.matchMedia && window.matchMedia("(pointer: coarse), (max-width: 760px)").matches);
+  var isTouchView = typeof window !== "undefined" && !!(window.matchMedia && window.matchMedia("(pointer: coarse), (max-width: 760px)").matches);
   var guestWidth = 1024;
   var zoom = isTouchView ? 1.5 : 1;
   var padEl = document.getElementById("pad");
