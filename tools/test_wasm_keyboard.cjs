@@ -34,7 +34,7 @@ async function main() {
   }
   const elements = Object.fromEntries(
     ['type', 'clear-type', 'pad', 'status', 'screen_container', 'serial', 'restart', 'fullscreen',
-     'zoom-out', 'zoom-in', 'zoom-fit', 'zoom-level', 'image-fingerprint']
+     'zoom-out', 'zoom-in', 'zoom-fit', 'zoom-level', 'image-fingerprint', 'download-replica']
       .map(id => [id, new Element()])
   );
   elements.screen_container.clientWidth = 360;
@@ -76,7 +76,19 @@ async function main() {
   assert.equal(elements['zoom-in'].disabled, false);
   assert.equal(elements['zoom-out'].disabled, false);
   assert.equal(elements['zoom-fit'].disabled, false);
-  assert.ok(emulator.options.fda && emulator.options.hda, 'Full system must use floppy and IDE');
+  assert.ok(emulator.options.fda && emulator.options.hda && emulator.options.hdb,
+    'Full system must use floppy, source IDE master, and independent output IDE slave');
+  assert.equal(elements['download-replica'].disabled, true, 'Never download an unverified output');
+  assert.equal(new Uint8Array(emulator.options.hdb.buffer).every(b => b === 0), true,
+    'Output disk must start blank');
+  new Uint8Array(emulator.options.hdb.buffer).set([0x55, 0xaa], 510);
+  for (const character of 'NANBUILD OK\\n') {
+    emulator.listeners['serial0-output-byte'](character.charCodeAt(0));
+  }
+  assert.equal(elements['download-replica'].disabled, false,
+    'Only the guest verified-output event enables downloading');
+  assert.ok(emulator.options.hdb.buffer !== emulator.options.hda.buffer,
+    'Replicator must never write to live source IDE disk');
   assert.deepEqual(emulator.scales.at(-1), [1.5, 1.5],
     'Touch devices must start zoomed in to make the guest readable');
   elements['zoom-out'].dispatch('click');
