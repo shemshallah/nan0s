@@ -29,9 +29,11 @@
   .hint { color:var(--dim); font-size:13px; text-align:center; }
   .hint b { color:var(--fg); }
   .typebar { max-width:640px; margin:8px auto 6px; }
-  .typebar input { width:100%; background:#07070f; color:var(--fg); border:1px solid #2e2e5e;
+  .typebar-row { display:flex; gap:8px; }
+  .typebar input { flex:1; min-width:0; background:#07070f; color:var(--fg); border:1px solid #2e2e5e;
     border-radius:5px; padding:11px 12px; font:inherit; }
   .typebar input:focus { outline:none; border-color:var(--cyan); }
+  .typebar-row button { white-space:nowrap; }
   .pad { display:flex; flex-wrap:wrap; gap:6px; justify-content:center; max-width:760px; margin:0 auto 8px; }
   .pad button { min-width:44px; padding:10px 0; font-size:15px; }
   details { margin-top:16px; color:var(--dim); }
@@ -62,8 +64,13 @@
     <span class="hint">boots the complete guest (floppy + primary IDE) to the desktop with one terminal · <b>q</b> quits the GUI → museum menu (<b>1–8</b>, <b>ESC</b> back) · tap the keys below or the text bar to type</span>
   </div>
   <div class="typebar">
-    <input id="type" type="text" inputmode="text" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"
-           placeholder="tap here for the phone keyboard — typing goes to the guest" disabled>
+    <label for="type" class="hint">Phone keyboard → NaN/0S PS/2 keyboard</label>
+    <div class="typebar-row">
+      <input id="type" type="text" inputmode="text" enterkeyhint="enter" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"
+             placeholder="Tap to type into NaN/0S" aria-describedby="type-hint" disabled>
+      <button type="button" id="clear-type" disabled title="Clear only this phone input field">Clear</button>
+    </div>
+    <p id="type-hint" class="hint">Text is sent into the guest as you type. Clear empties this field only; Enter is also available below.</p>
   </div>
   <div class="pad" id="pad">
     <button type="button" data-code="1" disabled>Esc</button>
@@ -116,6 +123,7 @@
   var fsBtn = document.getElementById("fullscreen");
   var padEl = document.getElementById("pad");
   var typeEl = document.getElementById("type");
+  var clearTypeBtn = document.getElementById("clear-type");
   var emulator = null;
   var serialBuf = "";
   var serialDirty = false;
@@ -129,6 +137,7 @@
 
   function setInputEnabled(on) {
     typeEl.disabled = !on;
+    clearTypeBtn.disabled = !on;
     var keys = padEl.querySelectorAll("button");
     for (var i = 0; i < keys.length; i++) keys[i].disabled = !on;
   }
@@ -220,27 +229,106 @@
     sendKey(code, b.getAttribute("data-ext") === "1");
   });
 
-  // Text bar: focusing it raises the phone's IME. While it is focused the emulator's own
-  // document-level keyboard capture is disabled, so typed text is forwarded exactly once
-  // (printable chars via keyboard_send_text; Backspace/Enter/Escape/Tab as scancodes).
-  var SPECIAL = { Backspace: 0x0E, Enter: 0x1C, Escape: 0x01, Tab: 0x0F };
-  typeEl.addEventListener("focus", function () {
-    if (emulator) emulator.keyboard_set_enabled(false);
-  });
-  typeEl.addEventListener("blur", function () {
-    if (emulator) emulator.keyboard_set_enabled(true);
-  });
+  // Android/Gboard input bridge. keyboard_set_enabled(false) disables v86's PS/2
+  // keyboard delivery, including injected text, so NEVER disable it while typing.
+  // Instead stop browser key events at this INPUT and inject real Set-1 scan codes.
+  // Keep an edit mirror: Android IMEs repeatedly replace composing text rather than
+  // emitting one keypress per letter. Reconcile changes with backspace + new strokes.
+  // Do not clear INPUT.value on every event; that breaks IME composition.
+  var CHAR_KEYS = {
+    a:0x1e,b:0x30,c:0x2e,d:0x20,e:0x12,f:0x21,g:0x22,h:0x23,i:0x17,
+    j:0x24,k:0x25,l:0x26,m:0x32,n:0x31,o:0x18,p:0x19,q:0x10,r:0x13,
+    s:0x1f,t:0x14,u:0x16,v:0x2f,w:0x11,x:0x2d,y:0x15,z:0x2c,
+    "1":0x02,"2":0x03,"3":0x04,"4":0x05,"5":0x06,"6":0x07,"7":0x08,
+    "8":0x09,"9":0x0a,"0":0x0b,"-":0x0c,"=":0x0d,"[":0x1a,"]":0x1b,
+    "\\":0x2b,";":0x27,"'":0x28,"`":0x29,",":0x33,".":0x34,"/":0x35,
+    " ":0x39
+  };
+  var SHIFTED_KEYS = {
+    "!":"1","@":"2","#":"3","$":"4","%":"5","^":"6","&":"7","*":"8",
+    "(":"9",")":"0","_":"-","+":"=","{":"[","}":"]","|":"\\",
+    ":":";","\"":"'","~":"`","<":",",">":".","?":"/"
+  };
+  var SPECIAL = { Enter:0x1c, Escape:0x01, Tab:0x0f, ArrowUp:0x48,
+    ArrowDown:0x50, ArrowLeft:0x4b, ArrowRight:0x4d };
+  var mirrored = "";
+
+  function appendStroke(codes, key, shifted) {
+    if (shifted) codes.push(0x2a); // left Shift press
+    codes.push(key, key | 0x80);
+    if (shifted) codes.push(0xaa); // left Shift release
+  }
+
+  function encodeChar(c, codes) {
+    if (c === "\n" || c === "\r") { appendStroke(codes, 0x1c, false); return true; }
+    if (c === "\t") { appendStroke(codes, 0x0f, false); return true; }
+    var lower = c.toLowerCase(), shifted = c !== lower;
+    var key = CHAR_KEYS[lower];
+    if (key === undefined && SHIFTED_KEYS[c]) {
+      key = CHAR_KEYS[SHIFTED_KEYS[c]];
+      shifted = true;
+    }
+    if (key === undefined) return false;
+    appendStroke(codes, key, shifted);
+    return true;
+  }
+
+  function syncPhoneInput() {
+    var current = typeEl.value;
+    if (!emulator) { mirrored = current; return; }
+    var oldChars = Array.from(mirrored), newChars = Array.from(current);
+    var prefix = 0;
+    while (prefix < oldChars.length && prefix < newChars.length &&
+           oldChars[prefix] === newChars[prefix]) prefix++;
+    var codes = [];
+    for (var i = prefix; i < oldChars.length; i++) {
+      // Only undo characters that had a representable guest key.
+      var discarded = [];
+      if (encodeChar(oldChars[i], discarded)) appendStroke(codes, 0x0e, false);
+    }
+    var skipped = false;
+    for (var j = prefix; j < newChars.length; j++) {
+      if (!encodeChar(newChars[j], codes)) skipped = true;
+    }
+    mirrored = current;
+    if (codes.length) emulator.keyboard_send_scancodes(codes);
+    if (skipped) status("This guest uses US/ASCII keys; unsupported characters were skipped.", true);
+  }
+
+  function clearPhoneInput() {
+    // Reset only the IME mirror. Never erase text in the running guest.
+    typeEl.value = "";
+    mirrored = "";
+  }
+
   typeEl.addEventListener("keydown", function (e) {
+    e.stopPropagation(); // let v86 handle the guest, not the browser keyboard event
     var code = SPECIAL[e.key];
-    if (code === undefined) return;
-    e.preventDefault();
-    sendKey(code, false);
-    typeEl.value = "";
+    if (code !== undefined) {
+      e.preventDefault();
+      sendKey(code, e.key.indexOf("Arrow") === 0);
+    } else if (e.key === "Backspace" && typeEl.value.length === 0) {
+      e.preventDefault();
+      sendKey(0x0e, false);
+    }
+    // Other Backspace events mutate the input and are handled by the diff.
   });
-  typeEl.addEventListener("input", function () {
-    var v = typeEl.value;
-    if (v && emulator) emulator.keyboard_send_text(v);
-    typeEl.value = "";
+  typeEl.addEventListener("keyup", function (e) { e.stopPropagation(); });
+  typeEl.addEventListener("keypress", function (e) { e.stopPropagation(); });
+  typeEl.addEventListener("beforeinput", function (e) {
+    if (e.inputType === "insertLineBreak" || e.inputType === "insertParagraph") {
+      e.preventDefault();
+      sendKey(0x1c, false);
+    } else if (e.inputType === "deleteContentBackward" && typeEl.value.length === 0) {
+      e.preventDefault();
+      sendKey(0x0e, false);
+    }
+  });
+  typeEl.addEventListener("input", syncPhoneInput);
+  typeEl.addEventListener("compositionend", syncPhoneInput);
+  clearTypeBtn.addEventListener("click", function () {
+    clearPhoneInput();
+    typeEl.focus();
   });
 
   fetchImage().then(function (image) {
