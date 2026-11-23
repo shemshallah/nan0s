@@ -1,62 +1,145 @@
 #!/bin/sh
 # tools/presqlite_gate.sh - aggregate pre-SQLite gate.
-# Runs every gate that exists in tools/ and reports a single summary. New
-# workstream gates (macro text, include, exact libm, ISO C, c-testsuite) are
-# picked up automatically when present.
+#
+#   sh tools/presqlite_gate.sh                 # complete battery
+#   sh tools/presqlite_gate.sh --only qgate64* # selected gates
+#   sh tools/presqlite_gate.sh --list          # list gate names
+#
+# Progress is written to stdout and appended to build/gate-progress.log so a
+# long gate can be watched from another terminal:
+#   tail -f build/gate-progress.log
 set -u
 cd "$(dirname "$0")/.."
 export LC_ALL=C
-T="${TMPDIR:-/tmp}/presqlite_gate.$$"; mkdir -p "$T"; trap 'rm -rf "$T"' EXIT
-fail=0; n=0
+T="${TMPDIR:-/tmp}/presqlite_gate.$$"; mkdir -p "$T" build
+PROGRESS="${PRESQLITE_PROGRESS:-build/gate-progress.log}"
+HB=0
+cleanup() { [ "$HB" -ne 0 ] && kill "$HB" 2>/dev/null; rm -rf "$T"; }
+trap cleanup EXIT INT TERM
+
+ONLY=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --only) shift; ONLY="$*"; break ;;
+    --list)
+      for m in $(seq 1 62); do [ -f "tools/ncc_m$m.sh" ] && echo "ncc_m$m"; done
+      for g in ncc_abi_sizes ncc_alloc ncc_heap ncc_aligned narena narena64 nten \
+               nan_simd nan_vec nan_vec_native nan_vec_avx2 nan_q4 nan_q4lm nan_bench \
+               xlate_x86 ncc_dp4b nmatmul nmat64 nmat64x64 ncc_headers ncc_ppexpr \
+               ncc_torture ncc_donut_exact ncc_macro_text ncc_include ncc_libm_exact \
+               ncc_iso_c ncc_ctests mkproof mkall qgate qgate_gui xmemgate qgate64 \
+               qgate64core qgate64block qgate64alu qgate64branch qgate64mem qgate64byte \
+               qgate64prog qgate64mul qgate64div qgate64fp qgate64fpe qgate64mem2 \
+               qgate64blockops qgate64trap qgate64vec qgate64vldst qgate64vdp4b \
+               qgate64vdp4b4 qgate64call qgate64callf qgate64putc; do
+        [ -f "tools/$g.sh" ] && echo "$g"
+      done
+      exit 0 ;;
+    *) echo "usage: $0 [--only PATTERN...] [--list]" >&2; exit 2 ;;
+  esac
+done
+
+want() {
+  [ -z "$ONLY" ] && return 0
+  for p in $ONLY; do case "$1" in $p) return 0 ;; esac; done
+  return 1
+}
+now() { date +%H:%M:%S; }
+say() { printf '[%s] %s\n' "$(now)" "$*" | tee -a "$PROGRESS"; }
+RUNNING="$T/running"; : > "$RUNNING"
+mark_run()  { printf '%s\n' "$1" >> "$RUNNING"; }
+mark_done() { grep -v -x "$1" "$RUNNING" > "$RUNNING.t" 2>/dev/null; mv "$RUNNING.t" "$RUNNING"; }
+
+n=0; fail=0
+printf '0 0\n' > "$T/counters"
+setcounts() { printf '%s %s\n' "$n" "$fail" > "$T/counters"; }
+heartbeat() {
+  while :; do
+    sleep 20
+    read -r n2 f2 < "$T/counters" 2>/dev/null || { n2=0; f2=0; }
+    say "... done=$n2 fail=$f2 running: $(tr '\n' ' ' < "$RUNNING")"
+  done
+}
+heartbeat & HB=$!
 
 run() {
   name="$1"; shift
-  n=$((n+1))
-  printf 'RUN %s\n' "$name"
-  if timeout 600 "$@" >"$T/$name.log" 2>&1; then
-    printf 'PASS %s\n' "$name"
+  want "$name" || return 0
+  n=$((n+1)); mark_run "$name"
+  t0=$(date +%s); setcounts
+  say "RUN  $name"
+  if timeout "${PRESQLITE_TIMEOUT:-900}" "$@" >"$T/$name.log" 2>&1; then
+    say "PASS $name ($(( $(date +%s) - t0 ))s)"
   else
-    printf 'FAIL %s\n' "$name"
-    tail -8 "$T/$name.log" | sed 's/^/  /'
+    rc=$?
+    say "FAIL $name ($(( $(date +%s) - t0 ))s, rc=$rc)"
+    tail -12 "$T/$name.log" | sed 's/^/  /' | tee -a "$PROGRESS"
     fail=$((fail+1))
   fi
+  setcounts
+  mark_done "$name"
 }
 
-# Parallel batch for the independent ncc_m* gates. The image/vector gates
-# stay sequential because they share qemu/image resources.
+# Parallel batch for the independent ncc_m* gates.  PIDs are tracked so the
+# heartbeat is never waited on.
 run_parallel() {
   jobs="${PRESQLITE_JOBS:-4}"
-  active=0
-  names=""
+  specs=""
   for spec in "$@"; do
-    name=${spec%%=*}; cmd=${spec#*=}
-    names="$names $name"
-    ( timeout 300 sh "$cmd" >"$T/$name.log" 2>&1; echo $? >"$T/$name.rc" ) &
-    active=$((active+1))
-    if [ "$active" -ge "$jobs" ]; then wait; active=0; fi
+    name=${spec%%=*}
+    want "$name" && specs="$specs $spec"
   done
-  wait
-  for name in $names; do
-    n=$((n+1))
+  [ -z "$specs" ] && return
+  pids=""; active=0
+  for spec in $specs; do
+    name=${spec%%=*}; cmd=${spec#*=}
+    n=$((n+1)); mark_run "$name"; setcounts
+    say "RUN  $name"
+    (
+      t0=$(date +%s)
+      timeout "${PRESQLITE_MTIMEOUT:-300}" sh "$cmd" >"$T/$name.log" 2>&1
+      echo $? > "$T/$name.rc"
+      echo $(( $(date +%s) - t0 )) > "$T/$name.dt"
+    ) &
+    pids="$pids $!"
+    active=$((active+1))
+    if [ "$active" -ge "$jobs" ]; then
+      for p in $pids; do wait "$p"; done
+      pids=""; active=0
+    fi
+  done
+  for p in $pids; do wait "$p"; done
+  for spec in $specs; do
+    name=${spec%%=*}
+    mark_done "$name"
     rc=$(cat "$T/$name.rc" 2>/dev/null || echo 1)
+    dt=$(cat "$T/$name.dt" 2>/dev/null || echo '?')
     if [ "$rc" -eq 0 ]; then
-      printf 'PASS %s\n' "$name"
+      say "PASS $name (${dt}s)"
     else
-      printf 'FAIL %s\n' "$name"
-      tail -8 "$T/$name.log" | sed 's/^/  /'
+      say "FAIL $name (${dt}s, rc=$rc)"
+      tail -12 "$T/$name.log" | sed 's/^/  /' | tee -a "$PROGRESS"
       fail=$((fail+1))
     fi
+    setcounts
   done
 }
 
+: > "$PROGRESS"
+say "presqlite start (only='${ONLY}', jobs=${PRESQLITE_JOBS:-4})"
 [ -x aarch64/android/nan_cli ] || (cd aarch64/android && make -s nan_cli)
+
 mspecs=""
 for m in $(seq 1 62); do
   [ -f "tools/ncc_m$m.sh" ] && mspecs="$mspecs ncc_m$m=tools/ncc_m$m.sh"
 done
-printf 'RUN ncc_m1..ncc_m62 (parallel=%s)\n' "${PRESQLITE_JOBS:-4}"
+say "batch ncc_m1..ncc_m62"
 run_parallel $mspecs
-for g in ncc_alloc ncc_heap ncc_aligned narena narena64 nten nan_simd nan_vec nan_vec_native nan_vec_avx2 nan_q4 nan_q4lm nan_bench xlate_x86 ncc_dp4b nmatmul nmat64 nmat64x64 ncc_headers ncc_ppexpr ncc_torture ncc_donut_exact; do
+
+for g in ncc_abi_sizes ncc_alloc ncc_heap ncc_aligned narena narena64 nten nan_simd \
+         nan_vec nan_vec_native nan_vec_avx2 nan_q4 nan_q4lm nan_bench xlate_x86 \
+         ncc_dp4b nmatmul nmat64 nmat64x64 ncc_headers ncc_ppexpr ncc_torture \
+         ncc_donut_exact; do
   [ -f "tools/$g.sh" ] && run "$g" sh "tools/$g.sh"
 done
 for g in ncc_macro_text ncc_include ncc_libm_exact ncc_iso_c ncc_ctests; do
@@ -65,34 +148,16 @@ done
 [ -f tools/py_m1.sh ] && run py_m1 sh tools/py_m1.sh
 [ -f tools/mkproof.sh ] && run mkproof sh tools/mkproof.sh src/tests/key_test.nas
 
-if [ -f tools/mkall.sh ]; then
+if [ -f tools/mkall.sh ] && want mkall; then
   run mkall sh tools/mkall.sh
-  [ -f tools/qgate.sh ] && run qgate sh tools/qgate.sh
-  [ -f tools/qgate_gui.sh ] && run qgate_gui sh tools/qgate_gui.sh
-  [ -f tools/xmemgate.sh ] && run xmemgate sh tools/xmemgate.sh
-  [ -f tools/qgate64.sh ] && run qgate64 sh tools/qgate64.sh
-  [ -f tools/qgate64core.sh ] && run qgate64core sh tools/qgate64core.sh
-  [ -f tools/qgate64block.sh ] && run qgate64block sh tools/qgate64block.sh
-  [ -f tools/qgate64alu.sh ] && run qgate64alu sh tools/qgate64alu.sh
-  [ -f tools/qgate64branch.sh ] && run qgate64branch sh tools/qgate64branch.sh
-  [ -f tools/qgate64mem.sh ] && run qgate64mem sh tools/qgate64mem.sh
-  [ -f tools/qgate64byte.sh ] && run qgate64byte sh tools/qgate64byte.sh
-  [ -f tools/qgate64prog.sh ] && run qgate64prog sh tools/qgate64prog.sh
-  [ -f tools/qgate64mul.sh ] && run qgate64mul sh tools/qgate64mul.sh
-  [ -f tools/qgate64div.sh ] && run qgate64div sh tools/qgate64div.sh
-  [ -f tools/qgate64fp.sh ] && run qgate64fp sh tools/qgate64fp.sh
-  [ -f tools/qgate64fpe.sh ] && run qgate64fpe sh tools/qgate64fpe.sh
-  [ -f tools/qgate64mem2.sh ] && run qgate64mem2 sh tools/qgate64mem2.sh
-  [ -f tools/qgate64blockops.sh ] && run qgate64blockops sh tools/qgate64blockops.sh
-  [ -f tools/qgate64trap.sh ] && run qgate64trap sh tools/qgate64trap.sh
-  [ -f tools/qgate64vec.sh ] && run qgate64vec sh tools/qgate64vec.sh
-  [ -f tools/qgate64vldst.sh ] && run qgate64vldst sh tools/qgate64vldst.sh
-  [ -f tools/qgate64vdp4b.sh ] && run qgate64vdp4b sh tools/qgate64vdp4b.sh
-  [ -f tools/qgate64vdp4b4.sh ] && run qgate64vdp4b4 sh tools/qgate64vdp4b4.sh
-  [ -f tools/qgate64callf.sh ] && run qgate64callf sh tools/qgate64callf.sh
-  [ -f tools/qgate64putc.sh ] && run qgate64putc sh tools/qgate64putc.sh
-  [ -f tools/qgate64call.sh ] && run qgate64call sh tools/qgate64call.sh
 fi
+for g in qgate qgate_gui xmemgate qgate64 qgate64core qgate64block qgate64alu \
+         qgate64branch qgate64mem qgate64byte qgate64prog qgate64mul qgate64div \
+         qgate64fp qgate64fpe qgate64mem2 qgate64blockops qgate64trap qgate64vec \
+         qgate64vldst qgate64vdp4b qgate64vdp4b4 qgate64call qgate64callf \
+         qgate64putc; do
+  [ -f "tools/$g.sh" ] && run "$g" sh "tools/$g.sh"
+done
 
-printf '\npresqlite_gate: %d gate(s), %d failure(s)\n' "$n" "$fail"
+say "presqlite done: $n gate(s), $fail failure(s)"
 [ "$fail" -eq 0 ]

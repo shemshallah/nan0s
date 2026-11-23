@@ -13,8 +13,12 @@ sh tools/gate_targeted.sh
 # explicit files
 sh tools/gate_targeted.sh src/lib/ncc.nas src/tests/foo.c
 
-# complete 96-gate battery
+# complete battery
 sh tools/gate_targeted.sh --full
+
+# selected aggregate gates (patterns are shell cases)
+sh tools/presqlite_gate.sh --only 'qgate64* ncc_abi_sizes'
+sh tools/presqlite_gate.sh --list
 
 # bypass/clear the cache
 NO_CACHE=1 sh tools/gate_targeted.sh src/lib/ncc.nas
@@ -22,7 +26,12 @@ rm -rf .gate-cache
 ```
 
 `JOBS` controls parallelism (default 4). `TIMEOUT`/`LONG_TIMEOUT` control the
-per-gate limits.
+per-gate limits.  `PRESQLITE_TIMEOUT` (default 900 s) and `PRESQLITE_MTIMEOUT`
+(default 300 s) bound aggregate gates.  The full aggregate can take many
+minutes; it prints `RUN`/`PASS`/`FAIL` with timestamps and a heartbeat, and
+appends the same lines to `build/gate-progress.log`, so watch it from another
+terminal with `tail -f build/gate-progress.log`.  A single gate that exceeds
+its timeout is reported as `FAIL`, not left hanging.
 
 ## Gate families
 
