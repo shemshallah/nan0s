@@ -11,6 +11,10 @@ async function main() {
   const scripts = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].filter(match => match[1].trim());
   assert.equal(scripts.length, 1, 'Expected a single inline browser-player script');
   const code = scripts[0][1];
+  // Phones must not scroll to a text field located below the guest framebuffer.
+  // Check that the IME input is viewport-pinned for touch/small-screen layouts.
+  assert.match(html, /@media\s*\(pointer:\s*coarse\)[\s\S]*?\.typebar\s*\{\s*position:\s*fixed;/,
+    'Touch layout must pin the keyboard input to the viewport');
 
   class Element {
     constructor() { this.listeners = {}; this.value = ''; this.disabled = true; this.className = ''; this.textContent = ''; }
@@ -25,7 +29,7 @@ async function main() {
       for (const handler of this.listeners[type] || []) handler(evt);
       return evt;
     }
-    focus() {}
+    focus(options) { this.lastFocusOptions = options; }
     querySelectorAll() { return []; }
   }
   const elements = Object.fromEntries(
@@ -61,6 +65,8 @@ async function main() {
   function clear() {
     elements['clear-type'].dispatch('click');
     assert.equal(input.value, '', 'Clear must reset only the phone input field');
+    assert.equal(input.lastFocusOptions && input.lastFocusOptions.preventScroll, true,
+      'Refocusing after Clear must never scroll the guest out of view');
     emulator.codes.length = 0;
   }
   function check(label, actual, expected) {
