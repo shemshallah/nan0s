@@ -30,6 +30,9 @@ jobs:
       - name: Check Android phone keyboard forwarding
         run: node tools/test_wasm_keyboard.cjs
 
+      - name: Guard n / b guest command routing and browser window ID
+        run: node tools/test_gui_commands.cjs
+
       - name: Install system-image build and boot-test dependencies
         run: |
           sudo apt-get update
