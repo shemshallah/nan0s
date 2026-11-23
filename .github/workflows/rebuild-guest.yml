@@ -15,12 +15,14 @@ permissions:
 
 concurrency:
   group: nan0s-guest-image-publisher
-  cancel-in-progress: false
+  # A new source revision supersedes an obsolete publishing run.
+  cancel-in-progress: true
 
 jobs:
   rebuild:
     name: Rebuild guest, test native boot, update published image
     runs-on: ubuntu-latest
+    timeout-minutes: 6
     steps:
       - name: Checkout main
         uses: actions/checkout@v4
@@ -28,10 +30,26 @@ jobs:
           ref: main
           persist-credentials: true
 
-      - name: Install assembly and full-system boot dependencies
+      - name: Install only missing image-build and QEMU test tools (bounded)
+        shell: bash
+        timeout-minutes: 3
         run: |
-          sudo apt-get update
-          sudo apt-get install -y gawk xxd qemu-system-x86 ffmpeg
+          set -euo pipefail
+          missing=()
+          for tool in gawk xxd qemu-system-i386 ffprobe; do
+            command -v "$tool" >/dev/null 2>&1 || missing+=("$tool")
+          done
+          if (("${#missing[@]}" == 0)); then
+            echo "Required tooling already present; skipping apt entirely."
+          else
+            echo "Missing tooling: ${missing[*]}"
+            export DEBIAN_FRONTEND=noninteractive
+            timeout 65s sudo apt-get -o Acquire::Retries=0               -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 update
+            timeout 105s sudo apt-get -o Dpkg::Use-Pty=0 install               --no-install-recommends -y gawk xxd qemu-system-x86 ffmpeg
+          fi
+          for tool in gawk xxd qemu-system-i386 ffprobe; do
+            command -v "$tool" >/dev/null || { echo "::error::Missing $tool"; exit 1; }
+          done
 
       - name: Rebuild GUI from source and regenerate full-system image
         shell: bash
