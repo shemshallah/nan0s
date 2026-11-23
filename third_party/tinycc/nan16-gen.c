@@ -227,8 +227,8 @@ ST_FUNC void gen_struct_copy(int size)
     a = vtop[0].r & VT_VALMASK;
     nan_op(0x06, d, d, 2);          /* byte address -> word index */
     nan_op(0x06, a, a, 2);
-    nan_movi32(1, (uint32_t)((size + 3) / 4));
-    nan_op(0x2D, d, a, 1);          /* BCOPY dst,src,cnt */
+    nan_movi32(11, (uint32_t)((size + 3) / 4));
+    nan_op(0x2D, d, a, 11);         /* BCOPY dst,src,cnt (r11 scratch) */
     vpop();
     vpop();
 }

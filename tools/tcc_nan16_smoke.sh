@@ -87,6 +87,11 @@ struct S { int a; int b; };
 int sum(struct S s){ return s.a + s.b; }
 int main(void){ struct S s; s.a = 40; s.b = 2; return sum(s); }
 EOC
+cat > "$T/sret.c" <<'EOC'
+struct S { int a; int b; };
+struct S make(void){ struct S s; s.a = 40; s.b = 2; return s; }
+int main(void){ struct S s = make(); return s.a + s.b; }
+EOC
 
 "$T/tcc_nan16" -c "$T/ret42.c" -o "$T/ret42.bin"
 "$T/tcc_nan16" -c "$T/call.c" -o "$T/call.bin"
@@ -106,12 +111,13 @@ EOC
 "$T/tcc_nan16" -c "$T/llg.c" -o "$T/llg.bin"
 "$T/tcc_nan16" -c "$T/llsh.c" -o "$T/llsh.bin"
 "$T/tcc_nan16" -c "$T/sbv.c" -o "$T/sbv.bin"
-for b in ret42 call loop global larray garray fact sw ptr str struct gstruct fnptr lladd llfact llg llsh sbv; do
+"$T/tcc_nan16" -c "$T/sret.c" -o "$T/sret.bin"
+for b in ret42 call loop global larray garray fact sw ptr str struct gstruct fnptr lladd llfact llg llsh sbv sret; do
   [ -s "$T/$b.bin" ] || { echo "tcc_nan16_smoke: FAIL (empty $b object)"; exit 1; }
 done
 
 
-for p in ret42 call loop global larray garray fact sw ptr str struct gstruct fnptr lladd llfact llg llsh sbv; do
+for p in ret42 call loop global larray garray fact sw ptr str struct gstruct fnptr lladd llfact llg llsh sbv sret; do
   "$CLI" --img "$T/$p.bin" --mem 16 --steps 4000 --serial --peek 0x100:1 \
       > "$T/$p.out" 2> "$T/$p.err" || true
   want=0000002A
@@ -128,4 +134,4 @@ for p in ret42 call loop global larray garray fact sw ptr str struct gstruct fnp
   fi
   grep -q 'rc=3' "$T/$p.err" || { echo "tcc_nan16_smoke: FAIL ($p did not halt)"; cat -v "$T/$p.err"; exit 1; }
 done
-echo "tcc_nan16_smoke: PASS (TCC emits NaN16: 19 programs incl. long long pairs and struct args)"
+echo "tcc_nan16_smoke: PASS (TCC emits NaN16: 20 programs incl. long long pairs, struct args and struct returns)"
