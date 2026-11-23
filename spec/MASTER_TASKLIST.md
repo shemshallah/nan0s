@@ -146,8 +146,12 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done and gated.
 - [x] NaN16 ABI contract (`nan16-abi.h`), host word encoder
       (`nan16-enc.c/.h`) and a runnable `MOVI/ST/HALT` smoke test
       (`tcc_nan16_enc`, raw words and `.nan` text).
-- [ ] `TCC_TARGET_NAN16`: `nan16-gen.c`, `nan16-link.c`, `nan16-asm.c`,
-      `nan16-tok.h` wired into `tcc.h`/`configure`.
+- [x] `TCC_TARGET_NAN16` builds (`nan16-gen.c`, `nan16-link.c`, `tcc.h`,
+      `libtcc.c`, `tccelf.c` hooks).  tcc0 compiles and runs 13 C programs
+      (`tcc_nan16_smoke`): returns, calls, loops, arrays, recursion,
+      switch, pointers, strings, structs.
+- [ ] Before tcc1: 64-bit `long long`/`double` values/args, function
+      pointers, struct-by-value, varargs, external libc/libtcc1, VFS.
 - [ ] NaN16 output: flat cartridge/executable writer, relocations, sections,
       entry point, symbol table.
 - [ ] ABI parity with ncc: args/returns, stack frames, varargs, structs,

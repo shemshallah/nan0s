@@ -5,9 +5,27 @@ Status: P0.7, started. TCC source is vendored at
 
 The ABI contract is in `third_party/tinycc/nan16-abi.h` and the host-side
 word encoder in `nan16-enc.c/.h`.  `tools/tcc_nan16_enc.sh` builds the
-encoder, emits `MOVI r1,42 ; ST r1,r0,0x100 ; HALT` as raw words and as
-`.nan` text, and executes both in `nan_cli` (stored payload 0x2A, halted).
-The TCC backend (`nan16-gen.c`, cartridge writer) is the next stage.
+encoder and executes raw-word and `.nan` programs in `nan_cli`.
+
+**tcc0 works.**  `third_party/tinycc/nan16-gen.c` and `nan16-link.c` implement
+the mandatory TCC generator/linker surface.  `tools/tcc_nan16_smoke.sh`
+builds TCC with `TCC_TARGET_NAN16`, compiles 13 C programs and runs each
+flat cartridge directly in `nan_cli`.  Passing:
+
+- `return 42`; `add(20,22)`; a `for` loop (sum 0..9 = 45)
+- local/global arrays; recursion (`fact(5)` = 120); `switch`
+- local pointers (`&x`, `*p`); string literals and `char` loads
+- local and global structs
+
+Coverage: byte-addressed C pointers (locals/params `SP*4+ci`/`FP*4+ci`,
+data `section_word*4+offset`), size-aware LDB/STB/LD/ST, stack arguments,
+callee-saved frame pointer, absolute jump/call relocations, `.rodata`,
+`.data.ro`, `.data`, `.bss`, `.rel.data`, and the 4-word entry prelude
+(`MOVI r14,0x8000; CALL main; ST r1,r0,0x100; HALT`).
+
+Open before tcc1: 64-bit `long long`/`double` values and arguments,
+function pointers (address-symbol duplicate resolution), struct passing by
+value/return, varargs, external libc/libtcc1, and the VFS.
 
 ## The milestone
 

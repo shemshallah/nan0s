@@ -84,6 +84,23 @@ ST_FUNC void relocate(TCCState *s1, ElfW_Rel *rel, int type,
     }
 }
 
+static int nan16_sym_index(TCCState *s1, const char *name)
+{
+    Section *st = s1->symtab;
+    int n, i, fallback = 0;
+    if (!st || !st->link) return 0;
+    n = st->data_offset / sizeof(ElfSym);
+    for (i = 1; i < n; i++) {
+        ElfSym *e = &((ElfSym *)st->data)[i];
+        if (e->st_name < st->link->data_offset
+            && !strcmp((char *)st->link->data + e->st_name, name)) {
+            if (e->st_shndx) return i;
+            if (!fallback) fallback = i;
+        }
+    }
+    return fallback;
+}
+
 static void nan16_write_word(FILE *f, uint64_t w)
 {
     unsigned char b[8];
@@ -152,7 +169,7 @@ int nan16_output_file(TCCState *s1, const char *filename)
 
     for (i = 0; i < nan_nrelocs; i++) {
         NanReloc *r = &nan_relocs[i];
-        int si = find_elf_sym(s1->symtab, r->name);
+        int si = nan16_sym_index(s1, r->name);
         ElfSym *es = si ? &((ElfSym *)s1->symtab->data)[si] : NULL;
         int value;
         if (!es) tcc_error("nan16: unresolved symbol '%s'", r->name);
@@ -166,7 +183,7 @@ int nan16_output_file(TCCState *s1, const char *filename)
 
     for (i = 0; i < nan_naddr_relocs; i++) {
         NanAddrReloc *r = &nan_addr_relocs[i];
-        int si = find_elf_sym(s1->symtab, r->name);
+        int si = nan16_sym_index(s1, r->name);
         ElfSym *es = si ? &((ElfSym *)s1->symtab->data)[si] : NULL;
         Section *sec;
         int addr;
