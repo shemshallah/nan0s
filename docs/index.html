@@ -110,6 +110,7 @@
     <span id="zoom-level" class="hint">100%</span>
     <button id="zoom-in" type="button" disabled aria-label="Zoom in guest screen">+</button>
     <button id="zoom-fit" type="button" disabled>Fit</button>
+    <span class="hint" id="image-fingerprint" aria-live="polite" title="SHA-256 of the exact guest image fetched by this browser">guest disk: loading…</span>
     <span class="hint">boots the complete guest (floppy + primary IDE) to the desktop with one terminal · <b>q</b> quits the GUI → museum menu (<b>1–8</b>, <b>ESC</b> back) · tap the keys below or the text bar to type</span>
   </div>
   <div class="typebar">
@@ -176,6 +177,7 @@
   var zoomInBtn = document.getElementById("zoom-in");
   var zoomFitBtn = document.getElementById("zoom-fit");
   var zoomLevelEl = document.getElementById("zoom-level");
+  var imageFingerprintEl = document.getElementById("image-fingerprint");
   var isTouchView = typeof window !== "undefined" && !!(window.matchMedia && window.matchMedia("(pointer: coarse), (max-width: 760px)").matches);
   var guestWidth = 1024;
   var zoom = isTouchView ? 1.5 : 1;
@@ -240,6 +242,23 @@
           if (bytes.length < 1474560 || bytes[510] !== 0x55 || bytes[511] !== 0xAA) {
             throw new Error(url + ": invalid or incomplete NaN/0S boot image");
           }
+          // Fingerprint the exact disk bytes *before* v86 can modify the buffer.
+          // This makes a stale cache or wrong image identifiable on a phone.
+          if (typeof crypto !== "undefined" && crypto.subtle && crypto.subtle.digest) {
+            imageFingerprintEl.textContent = "guest disk: verifying SHA-256…";
+            return crypto.subtle.digest("SHA-256", data).then(function (digest) {
+              var hex = Array.from(new Uint8Array(digest)).map(function (b) {
+                return b.toString(16).padStart(2, "0");
+              }).join("");
+              imageFingerprintEl.textContent = "guest SHA-256: " + hex.slice(0, 16);
+              imageFingerprintEl.title = "Full NaN/0S image SHA-256: " + hex;
+              return data;
+            }, function () {
+              imageFingerprintEl.textContent = "guest disk: " + bytes.length + " bytes (SHA-256 unavailable)";
+              return data;
+            });
+          }
+          imageFingerprintEl.textContent = "guest disk: " + bytes.length + " bytes (SHA-256 unavailable)";
           return data;
         });
       }).catch(attempt);
