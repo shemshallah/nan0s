@@ -77,6 +77,16 @@ int nan16_ldb(Nan16Prog *p, int d, int a, uint16_t imm) { return EMIT(0x2A, d, a
 int nan16_stb(Nan16Prog *p, int d, int a, uint16_t imm) { return EMIT(0x2B, d, a, imm); }
 int nan16_halt(Nan16Prog *p)                       { return EMIT(0xFF, 0, 0, 0); }
 
+int nan16_patch_imm16(Nan16Prog *p, size_t index, uint16_t value)
+{
+    uint32_t payload;
+    if (index >= p->n) return -1;
+    payload = nan16_payload(p->w[index]);
+    payload = (payload & 0xFFFF0000u) | value;
+    p->w[index] = nan16_mkword(payload, 15);
+    return 0;
+}
+
 int nan16_write_words(FILE *f, const Nan16Prog *p)
 {
     size_t i;

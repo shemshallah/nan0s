@@ -62,6 +62,9 @@ int nan16_ldb(Nan16Prog *p, int d, int a, uint16_t imm); /* 0x2A */
 int nan16_stb(Nan16Prog *p, int d, int a, uint16_t imm); /* 0x2B */
 int nan16_halt(Nan16Prog *p);                            /* 0xFF */
 
+/* Relocation-style patch of a 16-bit immediate/entry field. */
+int nan16_patch_imm16(Nan16Prog *p, size_t index, uint16_t value);
+
 /* Writers. */
 int nan16_write_words(FILE *f, const Nan16Prog *p);
 int nan16_write_text(FILE *f, const Nan16Prog *p);

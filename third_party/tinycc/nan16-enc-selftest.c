@@ -14,8 +14,8 @@ int main(int argc, char **argv)
     Nan16Prog p;
     FILE *f;
 
-    if (argc != 5) {
-        fprintf(stderr, "usage: %s words.bin prog.nan loop.bin loop.nan\n", argv[0]);
+    if (argc != 7) {
+        fprintf(stderr, "usage: %s words.bin prog.nan loop.bin loop.nan call.bin call.nan\n", argv[0]);
         return 2;
     }
     if (nan16_init(&p, 16)) return 1;
@@ -63,6 +63,26 @@ int main(int argc, char **argv)
     if (!f || nan16_write_text(f, &p)) return 1;
     fclose(f);
     printf("NAN16 ENC OK loop=%u\n", (unsigned)p.n);
+    nan16_free(&p);
+
+    /* CALL/RET program:
+       CALL 3 ; ST r1,r0,0x100 ; HALT ; MOVI r1,7 ; RET  */
+    if (nan16_init(&p, 16)) return 1;
+    if (nan16_call(&p, 3)
+        || nan16_st(&p, 1, 0, 0x100)
+        || nan16_halt(&p)
+        || nan16_movi(&p, 1, 7)
+        || nan16_ret(&p))
+        return 1;
+    assert(p.n == 5);
+    assert(nan16_payload(p.w[0]) == 0x0B000003);
+    f = fopen(argv[5], "wb");
+    if (!f || nan16_write_words(f, &p)) return 1;
+    fclose(f);
+    f = fopen(argv[6], "w");
+    if (!f || nan16_write_text(f, &p)) return 1;
+    fclose(f);
+    printf("NAN16 ENC OK call=%u\n", (unsigned)p.n);
     nan16_free(&p);
     return 0;
 }
