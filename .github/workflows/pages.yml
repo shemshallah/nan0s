@@ -16,11 +16,11 @@ permissions:
   contents: read
 
 concurrency:
-  group: github-pages
+  group: nan0s-browser-verify
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  verify:
     name: Build and boot-test full NaN/0S
     runs-on: ubuntu-latest
     steps:
