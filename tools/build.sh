@@ -4,6 +4,10 @@ set -e
 cd "$(dirname "$0")/.."
 sh tools/mkbase.sh
 awk -f tools/nmk.awk -v CMD=emit src/museum/museum.nas > src/nan/museum.nan
+# Reassemble the actual GUI source before packing it into the boot image.
+# Previously builds reused a stale checked-in gui_cart.nan, so fixing a .nas
+# terminal/browser bug did not fix the publicly deployed full guest.
+awk -f tools/nmk.awk -v CMD=emit src/exhibits/gui_cart.nas > src/nan/gui_cart.nan
 sh tools/mkall.sh
 # default NaNFS volume (raw ATA volume; guest reads it over ATA PIO LBA28 with nanfs_read):
 # third kind of disk, NOT one of the two bootable images in the image rule
