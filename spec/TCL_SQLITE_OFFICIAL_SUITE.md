@@ -64,7 +64,7 @@ Status legend: **done**, **partial**, **planned**.
 
 | # | Component | Current | Needed for Tcl/SQLite |
 | - | --- | --- | --- |
-| S1.1 | Trap/SVC gate, trap frame, kernel entry | **frozen v0.1** (`spec/KERNEL_ABI.md`); C oracle + x86_64 ABI-mechanics slice gated; full guest loader pending | syscalls, faults, preemption |
+| S1.1 | Trap/SVC gate, trap frame, kernel entry | **frozen v0.1** (`spec/KERNEL_ABI.md`); C oracle + x86_64 ABI slice + flat-cartridge acceptance gated; filesystem/sealed loader pending | syscalls, faults, preemption |
 | S1.2 | Timer/PIT, IRQ0, pending bit | instruction-timer vector in C oracle + x86_64 slice; hardware PIT/IRQ0 pending | preemptive threads, `after`/timeouts |
 | S1.3 | Region table + per-access checks | software checks in C oracle + x86_64 slice; per-process tables pending | process isolation, fork/exec |
 | S1.4 | Atomics/fences | opcodes partly present | mutexes, thread-safe SQLite |
@@ -113,8 +113,9 @@ Status legend: **done**, **partial**, **planned**.
 - [~] Bring the x86_64 S1 to the same op/feature baseline as the C oracle
       (ports, timer, trap frames, region checks, device windows) and make
       `qgate_x86_64` the acceptance path; the C core only cross-checks.
-      Landed: `src/native64/s1_kabi.c` ABI-mechanics slice + `tools/kabi64_gate.sh`.
-      Missing: full op set, guest word image loader, devices.
+      Landed: `src/native64/s1_kabi.c` ABI-mechanics slice + flat guest
+      cartridge loader + `tools/kabi64_gate.sh` / `tools/s1_guest_gate.sh`.
+      Missing: full op set, sealed/filesystem loader, devices.
 - [x] Resolve the `0x39` opcode conflict: keep far `CALL` and assign a new
       SVC/trap opcode. Frozen: 0x4E SVC, 0x4F SVCRET, 0x4D INL; see
       `spec/KERNEL_ABI.md`.

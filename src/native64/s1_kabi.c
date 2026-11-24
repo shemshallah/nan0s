@@ -13,8 +13,17 @@
 #include <stdint.h>
 #include <stddef.h>
 
+#ifndef S1_GUEST_MEM
+#define S1_GUEST_MEM 0x10000u
+#endif
+#ifndef S1_GUEST_STEPS
+#define S1_GUEST_STEPS 20000000u
+#endif
+#ifndef S1_GUEST_STACK
+#define S1_GUEST_STACK (S1_GUEST_MEM - (S1_GUEST_MEM / 8u))
+#endif
 #define MEM_BASE   0x200000ul
-#define MEM_WORDS  0x10000u
+#define MEM_WORDS  S1_GUEST_MEM
 #define MEM_MASK   (MEM_WORDS - 1u)
 #define UNSET      0xFFFFFFFFu
 #define NAN_HALTED 3
@@ -52,17 +61,38 @@ static void put_hex32(uint32_t x) {
   serial_puts("0x");
   for (int i = 28; i >= 0; i -= 4) serial_putc(hx[(x >> i) & 15]);
 }
+#ifndef S1_GUEST
 static void put_dec(uint32_t x) {
   char b[12]; int n = 0;
   if (!x) { serial_putc('0'); return; }
   while (x) { b[n++] = (char)('0' + x % 10u); x /= 10u; }
   while (n) serial_putc(b[--n]);
 }
+#endif
+#ifdef S1_GUEST
+/* QEMU debug console (port 0xE9): machine status without polluting COM1,
+ * so the guest transcript can be compared byte-for-byte with the C oracle. */
+static void dbg_putc(char c) { outb(0xE9, (uint8_t)c); }
+static void dbg_puts(const char *s) { while (*s) dbg_putc(*s++); }
+static void dbg_dec(uint32_t x) {
+  char b[12]; int n = 0;
+  if (!x) { dbg_putc('0'); return; }
+  while (x) { b[n++] = (char)('0' + x % 10u); x /= 10u; }
+  while (n) dbg_putc(b[--n]);
+}
+static void dbg_hex32(uint32_t x) {
+  static const char hx[] = "0123456789ABCDEF";
+  dbg_puts("0x");
+  for (int i = 28; i >= 0; i -= 4) dbg_putc(hx[(x >> i) & 15]);
+}
+#endif
 
 /* ---- NaN16 word helpers ---- */
 static const uint16_t HEADS[4] = {0x7FF1, 0xFFF1, 0x7FF8, 0xFFF8};
 static uint32_t hcls(uint32_t h) { return ((h >> 2) & 2u) | (h >> 15); }
 static int hvalid(uint32_t h) { return (h & 0x7FF0u) == 0x7FF0u && ((h & 15u) == 1u || (h & 15u) == 8u); }
+static uint32_t w_near(uint64_t w) { return (uint32_t)(w >> 48); }
+static uint32_t w_far(uint64_t w) { return (uint32_t)(((w & 0xFFu) << 8) | ((w >> 8) & 0xFFu)); }
 static uint64_t mkword(uint32_t payload, int n) {
   uint32_t far = HEADS[n & 3], near = HEADS[(n >> 2) & 3];
   return (uint64_t)(far >> 8) | ((uint64_t)(far & 0xFF) << 8) |
@@ -227,8 +257,7 @@ static uint32_t s1_run(uint32_t budget) {
     }
     if (!region_range(at, 1, PROT_X)) S1_VECTOR(CAUSE_FAULT, at, at);
     uint64_t w = MEM[at & MEM_MASK];
-    uint32_t nh = (uint32_t)(w >> 48);
-    uint32_t fh = (uint32_t)(((w & 0xFFu) << 8) | ((w >> 8) & 0xFFu));
+    uint32_t nh = w_near(w), fh = w_far(w);
     if (!hvalid(nh) || !hvalid(fh)) {
       S1_GUEST_FAULT(at, at);
       badgate(pc + 1); s.pc = pc; return NAN_HALTED;
@@ -269,11 +298,32 @@ static uint32_t s1_run(uint32_t budget) {
     case 0x0B: s.r[15] = pc; pc = imm; break;
     case 0x0C: pc = s.r[15]; break;
     case 0x0D: pc = A; break;
-    case 0x0F: break;
+    case 0x0F: case 0x1B: case 0x2F: break;
     case 0x14: { uint32_t ad = A + imm;
       if (!region_range(ad, 1, PROT_R | PROT_W)) S1_VECTOR(CAUSE_FAULT, at, ad);
       uint64_t q = MEM[ad & MEM_MASK];
       MEM[ad & MEM_MASK] = __builtin_bswap64(q); break; }
+    case 0x15: serial_putc((char)(s.r[d] & 0xFFu)); break;
+    case 0x16: if (!region_range(A, 1, PROT_W)) S1_VECTOR(CAUSE_FAULT, at, A);
+      MEM[A & MEM_MASK] = mkword(s.r[d], (int)(B & 15u)); break;
+    case 0x17: { uint32_t ad = A + imm;
+      if (!region_range(ad, 1, PROT_R)) S1_VECTOR(CAUSE_FAULT, at, ad);
+      uint64_t q = MEM[ad & MEM_MASK];
+      s.r[d] = (hvalid(w_near(q)) && hvalid(w_far(q)))
+             ? ((hcls(w_near(q)) << 2) | hcls(w_far(q))) : 0xFFFFFFFFu; break; }
+    case 0x20: { uint32_t res = A * B; s.r[d] = res; SETK(res == 0, 0); break; }
+    case 0x21: { uint32_t res = (uint32_t)(((int64_t)(int32_t)A * (int32_t)B) >> 32);
+      s.r[d] = res; SETK(res == 0, 0); break; }
+    case 0x22: { uint32_t res = (uint32_t)(((uint64_t)A * B) >> 32);
+      s.r[d] = res; SETK(res == 0, 0); break; }
+    case 0x23: case 0x24: case 0x25: case 0x26: {
+      uint32_t res;
+      if (B == 0) { res = (op == 0x23 || op == 0x25) ? 0 : A; s.r[d] = res; s.k = 3; break; }
+      if (op == 0x23) res = (B == 0xFFFFFFFFu) ? 0u - A : (uint32_t)((int32_t)A / (int32_t)B);
+      else if (op == 0x24) res = (B == 0xFFFFFFFFu) ? 0 : (uint32_t)((int32_t)A % (int32_t)B);
+      else if (op == 0x25) res = A / B; else res = A % B;
+      s.r[d] = res; SETK(res == 0, 0); break; }
+    case 0x2C: s.r[15] = pc; pc = A; break;
     case 0x29: { uint32_t s2 = (uint32_t)(int32_t)(int16_t)imm;
       uint64_t sum = (uint64_t)A + s2; s.r[d] = (uint32_t)sum;
       SETK((uint32_t)sum == 0, sum >> 32); break; }
@@ -332,7 +382,8 @@ static uint32_t s1_run(uint32_t budget) {
   return 0;
 }
 
-/* ---- tests ---- */
+#ifndef S1_GUEST
+/* ---- KABI self-tests (oracle/mechanics build) ---- */
 static uint32_t checks, fails, pw;
 #define ENTRY  0x1000u
 #define FRAME  0x2000u
@@ -644,3 +695,45 @@ void s1_main(void) {
   }
   for (;;) __asm__ volatile("hlt");
 }
+
+#else /* S1_GUEST: run a flat cartridge placed at guest word 0. */
+extern const uint8_t s1_guest_bin[];
+extern const uint8_t s1_guest_bin_end[];
+
+static uint32_t guest_load_image(void) {
+  uintptr_t bytes = (uintptr_t)(s1_guest_bin_end - s1_guest_bin);
+  if (!bytes || (bytes % 8u) || bytes / 8u > MEM_WORDS) return 0;
+  uint32_t words = (uint32_t)(bytes / 8u);
+  for (uint32_t i = 0; i < words; i++) {
+    uint64_t w = 0;
+    for (int b = 0; b < 8; b++)
+      w |= (uint64_t)s1_guest_bin[i * 8u + (uint32_t)b] << (8 * b);
+    MEM[i] = w;
+  }
+  return words;
+}
+
+void s1_main(void) {
+  serial_init();
+  s1_reset();
+  uint32_t words = guest_load_image();
+  if (!words) {
+    dbg_puts("S1GUEST LOAD FAIL\n");
+    for (;;) __asm__ volatile("hlt");
+  }
+  /* Loader contract: flat image at word 0; r0=0, r13=1, r14=stack top,
+     PC=0, k=0.  The image owns words 0..words-1; the stack grows up from
+     S1_GUEST_STACK (default mem_words - mem_words/8). */
+  s.r[0] = 0;
+  s.r[13] = 1;
+  s.r[14] = S1_GUEST_STACK;
+  s.pc = 0;
+  s.k = 0;
+  dbg_puts("S1GUEST LOAD "); dbg_dec(words); dbg_puts(" WORDS\n");
+  uint32_t rc = s1_run(S1_GUEST_STEPS);
+  dbg_puts("S1GUEST HALT rc="); dbg_dec(rc);
+  dbg_puts(" r1="); dbg_hex32(s.r[1]);
+  dbg_puts(" pc="); dbg_hex32(s.pc); dbg_putc('\n');
+  for (;;) __asm__ volatile("hlt");
+}
+#endif

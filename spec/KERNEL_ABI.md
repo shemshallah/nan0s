@@ -216,11 +216,39 @@ primary target:
   default (`KABI64_MEM` override), and explicit page-table/stack overlap
   checks on `__bss_end`.
 
-The slice is **not** the full NaN16 core and not a guest cartridge loader:
-it runs compiled-in ABI tests. It has no FP, vector, display, ATA, loader,
-scheduler, Tcl or SQLite. The next x86_64 step is a guest word image loader
-(sealed cartridge -> word memory) plus the complete op table; only then can
-the tcc/SQLite path be claimed on x86_64.
+The same `s1_kabi.c` also has a `-DS1_GUEST` build that loads and runs a
+flat NaN16 cartridge (see 10.1). It is still **not** full op/device parity:
+it has no FP/vector/display/ATA/CPUID/RDTSC/KEY/TICK, no filesystem loader,
+no seal verification, and no scheduler. Tcl/SQLite cannot be claimed yet.
+
+### 10.1 Flat guest cartridge contract (this S1 slice)
+
+A cartridge is a headerless sequence of 8-byte guest words:
+`[far head BE][payload LE32][near head LE]`. There is no `.nan` text parser
+in the product image; the gate converts with nmk before linking.
+
+- `tools/s1_guest_gate.sh` assembles with `tools/nmk.awk`, converts the
+  words, and links the payload into S1 `.rodata`; the loader copies it to
+  guest word 0 at runtime. The embedded image is bounded by the 64 KiB boot
+  fixture and by `S1_GUEST_MEM` (guest word count, default `0x10000`).
+- Reset state: `r0=0`, `r13=1`, `r14=S1_GUEST_STACK` (default
+  `mem_words - mem_words/8`), `r15=0`, other registers 0, `pc=0`, `k=0`.
+- Byte addressing is `byte = word_index*4 + lane`, identical to the C core
+  `LDB`/`STB` (and `nan_cli`). `LD`/`ST` use word indices.
+- `HALT` stops the interpreter with the defined status `NAN_HALTED` (3).
+  The guest-visible terminal is COM1/PUTC only; machine status is written to
+  QEMU debug console 0xE9 (`S1GUEST LOAD n WORDS`, `S1GUEST HALT rc=3 ...`)
+  so COM1 can be compared byte-for-byte with the C oracle.
+- Overrides: `S1_GUEST_MEM` (words), `S1_GUEST_STEPS`, `S1_GUEST_STACK`,
+  `QEMU` (binary), `QEMU_MEM` (MiB).
+- Op coverage in this build: BOOL, MOVI/MOVHI/LA, ADD/SUB/ADDI, SHL/SHR/SAR,
+  CMP/CMPS, MUL/MULH/MULHU, DIV/MOD/DIVU/MODU, LD/ST/LDB/STB/LDN/STW,
+  BSWAPM, JMP/JMPF/JMPR/CALL/CALLF/CALLR/RET, BCOPY/BFILL, PUTC, NOP, HALT,
+  OUTL/INL, SVC/SVCRET and the trap/region ABI above.
+- Missing for full parity: FP 0x30-0x37/0x46-0x48, vector 0x50-0x5F,
+  display/keyboard/timer ops 0x10-0x13/0x18-0x1B, CPUID/RDTSC 0x44/0x45,
+  FBCOPY/FBFILL 0x3C/0x3D, and all devices/storage. The real NFS2 RAM test
+  runs today; no instruction is missing for it.
 
 Exact port points for the full `kan64` port:
 - `x86/native/kan16.xa`: `loop:` (fetch/gate/predication), `tbl:` (opcode
@@ -242,3 +270,6 @@ unaffected by this ABI.
 - `tools/kabi64_gate.sh` - exact x86_64 COM1 transcript.
 - `tools/kabi_asm_gate.sh` - `INL`/`SVC`/`SVCRET` nmk emit, exact words,
   `CMD=check` round-trip and the NaN disassembler table.
+- `tools/s1_guest_gate.sh` - flat-cartridge acceptance: focused coverage
+  cartridge + real `src/tests/nfs2_test.nas`, x86_64 QEMU COM1 exactly equal
+  to the C oracle; debug console reports loader word count and HALT status.
