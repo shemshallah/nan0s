@@ -8,7 +8,7 @@ The NaN-native debug system. Design and rationale: `spec/NANDBG.md`.
 |---|---|
 | `ndbg.nas` | first proof: 16 diagnostic types, records, subset step core, breakpoint, gate/bad-op records |
 | `core.nas` | reusable full `0x00–0x5F` step core: typed traps, shadow call stack, non-blocking KEY, DP4B, vectors, scalar undo hooks |
-| `n16dbg.nas` | serial monitor: step, run, breakpoint, goto, watch, history, stack, types, registers, disassembly, dump |
+| `n16dbg.nas` | serial monitor: step, run, breakpoint, goto, watch, history, stack, types, registers, disassembly, dump, NDR |
 | `undo_stub.nas` | no-op recording hooks for standalone core builds |
 | `ndr.nas` | NDR w4-w6 operands and FNV-1a/32 seal in w7 |
 | `ndr_stub.nas` | no-op NDR completion for tests that inspect only w0-w3 |
@@ -77,7 +77,9 @@ PC or a chosen address, the captured 80x25 cart text buffer, and the captured
 memory word, and the PC; `setw` and `setc` write a word and/or class nibble.
 `undo [n]` rewinds one or `n` recorded scalar steps,
 including the guest words they wrote. `redo [n]` restores the saved post-step
-states and write values; new steps and edits clear the redo ring. `checkpoint`
+states and write values; new steps and edits clear the redo ring. The serial
+monitor's `n` command prints the eight-word NDR (header, site, payload, class,
+a/b/d, FNV seal). `checkpoint`
 saves registers, PC, condition, call depth, the 64K cart arena, and the captured
 screen/serial window; `restore` reloads them and clears the time-travel
 history.
