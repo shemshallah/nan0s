@@ -2,7 +2,8 @@
  * tclNan16File.c -- native filesystem/path layer over the NaN16 VFS.
  *
  * The VFS is a flat namespace with implicit directories derived from pack
- * prefixes.  There are no symlinks, hard links or passwd entries.
+ * prefixes.  Symbolic links are MemFile targets in the libc VFS; hard links
+ * and passwd entries are not supported.
  */
 #include "tclInt.h"
 #include "tclFileSystem.h"
@@ -353,9 +354,44 @@ TclpObjLink(
     Tcl_Obj *toPtr,
     int linkAction)
 {
-    (void)pathPtr; (void)toPtr; (void)linkAction;
-    errno = EINVAL;
-    return NULL;
+    const char *src = (const char *)Tcl_FSGetNativePath(pathPtr);
+
+    if (src == NULL) {
+	return NULL;
+    }
+    if (toPtr != NULL) {
+	const char *target = (const char *)Tcl_FSGetNativePath(toPtr);
+	if (target == NULL) {
+	    return NULL;
+	}
+	if (access(src, F_OK) != -1) {
+	    errno = EEXIST;
+	    return NULL;
+	}
+	if (access(target, F_OK) == -1) {
+	    errno = ENOENT;
+	    return NULL;
+	}
+	if (linkAction & TCL_CREATE_SYMBOLIC_LINK) {
+	    if (symlink(target, src) != 0) {
+		return NULL;
+	    }
+	    return toPtr;
+	}
+	errno = EPERM;              /* hard links are not supported */
+	return NULL;
+    } else {
+	char link[1024];
+	ssize_t length = readlink(src, link, sizeof link);
+	Tcl_Obj *linkPtr;
+
+	if (length < 0) {
+	    return NULL;
+	}
+	linkPtr = Tcl_NewStringObj(link, (Tcl_Size)length);
+	Tcl_IncrRefCount(linkPtr);
+	return linkPtr;
+    }
 }
 
 int
