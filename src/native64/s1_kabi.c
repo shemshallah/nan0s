@@ -22,13 +22,17 @@
 #ifndef S1_GUEST_STACK
 #define S1_GUEST_STACK (S1_GUEST_MEM - (S1_GUEST_MEM / 8u))
 #endif
+#ifndef S1_GUEST_ZERO_WORDS
+#define S1_GUEST_ZERO_WORDS S1_GUEST_MEM
+#endif
 #define MEM_BASE   0x200000ul
 #define MEM_WORDS  S1_GUEST_MEM
 #define MEM_MASK   (MEM_WORDS - 1u)
 #define UNSET      0xFFFFFFFFu
 #define NAN_HALTED 3
 
-#define MEM ((volatile uint64_t *)(uintptr_t)MEM_BASE)
+/* Single-threaded S1: ordinary accesses; no DMA/IRQ writer observes these. */
+#define MEM ((uint64_t *)(uintptr_t)MEM_BASE)
 
 /* ---- freestanding libc surface the compiler may reference ---- */
 void *memset(void *d, int c, size_t n) {
@@ -46,6 +50,11 @@ void *memcpy(void *d, const void *s, size_t n) {
 static inline void outb(uint16_t port, uint8_t v) {
   __asm__ volatile("outb %0,%1" : : "a"(v), "Nd"(port));
 }
+#ifdef S1_GUEST
+static inline void outl(uint16_t port, uint32_t v) {
+  __asm__ volatile("outl %0,%1" : : "a"(v), "Nd"(port));
+}
+#endif
 static void serial_init(void) {
   outb(0x3F9, 0x00); outb(0x3FB, 0x80); outb(0x3F8, 0x01);
   outb(0x3F9, 0x00); outb(0x3FB, 0x03); outb(0x3FA, 0xC7); outb(0x3FC, 0x0B);
@@ -102,7 +111,8 @@ static uint32_t word_payload(uint32_t i) { return (uint32_t)(MEM[i & MEM_MASK] >
 
 /* ---- S1 state ---- */
 typedef struct {
-  uint32_t r[16], pc, k, halted, steps;
+  uint32_t r[16], pc, k, halted;
+  uint64_t steps;
   uint32_t kentry, kframe, ktimer, ktimer_left, kstack, kregions, ktcb;
   uint32_t kin, ktimer_pending, ktrap_pending;
 } S1;
@@ -114,7 +124,7 @@ enum { TF_PC = 16, TF_K = 17, TF_ADDRH = 18, TF_CAUSE = 19,
        TF_IMM = 20, TF_RET = 21, TF_SP = 22, TF_WORDS = 24 };
 
 static void s1_reset(void) {
-  for (uint32_t i = 0; i < MEM_WORDS; i++) MEM[i] = 0;
+  for (uint32_t i = 0; i < S1_GUEST_ZERO_WORDS; i++) MEM[i] = 0;
   for (int i = 0; i < 16; i++) s.r[i] = 0;
   s.pc = 0; s.k = 0; s.halted = 0; s.steps = 0;
   s.kentry = s.kframe = s.kstack = s.kregions = s.ktcb = UNSET;
@@ -235,6 +245,23 @@ static uint32_t port_in(uint16_t port) {
   }
 }
 
+#ifdef S1_GUEST
+/* Guest time/steps control block (guest BYTE addresses):
+   0x03EFF010 ms, +4 steps low, +8 steps high.  The C core publishes the same
+   block, so tcc libc time/nanosleep work unchanged. */
+static void guest_write_u32(uint32_t byte_addr, uint32_t v) {
+  uint32_t wi = byte_addr >> 2;
+  if (wi >= MEM_WORDS) return;          /* e.g. --mem 64: no time block */
+  MEM[wi] = mkword(v, 10);
+}
+static void guest_publish_time(void) {
+  uint32_t ms = (uint32_t)(s.steps / 1000u);
+  guest_write_u32(0x03EFF010u, ms);
+  guest_write_u32(0x03EFF014u, (uint32_t)s.steps);
+  guest_write_u32(0x03EFF018u, (uint32_t)(s.steps >> 32));
+}
+#endif
+
 #define SETK(z, l) (s.k = 2u * (uint32_t)(z) + (uint32_t)(l))
 /* `goto restart`, not `continue`: continue would only leave do{}while(0)
  * and fall through into the faulting access. */
@@ -250,12 +277,16 @@ static uint32_t s1_run(uint32_t budget) {
   uint32_t pc = s.pc, done = 0;
   while (done < budget) {
     done++; s.steps++;
+#ifdef S1_GUEST
+    if ((s.steps & 1023u) == 0) guest_publish_time();
+#endif
     uint32_t at = pc;
     if (s.kregions != UNSET && !s.kin &&
         (uint64_t)s.kregions + 4u > MEM_WORDS) {
       trapk(at); s.pc = at; s.halted = 1; return NAN_HALTED;
     }
-    if (!region_range(at, 1, PROT_X)) S1_VECTOR(CAUSE_FAULT, at, at);
+    if (s.kregions != UNSET && !s.kin &&
+        !region_range(at, 1, PROT_X)) S1_VECTOR(CAUSE_FAULT, at, at);
     uint64_t w = MEM[at & MEM_MASK];
     uint32_t nh = w_near(w), fh = w_far(w);
     if (!hvalid(nh) || !hvalid(fh)) {
@@ -289,10 +320,12 @@ static uint32_t s1_run(uint32_t budget) {
     case 0x07: SETK(A == B, A < B); break;
     case 0x28: SETK(A == B, (int32_t)A < (int32_t)B); break;
     case 0x08: { uint32_t ad = A + imm;
-      if (!region_range(ad, 1, PROT_R)) S1_VECTOR(CAUSE_FAULT, at, ad);
+      if (s.kregions != UNSET && !s.kin &&
+          !region_range(ad, 1, PROT_R)) S1_VECTOR(CAUSE_FAULT, at, ad);
       s.r[d] = (uint32_t)(MEM[ad & MEM_MASK] >> 16); break; }
     case 0x09: { uint32_t ad = A + imm;
-      if (!region_range(ad, 1, PROT_W)) S1_VECTOR(CAUSE_FAULT, at, ad);
+      if (s.kregions != UNSET && !s.kin &&
+          !region_range(ad, 1, PROT_W)) S1_VECTOR(CAUSE_FAULT, at, ad);
       MEM[ad & MEM_MASK] = mkword(s.r[d], 10); break; }
     case 0x0A: pc = imm; break;
     case 0x0B: s.r[15] = pc; pc = imm; break;
@@ -300,14 +333,17 @@ static uint32_t s1_run(uint32_t budget) {
     case 0x0D: pc = A; break;
     case 0x0F: case 0x1B: case 0x2F: break;
     case 0x14: { uint32_t ad = A + imm;
-      if (!region_range(ad, 1, PROT_R | PROT_W)) S1_VECTOR(CAUSE_FAULT, at, ad);
+      if (s.kregions != UNSET && !s.kin &&
+          !region_range(ad, 1, PROT_R | PROT_W)) S1_VECTOR(CAUSE_FAULT, at, ad);
       uint64_t q = MEM[ad & MEM_MASK];
       MEM[ad & MEM_MASK] = __builtin_bswap64(q); break; }
     case 0x15: serial_putc((char)(s.r[d] & 0xFFu)); break;
-    case 0x16: if (!region_range(A, 1, PROT_W)) S1_VECTOR(CAUSE_FAULT, at, A);
+    case 0x16: if (s.kregions != UNSET && !s.kin &&
+                   !region_range(A, 1, PROT_W)) S1_VECTOR(CAUSE_FAULT, at, A);
       MEM[A & MEM_MASK] = mkword(s.r[d], (int)(B & 15u)); break;
     case 0x17: { uint32_t ad = A + imm;
-      if (!region_range(ad, 1, PROT_R)) S1_VECTOR(CAUSE_FAULT, at, ad);
+      if (s.kregions != UNSET && !s.kin &&
+          !region_range(ad, 1, PROT_R)) S1_VECTOR(CAUSE_FAULT, at, ad);
       uint64_t q = MEM[ad & MEM_MASK];
       s.r[d] = (hvalid(w_near(q)) && hvalid(w_far(q)))
              ? ((hcls(w_near(q)) << 2) | hcls(w_far(q))) : 0xFFFFFFFFu; break; }
@@ -328,16 +364,20 @@ static uint32_t s1_run(uint32_t budget) {
       uint64_t sum = (uint64_t)A + s2; s.r[d] = (uint32_t)sum;
       SETK((uint32_t)sum == 0, sum >> 32); break; }
     case 0x2A: { uint32_t ad = A + imm;
-      if (!byte_range(ad, 1, PROT_R)) S1_VECTOR(CAUSE_FAULT, at, ad);
+      if (s.kregions != UNSET && !s.kin &&
+          !byte_range(ad, 1, PROT_R)) S1_VECTOR(CAUSE_FAULT, at, ad);
       s.r[d] = ((uint32_t)(MEM[(ad >> 2) & MEM_MASK] >> 16) >> ((ad & 3u) * 8u)) & 0xFFu; break; }
     case 0x2B: { uint32_t ad = A + imm, sh = (ad & 3u) * 8u;
-      if (!byte_range(ad, 1, PROT_W)) S1_VECTOR(CAUSE_FAULT, at, ad);
+      if (s.kregions != UNSET && !s.kin &&
+          !byte_range(ad, 1, PROT_W)) S1_VECTOR(CAUSE_FAULT, at, ad);
       uint32_t pl = (uint32_t)(MEM[(ad >> 2) & MEM_MASK] >> 16);
       pl = (pl & ~(0xFFu << sh)) | ((s.r[d] & 0xFFu) << sh);
       MEM[(ad >> 2) & MEM_MASK] = mkword(pl, 10); break; }
     case 0x2D: { uint32_t src = A, dst = s.r[d], cnt = B;
-      if (!region_range(src, cnt, PROT_R)) S1_VECTOR(CAUSE_FAULT, at, src);
-      if (!region_range(dst, cnt, PROT_W)) S1_VECTOR(CAUSE_FAULT, at, dst);
+      if (s.kregions != UNSET && !s.kin && !region_range(src, cnt, PROT_R))
+        S1_VECTOR(CAUSE_FAULT, at, src);
+      if (s.kregions != UNSET && !s.kin && !region_range(dst, cnt, PROT_W))
+        S1_VECTOR(CAUSE_FAULT, at, dst);
       src &= MEM_MASK; dst &= MEM_MASK;
       if (cnt) {
         if (((dst - src) & MEM_MASK) < cnt) {
@@ -349,7 +389,8 @@ static uint32_t s1_run(uint32_t budget) {
       }
       break; }
     case 0x2E: { uint32_t dst = s.r[d], cnt = B;
-      if (!region_range(dst, cnt, PROT_W)) S1_VECTOR(CAUSE_FAULT, at, dst);
+      if (s.kregions != UNSET && !s.kin &&
+          !region_range(dst, cnt, PROT_W)) S1_VECTOR(CAUSE_FAULT, at, dst);
       uint64_t wd = mkword(A, 10);
       for (uint32_t i = 0; i < cnt; i++) MEM[(dst + i) & MEM_MASK] = wd; break; }
     case 0x38: pc = p & 0xFFFFFFu; break;
@@ -697,17 +738,76 @@ void s1_main(void) {
 }
 
 #else /* S1_GUEST: run a flat cartridge placed at guest word 0. */
-extern const uint8_t s1_guest_bin[];
-extern const uint8_t s1_guest_bin_end[];
+extern const uint32_t s1_guest_bytes;
+extern const uint32_t s1_peek_count;
+extern const uint32_t s1_peek_specs[];
+
+static void serial_hex8(uint32_t x) {
+  static const char hx[] = "0123456789ABCDEF";
+  for (int i = 28; i >= 0; i -= 4) serial_putc(hx[(x >> i) & 15]);
+}
+static void serial_dec(uint32_t x) {
+  char b[12]; int n = 0;
+  if (!x) { serial_putc('0'); return; }
+  while (x) { b[n++] = (char)('0' + x % 10u); x /= 10u; }
+  while (n) serial_putc(b[--n]);
+}
+static uint32_t guest_read_word(uint32_t word_addr) {
+  return (uint32_t)(MEM[word_addr & MEM_MASK] >> 16);
+}
+static uint32_t guest_read_u32(uint32_t byte_addr) {
+  uint32_t wi = byte_addr >> 2;
+  return wi < MEM_WORDS ? (uint32_t)(MEM[wi & MEM_MASK] >> 16) : 0;
+}
+static uint8_t guest_read_byte(uint32_t byte_addr) {
+  uint32_t wi = (byte_addr >> 2) & MEM_MASK;
+  return (uint8_t)(((uint32_t)(MEM[wi] >> 16) >> ((byte_addr & 3u) * 8u)) & 0xFFu);
+}
+static void guest_emit_bytes(uint32_t ptr, uint32_t len) {
+  uint64_t cap = (uint64_t)MEM_WORDS * 4u;
+  if (ptr >= cap) return;
+  if ((uint64_t)ptr + len > cap) len = (uint32_t)(cap - ptr);
+  for (uint32_t i = 0; i < len; i++) serial_putc((char)guest_read_byte(ptr + i));
+}
+static void guest_dump_console(uint32_t ctl, const char *tag) {
+  uint32_t ptr = guest_read_u32(ctl), len = guest_read_u32(ctl + 4u);
+  uint64_t cap = (uint64_t)MEM_WORDS * 4u;
+  if (!ptr || ptr >= cap) len = 0;
+  else if ((uint64_t)ptr + len > cap) len = (uint32_t)(cap - ptr);
+  serial_puts("@@NAN16 "); serial_puts(tag); serial_putc(' ');
+  serial_dec(len); serial_putc('\n');
+  if (len) guest_emit_bytes(ptr, len);
+  serial_putc('\n');
+}
+static void guest_dump_peeks(void) {
+  uint32_t n = s1_peek_count;
+  for (uint32_t i = 0; i < n; i++) {
+    uint32_t addr = s1_peek_specs[i * 2u], cnt = s1_peek_specs[i * 2u + 1u];
+    for (uint32_t j = 0; j < cnt; j++) {
+      serial_puts("@@NAN16 PEEK "); serial_hex8(guest_read_word(addr + j));
+      serial_putc('\n');
+    }
+  }
+}
+static void guest_frame(uint32_t rc) {
+  uint32_t end = (rc == NAN_HALTED && !last_trap) ? 3u : (last_trap ? 4u : 2u);
+  guest_dump_console(0x03EFF000u, "SOUT");
+  guest_dump_console(0x03EFF008u, "SERR");
+  guest_dump_peeks();
+  serial_puts("@@NAN16 END "); serial_dec(end); serial_putc('\n');
+}
 
 static uint32_t guest_load_image(void) {
-  uintptr_t bytes = (uintptr_t)(s1_guest_bin_end - s1_guest_bin);
-  if (!bytes || (bytes % 8u) || bytes / 8u > MEM_WORDS) return 0;
-  uint32_t words = (uint32_t)(bytes / 8u);
+  uint32_t bytes = s1_guest_bytes;
+  if (!bytes || (bytes % 8u) || bytes / 8u > MEM_WORDS || bytes > 0xC0000u) return 0;
+  /* The boot fixture staged guest bytes at physical 0x40000 (0x40000..0xFFFFF,
+     768 KiB max).  Copy them into guest word memory at word 0. */
+  const uint8_t *src = (const uint8_t *)0x40000u;
+  uint32_t words = bytes / 8u;
   for (uint32_t i = 0; i < words; i++) {
     uint64_t w = 0;
     for (int b = 0; b < 8; b++)
-      w |= (uint64_t)s1_guest_bin[i * 8u + (uint32_t)b] << (8 * b);
+      w |= (uint64_t)src[i * 8u + (uint32_t)b] << (8 * b);
     MEM[i] = w;
   }
   return words;
@@ -729,11 +829,15 @@ void s1_main(void) {
   s.r[14] = S1_GUEST_STACK;
   s.pc = 0;
   s.k = 0;
+  guest_publish_time();
   dbg_puts("S1GUEST LOAD "); dbg_dec(words); dbg_puts(" WORDS\n");
   uint32_t rc = s1_run(S1_GUEST_STEPS);
   dbg_puts("S1GUEST HALT rc="); dbg_dec(rc);
   dbg_puts(" r1="); dbg_hex32(s.r[1]);
-  dbg_puts(" pc="); dbg_hex32(s.pc); dbg_putc('\n');
+  dbg_puts(" pc="); dbg_hex32(s.pc);
+  dbg_puts(" steps="); dbg_dec((uint32_t)s.steps); dbg_putc('\n');
+  guest_frame(rc);
+  outl(0xF4, 0);              /* QEMU isa-debug-exit, when attached */
   for (;;) __asm__ volatile("hlt");
 }
 #endif

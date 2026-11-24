@@ -1,9 +1,13 @@
-/* s1_bootsec.S - minimal 512-byte floppy boot fixture for tools/kabi64_gate.sh.
+/* s1_bootsec.S - minimal 512-byte floppy boot fixture for the x86_64 S1.
  *
- * Loads 128 sectors (64 KiB) from LBA 1 to 0x10000 with BIOS INT 13h CHS,
- * enables A20, enters flat 32-bit protected mode and jumps to the S1 image.
- * It is deliberately independent of the museum image and tools/mkall.sh.
+ * LBA 1..128 -> 0x10000 (64 KiB kernel window)
+ * LBA 129.. -> 0x40000 (guest payload staging, up to 1536 sectors / 768 KiB)
+ * Then A20, flat protected mode, jump to the S1 image at 0x10000.
+ * S1_GUEST_SECTORS is supplied by the runner; 0 is the KABI-only build.
  */
+#ifndef S1_GUEST_SECTORS
+#define S1_GUEST_SECTORS 0
+#endif
 .code16
 .globl _start
 _start:
@@ -20,36 +24,22 @@ _start:
     mov $1, %ax
     mov %ax, lba
     movw $128, count
-    mov $0x1000, %ax
+    mov $0x1000, %ax            /* 0x1000:0 == 0x10000 */
     mov %ax, %es
+    movw $0, dst_off
+    call load_sectors
 
-load_loop:
-    mov lba, %ax
-    xor %dx, %dx
-    mov $18, %bx
-    div %bx                     /* ax=track, dx=sector-1 */
-    inc %dl
-    mov %dl, sec
-    xor %dx, %dx
-    mov $2, %bx
-    div %bx                     /* ax=cylinder, dx=head */
-    mov %dl, head
-    mov %al, cyl
-    mov cyl, %ch
-    mov sec, %cl
-    mov head, %dh
-    mov drive, %dl
-    mov $0x0201, %ax            /* read one sector */
-    xor %bx, %bx
-    int $0x13
-    jc fail
-    mov %es, %ax
-    add $0x20, %ax              /* next 512-byte paragraph */
+.if S1_GUEST_SECTORS > 0
+    mov $129, %ax
+    mov %ax, lba
+    movw $S1_GUEST_SECTORS, count
+    mov $0x4000, %ax            /* 0x4000:0 == 0x40000, below guest RAM */
     mov %ax, %es
-    incw lba
-    decw count
-    jnz load_loop
+    movw $0, dst_off
+    call load_sectors
+.endif
 
+    cli
     /* fast A20 */
     in $0x92, %al
     or $2, %al
@@ -67,6 +57,35 @@ fail:
     cli
     hlt
     jmp fail
+
+/* Read `count` sectors from CHS(lba) to es:dst_off, advancing es by 0x20. */
+load_sectors:
+    mov lba, %ax
+    xor %dx, %dx
+    mov $18, %bx
+    div %bx                     /* ax=track, dx=sector-1 */
+    inc %dl
+    mov %dl, sec
+    xor %dx, %dx
+    mov $2, %bx
+    div %bx                     /* ax=cylinder, dx=head */
+    mov %dl, head
+    mov %al, cyl
+    mov cyl, %ch
+    mov sec, %cl
+    mov head, %dh
+    mov drive, %dl
+    mov $0x0201, %ax            /* read one sector */
+    mov dst_off, %bx
+    int $0x13
+    jc fail
+    mov %es, %ax
+    add $0x20, %ax              /* next 512-byte paragraph */
+    mov %ax, %es
+    incw lba
+    decw count
+    jnz load_sectors
+    ret
 
 .code32
 pm:
@@ -96,6 +115,7 @@ count:  .word 0
 sec:    .byte 0
 head:   .byte 0
 cyl:    .byte 0
+dst_off: .word 0
 
 .org 510
 .word 0xAA55
