@@ -168,6 +168,86 @@ SUB r14,r14,r13
 LD r15,r14,0
 RET
 
+; sh_click r1=x r2=y: mouse-only interaction for native overlays.
+; A modal consumes pointer input; clicks outside never affect windows below it.
+; Launcher card geometry exactly matches sh_draw's 4-column x 2-row grid.
+sh_click:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,@sh_pointer_x
+ST r2,r0,@sh_pointer_y
+LD r3,r0,@sh_modal
+CMP r3,r0
+JMP[NE] @sh_click_dialog
+LD r3,r0,@sh_open
+CMP r3,r0
+JMP[EQ] @sh_click_done
+MOVI r3,195
+CMP r1,r3
+JMP[LT] @sh_click_done
+MOVI r3,819
+CMP r1,r3
+JMP[GT] @sh_click_done
+MOVI r3,197
+CMP r2,r3
+JMP[LT] @sh_click_done
+MOVI r3,485
+CMP r2,r3
+JMP[GT] @sh_click_done
+MOVI r3,195
+SUB r1,r1,r3
+MOVI r3,156
+DIV r1,r1,r3
+MOVI r3,3
+CMP r1,r3
+JMP[LE] @sh_click_colok
+JMP @sh_click_done
+sh_click_colok:
+ST r1,r0,@sh_pointer_col
+LD r2,r0,@sh_pointer_y
+MOVI r3,197
+SUB r2,r2,r3
+MOVI r3,152
+DIV r2,r2,r3
+SHL r2,r2,2
+LD r1,r0,@sh_pointer_col
+ADD r1,r1,r2
+MOVI r3,7
+CMP r1,r3
+JMP[GT] @sh_click_done
+ST r1,r0,@sh_sel
+CALL @sh_launch_selected
+JMP @sh_click_done
+sh_click_dialog:
+; Left half of the centered dialog is Cancel, right half confirms Close.
+MOVI r3,330
+CMP r2,r3
+JMP[LT] @sh_click_done
+MOVI r3,454
+CMP r2,r3
+JMP[GT] @sh_click_done
+MOVI r3,500
+CMP r1,r3
+JMP[LT] @sh_click_cancel
+MOVI r1,13
+ST r1,r0,@sh_temp
+CALL @sh_dialog_key
+JMP @sh_click_done
+sh_click_cancel:
+MOVI r1,27
+ST r1,r0,@sh_temp
+CALL @sh_dialog_key
+sh_click_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+sh_pointer_x:
+.word 0
+sh_pointer_y:
+.word 0
+sh_pointer_col:
+.word 0
+
 ; These overlays render AFTER taskbar + windows, so their composition
 ; order and focus highlights are intrinsic to the native frame buffer.
 sh_draw:
