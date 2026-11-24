@@ -68,6 +68,7 @@ async function main() {
     ['type', 'clear-type', 'pad', 'status', 'screen_container', 'serial', 'restart', 'fullscreen',
      'zoom-out', 'zoom-in', 'zoom-fit', 'zoom-level', 'image-fingerprint', 'download-replica',
      'function-keys', 'fullscreen-stage', 'fullscreen-exitbar', 'exit-fullscreen',
+     'exit-fullscreen-keyboard',
      'fullscreen-keyboard', 'fullscreen-zoom-out', 'fullscreen-zoom-fit', 'fullscreen-zoom-in']
       .map(id => [id, new Element()])
   );
@@ -129,6 +130,10 @@ async function main() {
   // Fullscreen API. The Exit button is in a separate, bottom toolbar.
   const stage = elements['fullscreen-stage'];
   const exit = elements['exit-fullscreen'];
+  const keyboardExit = elements['exit-fullscreen-keyboard'];
+  assert.ok(html.indexOf('<div class="typebar">') > html.indexOf('<div id="fullscreen-stage">') &&
+            html.indexOf('<div class="typebar">') < html.indexOf('<div class="controls">'),
+    'Keyboard input must be a descendant of the native fullscreen stage');
   const keyboard = elements['fullscreen-keyboard'];
   assert.match(html, /#fullscreen-stage\.immersive[^]*?position:fixed/,
     'Fullscreen needs an actual viewport-sized CSS fallback');
@@ -151,11 +156,13 @@ async function main() {
   elements['fullscreen-zoom-out'].dispatch('click');
   assert.deepEqual(emulator.scales.at(-1), [1.5, 1.5],
     'Zoom out must work in immersive mode');
-  exit.dispatch('click');
+  keyboardExit.dispatch('click');
   assert.equal(stage.classList.contains('immersive'), false,
-    'Exit must always close CSS fullscreen even without native API');
+    'Keyboard-visible Exit must always work even when Gboard covers the bottom controls');
   assert.equal(document.body.classList.contains('nan0s-keys-open'), false);
   assert.equal(document.body.classList.contains('nan0s-immersive'), false);
+  assert.match(html, /#exit-fullscreen-keyboard[^]*?min-height:50px/,
+    'Keyboard-visible exit must have its own large, accessible touch target');
   assert.equal(elements.fullscreen.getAttribute('aria-expanded'), 'false');
 
   // Real native full screen: the button enters the same stage that owns Exit.
