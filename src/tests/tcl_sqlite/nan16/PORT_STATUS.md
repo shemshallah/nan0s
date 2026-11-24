@@ -3,22 +3,21 @@
 Goal: a `tcc0`-built, single-threaded `tclsh` cartridge that mounts an
 N16PACK1 guest VFS, runs `/test.tcl`, and prints an exact transcript.
 
-Status: **milestone 1 passes on the portable C-core oracle**.  Product
-acceptance (x86_64 S1 runner) is still pending; the gate labels the C-core
-result `ORACLE MATCH`.
+Status: **milestone 1 passes in product mode on the x86_64 S1**.  The
+portable C-core oracle agrees; no oracle flag is used for acceptance.
 
 ## Exact gate result
 
 ```
-$ TCL_SRC=<tcl-9.0.3> TCL_NAN16_PORT_ALLOW_ORACLE=1 \
+$ TCL_SRC=<tcl-9.0.3> TCL_NAN16_PORT_RUNNER=$PWD/tools/s1_runner.sh \
     sh tools/tcl_nan16_port_gate.sh
 tcl_nan16_port: build tcc0
 tcl_nan16_port: pack guest VFS
 pack: 841 files, 3441604 bytes -> <TMPDIR>/suite.n16pack
 tcl_nan16_port: compile guest (83 generic + 8 OO + 69 tommath + 11 zlib + 10 port)
 tcl_nan16_port: run guest
-tcl_nan16_port: cartridge 21270360 bytes sha256 756f7dafb9eb56f5db7fd4cda95314404451057305289de56cf6c153a4451086
-tcl_nan16_port: ORACLE MATCH (x86_64 S1 acceptance pending)
+tcl_nan16_port: cartridge 21298008 bytes sha256 72bebb01778aeefc30e9242a2f40cefcba2143a9d70f27cd71dab73cf1e99fec
+tcl_nan16_port: PASS (guest VFS tclsh, exact stdout + main result 0)
 ```
 
 Guest transcript (exact, stdout):
@@ -33,8 +32,11 @@ Main result: word 0x100 is `00000000`.  Guest stderr: empty.  The script is
 under `/usr/lib/tcl9.0`, so `Tcl_Init` sources the real `init.tcl` (not a
 hand-written stub) and the `clock` ensemble is created from `clock.tcl`.
 
-The oracle run used 128 MiB and halted after about 2.8e9 NaN16 steps.  The
-gate default is 8e9 steps.
+The product run used the x86_64 S1 runner, `--mem 128` and the 21.3 MB
+flat cartridge through the IDE large-image path.  The guest halts and the
+runner reads the control block; the gate default is 8e9 steps.  The
+allocation fixes `20f295b`, `105c62d` and `067999f` are required for the
+guest heap to survive Tcl's allocator pattern.
 
 ## Build shape
 
@@ -51,8 +53,11 @@ gate default is 8e9 steps.
 - The ten `tclNan16*.c` platform files and `third_party/nan16-libc/src/libc.c`.
 - Tcl `TCL_THREADS=0`; no socket, load or thread package is enabled.
 
-Image: 21,270,360 bytes.  SHA-256:
-`756f7dafb9eb56f5db7fd4cda95314404451057305289de56cf6c153a4451086`.
+Image: 21,298,008 bytes.  SHA-256:
+`72bebb01778aeefc30e9242a2f40cefcba2143a9d70f27cd71dab73cf1e99fec`.
+The pack is a generated static `tcl_nan16_pack[]` array (from
+`tools/nan16_embed.py`), not a fixed `GUEST_PACK_BASE` image section, so
+there is no header/image pack-base mismatch in this tclsh build.
 
 ## Platform files replaced (unix/ is not compiled)
 
@@ -212,5 +217,5 @@ procedures; it returns an empty attribute list rather than inventing one.
    guest library so the suite's `package require` is quiet and complete.
 3. Decide whether the test suite needs `exec` (currently an explicit error) or
    file-event channels; neither exists yet.
-4. Produce an x86_64 S1 runner and rerun this gate in product mode (no
-   `TCL_NAN16_PORT_ALLOW_ORACLE`).
+4. ~~Produce an x86_64 S1 runner and rerun this gate in product mode~~ —
+   done: `tools/s1_runner.sh`, large IDE cartridge path, PASS above.
