@@ -36,6 +36,50 @@ const fs = require('node:fs');
     await page.waitForTimeout(300);
     const after=await sample();
     assert.deepEqual(after,before,'Host IME tap changed stable guest terminal pixels');
+    // Test the real mobile IME path before unrelated desktop touch gates.
+    // These assertions read actual raw NaN compiler/runtime output on COM1.
+    const ime=page.locator('#type');
+    const mode=page.locator('#enter-mode');
+    async function line(s) {
+      await ime.fill(s);
+      await ime.press('Enter');
+      await page.waitForTimeout(350);
+    }
+    async function serialContains(s, count=1) {
+      await page.waitForFunction(({s,count}) =>
+        document.querySelector('#serial').textContent.split(s).length-1>=count,
+        {s,count},{timeout:60000});
+    }
+    assert.equal(await mode.getAttribute('aria-checked'),'true');
+    await line('.demo');
+    await serialContains('hello from NaN16 C');
+    await line('e');
+    await line('.demo');
+    await serialContains('hello from NaN16 C',2);
+    await line('.clear');
+    await mode.tap();
+    assert.equal(await mode.getAttribute('aria-checked'),'false');
+    await line('int main(void) {');
+    await line('  puts("NAN_EDITOR_RUN_OK");');
+    await line('  return 0;');
+    await line('}');
+    await mode.tap();
+    await line('.run');
+    await serialContains('NAN_EDITOR_RUN_OK');
+    await line('.quit');
+    await line('write /editor_gate.c');
+    await ime.fill('int main(void) {\n  puts("NAN_EDITOR_SAVE_OK");\n  return 0;\n}');
+    // Pasted line breaks are literal. Finish the final line in source mode.
+    await mode.tap();
+    await ime.press('Enter');
+    await mode.tap();
+    await line('.save');
+    await line('.quit');
+    await line('run /editor_gate.c');
+    await serialContains('NAN_EDITOR_SAVE_OK');
+    await page.screenshot({path:'browser-evidence/phone-c-editor.png',fullPage:true});
+    console.log('PASS: mobile WASM .demo, e, literal multiline C, .run, .save, .quit and file execution');
+    await line('c');
     await page.locator('#function-keys button').filter({hasText:/^F1$/}).tap();
     await page.waitForTimeout(600);
     await page.screenshot({path:'browser-evidence/phone-launcher.png',fullPage:true});

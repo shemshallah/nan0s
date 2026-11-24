@@ -1671,7 +1671,7 @@ s_ce_cleared:
 s_ce_bye:
 .str "editor closed\n"
 s_ce_help:
-.str "C editor: .run .demo .save .clear .quit .help\nShift+Enter: literal source line\n> "
+.str "C editor: .run .demo .save .clear .quit .help\nShift+Enter: literal source line\n.save requires write/edit PATH\n> "
 ; gui_c_out: terminal character hook. Preserves r2..r12 for the C runtime.
 gui_c_out:
 ST r15,r14,0
@@ -5282,8 +5282,6 @@ fs_edit:
 ST r15,r14,0
 ADD r14,r14,r13
 ST r1,r0,@fs_src
-CALL @fs_savepath
-LD r1,r0,@fs_src
 CALL @nfs_data
 CMP r3,r0
 JMP[EQ] @fs_ed_nf
@@ -5292,6 +5290,9 @@ CMP r2,r4
 JMP[GT] @fs_ed_big
 ST r1,r0,@fs_ptr
 ST r2,r0,@fs_len
+LD r1,r0,@fs_src
+CALL @fs_savepath
+LD r1,r0,@fs_ptr
 ; copy packed bytes into CE buffer
 SHL r1,r1,2
 LA r2,#CEB
