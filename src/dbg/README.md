@@ -10,6 +10,8 @@ The NaN-native debug system. Design and rationale: `spec/NANDBG.md`.
 | `core.nas` | reusable full `0x00–0x5F` step core: typed traps, shadow call stack, non-blocking KEY, DP4B, vectors, scalar undo hooks |
 | `n16dbg.nas` | serial monitor: step, run, breakpoint, goto, watch, history, stack, types, registers, disassembly, dump |
 | `undo_stub.nas` | no-op recording hooks for standalone core builds |
+| `ndr.nas` | NDR w4-w6 operands and FNV-1a/32 seal in w7 |
+| `ndr_stub.nas` | no-op NDR completion for tests that inspect only w0-w3 |
 | `../tests/ndbg_core_test.nas` | reset/run/step on a small target |
 | `../tests/ndbg_diff_body.nas` | deterministic target: integer, float, memory, calls, DP4B, vectors |
 | `../tests/ndbg_diff_native.nas` / `ndbg_diff_debug.nas` | the same target natively and through `core.nas` |
@@ -18,6 +20,7 @@ The NaN-native debug system. Design and rationale: `spec/NANDBG.md`.
 | `../exhibits/gui_cart.nas` | terminal `debug` command + kind-8 second CLI + `carts`/`load` + `next`/`finish` + `mem [addr]`/`dis [addr]`/`log`/`hist`/`stack`/`types`/`bpts`/`wpts`/`bp`/`wp`/`goto` + `screen`/`serial` + `undo [n]`/`redo [n]`/`checkpoint`/`restore` + `setw`/`setc` + `dis` |
 | `../tests/ndbg_guard_test.nas` | write-window fault and before-write watchpoint |
 | `../tests/ndbg_putc_cart.nas` | tiny PUTC cartridge for the serial-capture gate |
+| `../tests/ndbg_ndr_test.nas` | NDR operands and seal over a deliberately bad word |
 
 ## Run
 
