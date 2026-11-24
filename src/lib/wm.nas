@@ -618,6 +618,8 @@ ST r5,r1,#W_X
 LD r4,r0,@fb_h
 MOVI r6,#TOPH
 SUB r4,r4,r6
+MOVI r7,#TASKH
+SUB r4,r4,r7
 LD r5,r0,@en_fh
 CMP r5,r0
 JMP[EQ] @en_h
@@ -628,6 +630,8 @@ en_h:
 ST r4,r1,#W_H
 LD r5,r0,@fb_h
 SUB r5,r5,r6
+MOVI r7,#TASKH
+SUB r5,r5,r7
 SUB r5,r5,r4
 SHR r5,r5,1
 ADD r5,r5,r6
@@ -1147,16 +1151,18 @@ ST r2,r0,@wm_redraw
 RET
 
 ; wm_minimize: r1=window id. Preserve app state and buffers while removing
-; the window from z-order; never minimize the last visible window.
+; the window from z-order; an empty desktop remains usable.
 wm_minimize:
 ST r15,r14,0
 ADD r14,r14,r13
 ST r1,r0,@wm_min_id
-LD r2,r0,@wm_zn
-MOVI r3,2
-CMP r2,r3
-JMP[LT] @wm_min_done
+MOVI r2,#MAXW
+CMP r1,r2
+JMP[GE] @wm_min_done
 CALL @wm_wbase
+LD r2,r1,#W_ALIVE
+CMP r2,r0
+JMP[EQ] @wm_min_done
 LD r2,r1,#W_FLAGS
 MOVI r3,2
 BOOL.14 r2,r2,r3
@@ -1175,7 +1181,7 @@ wm_min_id:
 ; wm_taskbar_select: r1 is a stable window slot. A click on another
 ; taskbar window raises it; a click on the already-focused window hides that
 ; window and exposes the one directly underneath. No window is closed.
-; Clicking the last visible app is a no-op, keeping the desktop usable.
+; The last visible app may also be minimized and restored through the dock.
 wm_taskbar_select:
 ST r15,r14,0
 ADD r14,r14,r13
@@ -1192,10 +1198,6 @@ CALL @wm_top
 LD r2,r0,@wts_id
 CMP r1,r2
 JMP[NE] @wts_raise
-LD r3,r0,@wm_zn
-MOVI r4,2
-CMP r3,r4
-JMP[LT] @wts_done
 ADD r1,r2,r0
 CALL @wm_minimize
 JMP @wts_done
