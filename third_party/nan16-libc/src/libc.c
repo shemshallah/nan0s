@@ -56,10 +56,13 @@ static void heap_init(void)
 void *malloc(size_t n)
 {
     Block *b, *prev = 0;
-    unsigned need;
+    unsigned need, steps = 0;
     heap_init();
+    if (n > HEAP_SIZE - HDR_ALIGN) return 0;
     need = align_up((unsigned)n);
+    if (need < n) return 0;
     for (b = heap_head; b; prev = b, b = b->next) {
+        if (++steps > HEAP_SIZE / sizeof(Block)) return 0;
         if (b->free && b->size >= need) {
             if (b->size >= need + sizeof(Block) + HDR_ALIGN) {
                 Block *nb = (Block *)((unsigned char *)(b + 1) + need);
@@ -81,6 +84,7 @@ void free(void *p)
     Block *b, *n;
     if (!p) return;
     b = (Block *)p - 1;
+    if (b->free) return;
     b->free = 1;
     for (n = heap_head; n; n = n->next) {
         if (n->free && n->next && n->next->free) {
@@ -92,11 +96,12 @@ void free(void *p)
 
 void *calloc(size_t n, size_t s)
 {
-    void *p = malloc(n * s);
+    void *p;
+    if (n && s > (size_t)-1 / n) return 0;
+    p = malloc(n * s);
     if (p) memset(p, 0, n * s);
     return p;
 }
-
 void *realloc(void *p, size_t n)
 {
     Block *b;
@@ -104,6 +109,7 @@ void *realloc(void *p, size_t n)
     unsigned old;
     if (!p) return malloc(n);
     if (!n) { free(p); return 0; }
+    if (n > HEAP_SIZE - HDR_ALIGN) return 0;
     b = (Block *)p - 1;
     old = b->size;
     if (old >= n) return p;
