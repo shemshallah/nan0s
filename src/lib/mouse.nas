@@ -43,6 +43,58 @@ ms_tick:
 ms_budget:
 .word 0
 
+; Input busy (8042 status bit1) must clear before EACH command/data write.
+; Never wait unbounded on a broken physical controller or v86 reset.
+ms_write_ready:
+MOVI r8,4096
+ms_write_wait:
+MOVI r1,0x64
+INB r2,r1
+MOVI r3,2
+BOOL.8 r4,r2,r3
+CMP r4,r0
+JMP[EQ] @ms_write_ok
+SUB r8,r8,r13
+CMP r8,r0
+JMP[NE] @ms_write_wait
+MOVI r1,0
+RET
+ms_write_ok:
+MOVI r1,1
+RET
+
+; r1=controller command: waits then writes to port 0x64.
+ms_command:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,@ms_tmp
+CALL @ms_write_ready
+CMP r1,r0
+JMP[EQ] @ms_command_end
+MOVI r1,0x64
+LD r2,r0,@ms_tmp
+OUTB r2,r1
+ms_command_end:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; r1=data byte for 0x60 after a prior D4 AUX forwarding command.
+ms_data:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,@ms_tmp
+CALL @ms_write_ready
+CMP r1,r0
+JMP[EQ] @ms_data_end
+MOVI r1,0x60
+LD r2,r0,@ms_tmp
+OUTB r2,r1
+ms_data_end:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
 ms_init:
 ST r15,r14,0
 ADD r14,r14,r13
@@ -54,22 +106,17 @@ MOVI r1,512
 ST r1,r0,@ms_x
 MOVI r1,384
 ST r1,r0,@ms_y
-; 8042 AUX enable then direct a Set Defaults and Enable Data Reporting.
-; The output port is never treated as a keyboard scancode by this driver.
-MOVI r1,0x64
-MOVI r2,0xA8
-OUTB r2,r1
-MOVI r2,0xD4
-OUTB r2,r1
-MOVI r1,0x60
-MOVI r2,0xF6
-OUTB r2,r1
-MOVI r1,0x64
-MOVI r2,0xD4
-OUTB r2,r1
-MOVI r1,0x60
-MOVI r2,0xF4
-OUTB r2,r1
+; Make and ACK only affect AUX. Keyboard bytes remain in keyboard queue.
+MOVI r1,0xA8
+CALL @ms_command
+MOVI r1,0xD4
+CALL @ms_command
+MOVI r1,0xF6
+CALL @ms_data
+MOVI r1,0xD4
+CALL @ms_command
+MOVI r1,0xF4
+CALL @ms_data
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -139,6 +186,12 @@ ms_update:
 ST r15,r14,0
 ADD r14,r14,r13
 LD r1,r0,@ms_p1
+; PS/2 overflow flags indicate a non-representable movement delta.
+; Ignore it rather than teleporting the guest pointer or dragging windows.
+MOVI r2,0xC0
+BOOL.8 r3,r1,r2
+CMP r3,r0
+JMP[NE] @ms_update_done
 MOVI r2,7
 BOOL.8 r3,r1,r2
 LD r4,r0,@ms_buttons
@@ -212,6 +265,7 @@ CALL @ms_drag_update
 ms_changed:
 MOVI r1,1
 ST r1,r0,@wm_redraw
+ms_update_done:
 SUB r14,r14,r13
 LD r15,r14,0
 RET
