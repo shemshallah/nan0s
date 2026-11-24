@@ -23,12 +23,12 @@
 .equ NF_E_PATH   5
 .equ NF_E_SZ     16
 
-.equ W_NF_PATH 61330
-.equ W_NF_SRC  61331
-.equ W_NF_SIZE 61332
-.equ W_NF_ENT  61333
-.equ W_NF_DIR  61334
-.equ W_NF_IDX  61335
+.equ W_NF_PATH 64330
+.equ W_NF_SRC  64331
+.equ W_NF_SIZE 64332
+.equ W_NF_ENT  64333
+.equ W_NF_DIR  64334
+.equ W_NF_IDX  64335
 .equ NFS_DISK_LBA 2048
 .equ NFS_HDR 11023000
 

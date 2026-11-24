@@ -1483,8 +1483,13 @@ LA r1,#CEB
 LA r2,#EXB
 CALL @fs_expand
 LA r1,#EXP_BUF
+ST r13,r0,@ncc_recover
 CALL @ncc_compile
+CMP r1,r0
+JMP[NE] @gcr_done1
 CALL @ncc_run
+gcr_done1:
+ST r0,r0,@ncc_recover
 ST r0,r0,@ncc_out
 JMP @ce_prompt
 ce_begin_demo:
@@ -1493,8 +1498,13 @@ ST r1,r0,@gco_id
 LA r1,@gui_c_out
 ST r1,r0,@ncc_out
 LA r1,@ncc_demo_src
+ST r13,r0,@ncc_recover
 CALL @ncc_compile
+CMP r1,r0
+JMP[NE] @gcr_done2
 CALL @ncc_run
+gcr_done2:
+ST r0,r0,@ncc_recover
 ST r0,r0,@ncc_out
 JMP @ce_prompt
 ce_empty:
@@ -5093,8 +5103,13 @@ ST r1,r0,@gco_id
 LA r1,@gui_c_out
 ST r1,r0,@ncc_out
 LD r1,r0,@fs_src
+ST r13,r0,@ncc_recover
 CALL @ncc_compile
+CMP r1,r0
+JMP[NE] @gcr_done3
 CALL @ncc_run
+gcr_done3:
+ST r0,r0,@ncc_recover
 ST r0,r0,@ncc_out
 JMP @fs_cc_d
 fs_cc_nf:

@@ -17,6 +17,8 @@
 .include "mpp.nas"
 
 ; ------------------------------------------------------------------ memory map
+; Low scratch ABI: words 63000..64999, outside the growing GUI cartridge.
+; Shared preprocessor and NFS scratch use the same relocated address block.
 .equ NCC_IRB    1000000      ; IR: 2 words per instruction (byte 4 MB)
 .equ NCC_IRMAX  400000
 .equ NCC_IREND  1400000
@@ -650,392 +652,392 @@
 
 ; ------------------------------------------------------------------ compiler state
 ; Kept below word 65536 so ST/LD can use the 16-bit immediate form directly.
-.equ W_IRPC     60000
-.equ W_SYMUSED  60001
-.equ W_GLOBUSED 60002
-.equ W_NAMEP    60003
-.equ W_STRP     60004
-.equ W_FUNCSYM  60005
-.equ W_NLOC     60006
-.equ W_NPAR     60007
-.equ W_LVAL     60008
-.equ W_LKIND    60009
-.equ W_LADDR    60010
-.equ W_HAVE     60011
-.equ W_ERRCODE  60012
-.equ W_BRK_N    60013
-.equ W_CNT_N    60014
-.equ W_ETYPE    60015
-.equ W_LTYPE    60016
-.equ W_SCLASS   60017
-.equ W_TYPEN    60018
-.equ W_GLOBP    60019
-.equ W_LOCALB   60020
-.equ W_FRAMEB   60021
-.equ W_FUNCRET  60022
-.equ W_PARAMP   60023
-.equ W_MEMBP    60024
-.equ W_STRUCTID 60025
-.equ W_FUNCNP   60026
-.equ W_FUNCARG  60027
-.equ W_SW_N     60028
-.equ W_SW_TAB   60032      ; 16 entries x 2 words (value, jmp-index)
-.equ W_CASE_N   60029
-.equ W_GOTO_N   60030
-.equ W_DECLNAME 60040      ; saved declarator token: hash, len, text[8]
-.equ W_TY_TMP   60052
-.equ W_PP_N     60053
-.equ W_BRK_TAB  60064      ; 64 entries
-.equ W_CNT_TAB  60128      ; 64 entries
-.equ W_LOOPN    60600
-.equ W_LOOPS    60608      ; 32 contexts x 8 words
-.equ W_SIDX     60900
-.equ W_SKIND    60901
-.equ W_MIDX     60902
-.equ W_BID      60903
-.equ W_BNP      60904
-.equ W_TMP2     60905
-.equ W_PSAVE    60906
-.equ W_PSAVE2   60907
-.equ W_FSKIP    60908
-.equ W_FENTRY   60909
-.equ W_TY_KIND  60920
-.equ W_TY_SIZE  60921
-.equ W_TY_ALIGN 60922
-.equ W_TY_BASE  60923
-.equ W_TY_COUNT 60924
-.equ W_TY_MEM   60925
-.equ W_TY_NMEM  60926
-.equ W_TY_SIGN  60927
-.equ W_TY_RET   60928
-.equ W_TY_ID    60929
-.equ W_TSIGN    60930
-.equ W_TSHORT   60931
-.equ W_TLONG    60932
-.equ W_TLL      61576
-.equ W_CALLWORDS 61589
-.equ W_SRCOFF  61592
-.equ W_CALLSYM 61593
-.equ W_ARGIDX  61594
-.equ W_CASTTYPE 61595
-.equ W_FPSTART  61596
-.equ W_CALLFTYPE 61597
-.equ W_FPTMP   61598
-.equ W_DECL_CONST 61636
-.equ W_DECL_HASH  61637
-.equ W_LCONST     61638
-.equ W_TCONST     61640
-.equ W_MARK_CONST 61641
-.equ W_CONSTSYM 61642
-.equ W_MEMIDX  61650
-.equ W_DESIDX  61651
-.equ W_DESOFF  61652
-.equ W_DESTYPE 61653
-.equ W_ELEMSZ  61654
-.equ W_EL_ELEM 61655
-.equ W_EL_COUNT 61656
-.equ W_EL_BASE 61657
-.equ W_EL_GLB 61658
-.equ W_EL_FIRST 61659
-.equ W_EL_I 61660
-.equ W_EL_M 61661
-.equ W_EL_ESIZE 61662
-.equ W_EL_MEM 61663
-.equ W_EL_NMEM 61664
-.equ W_EL_OFF 61665
-.equ W_EL_MTYPE 61666
-.equ W_ARRMAX 61688
-.equ W_ELT_TYPE 61710
-.equ W_ELT_ELEM 61711
-.equ W_ELT_ESZ  61712
-.equ W_ELT_N    61713
-.equ W_ELT_I    61714
-.equ W_ELT_MEM  61715
-.equ W_ELT_NMEM 61716
-.equ W_ELT_KIND 61717
-.equ W_ELT_OFF  61718
-.equ W_ELT_MT   61719
-.equ W_ELT_TMP  61720
-.equ W_SIGLB    61721
-.equ W_FPOFF   61643
-.equ W_FPNP1   61644
-.equ W_FPDEF   61646
-.equ W_OUTER   61645
-.equ W_CN_N       61639
+.equ W_IRPC     63000
+.equ W_SYMUSED  63001
+.equ W_GLOBUSED 63002
+.equ W_NAMEP    63003
+.equ W_STRP     63004
+.equ W_FUNCSYM  63005
+.equ W_NLOC     63006
+.equ W_NPAR     63007
+.equ W_LVAL     63008
+.equ W_LKIND    63009
+.equ W_LADDR    63010
+.equ W_HAVE     63011
+.equ W_ERRCODE  63012
+.equ W_BRK_N    63013
+.equ W_CNT_N    63014
+.equ W_ETYPE    63015
+.equ W_LTYPE    63016
+.equ W_SCLASS   63017
+.equ W_TYPEN    63018
+.equ W_GLOBP    63019
+.equ W_LOCALB   63020
+.equ W_FRAMEB   63021
+.equ W_FUNCRET  63022
+.equ W_PARAMP   63023
+.equ W_MEMBP    63024
+.equ W_STRUCTID 63025
+.equ W_FUNCNP   63026
+.equ W_FUNCARG  63027
+.equ W_SW_N     63028
+.equ W_SW_TAB   63032      ; 16 entries x 2 words (value, jmp-index)
+.equ W_CASE_N   63029
+.equ W_GOTO_N   63030
+.equ W_DECLNAME 63040      ; saved declarator token: hash, len, text[8]
+.equ W_TY_TMP   63052
+.equ W_PP_N     63053
+.equ W_BRK_TAB  63064      ; 64 entries
+.equ W_CNT_TAB  63128      ; 64 entries
+.equ W_LOOPN    63600
+.equ W_LOOPS    63608      ; 32 contexts x 8 words
+.equ W_SIDX     63900
+.equ W_SKIND    63901
+.equ W_MIDX     63902
+.equ W_BID      63903
+.equ W_BNP      63904
+.equ W_TMP2     63905
+.equ W_PSAVE    63906
+.equ W_PSAVE2   63907
+.equ W_FSKIP    63908
+.equ W_FENTRY   63909
+.equ W_TY_KIND  63920
+.equ W_TY_SIZE  63921
+.equ W_TY_ALIGN 63922
+.equ W_TY_BASE  63923
+.equ W_TY_COUNT 63924
+.equ W_TY_MEM   63925
+.equ W_TY_NMEM  63926
+.equ W_TY_SIGN  63927
+.equ W_TY_RET   63928
+.equ W_TY_ID    63929
+.equ W_TSIGN    63930
+.equ W_TSHORT   63931
+.equ W_TLONG    63932
+.equ W_TLL      64576
+.equ W_CALLWORDS 64589
+.equ W_SRCOFF  64592
+.equ W_CALLSYM 64593
+.equ W_ARGIDX  64594
+.equ W_CASTTYPE 64595
+.equ W_FPSTART  64596
+.equ W_CALLFTYPE 64597
+.equ W_FPTMP   64598
+.equ W_DECL_CONST 64636
+.equ W_DECL_HASH  64637
+.equ W_LCONST     64638
+.equ W_TCONST     64640
+.equ W_MARK_CONST 64641
+.equ W_CONSTSYM 64642
+.equ W_MEMIDX  64650
+.equ W_DESIDX  64651
+.equ W_DESOFF  64652
+.equ W_DESTYPE 64653
+.equ W_ELEMSZ  64654
+.equ W_EL_ELEM 64655
+.equ W_EL_COUNT 64656
+.equ W_EL_BASE 64657
+.equ W_EL_GLB 64658
+.equ W_EL_FIRST 64659
+.equ W_EL_I 64660
+.equ W_EL_M 64661
+.equ W_EL_ESIZE 64662
+.equ W_EL_MEM 64663
+.equ W_EL_NMEM 64664
+.equ W_EL_OFF 64665
+.equ W_EL_MTYPE 64666
+.equ W_ARRMAX 64688
+.equ W_ELT_TYPE 64710
+.equ W_ELT_ELEM 64711
+.equ W_ELT_ESZ  64712
+.equ W_ELT_N    64713
+.equ W_ELT_I    64714
+.equ W_ELT_MEM  64715
+.equ W_ELT_NMEM 64716
+.equ W_ELT_KIND 64717
+.equ W_ELT_OFF  64718
+.equ W_ELT_MT   64719
+.equ W_ELT_TMP  64720
+.equ W_SIGLB    64721
+.equ W_FPOFF   64643
+.equ W_FPNP1   64644
+.equ W_FPDEF   64646
+.equ W_OUTER   64645
+.equ W_CN_N       64639
 .equ NCTAB        2300000
-.equ W_IRYSTOP 61601
-.equ W_ALARM   61649
-.equ W_CMPFP   61602
-.equ W_CMPA    61603
-.equ W_CMPB    61604
-.equ W_CMPOLD  61605
-.equ QS_BASE   61606
-.equ QS_N      61607
-.equ QS_SIZE   61608
-.equ QS_CMP    61609
-.equ QS_I      61610
-.equ QS_J      61611
-.equ QS_P1     61612
-.equ QS_P2     61613
-.equ QS_KEY    61614
-.equ W_CALLENTRY 61615
-.equ W_DECLTYPE 61616
-.equ W_TCHAR    60933
-.equ W_TVOID    60934
-.equ W_TFLOAT   60935
-.equ W_TAGSYM   60936
-.equ W_ARRDIM   60937      ; 8 dimensions
-.equ W_ARRND    60945
-.equ W_SW_PATCH  60946
-.equ W_GOTO_PATCH 60947
-.equ W_GOTO_NAME 60948
-.equ W_PP_ACTIVE 60949
-.equ W_ENUMVAL  60950
-.equ W_SSIZE    60960
-.equ W_SALIGN   60961
-.equ W_SMEM     60962
-.equ W_SNMEM    60963
-.equ W_MEMTOP   61009
-.equ W_SSDEPTH  61010
-.equ W_SDOWN    61011
-.equ W_SANON    61012
-.equ W_ML_SOFT  61013
-.equ W_ANON_TY  61014
-.equ W_ANON_OFF 61015
-.equ W_SSPKIND  61025
-.equ W_STAG     60964
-.equ W_SOFF     60965
-.equ W_STYPE    60966
-.equ W_STMP     60967
-.equ W_STRUCTKIND    60968
-.equ W_MSIZE    60969
-.equ W_TSEEN    60970
-.equ W_BRET     60981
-.equ W_HEAP     60982
-.equ W_TAILHALT 60983
-.equ W_PTRV     60984
-.equ W_PTRC     60985
-.equ W_PF_FMT   60986
-.equ W_PF_IDX   60987
-.equ W_PF_ARGC  60988
-.equ W_PF_OFF   60989
-.equ W_PF_LL    60990
-.equ W_PF_CASE  60991
-.equ W_PF_W     60992
-.equ W_PF_FLAGS 60993
-.equ W_PF_VAL   60994
-.equ W_PF_LEN   60995
-.equ W_PF_PAD   60996
-.equ W_PF_NEG   60997
-.equ W_PF_TMP   60998
-.equ W_PF_PREC  60999
-.equ W_F2V      61000
-.equ W_F2P      61001
-.equ W_F2NEG    61002
-.equ W_F2S      61003
-.equ W_F2I      61004
-.equ W_F2F      61005
-.equ W_F2L      61006
-.equ W_F2BIG    61007
-.equ W_PF_LSTR   61008
+.equ W_IRYSTOP 64601
+.equ W_ALARM   64649
+.equ W_CMPFP   64602
+.equ W_CMPA    64603
+.equ W_CMPB    64604
+.equ W_CMPOLD  64605
+.equ QS_BASE   64606
+.equ QS_N      64607
+.equ QS_SIZE   64608
+.equ QS_CMP    64609
+.equ QS_I      64610
+.equ QS_J      64611
+.equ QS_P1     64612
+.equ QS_P2     64613
+.equ QS_KEY    64614
+.equ W_CALLENTRY 64615
+.equ W_DECLTYPE 64616
+.equ W_TCHAR    63933
+.equ W_TVOID    63934
+.equ W_TFLOAT   63935
+.equ W_TAGSYM   63936
+.equ W_ARRDIM   63937      ; 8 dimensions
+.equ W_ARRND    63945
+.equ W_SW_PATCH  63946
+.equ W_GOTO_PATCH 63947
+.equ W_GOTO_NAME 63948
+.equ W_PP_ACTIVE 63949
+.equ W_ENUMVAL  63950
+.equ W_SSIZE    63960
+.equ W_SALIGN   63961
+.equ W_SMEM     63962
+.equ W_SNMEM    63963
+.equ W_MEMTOP   64009
+.equ W_SSDEPTH  64010
+.equ W_SDOWN    64011
+.equ W_SANON    64012
+.equ W_ML_SOFT  64013
+.equ W_ANON_TY  64014
+.equ W_ANON_OFF 64015
+.equ W_SSPKIND  64025
+.equ W_STAG     63964
+.equ W_SOFF     63965
+.equ W_STYPE    63966
+.equ W_STMP     63967
+.equ W_STRUCTKIND    63968
+.equ W_MSIZE    63969
+.equ W_TSEEN    63970
+.equ W_BRET     63981
+.equ W_HEAP     63982
+.equ W_TAILHALT 63983
+.equ W_PTRV     63984
+.equ W_PTRC     63985
+.equ W_PF_FMT   63986
+.equ W_PF_IDX   63987
+.equ W_PF_ARGC  63988
+.equ W_PF_OFF   63989
+.equ W_PF_LL    63990
+.equ W_PF_CASE  63991
+.equ W_PF_W     63992
+.equ W_PF_FLAGS 63993
+.equ W_PF_VAL   63994
+.equ W_PF_LEN   63995
+.equ W_PF_PAD   63996
+.equ W_PF_NEG   63997
+.equ W_PF_TMP   63998
+.equ W_PF_PREC  63999
+.equ W_F2V      64000
+.equ W_F2P      64001
+.equ W_F2NEG    64002
+.equ W_F2S      64003
+.equ W_F2I      64004
+.equ W_F2F      64005
+.equ W_F2L      64006
+.equ W_F2BIG    64007
+.equ W_PF_LSTR   64008
 ; libm soft-double scratch (ni_sin/ni_cos range reduction and kernels)
-.equ W_LM_X     61900
-.equ W_LM_AX    61901
-.equ W_LM_N     61902
-.equ W_LM_ND    61903
-.equ W_LM_Q     61904
-.equ W_LM_RH    61905
-.equ W_LM_RL    61906
-.equ W_LM_ZH    61907
-.equ W_LM_ZL    61908
-.equ W_LM_AH    61909
-.equ W_LM_AL    61910
-.equ W_LM_PH    61911
-.equ W_LM_PL    61912
-.equ W_LM_TH    61913
-.equ W_LM_TL    61914
-.equ W_LM_C     61915
-.equ W_LM_SG    61916
-.equ W_EXITCODE  61140      ; last main()/exit() status, returned by ncc_run
-.equ W_INCSTEP   61141      ; ++/-- step preserved across px_emit_store
-.equ W_PARM_SAVE 61142      ; saved W_PARAMP across member funcptr params
-.equ W_BUILTIN_IDX 61143    ; builtin shadowed by a prototype, or -1
-.equ W_EXISTFUNC 61144      ; existing function/prototype with same name, or -1
-.equ W_SWSAVE   61145      ; switch break-count saved across break patching
-.equ W_DECLBASE 61146      ; unsuffixed base type for a declarator list
-.equ W_DECLFLAG 61147      ; first declarator's pointer suffix already consumed
-.equ W_BITUNIT   61800
-.equ W_BITUSED   61801
-.equ W_MEMBIT    61802
-.equ W_LBIT      61803
-.equ W_BF_ADDR   61804
-.equ W_BF_VAL    61805
-.equ W_BF_MASK   61806
-.equ W_BF_FIELD  61807
-.equ W_BF_UNIT   61808
-.equ W_BF_BITS   61809
-.equ W_BF_OFF    61810
-.equ W_BITS_W    61811
-.equ W_STBIT     61812
-.equ W_ELT_BIT   61813
-.equ W_EX_A      61814
-.equ W_EX_B      61815
-.equ W_RAND_INIT 61816
-.equ W_HEAP_INIT 61817
-.equ W_FREELIST  61818
-.equ W_ALLOC_NEED 61819
-.equ W_ALLOC_BLK 61821
-.equ W_ALLOC_SIZE 61822
-.equ W_ALLOC_A   61823
-.equ W_ALLOC_B   61824
-.equ W_ALLOC_OLD 61825
-.equ W_ALLOC_NEW 61826
-.equ W_AGHI     61827
-.equ W_HEAP_LIMIT 61840
-.equ W_MEM_WORDS  61844
-.equ W_C_STACK    61845
-.equ W_C_STACK_END 61846
-.equ W_HEAP_END   61847
-.equ W_ALIGN      61848
-.equ W_ERRNO     61795
-.equ W_FWIDE_STD 61796
-.equ W_STDPB     61820
-.equ W_DK_I      61830
-.equ W_DK_N      61831
-.equ W_ATEXIT_N 61890
-.equ W_ATEXIT_I 61891
-.equ W_ATEXIT_SYM 61892
-.equ W_ATEXIT_OLD 61893
-.equ W_ATEXIT_SKIP 61894
-.equ W_GM_X     61884
-.equ W_GM_SIGN  61885
-.equ W_GM_S     61886
-.equ W_SIGNGAM  61887
-.equ W_GM_A     61888
-.equ W_GM_P     61889
-.equ W_DIVTYPE  61896
-.equ W_LDIVTYPE 61897
-.equ W_LLDIVTYPE 61898
-.equ W_IT_INTERVAL 61899
-.equ W_ATEXIT_RUN 61895
-.equ W_VARNP    61390
-.equ W_VARFLAG  61391
-.equ W_VARCNT   61393
-.equ W_ITYPE    61420
-.equ W_INOFF    61421
-.equ W_INTYPE   61422
-.equ W_INMEM    61423
-.equ W_INNMEM   61424
-.equ W_INUM     61425
-.equ W_II       61426
-.equ W_IELEM    61427
-.equ W_IESZ     61428
-.equ W_INNUM    61429
-.equ W_BITW     61430
-.equ W_SBASE    61434
-.equ W_RAND     61435
-.equ W_SNOUT    61436
-.equ W_SNLIM    61437
-.equ W_SNPOS    61438
-.equ W_SNTMP1   61439
-.equ W_SNTMP2   61440
-.equ W_SNTMP3   61441
-.equ W_SNREG1   61442
-.equ W_SNREG2   61443
-.equ W_SNREG3   61444
-.equ W_F2EXP    61445
-.equ W_F2SIGN2  61446
-.equ W_F2TMP    61447
-.equ W_AGVAL    61524
-.equ W_AGSYM    61525
-.equ W_AMTYP    61526
-.equ W_AMOFF    61527
-.equ W_AMHASH   61528
-.equ W_AMNAME   61529
-.equ W_AMLEN    61530
-.equ W_TMTYPE   61531
-.equ W_TM0      61532
-.equ W_TM1      61533
-.equ W_TM2      61534
-.equ W_TM3      61535
-.equ W_TM4      61536
-.equ W_TM5      61537
-.equ W_TM6      61538
-.equ W_TM7      61539
-.equ W_TM8      61540
-.equ W_TA       61541
-.equ W_TB       61542
-.equ W_TC       61543
-.equ W_TD       61544
-.equ W_TE       61545
-.equ W_TF       61546
-.equ W_TKPTR    60990
-.equ W_CASEBASE 60971
-.equ W_DEFSET   60972
-.equ W_DEFTGT   60973
-.equ W_SWDISP   60974
-.equ W_SWFALL   60975
-.equ W_SWTMP    60976
-.equ W_SWNO     60977
-.equ W_SWEND    60978
-.equ W_SWI      60979
-.equ W_TMP3     60980
+.equ W_LM_X     64900
+.equ W_LM_AX    64901
+.equ W_LM_N     64902
+.equ W_LM_ND    64903
+.equ W_LM_Q     64904
+.equ W_LM_RH    64905
+.equ W_LM_RL    64906
+.equ W_LM_ZH    64907
+.equ W_LM_ZL    64908
+.equ W_LM_AH    64909
+.equ W_LM_AL    64910
+.equ W_LM_PH    64911
+.equ W_LM_PL    64912
+.equ W_LM_TH    64913
+.equ W_LM_TL    64914
+.equ W_LM_C     64915
+.equ W_LM_SG    64916
+.equ W_EXITCODE  64140      ; last main()/exit() status, returned by ncc_run
+.equ W_INCSTEP   64141      ; ++/-- step preserved across px_emit_store
+.equ W_PARM_SAVE 64142      ; saved W_PARAMP across member funcptr params
+.equ W_BUILTIN_IDX 64143    ; builtin shadowed by a prototype, or -1
+.equ W_EXISTFUNC 64144      ; existing function/prototype with same name, or -1
+.equ W_SWSAVE   64145      ; switch break-count saved across break patching
+.equ W_DECLBASE 64146      ; unsuffixed base type for a declarator list
+.equ W_DECLFLAG 64147      ; first declarator's pointer suffix already consumed
+.equ W_BITUNIT   64800
+.equ W_BITUSED   64801
+.equ W_MEMBIT    64802
+.equ W_LBIT      64803
+.equ W_BF_ADDR   64804
+.equ W_BF_VAL    64805
+.equ W_BF_MASK   64806
+.equ W_BF_FIELD  64807
+.equ W_BF_UNIT   64808
+.equ W_BF_BITS   64809
+.equ W_BF_OFF    64810
+.equ W_BITS_W    64811
+.equ W_STBIT     64812
+.equ W_ELT_BIT   64813
+.equ W_EX_A      64814
+.equ W_EX_B      64815
+.equ W_RAND_INIT 64816
+.equ W_HEAP_INIT 64817
+.equ W_FREELIST  64818
+.equ W_ALLOC_NEED 64819
+.equ W_ALLOC_BLK 64821
+.equ W_ALLOC_SIZE 64822
+.equ W_ALLOC_A   64823
+.equ W_ALLOC_B   64824
+.equ W_ALLOC_OLD 64825
+.equ W_ALLOC_NEW 64826
+.equ W_AGHI     64827
+.equ W_HEAP_LIMIT 64840
+.equ W_MEM_WORDS  64844
+.equ W_C_STACK    64845
+.equ W_C_STACK_END 64846
+.equ W_HEAP_END   64847
+.equ W_ALIGN      64848
+.equ W_ERRNO     64795
+.equ W_FWIDE_STD 64796
+.equ W_STDPB     64820
+.equ W_DK_I      64830
+.equ W_DK_N      64831
+.equ W_ATEXIT_N 64890
+.equ W_ATEXIT_I 64891
+.equ W_ATEXIT_SYM 64892
+.equ W_ATEXIT_OLD 64893
+.equ W_ATEXIT_SKIP 64894
+.equ W_GM_X     64884
+.equ W_GM_SIGN  64885
+.equ W_GM_S     64886
+.equ W_SIGNGAM  64887
+.equ W_GM_A     64888
+.equ W_GM_P     64889
+.equ W_DIVTYPE  64896
+.equ W_LDIVTYPE 64897
+.equ W_LLDIVTYPE 64898
+.equ W_IT_INTERVAL 64899
+.equ W_ATEXIT_RUN 64895
+.equ W_VARNP    64390
+.equ W_VARFLAG  64391
+.equ W_VARCNT   64393
+.equ W_ITYPE    64420
+.equ W_INOFF    64421
+.equ W_INTYPE   64422
+.equ W_INMEM    64423
+.equ W_INNMEM   64424
+.equ W_INUM     64425
+.equ W_II       64426
+.equ W_IELEM    64427
+.equ W_IESZ     64428
+.equ W_INNUM    64429
+.equ W_BITW     64430
+.equ W_SBASE    64434
+.equ W_RAND     64435
+.equ W_SNOUT    64436
+.equ W_SNLIM    64437
+.equ W_SNPOS    64438
+.equ W_SNTMP1   64439
+.equ W_SNTMP2   64440
+.equ W_SNTMP3   64441
+.equ W_SNREG1   64442
+.equ W_SNREG2   64443
+.equ W_SNREG3   64444
+.equ W_F2EXP    64445
+.equ W_F2SIGN2  64446
+.equ W_F2TMP    64447
+.equ W_AGVAL    64524
+.equ W_AGSYM    64525
+.equ W_AMTYP    64526
+.equ W_AMOFF    64527
+.equ W_AMHASH   64528
+.equ W_AMNAME   64529
+.equ W_AMLEN    64530
+.equ W_TMTYPE   64531
+.equ W_TM0      64532
+.equ W_TM1      64533
+.equ W_TM2      64534
+.equ W_TM3      64535
+.equ W_TM4      64536
+.equ W_TM5      64537
+.equ W_TM6      64538
+.equ W_TM7      64539
+.equ W_TM8      64540
+.equ W_TA       64541
+.equ W_TB       64542
+.equ W_TC       64543
+.equ W_TD       64544
+.equ W_TE       64545
+.equ W_TF       64546
+.equ W_TKPTR    63990
+.equ W_CASEBASE 63971
+.equ W_DEFSET   63972
+.equ W_DEFTGT   63973
+.equ W_SWDISP   63974
+.equ W_SWFALL   63975
+.equ W_SWTMP    63976
+.equ W_SWNO     63977
+.equ W_SWEND    63978
+.equ W_SWI      63979
+.equ W_TMP3     63980
 ; C11 language helpers
-.equ W_ALIGNAS  61782
-.equ W_CNST_START 61783
-.equ W_CNST_SAVE 61784
-.equ W_CNST_FP  61770
-.equ W_CNST_STOP 61771
-.equ W_CNST_ALARM 61772
-.equ W_GEN_TYPE 61785
-.equ W_GEN_DONE 61786
-.equ W_GEN_TMP  61787
-.equ W_SCAN_DEPTH 61788
-.equ W_ISO_TMP  61789
-.equ W_CPLX_BASE 61773
-.equ W_CPLX_TYPE 61774
-.equ W_CPLX_LOCAL 61775
-.equ W_CPLX_N   61776
-.equ W_LEXWIDE  61759
+.equ W_ALIGNAS  64782
+.equ W_CNST_START 64783
+.equ W_CNST_SAVE 64784
+.equ W_CNST_FP  64770
+.equ W_CNST_STOP 64771
+.equ W_CNST_ALARM 64772
+.equ W_GEN_TYPE 64785
+.equ W_GEN_DONE 64786
+.equ W_GEN_TMP  64787
+.equ W_SCAN_DEPTH 64788
+.equ W_ISO_TMP  64789
+.equ W_CPLX_BASE 64773
+.equ W_CPLX_TYPE 64774
+.equ W_CPLX_LOCAL 64775
+.equ W_CPLX_N   64776
+.equ W_LEXWIDE  64759
 .equ ISO_SAVE   960000      ; free words between MP buffers and IR
-.equ W_TKA      60200
-.equ W_TKB      60272
-.equ W_TMP      60400
-.equ W_DECBUF   60402      ; 10 words
+.equ W_TKA      63200
+.equ W_TKB      63272
+.equ W_TMP      63400
+.equ W_DECBUF   63402      ; 10 words
 
 ; lexer globals (absolute words)
-.equ L_WP       60450
-.equ L_BI       60451
-.equ L_LINE     60452
-.equ L_CH       60453
-.equ L_TOKP     60454
-.equ L_TADDR    60455
-.equ L_TCNT     60456
-.equ L_TMP0     60457
-.equ L_TMP1     60458
-.equ L_TMP2     60459
-.equ L_TMP3     60460
-.equ L_TMP4     60461
-.equ L_TMP5     60462
-.equ L_KIND     60463
-.equ L_VAL      60464
-.equ L_LL       60469
-.equ L_UNS      60470
-.equ L_VALH     60471
-.equ L_HASH     60465
-.equ L_LEN      60466
-.equ L_TLINE    60467
-.equ L_TCAP     60468
+.equ L_WP       63450
+.equ L_BI       63451
+.equ L_LINE     63452
+.equ L_CH       63453
+.equ L_TOKP     63454
+.equ L_TADDR    63455
+.equ L_TCNT     63456
+.equ L_TMP0     63457
+.equ L_TMP1     63458
+.equ L_TMP2     63459
+.equ L_TMP3     63460
+.equ L_TMP4     63461
+.equ L_TMP5     63462
+.equ L_KIND     63463
+.equ L_VAL      63464
+.equ L_LL       63469
+.equ L_UNS      63470
+.equ L_VALH     63471
+.equ L_HASH     63465
+.equ L_LEN      63466
+.equ L_TLINE    63467
+.equ L_TCAP     63468
 
 ; parser/interpreter globals
-.equ R_PC       60500
-.equ R_SP       60501
-.equ R_FP       60502
-.equ R_RETV     60503
-.equ R_IP       60504
-.equ R_T0       60505
-.equ R_T1       60506
-.equ R_T2       60507
+.equ R_PC       63500
+.equ R_SP       63501
+.equ R_FP       63502
+.equ R_RETV     63503
+.equ R_IP       63504
+.equ R_T0       63505
+.equ R_T1       63506
+.equ R_T2       63507
 
 ; ================================================================== PREPROCESSOR
 ; Minimal C89 line preprocessor: object-like #define/#undef, #ifdef/#ifndef,
@@ -1051,48 +1053,48 @@
 .equ QPMACW    1990000
 .equ QPMACMAX  128
 .equ QPCONDW   1991100
-.equ WQ_WP     61200
-.equ WQ_BI     61201
-.equ WQ_OUT    61202
-.equ WQ_ACT    61203
-.equ WQ_DEPTH  61204
-.equ WQ_NAMEP  61205
-.equ WQ_MACN   61206
-.equ WQ_HASH   61207
-.equ WQ_ILEN   61208
-.equ WQ_LEN    61209
-.equ WQ_T0     61210
-.equ WQ_T1     61211
-.equ WQ_T2     61212
-.equ WQ_T3     61213
-.equ WQ_Q      61214
-.equ WQ_ESC    61215
-.equ WQ_CMT    61216
-.equ WQ_P0     61217
+.equ WQ_WP     64200
+.equ WQ_BI     64201
+.equ WQ_OUT    64202
+.equ WQ_ACT    64203
+.equ WQ_DEPTH  64204
+.equ WQ_NAMEP  64205
+.equ WQ_MACN   64206
+.equ WQ_HASH   64207
+.equ WQ_ILEN   64208
+.equ WQ_LEN    64209
+.equ WQ_T0     64210
+.equ WQ_T1     64211
+.equ WQ_T2     64212
+.equ WQ_T3     64213
+.equ WQ_Q      64214
+.equ WQ_ESC    64215
+.equ WQ_CMT    64216
+.equ WQ_P0     64217
 
 .equ Q2MAC      2000000
 .equ Q2MACMAX   256
 .equ Q2COND     2001024
 .equ Q2BUF      8020000
-.equ W_Q2N      61300
-.equ W_Q2SKIP   61301
-.equ W_Q2DEPTH  61302
-.equ W_Q2HASH   61303
-.equ W_Q2LEN    61304
-.equ W_Q2VAL    61305
-.equ W_Q2T0     61306
-.equ W_Q2SIGN   61307
-.equ W_Q2PTR    61308
-.equ W_SCOPEID 61310
-.equ W_FORCENEW 61311
-.equ W_NEXTSCOPE 61312
-.equ W_IDXTYPE 61341
-.equ W_CALLV    61350
-.equ W_FPSYM    61351
-.equ W_FPTR_TYPE 61352
-.equ W_FPGLOBAL 61353
-.equ W_FPRET    61354
-.equ W_FPNP     61355
+.equ W_Q2N      64300
+.equ W_Q2SKIP   64301
+.equ W_Q2DEPTH  64302
+.equ W_Q2HASH   64303
+.equ W_Q2LEN    64304
+.equ W_Q2VAL    64305
+.equ W_Q2T0     64306
+.equ W_Q2SIGN   64307
+.equ W_Q2PTR    64308
+.equ W_SCOPEID 64310
+.equ W_FORCENEW 64311
+.equ W_NEXTSCOPE 64312
+.equ W_IDXTYPE 64341
+.equ W_CALLV    64350
+.equ W_FPSYM    64351
+.equ W_FPTR_TYPE 64352
+.equ W_FPGLOBAL 64353
+.equ W_FPRET    64354
+.equ W_FPNP     64355
 .equ W_SCOPEPAR 2001200
 .include "timeb.nas"
 .include "ata.nas"
@@ -1697,6 +1699,8 @@ q2s_endif:
 
 ; ------------------------------------------------------------------ entry points
 ncc_compile:
+ST r14,r0,@ncc_recover_sp
+ST r15,r0,@ncc_recover_lr
 ST r14,r0,#W_PSAVE
 LA r14,#NCC_PS
 ST r15,r14,0
@@ -1765,6 +1769,7 @@ CALL @ir_emit
 SUB r14,r14,r13
 LD r15,r14,0
 LD r14,r0,#W_PSAVE
+MOVI r1,0
 RET
 
 ; ncc_mem_setup: size the C heap and stack from the VM's actual memory.
@@ -1825,6 +1830,8 @@ LD r15,r14,0
 RET
 
 ncc_run:
+ST r14,r0,@ncc_recover_sp
+ST r15,r0,@ncc_recover_lr
 ST r14,r0,#W_PSAVE2
 LA r14,#NCC_PS
 ST r15,r14,0
@@ -1933,6 +1940,11 @@ ncc_err:
 ST r15,r14,0
 ADD r14,r14,r13
 ST r1,r0,#W_ERRCODE
+LD r2,r0,@ncc_recover
+CMP r2,r0
+JMP[EQ] @nerr_report
+ST r0,r0,#W_SNOUT
+nerr_report:
 MOVI r1,33
 CALL @ncc_putc
 MOVI r1,67
@@ -1959,6 +1971,15 @@ MOVI r1,93
 CALL @ncc_putc
 MOVI r1,10
 CALL @ncc_putc
+LD r2,r0,@ncc_recover
+CMP r2,r0
+JMP[EQ] @nerr_halt
+; Recover to top-level compile/run caller, not a nested parser frame.
+LD r1,r0,#W_ERRCODE
+LD r14,r0,@ncc_recover_sp
+LD r15,r0,@ncc_recover_lr
+RET
+nerr_halt:
 HALT
 
 ; puthex4: r5 = value -> 4 uppercase hex digits
@@ -4029,6 +4050,12 @@ RET
 
 ; ---- output hook + constant tables --------------------------------
 ncc_out:
+.word 0
+ncc_recover:
+.word 0
+ncc_recover_sp:
+.word 0
+ncc_recover_lr:
 .word 0
 k_fnv0:
 .word 0x811C9DC5
