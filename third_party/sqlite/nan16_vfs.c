@@ -21,8 +21,14 @@ static unsigned int nan_now_ms(void)
     return *(volatile unsigned int *)0x03EFF010u;
 }
 
-#define NAN_VFS_FILES 16
-#define NAN_VFS_NAME  64
+#ifndef NAN16_SQLITE_VFS_FILES
+#define NAN16_SQLITE_VFS_FILES 64
+#endif
+#ifndef NAN16_SQLITE_VFS_NAME
+#define NAN16_SQLITE_VFS_NAME 128
+#endif
+#define NAN_VFS_FILES NAN16_SQLITE_VFS_FILES
+#define NAN_VFS_NAME  NAN16_SQLITE_VFS_NAME
 
 typedef struct NanMemFile {
     char name[NAN_VFS_NAME];
