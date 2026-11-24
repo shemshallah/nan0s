@@ -292,6 +292,25 @@ The storage work includes NaNFS and experimental file/volume tools. [Cryptograph
 
 Native head storage and bounded learning counters are documented in [head runtime](docs/N16_HEAD_RUNTIME.md) and [worker image](docs/N16_HEAD_WORKER_IMAGE.md). These are specific guest primitives, **not** evidence that a full language model is already resident or trained in NaN/0S.
 
+## NANDBG
+
+The repository ships NANDBG, a NaN-native debugger, as both a standalone
+component and a resident shell ABI. The standalone monitor, typed-record core,
+tests, and exact gates live in `src/dbg/` and `src/tests/ndbg_*`; the design is
+in `spec/NANDBG.md`, and the integration notes are in
+[`docs/NDBG_INTEGRATION.md`](docs/NDBG_INTEGRATION.md).
+
+```sh
+sh tools/ndbg.sh       # typed words, mirror, step core
+sh tools/ndbg_diff.sh  # native vs stepped, guard/watch, real cart
+sh tools/ndbg_mon.sh   # serial monitor
+sh tools/ndbg_img.sh   # bare-metal QEMU monitor boot
+```
+
+The desktop pane CLI is maintained in `shemshallah/ndbg`; its Silver Slate port
+is pending. `tools/ndbg_sync.sh` refreshes the vendored component from an ndbg
+checkout.
+
 ## Mathematical and formal verification work
 
 The [NaN16 formalization](formal/nan16/) uses Coq to prove properties of mirror operations, canonical addresses, signed orientations, and abstract memory updates. The [R5 proof-status ledger](formal/nan16/PROOF_STATUS.md) identifies the precise kernel-checked theorems and recorded CI results.
