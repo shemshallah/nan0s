@@ -13,9 +13,16 @@ JMP @f7_ok
 f7_q:
 MOVI r3,63
 f7_ok:
+ST r3,r0,@f7_ascii
 ST r1,r0,@f7_x
 ST r2,r0,@f7_y
 ST r4,r0,@f7_c
+ST r15,r0,@f7_damage_ret
+MOVI r3,7
+MOVI r4,11
+CALL @fb_damage
+LD r15,r0,@f7_damage_ret
+LD r3,r0,@f7_ascii
 MOVI r5,32
 SUB r3,r3,r5
 MOVI r5,11
@@ -48,6 +55,8 @@ LD r10,r0,@fb_w
 MUL r9,r9,r10
 LD r10,r0,@f7_x
 ADD r9,r9,r10
+LD r10,r0,@fb_scene_offset
+ADD r9,r9,r10
 MOVI r11,64
 LD r10,r0,@f7_x
 ST r10,r0,@f7_colx
@@ -78,6 +87,10 @@ ADD r6,r6,r13
 JMP @f7_row
 f7_done:
 RET
+f7_damage_ret:
+.word 0
+f7_ascii:
+.word 0
 f7_colx:
 .word 0
 f7_x:

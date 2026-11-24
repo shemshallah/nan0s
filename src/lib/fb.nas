@@ -284,7 +284,7 @@ fb_clear:
 LD r2,r0,@fb_w
 LD r3,r0,@fb_h
 MUL r2,r2,r3
-MOVI r3,0
+LD r3,r0,@fb_scene_offset
 FBFILL r2,r3,r1
 RET
 fb_put:
@@ -1268,3 +1268,114 @@ uni_cp:
 .word 8776
 .word 8853
 .word 10003
+
+; Retained scene target (zero for non-desktop users). Scanline damage at 0x58200.
+fb_scene_offset:
+.word 0
+fb_mark_suppress:
+.word 0
+fb_dirty:
+.word 0
+; r1=x r2=y r3=w r4=h. Preserves all registers except r5.
+fb_damage:
+LD r5,r0,@fb_scene_offset
+CMP r5,r0
+RET[EQ]
+LD r5,r0,@fb_mark_suppress
+CMP r5,r0
+RET[NE]
+ST r1,r0,@fd_save1
+ST r2,r0,@fd_save2
+ST r3,r0,@fd_save3
+ST r4,r0,@fd_save4
+ST r6,r0,@fd_save6
+ST r7,r0,@fd_save7
+ST r8,r0,@fd_save8
+ST r9,r0,@fd_save9
+ST r10,r0,@fd_save10
+ST r11,r0,@fd_save11
+ST r12,r0,@fd_save12
+CMP r3,r0
+JMP[LE] @fd_done
+CMP r4,r0
+JMP[LE] @fd_done
+ADD r3,r1,r3
+ADD r4,r2,r4
+SHR r6,r1,31
+CMP r6,r0
+MOVI[NE] r1,0
+SHR r6,r2,31
+CMP r6,r0
+MOVI[NE] r2,0
+LD r6,r0,@fb_w
+CMP r3,r6
+ADD[GT] r3,r6,r0
+LD r6,r0,@fb_h
+CMP r4,r6
+ADD[GT] r4,r6,r0
+CMP r3,r1
+JMP[LE] @fd_done
+CMP r4,r2
+JMP[LE] @fd_done
+ST r13,r0,@fb_dirty
+MOVI r7,0x8200
+MOVHI r7,5
+ADD r7,r7,r2
+MOVI r12,0xFFFF
+fd_row:
+LD r8,r7,0
+CMP r8,r0
+JMP[EQ] @fd_new
+BOOL.8 r9,r8,r12
+SHR r10,r8,16
+CMP r9,r1
+ADD[GT] r9,r1,r0
+CMP r10,r3
+ADD[LT] r10,r3,r0
+JMP @fd_pack
+fd_new:
+ADD r9,r1,r0
+ADD r10,r3,r0
+fd_pack:
+SHL r10,r10,16
+BOOL.14 r9,r9,r10
+ST r9,r7,0
+ADD r7,r7,r13
+ADD r2,r2,r13
+CMP r2,r4
+JMP[LT] @fd_row
+fd_done:
+LD r1,r0,@fd_save1
+LD r2,r0,@fd_save2
+LD r3,r0,@fd_save3
+LD r4,r0,@fd_save4
+LD r6,r0,@fd_save6
+LD r7,r0,@fd_save7
+LD r8,r0,@fd_save8
+LD r9,r0,@fd_save9
+LD r10,r0,@fd_save10
+LD r11,r0,@fd_save11
+LD r12,r0,@fd_save12
+RET
+fd_save1:
+.word 0
+fd_save2:
+.word 0
+fd_save3:
+.word 0
+fd_save4:
+.word 0
+fd_save6:
+.word 0
+fd_save7:
+.word 0
+fd_save8:
+.word 0
+fd_save9:
+.word 0
+fd_save10:
+.word 0
+fd_save11:
+.word 0
+fd_save12:
+.word 0

@@ -37,6 +37,7 @@ CALL @kbd_init
 CALL @wm_init
 CALL @sh_init
 CALL @ms_init
+CALL @g_scene_init
 MOVI r1,@ms_touch
 ST r1,r0,@kb_touch_hook
 CALL @nfs_format
@@ -85,11 +86,23 @@ LD r1,r0,@wm_redraw
 CMP r1,r0
 JMP[EQ] @g_nodraw
 ST r0,r0,@wm_redraw
+LD r1,r0,@fb_scene_offset
+CMP r1,r0
+JMP[NE] @g_compose
 ST r0,r0,@ms_cursor_saved
 CALL @wm_draw_all
 CALL @g_bar
 CALL @sh_draw
 CALL @ms_draw
+JMP @g_nodraw
+g_compose:
+ST r13,r0,@fb_mark_suppress
+CALL @wm_draw_all
+CALL @sh_draw
+ST r0,r0,@fb_mark_suppress
+CALL @g_structural_damage
+CALL @g_bar
+CALL @g_present
 g_nodraw:
 LD r1,r0,@g_quit
 CMP r1,r0
@@ -106,12 +119,12 @@ BOOL.8 r1,r1,r4
 CMP r1,r0
 JMP[EQ] @g_tick
 ST r1,r0,@g_key
-CALL @ms_erase
+CALL @g_cursor_guard
 CALL @g_onkey
 LD r1,r0,@wm_redraw
 CMP r1,r0
 JMP[NE] @g_loop
-CALL @ms_draw
+CALL @g_present
 JMP @g_loop
 g_tick:
 TICK r1
@@ -121,11 +134,14 @@ MOVI r4,#PERIOD
 CMP r3,r4
 JMP[LT] @g_loop
 ST r1,r0,@g_last
-CALL @ms_erase
+CALL @g_cursor_guard
 CALL @g_ticks
 CALL @wm_notice_tick
+LD r1,r0,@wm_redraw
+CMP r1,r0
+JMP[NE] @g_loop
 CALL @g_bar
-CALL @ms_draw
+CALL @g_present
 JMP @g_loop
 g_exit:
 MOVI r1,0xFFFF
@@ -2309,6 +2325,7 @@ st_mode:
 ST r15,r14,0
 ADD r14,r14,r13
 CALL @fb_init_mode
+CALL @g_scene_init
 CALL @st_refit
 ST r0,r0,@ls_w
 ST r13,r0,@wm_redraw
@@ -2445,7 +2462,7 @@ LD r1,r0,@stt_id
 CALL @st_draw
 JMP @stt_ret
 stt_full:
-ST r13,r0,@wm_redraw
+; Covered countdown retains state until exposure.
 stt_ret:
 SUB r14,r14,r13
 LD r15,r14,0
@@ -3939,6 +3956,8 @@ ADD r7,r7,r8
 LD r9,r0,@fb_w
 MUL r7,r7,r9
 ADD r7,r7,r6
+LD r8,r0,@fb_scene_offset
+ADD r7,r7,r8
 ST r7,r0,@ls_a
 LD r4,r0,@ls_w
 CMP r4,r2
@@ -3958,6 +3977,8 @@ ST r0,r0,@ls_n
 LD r2,r0,@fb_w
 LD r3,r0,@fb_h
 MUL r2,r2,r3
+LD r3,r0,@fb_scene_offset
+ADD r2,r2,r3
 ST r2,r0,@ls_oc
 LA r4,#LSLIM
 MOVI r5,0
@@ -4122,6 +4143,7 @@ lat_draw:
 ST r15,r14,0
 ADD r14,r14,r13
 CALL @lat_sync
+CALL @g_lat_damage
 ST r0,r0,@ld_r
 ld_loop:
 LD r2,r0,@ld_r
@@ -4220,6 +4242,7 @@ CALL @wm_covered
 CMP r1,r0
 JMP[NE] @lt_done
 lt_scroll:
+CALL @g_lat_damage
 LD r10,r0,@ls_a
 LD r9,r0,@fb_w
 LD r12,r0,@ls_bw
@@ -5668,3 +5691,321 @@ fs_useinc_path:
 .str "/useinc.c"
 fs_useinc_src:
 .str "#include \"/inc.h\"\nint main(void){ printf(\"%d\\n\", add(20,22)); return 0; }\n"
+
+; Native retained scene: [W*H, 2*W*H) in the existing 2M VRAM arena.
+; Modes too large for two surfaces retain the direct-renderer fallback.
+g_scene_init:
+ST r0,r0,@fb_scene_offset
+ST r0,r0,@fb_mark_suppress
+ST r0,r0,@fb_dirty
+ST r0,r0,@gs_ready
+ST r0,r0,@ms_cursor_saved
+ST r0,r0,@ms_cursor_target
+LD r1,r0,@fb_w
+LD r2,r0,@fb_h
+MUL r3,r1,r2
+LA r4,1000000
+CMP r3,r4
+JMP[GT] @gsi_cursor
+ST r3,r0,@fb_scene_offset
+MOVI r1,0x8200
+MOVHI r1,5
+MOVI r2,0
+MOVI r3,1600
+BFILL r1,r2,r3
+MOVI r1,0x8140
+MOVHI r1,5
+MOVI r2,0
+MOVI r3,48
+BFILL r1,r2,r3
+ST r0,r0,@gs_shell
+ST r0,r0,@gs_modal
+gsi_cursor:
+LD r1,r0,@fb_w
+SUB r1,r1,r13
+LD r2,r0,@ms_x
+CMP r2,r1
+ST[GT] r1,r0,@ms_x
+LD r1,r0,@fb_h
+SUB r1,r1,r13
+LD r2,r0,@ms_y
+CMP r2,r1
+ST[GT] r1,r0,@ms_y
+RET
+g_cursor_guard:
+LD r1,r0,@fb_scene_offset
+CMP r1,r0
+RET[NE]
+JMP @ms_erase
+; Structural damage compares the eight visible-window footprints and z-ranks.
+; Old snapshot at 0x58140: rank,x,y,w,h,title per slot.
+g_structural_damage:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r1,r0,@gs_ready
+CMP r1,r0
+JMP[EQ] @gs_all
+LD r1,r0,@wm_theme
+LD r2,r0,@gs_theme
+CMP r1,r2
+JMP[EQ] @gs_start
+gs_all:
+MOVI r1,0
+MOVI r2,0
+LD r3,r0,@fb_w
+LD r4,r0,@fb_h
+CALL @fb_damage
+ST r13,r0,@gs_ready
+gs_start:
+LD r1,r0,@wm_theme
+ST r1,r0,@gs_theme
+ST r0,r0,@gs_i
+ST r0,r0,@gs_changed
+gs_slot:
+LD r1,r0,@gs_i
+MOVI r2,#MAXW
+CMP r1,r2
+JMP[GE] @gs_overlays
+CALL @wm_wbase
+ST r1,r0,@gs_wb
+LD r1,r0,@gs_i
+MOVI r2,6
+MUL r1,r1,r2
+MOVI r2,0x8140
+MOVHI r2,5
+ADD r1,r1,r2
+ST r1,r0,@gs_old
+MOVI r2,0
+LD r3,r0,@wm_zn
+gs_rank:
+CMP r2,r3
+JMP[GE] @gs_absent
+MOVI r4,#ZOL
+MOVHI r4,#ZOH
+ADD r4,r4,r2
+LD r5,r4,0
+LD r6,r0,@gs_i
+ADD r2,r2,r13
+CMP r5,r6
+JMP[NE] @gs_rank
+CMP r2,r3
+JMP[NE] @gs_ranked
+MOVI r4,256
+ADD r2,r2,r4
+JMP @gs_ranked
+gs_absent:
+MOVI r2,0
+gs_ranked:
+ST r2,r0,@gs_rank_now
+LD r1,r0,@gs_old
+LD r3,r1,0
+CMP r2,r3
+JMP[NE] @gs_change
+CMP r2,r0
+JMP[EQ] @gs_save
+LD r2,r0,@gs_wb
+LD r3,r2,#W_X
+LD r4,r1,1
+CMP r3,r4
+JMP[NE] @gs_change
+LD r3,r2,#W_Y
+LD r4,r1,2
+CMP r3,r4
+JMP[NE] @gs_change
+LD r3,r2,#W_W
+LD r4,r1,3
+CMP r3,r4
+JMP[NE] @gs_change
+LD r3,r2,#W_H
+LD r4,r1,4
+CMP r3,r4
+JMP[NE] @gs_change
+LD r3,r2,#W_TITLE
+LD r4,r1,5
+CMP r3,r4
+JMP[NE] @gs_change
+JMP @gs_save
+gs_change:
+ST r13,r0,@gs_changed
+LD r5,r0,@gs_old
+LD r6,r5,0
+CMP r6,r0
+JMP[EQ] @gs_mark_new
+LD r1,r5,1
+LD r2,r5,2
+LD r3,r5,3
+LD r4,r5,4
+MOVI r6,6
+ADD r3,r3,r6
+ADD r4,r4,r6
+CALL @fb_damage
+gs_mark_new:
+LD r1,r0,@gs_rank_now
+CMP r1,r0
+JMP[EQ] @gs_save
+CALL @gs_mark_current
+gs_save:
+LD r1,r0,@gs_old
+LD r2,r0,@gs_rank_now
+ST r2,r1,0
+LD r2,r0,@gs_wb
+LD r3,r2,#W_X
+ST r3,r1,1
+LD r3,r2,#W_Y
+ST r3,r1,2
+LD r3,r2,#W_W
+ST r3,r1,3
+LD r3,r2,#W_H
+ST r3,r1,4
+LD r3,r2,#W_TITLE
+ST r3,r1,5
+LD r1,r0,@gs_i
+ADD r1,r1,r13
+ST r1,r0,@gs_i
+JMP @gs_slot
+gs_overlays:
+LD r1,r0,@sh_open
+LD r2,r0,@gs_shell
+BOOL.14 r3,r1,r2
+ST r1,r0,@gs_shell
+CMP r3,r0
+JMP[EQ] @gs_modal_check
+MOVI r1,174
+MOVI r2,117
+MOVI r3,670
+MOVI r4,442
+CALL @fb_damage
+ST r13,r0,@gs_changed
+gs_modal_check:
+LD r1,r0,@sh_modal
+LD r2,r0,@gs_modal
+BOOL.14 r3,r1,r2
+ST r1,r0,@gs_modal
+CMP r3,r0
+JMP[EQ] @gs_dock
+MOVI r1,283
+MOVI r2,266
+MOVI r3,456
+MOVI r4,196
+CALL @fb_damage
+ST r13,r0,@gs_changed
+gs_dock:
+MOVI r1,0
+LD r2,r0,@fb_h
+MOVI r4,62
+SUB r2,r2,r4
+LD r3,r0,@fb_w
+CALL @fb_damage
+; Unknown non-geometric invalidation: repaint visible windows, not wallpaper.
+LD r1,r0,@gs_changed
+CMP r1,r0
+JMP[NE] @gs_end
+ST r0,r0,@gs_i
+gs_content:
+LD r1,r0,@gs_i
+LD r2,r0,@wm_zn
+CMP r1,r2
+JMP[GE] @gs_end
+MOVI r2,#ZOL
+MOVHI r2,#ZOH
+ADD r2,r2,r1
+LD r1,r2,0
+CALL @wm_wbase
+ST r1,r0,@gs_wb
+CALL @gs_mark_current
+LD r1,r0,@gs_i
+ADD r1,r1,r13
+ST r1,r0,@gs_i
+JMP @gs_content
+gs_end:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+gs_mark_current:
+LD r5,r0,@gs_wb
+LD r1,r5,#W_X
+LD r2,r5,#W_Y
+LD r3,r5,#W_W
+LD r4,r5,#W_H
+MOVI r6,6
+ADD r3,r3,r6
+ADD r4,r4,r6
+JMP @fb_damage
+g_lat_damage:
+LD r5,r0,@ls_wb
+LD r1,r5,#W_X
+ADD r1,r1,r13
+ADD r1,r1,r13
+LD r2,r5,#W_Y
+MOVI r6,18
+ADD r2,r2,r6
+LD r3,r0,@ls_bw
+LD r4,r0,@ls_bh
+JMP @fb_damage
+; Cursor drawn into the hidden scene before dirty spans are copied. Erasing
+; it afterwards affects only the hidden scene; the front never loses it.
+g_present:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r1,r0,@fb_scene_offset
+CMP r1,r0
+JMP[EQ] @gp_direct
+LD r2,r0,@fb_dirty
+CMP r2,r0
+JMP[EQ] @gp_direct
+ST r1,r0,@ms_cursor_target
+ST r0,r0,@ms_cursor_saved
+CALL @ms_draw
+LD r10,r0,@fb_w
+LD r11,r0,@fb_h
+LD r12,r0,@fb_scene_offset
+MOVI r7,0x8200
+MOVHI r7,5
+MOVI r6,0
+MOVI r5,0xFFFF
+gp_row:
+LD r8,r7,0
+CMP r8,r0
+JMP[EQ] @gp_next
+BOOL.8 r1,r8,r5
+SHR r2,r8,16
+SUB r3,r2,r1
+ADD r1,r1,r6
+ADD r2,r1,r12
+FBCOPY r3,r1,r2
+ST r0,r7,0
+gp_next:
+ADD r7,r7,r13
+ADD r6,r6,r10
+SUB r11,r11,r13
+CMP r11,r0
+JMP[NE] @gp_row
+ST r0,r0,@fb_dirty
+CALL @ms_erase
+ST r0,r0,@ms_cursor_target
+ST r13,r0,@ms_cursor_saved
+JMP @gp_end
+gp_direct:
+CALL @ms_draw
+gp_end:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+gs_ready:
+.word 0
+gs_theme:
+.word 0
+gs_i:
+.word 0
+gs_changed:
+.word 0
+gs_wb:
+.word 0
+gs_old:
+.word 0
+gs_rank_now:
+.word 0
+gs_shell:
+.word 0
+gs_modal:
+.word 0

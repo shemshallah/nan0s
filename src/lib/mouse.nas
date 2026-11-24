@@ -249,7 +249,13 @@ BOOL.6 r4,r4,r5
 BOOL.14 r3,r3,r4
 CMP r3,r0
 JMP[EQ] @ms_update_done
+LD r3,r0,@ms_dx
+LD r2,r0,@ms_dy
+BOOL.14 r3,r3,r2
+CMP r3,r0
+JMP[EQ] @ms_position
 CALL @ms_erase
+ms_position:
 LD r1,r0,@ms_x
 LD r2,r0,@ms_dx
 ADD r1,r1,r2
@@ -347,9 +353,6 @@ ST r13,r0,@wm_redraw
 ms_changed:
 ; Pointer movement alone only updates its saved-under pixels. Geometry,
 ; focus and shell actions request full ordered composition themselves.
-LD r1,r0,@wm_redraw
-CMP r1,r0
-JMP[NE] @ms_update_done
 CALL @ms_draw
 ms_update_done:
 SUB r14,r14,r13
@@ -694,6 +697,8 @@ RET
 
 ; Pointer: guest-native save-under cursor. Erase before any app paints;
 ; invalidate saved pixels before a complete frame replaces the framebuffer.
+ms_cursor_target:
+.word 0
 ms_cursor_saved:
 .word 0
 ms_cursor_pixels:
@@ -732,6 +737,8 @@ ADD r9,r2,r4
 CMP r9,r6
 JMP[GE] @ms_cursor_next
 MUL r9,r9,r5
+ADD r9,r9,r8
+LD r8,r0,@ms_cursor_target
 ADD r9,r9,r8
 CMP r11,r0
 JMP[EQ] @ms_cursor_restore

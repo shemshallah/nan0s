@@ -111,9 +111,16 @@ CMP r3,r0
 RET[LE]
 CMP r4,r0
 RET[LE]
+ST r15,r0,@wr_damage_ret
+ST r5,r0,@wr_damage_color
+CALL @fb_damage
+LD r5,r0,@wr_damage_color
+LD r15,r0,@wr_damage_ret
 LD r6,r0,@fb_w
 MUL r6,r2,r6
 ADD r6,r6,r1
+LD r7,r0,@fb_scene_offset
+ADD r6,r6,r7
 wr_loop:
 CMP r4,r0
 RET[EQ]
@@ -122,6 +129,10 @@ LD r7,r0,@fb_w
 ADD r6,r6,r7
 SUB r4,r4,r13
 JMP @wr_loop
+wr_damage_ret:
+.word 0
+wr_damage_color:
+.word 0
 ; Rounded 3px corners, using three clipped spans; native palette rendering.
 wm_round:
 ST r15,r14,0
@@ -559,6 +570,8 @@ CMP r9,r10
 JMP[LE] @cv_next
 LD r11,r5,#W_W
 ADD r11,r10,r11
+MOVI r12,6
+ADD r11,r11,r12
 CMP r11,r8
 JMP[LE] @cv_next
 LD r8,r7,#W_Y
@@ -569,6 +582,8 @@ CMP r9,r10
 JMP[LE] @cv_next
 LD r11,r5,#W_H
 ADD r11,r10,r11
+MOVI r12,6
+ADD r11,r11,r12
 CMP r11,r8
 JMP[LE] @cv_next
 cv_yes:
