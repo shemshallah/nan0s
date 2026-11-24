@@ -9,6 +9,7 @@ on:
       - "src/exhibits/gui_cart.nas"
       - "tools/qgate_mouse.sh"
       - "tools/qgate_close_x.sh"
+      - "tools/qgate_monitor.sh"
       - ".github/workflows/mouse-gate.yml"
   workflow_dispatch:
 permissions:
@@ -34,3 +35,13 @@ jobs:
         run: sh tools/qgate_mouse.sh
       - name: Physically click raw NaN16 title-bar X and verify desktop survives
         run: sh tools/qgate_close_x.sh
+
+      - name: Verify system monitor does not paint over foreground, minimize or close
+        run: sh tools/qgate_monitor.sh
+      - name: Retain verified boot image for deployment
+        uses: actions/upload-artifact@v4
+        with:
+          name: nan0s-monitor-verified-image
+          path: |
+            docs/nan0s.img
+            src/nan/gui_cart.nan
