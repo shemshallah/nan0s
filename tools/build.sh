@@ -8,7 +8,7 @@ awk -f tools/nmk.awk -v CMD=emit src/museum/museum.nas > src/nan/museum.nan
 # Previously builds reused a stale checked-in gui_cart.nan, so fixing a .nas
 # terminal/browser bug did not fix the publicly deployed full guest.
 awk -f tools/nmk.awk -v CMD=emit src/exhibits/gui_cart.nas > src/nan/gui_cart.nan
-# The native compiler and filesystem reserve words 63000..64999.
+# The native compiler and filesystem reserve words 63000..65300.
 [ "$(wc -l < src/nan/gui_cart.nan)" -le 63001 ] || { echo "GUI code overlaps native C scratch" >&2; exit 1; }
 sh tools/mkall.sh
 # default NaNFS volume (raw ATA volume; guest reads it over ATA PIO LBA28 with nanfs_read):

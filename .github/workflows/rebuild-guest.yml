@@ -5,11 +5,7 @@ on:
     branches: [main]
     paths:
       - "src/exhibits/gui_cart.nas"
-      - "src/lib/wm.nas"
-      - "src/lib/mouse.nas"
-      - "src/lib/shell.nas"
-      - "src/lib/kbd.nas"
-      - "src/lib/bootbuild.nas"
+      - "src/lib/**"
       - "tools/build.sh"
       - ".github/workflows/rebuild-guest.yml"
   workflow_dispatch:
@@ -88,8 +84,7 @@ jobs:
           for attempt in 1 2 3; do
             git fetch origin main
             if ! git diff --quiet HEAD^ origin/main -- \
-              src/exhibits/gui_cart.nas src/lib/wm.nas src/lib/mouse.nas src/lib/shell.nas \
-              src/lib/kbd.nas src/lib/bootbuild.nas tools/build.sh; then
+              src/exhibits/gui_cart.nas src/lib tools/build.sh; then
               echo "A newer NaN16 source is on main; this obsolete image must not publish."
               exit 0
             fi
