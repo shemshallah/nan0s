@@ -45,6 +45,17 @@ Because the loader appends without deduplication, names in one archive must be
 unique, as required above. Runtime `nan16_vfs_add_ro`/`nan16_vfs_add` still
 look up an existing name and update that entry.
 
+## Directories
+
+`N16PACK1` stores files only; directories are implicit from path prefixes
+(`/sqlite/test/select1.test` makes `/sqlite` and `/sqlite/test` directories).
+The libc VFS adds `mkdir`/`rmdir` markers for runtime-created directories,
+`stat` reports `S_IFDIR` for both kinds, and `opendir`/`readdir` enumerate
+their immediate children from the flat table. `unlink` refuses directories,
+and `rmdir` returns `ENOTEMPTY` while children remain.
+`tools/nan16_vfs_dirs_gate.sh` checks stat/access, mkdir/rmdir, ENOTEMPTY,
+implicit `/suite/a`, and exact `dirent` order.
+
 Default mapping for the official suite:
 
 | host tree | guest prefix |

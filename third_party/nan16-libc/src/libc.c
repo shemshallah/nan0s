@@ -11,6 +11,7 @@
 #include <setjmp.h>
 #include <time.h>
 #include <unistd.h>
+#include <dirent.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/time.h>
@@ -495,7 +496,7 @@ typedef struct MemFile {
     char name[VFS_NAME_MAX];
     unsigned char *data;
     unsigned size, cap, pos;
-    int used, writable, owned;
+    int used, writable, owned, isdir;
 } MemFile;
 static MemFile *files;
 static unsigned vfs_cap, vfs_used;
@@ -575,6 +576,7 @@ init:
     files[slot].data = 0; files[slot].size = files[slot].cap = files[slot].pos = 0;
     files[slot].writable = 1;
     files[slot].owned = 1;
+    files[slot].isdir = 0;
     vfs_used++;
     return &files[slot];
 }
@@ -592,6 +594,7 @@ static int mf_put_ro(unsigned slot, const char *name, const void *data,
     files[slot].used = 1;
     files[slot].writable = 0;
     files[slot].owned = 0;
+    files[slot].isdir = 0;
     vfs_used++;
     return 0;
 }
@@ -606,6 +609,7 @@ int nan16_vfs_add(const char *name, const void *data, unsigned size)
     memcpy(f->data, data, size);
     f->size = f->cap = size;
     f->pos = 0; f->writable = 0; f->owned = 1;
+    f->isdir = 0;
     return 0;
 }
 
@@ -621,6 +625,7 @@ int nan16_vfs_add_ro(const char *name, const void *data, unsigned size)
     f->data = (unsigned char *)(void *)data;
     f->size = f->cap = size;
     f->pos = 0; f->writable = 0; f->owned = 0;
+    f->isdir = 0;
     return 0;
 }
 /* Register every file in an N16PACK1 archive (see
@@ -680,11 +685,158 @@ int nan16_vfs_add_pack(const void *pack, unsigned len)
     return (int)count;
 }
 unsigned nan16_vfs_count(void) { return vfs_used; }
+unsigned nan16_vfs_capacity(void) { return vfs_cap; }
+/* Enumerate the table by slot: returns 1 for a live entry.  Callers loop
+   i=0..nan16_vfs_capacity()-1 and skip holes.  Pointers stay valid until the
+   next table growth or mutation. */
+int nan16_vfs_entry(unsigned i, const char **name, unsigned *size, int *isdir)
+{
+    if (i >= vfs_cap || !files[i].used) return 0;
+    if (name) *name = files[i].name;
+    if (size) *size = files[i].size;
+    if (isdir) *isdir = files[i].isdir;
+    return 1;
+}
 int nan16_vfs_get(const char *name, unsigned char **data, unsigned *size)
 {
     MemFile *f = mf_find(name);
     if (!f) return -1;
     *data = f->data; *size = f->size;
+    return 0;
+}
+/* A path is a directory if it has an explicit directory entry or if any file
+   lives beneath it.  N16PACK1 stores only files, so suite directories such as
+   /sqlite/test are implicit.  Trailing slashes are ignored except for root. */
+static int mf_isdir_name(const char *name)
+{
+    char norm[VFS_NAME_MAX];
+    unsigned n, i;
+    MemFile *f;
+    if (!name || name[0] != '/') return 0;
+    n = (unsigned)strlen(name);
+    while (n > 1 && name[n - 1] == '/') n--;
+    if (n >= VFS_NAME_MAX) return 0;
+    memcpy(norm, name, n);
+    norm[n] = 0;
+    if (n == 1) return 1;
+    f = mf_find(norm);
+    if (f) return f->isdir;
+    for (i = 0; i < vfs_cap; i++)
+        if (files[i].used && !strncmp(files[i].name, norm, n) &&
+            files[i].name[n] == '/')
+            return 1;
+    return 0;
+}
+int nan16_vfs_isdir(const char *name) { return mf_isdir_name(name); }
+
+/* ------------------------------------------------------------ directory API */
+struct __nan16_DIR {
+    char path[VFS_NAME_MAX];
+    struct dirent ent;
+    unsigned count, index, cap;
+    char **names;
+    unsigned char *types;
+};
+/* Return the immediate child component of file under dir.  *isdir is set when
+   the remaining path continues past a slash. */
+static int dir_child(const char *dir, const char *file, char *out,
+                     unsigned outsz, int *isdir)
+{
+    const char *start, *slash;
+    unsigned n, len;
+    n = (unsigned)strlen(dir);
+    while (n > 1 && dir[n - 1] == '/') n--;
+    if (file[0] != '/') return 0;
+    if (n == 1) {
+        start = file + 1;
+    } else {
+        if (strncmp(file, dir, n) || file[n] != '/') return 0;
+        start = file + n + 1;
+    }
+    if (!*start) return 0;
+    slash = strchr(start, '/');
+    len = slash ? (unsigned)(slash - start) : (unsigned)strlen(start);
+    if (!len || len >= outsz) return 0;
+    memcpy(out, start, len);
+    out[len] = 0;
+    *isdir = slash != 0;
+    return 1;
+}
+static int dir_add(DIR *d, const char *name, int isdir)
+{
+    unsigned i;
+    for (i = 0; i < d->count; i++) {
+        if (!strcmp(d->names[i], name)) {
+            if (isdir) d->types[i] = DT_DIR;
+            return 0;
+        }
+    }
+    if (d->count == d->cap) {
+        unsigned nc = d->cap ? d->cap * 2 : 16;
+        char **nn = (char **)realloc(d->names, nc * sizeof(char *));
+        unsigned char *nt;
+        if (!nn) return -1;
+        d->names = nn;
+        nt = (unsigned char *)realloc(d->types, nc);
+        if (!nt) return -1;
+        d->types = nt;
+        d->cap = nc;
+    }
+    d->names[d->count] = strdup(name);
+    if (!d->names[d->count]) return -1;
+    d->types[d->count] = isdir ? DT_DIR : DT_REG;
+    d->count++;
+    return 0;
+}
+DIR *opendir(const char *path)
+{
+    DIR *d;
+    unsigned i, n;
+    char comp[VFS_NAME_MAX], norm[VFS_NAME_MAX];
+    if (!path || path[0] != '/' || !mf_isdir_name(path)) {
+        errno = ENOENT; return 0;
+    }
+    n = (unsigned)strlen(path);
+    while (n > 1 && path[n - 1] == '/') n--;
+    if (n >= VFS_NAME_MAX) { errno = EINVAL; return 0; }
+    memcpy(norm, path, n); norm[n] = 0;
+    d = (DIR *)calloc(1, sizeof *d);
+    if (!d) { errno = ENOMEM; return 0; }
+    strcpy(d->path, norm);
+    if (dir_add(d, ".", 1) || dir_add(d, "..", 1)) goto fail;
+    for (i = 0; i < vfs_cap; i++) {
+        int isdir = 0;
+        if (!files[i].used) continue;
+        if (dir_child(norm, files[i].name, comp, sizeof comp, &isdir) &&
+            dir_add(d, comp, isdir || files[i].isdir))
+            goto fail;
+    }
+    return d;
+fail:
+    closedir(d);
+    errno = ENOMEM;
+    return 0;
+}
+struct dirent *readdir(DIR *d)
+{
+    if (!d || d->index >= d->count) return 0;
+    memset(&d->ent, 0, sizeof d->ent);
+    strncpy(d->ent.d_name, d->names[d->index], sizeof d->ent.d_name - 1);
+    d->ent.d_type = d->types[d->index];
+    d->ent.d_ino = d->index + 1;
+    d->ent.d_reclen = sizeof d->ent;
+    d->index++;
+    return &d->ent;
+}
+void rewinddir(DIR *d) { if (d) d->index = 0; }
+int closedir(DIR *d)
+{
+    unsigned i;
+    if (!d) return -1;
+    for (i = 0; i < d->count; i++) free(d->names[i]);
+    free(d->names);
+    free(d->types);
+    free(d);
     return 0;
 }
 
@@ -774,8 +926,39 @@ off_t lseek(int fd, off_t off, int whence)
 int unlink(const char *name)
 {
     MemFile *f = mf_find(name);
-    if (!f) return -1;
-    if (f->data) free(f->data);
+    if (!f) {
+        if (mf_isdir_name(name)) { errno = EISDIR; return -1; }
+        errno = ENOENT; return -1;
+    }
+    if (f->isdir) { errno = EISDIR; return -1; }
+    if (f->owned && f->data) free(f->data);
+    f->used = 0;
+    if (vfs_used) vfs_used--;
+    return 0;
+}
+int rmdir(const char *name)
+{
+    char norm[VFS_NAME_MAX];
+    unsigned n, i;
+    MemFile *f;
+    if (!name || name[0] != '/') { errno = ENOENT; return -1; }
+    n = (unsigned)strlen(name);
+    while (n > 1 && name[n - 1] == '/') n--;
+    if (n >= VFS_NAME_MAX) { errno = EINVAL; return -1; }
+    memcpy(norm, name, n); norm[n] = 0;
+    f = mf_find(norm);
+    if (!f || !f->isdir) {
+        if (!f && mf_isdir_name(norm)) { errno = ENOTEMPTY; return -1; }
+        errno = ENOENT; return -1;
+    }
+    for (i = 0; i < vfs_cap; i++)
+        if (files[i].used &&
+            ((n == 1) ? (files[i].name[0] == '/' && files[i].name[1])
+                      : (!strncmp(files[i].name, norm, n) &&
+                         files[i].name[n] == '/'))) {
+            errno = ENOTEMPTY; return -1;
+        }
+    if (f->owned && f->data) free(f->data);
     f->used = 0;
     if (vfs_used) vfs_used--;
     return 0;
@@ -997,10 +1180,17 @@ int fscanf(FILE *fp, const char *fmt, ...) { (void)fp; (void)fmt; return 0; }
 int stat(const char *name, struct stat *st)
 {
     MemFile *f = mf_find(name);
-    if (!f) return -1;
+    if (!f) {
+        if (!mf_isdir_name(name)) { errno = ENOENT; return -1; }
+        memset(st, 0, sizeof *st);
+        st->st_mode = S_IFDIR | 0755;
+        st->st_nlink = 2;
+        return 0;
+    }
     memset(st, 0, sizeof *st);
-    st->st_size = f->size;
-    st->st_mode = S_IFREG | 0644;
+    st->st_size = f->isdir ? 0 : (long)f->size;
+    st->st_mode = f->isdir ? (S_IFDIR | 0755) : (S_IFREG | (f->writable ? 0644 : 0444));
+    st->st_nlink = f->isdir ? 2 : 1;
     return 0;
 }
 int fstat(int fd, struct stat *st)
@@ -1008,13 +1198,31 @@ int fstat(int fd, struct stat *st)
     if (fd < FD_VFS_BASE || (unsigned)(fd - FD_VFS_BASE) >= vfs_cap) return -1;
     memset(st, 0, sizeof *st);
     st->st_size = files[fd - FD_VFS_BASE].size;
-    st->st_mode = S_IFREG | 0644;
+    st->st_mode = files[fd - FD_VFS_BASE].isdir
+        ? (S_IFDIR | 0755) : (S_IFREG | 0644);
     return 0;
 }
-int mkdir(const char *name, mode_t mode) { (void)name; (void)mode; return 0; }
+int mkdir(const char *name, mode_t mode)
+{
+    MemFile *f;
+    (void)mode;
+    if (!name || name[0] != '/') { errno = ENOENT; return -1; }
+    if (mf_find(name) || mf_isdir_name(name)) { errno = EEXIST; return -1; }
+    f = mf_new(name);
+    if (!f) { errno = ENOSPC; return -1; }
+    f->isdir = 1;
+    f->writable = 0;
+    return 0;
+}
 char *getcwd(char *buf, size_t n) { if (n) { strncpy(buf, "/", n); buf[n - 1] = 0; } return buf; }
 int chdir(const char *p) { (void)p; return 0; }
-int access(const char *p, int m) { (void)m; return mf_find(p) ? 0 : -1; }
+int access(const char *p, int m)
+{
+    MemFile *f = mf_find(p);
+    if (!f) return mf_isdir_name(p) ? 0 : -1;
+    if ((m & W_OK) && !f->writable) { errno = EACCES; return -1; }
+    return 0;
+}
 int isatty(int fd) { (void)fd; return 0; }
 int getpid(void) { return 1; }
 char *realpath(const char *p, char *out) { if (out) { strcpy(out, p); return out; } return strdup(p); }
