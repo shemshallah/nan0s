@@ -470,7 +470,11 @@ MOVI r5,16
 SUB r4,r4,r5
 CMP r2,r4
 JMP[LT] @ms_hit_max
-CALL @sh_dialog
+; The X title-bar control closes immediately. F4 remains the separate
+; confirmation-dialog path. Never require a hidden second click on Android.
+LD r1,r0,@ms_id
+CALL @wm_close
+ST r0,r0,@ms_drag
 JMP @ms_down_done
 ms_hit_max:
 MOVI r5,15
