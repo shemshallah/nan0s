@@ -210,7 +210,12 @@ Status legend: **done**, **partial**, **planned**.
 - [x] Guest console capture: fixed stdout/stderr control block at
       `0x03EFF000`, `nan_cli --guest-stdout/--guest-stderr`, exact console gate.
 - [x] x86_64 S1 product runner: `tools/s1_runner.sh` passes console, NFS2,
-      VFS dirs/paths/capacity and time gates; guest FP/vector ops are next.
+      VFS dirs/paths/capacity, time and the 21.3 MB Tcl milestone-1 tclsh
+      gate. Scalar FP is implemented; vector ops are added only when a real
+      cartridge needs them.
+- [x] Guest testfixture selector: `--guest-script PATH` writes u32 length at
+      `0x03EFF020` and up to 255 bytes at `0x03EFF024` before the cartridge
+      starts, distinct from stdout/stderr at `0x03EFF000`.
 
 ### P4 — SQLite testfixture and official suite
 

@@ -2,7 +2,8 @@
 # tools/s1_runner.sh - x86_64 bare-metal S1 runner with the gate CLI.
 #
 #   --img FILE [--mem MB] [--steps N] [--serial]
-#   [--guest-stdout FILE] [--guest-stderr FILE] [--peek 'ADDR[:LEN],...']
+#   [--guest-stdout FILE] [--guest-stderr FILE] [--guest-script PATH]
+#   [--peek 'ADDR[:LEN],...']
 #
 # FILE may be nmk .nan text or a flat NaN16 word cartridge (8-byte words).
 # The guest runs on src/native64/s1_kabi.c -DS1_GUEST under QEMU x86_64 with
@@ -15,10 +16,10 @@ export LC_ALL=C
 ROOT=$(pwd)
 
 usage() {
-  echo "usage: $0 --img FILE [--mem MB] [--steps N] [--serial] [--guest-stdout FILE] [--guest-stderr FILE] [--peek 'ADDR[:LEN][,ADDR[:LEN]...]']" >&2
+  echo "usage: $0 --img FILE [--mem MB] [--steps N] [--serial] [--guest-stdout FILE] [--guest-stderr FILE] [--guest-script PATH] [--peek 'ADDR[:LEN][,ADDR[:LEN]...]']" >&2
   exit 2
 }
-IMG=""; MEM_MB=128; STEPS=50000000; SERIAL=0; GOUT=""; GERR=""; PEEK=""
+IMG=""; MEM_MB=128; STEPS=50000000; SERIAL=0; GOUT=""; GERR=""; GSCRIPT=""; PEEK=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --img) [ "$#" -ge 2 ] || usage; IMG=$2; shift 2 ;;
@@ -27,6 +28,7 @@ while [ "$#" -gt 0 ]; do
     --serial) SERIAL=1; shift ;;
     --guest-stdout) [ "$#" -ge 2 ] || usage; GOUT=$2; shift 2 ;;
     --guest-stderr) [ "$#" -ge 2 ] || usage; GERR=$2; shift 2 ;;
+    --guest-script) [ "$#" -ge 2 ] || usage; GSCRIPT=$2; shift 2 ;;
     --peek) [ "$#" -ge 2 ] || usage; PEEK=$2; shift 2 ;;
     *) echo "s1_runner: unknown argument $1" >&2; usage ;;
   esac
@@ -37,6 +39,11 @@ case "$MEM_MB" in *[!0-9]*|"") echo "s1_runner: bad --mem" >&2; exit 2 ;; esac
 case "$STEPS" in *[!0-9]*|"") echo "s1_runner: bad --steps" >&2; exit 2 ;; esac
 [ "$MEM_MB" -eq 0 ] && MEM_MB=128
 [ "$STEPS" -eq 0 ] && STEPS=50000000
+GSCRIPT_LEN=0
+if [ -n "$GSCRIPT" ]; then
+  GSCRIPT_LEN=$(printf '%s' "$GSCRIPT" | wc -c | tr -d ' ')
+  [ "$GSCRIPT_LEN" -le 255 ] || { echo "s1_runner: guest script path too long (max 255 bytes)" >&2; exit 2; }
+fi
 QEMU_BIN=${QEMU:-qemu-system-x86_64}
 command -v "$QEMU_BIN" >/dev/null 2>&1 || { echo "s1_runner: no $QEMU_BIN" >&2; exit 1; }
 if [ -n "${S1_QEMU_MEM:-}" ]; then QMEM=$S1_QEMU_MEM
@@ -115,6 +122,21 @@ s1_guest_disk: .long $GDISK
 .text
 EOF
 
+{
+  echo '.section .rodata'
+  echo '.global s1_guest_script_len'
+  echo "s1_guest_script_len: .long $GSCRIPT_LEN"
+  echo '.global s1_guest_script'
+  echo 's1_guest_script:'
+  if [ "$GSCRIPT_LEN" -gt 0 ]; then
+    bytes=$(printf '%s' "$GSCRIPT" | od -An -v -tu1 | tr -s ' \n' ' ' | sed 's/^ *//;s/ *$//;s/ /,/g')
+    echo "  .byte $bytes"
+  else
+    echo '  .byte 0'
+  fi
+  echo '.text'
+} > "$T/script.S"
+
 STACK_DEF=""
 [ -n "${S1_GUEST_STACK:-}" ] && STACK_DEF="-DS1_GUEST_STACK=$S1_GUEST_STACK"
 
@@ -129,9 +151,10 @@ clang --target=x86_64-none-elf -std=gnu99 -O3 -Wall -Wextra -ffp-contract=off -f
   -DS1_GUEST_ZERO_WORDS="$SAFE" $STACK_DEF \
   -c src/native64/s1_kabi.c -o "$T/s1.o"
 clang --target=x86_64-none-elf -c "$T/guest.S" -o "$T/guest.o"
+clang --target=x86_64-none-elf -c "$T/script.S" -o "$T/script.o"
 clang --target=x86_64-none-elf -c "$T/peek.S" -o "$T/peek.o"
 ld.lld -m elf_x86_64 -T src/native64/s1_kabi.ld -e _start \
-  -o "$T/s1.elf" "$T/boot.o" "$T/s1.o" "$T/guest.o" "$T/peek.o"
+  -o "$T/s1.elf" "$T/boot.o" "$T/s1.o" "$T/guest.o" "$T/script.o" "$T/peek.o"
 llvm-objcopy -O binary "$T/s1.elf" "$T/s1.bin"
 [ "$(wc -c < "$T/s1.bin")" -le 65536 ] || { echo "s1_runner: S1 image > 64 KiB" >&2; exit 1; }
 cat "$T/bootsec.bin" "$T/s1.bin" > "$T/image"
