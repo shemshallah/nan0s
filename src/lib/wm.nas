@@ -949,6 +949,32 @@ RET
 wm_min_id:
 .word 0
 
+; wm_activate_slot: r1=0..7 stable taskbar slot, restore if minimized,
+; then raise and focus. Use Ctrl+1..8 so window switching never relies on mouse.
+wm_activate_slot:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,@was_id
+MOVI r2,#MAXW
+CMP r1,r2
+JMP[GE] @was_done
+CALL @wm_wbase
+LD r2,r1,#W_ALIVE
+CMP r2,r0
+JMP[EQ] @was_done
+LD r2,r1,#W_FLAGS
+MOVI r3,0xFFFD
+BOOL.8 r2,r2,r3
+ST r2,r1,#W_FLAGS
+LD r1,r0,@was_id
+CALL @wm_raise
+was_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+was_id:
+.word 0
+
 ; wm_restore_minimized: restore the most recently indexed live minimized slot.
 wm_restore_minimized:
 ST r15,r14,0
