@@ -73,6 +73,24 @@ int main(void)
     printf("over=%d:%s\n", r, getenv("NAN16_X"));
     unsetenv("NAN16_X");
     printf("unset=%d\n", getenv("NAN16_X") == 0);
+
+    fd = open("/trunc.txt", O_CREAT | O_WRONLY, 0644);
+    if (fd >= 0) { write(fd, "abcdef", 6); close(fd); }
+    stat("/trunc.txt", &st);
+    r = (int)st.st_size;
+    printf("trunc0=%d\n", r);
+    printf("trunc1=%d\n", truncate("/trunc.txt", 3));
+    stat("/trunc.txt", &st);
+    printf("trunc2=%d\n", (int)st.st_size);
+    fd = open("/trunc.txt", O_RDWR);
+    r = fd >= 0 ? ftruncate(fd, 5) : -1;
+    if (fd >= 0) close(fd);
+    stat("/trunc.txt", &st);
+    printf("trunc3=%d:%d\n", r, (int)st.st_size);
+    fd = open("/trunc.txt", O_RDONLY);
+    r = fd >= 0 ? (int)read(fd, buf, 8) : -1;
+    if (fd >= 0) close(fd);
+    printf("trunc4=%d:%d:%d\n", r, !memcmp(buf, "abc", 3), buf[3] == 0 && buf[4] == 0);
     printf("PATHS PASS\n");
     return 0;
 }

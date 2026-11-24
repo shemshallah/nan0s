@@ -1036,6 +1036,42 @@ off_t lseek(int fd, off_t off, int whence)
     f->pos = (unsigned)np;
     return np;
 }
+static int mf_resize(MemFile *f, unsigned n)
+{
+    if (n > f->cap) {
+        unsigned nc = f->cap ? f->cap : 256;
+        unsigned char *nb;
+        while (nc < n) nc *= 2;
+        nb = (unsigned char *)malloc(nc);
+        if (!nb) { errno = ENOMEM; return -1; }
+        if (f->data) {
+            memcpy(nb, f->data, f->size);
+            free(f->data);
+        }
+        memset(nb + f->size, 0, nc - f->size);
+        f->data = nb;
+        f->cap = nc;
+    } else if (n > f->size) {
+        memset(f->data + f->size, 0, n - f->size);
+    }
+    f->size = n;
+    if (f->pos > n) f->pos = n;
+    return 0;
+}
+int ftruncate(int fd, off_t len)
+{
+    MemFile *f;
+    if (fd < FD_VFS_BASE || (unsigned)(fd - FD_VFS_BASE) >= vfs_cap) return -1;
+    f = &files[fd - FD_VFS_BASE];
+    if (!f->used || f->isdir || !f->writable || len < 0) { errno = EINVAL; return -1; }
+    return mf_resize(f, (unsigned)len);
+}
+int truncate(const char *name, off_t len)
+{
+    MemFile *f = mf_find_p(name);
+    if (!f || f->isdir || !f->writable || len < 0) { errno = EINVAL; return -1; }
+    return mf_resize(f, (unsigned)len);
+}
 int unlink(const char *name)
 {
     char abs[VFS_NAME_MAX];
