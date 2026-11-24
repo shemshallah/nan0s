@@ -49,6 +49,14 @@
 .equ C_YEL 14
 .equ C_CLOSE 4
 .equ C_ENL 2
+.equ C_SHADOW 17
+.equ C_SURFACE 19
+.equ C_DIVIDER 8
+.equ C_ACCENT 11
+.equ C_TASK 1
+.equ C_INACTIVE 8
+.equ TASKH 29
+.equ WM_MIN 2
 ; ---- rect (clipped to the screen): r1=x r2=y r3=w r4=h r5=colour ; clobbers r1-r8 ----
 wm_rect:
 LD r6,r0,@fb_w
@@ -156,6 +164,7 @@ MOVI r2,0
 MOVI r3,256
 BFILL r1,r2,r3
 ST r0,r0,@wm_zn
+ST r0,r0,@wm_notice_ticks
 RET
 ; ---- wm_kcall: r1=id r2=slot r3=arg ; dispatch to the window kind ----
 wm_kcall:
@@ -509,7 +518,7 @@ en_fh:
 .word 0
 en_b:
 .word 0
-; ---- wm_draw_window: r1=id (border, 15px title bar, enlarge + close boxes, then the app's draw). UNTESTED (r25 WIP) ----
+; ---- wm_draw_window: r1=id native modern frame, active accents, soft shadow. ----
 wm_draw_window:
 ST r15,r14,0
 ADD r14,r14,r13
@@ -525,6 +534,19 @@ ST r3,r0,@dw_foc
 LD r1,r0,@dw_id
 CALL @wm_wbase
 ST r1,r0,@dw_b
+; Three stepped shadow planes; wholly guest-native framebuffer rectangles.
+; The existing rect routine clips at the screen edge.
+LD r1,r0,@dw_b
+LD r2,r1,#W_Y
+MOVI r6,6
+ADD r2,r2,r6
+LD r3,r1,#W_W
+LD r4,r1,#W_H
+LD r1,r1,#W_X
+ADD r1,r1,r6
+MOVI r5,#C_SHADOW
+CALL @wm_rect
+LD r1,r0,@dw_b
 LD r2,r1,#W_Y
 LD r3,r1,#W_W
 LD r4,r1,#W_H
@@ -537,6 +559,7 @@ MOVI r6,#C_FOC
 dw_bc:
 ADD r5,r6,r0
 CALL @wm_rect
+; Inset modern surface panel: colored outline, no app-layout changes.
 LD r9,r0,@dw_b
 LD r1,r9,#W_X
 ADD r1,r1,r13
@@ -554,6 +577,22 @@ MOVI r6,#C_TITLE_F
 dw_tc:
 ADD r5,r6,r0
 CALL @wm_rect
+; An active-window accent rail makes focus obvious under overlaps.
+LD r7,r0,@dw_foc
+CMP r7,r0
+JMP[EQ] @dw_noaccent
+LD r9,r0,@dw_b
+LD r1,r9,#W_X
+ADD r1,r1,r13
+LD r2,r9,#W_Y
+ADD r2,r2,r13
+LD r3,r9,#W_W
+SUB r3,r3,r13
+SUB r3,r3,r13
+MOVI r4,2
+MOVI r5,#C_ACCENT
+CALL @wm_rect
+dw_noaccent:
 LD r9,r0,@dw_b
 LD r1,r9,#W_X
 ADD r1,r1,r13
@@ -652,7 +691,13 @@ dw_b:
 .word 0
 s_nan0s:
 .str "NaN/0S"
-; ---- wm_draw_all: desktop + top bar + every window bottom to top. UNTESTED (r25 WIP) ----
+s_dock:
+.str "NaN/0S  |  APPS"
+s_dock_window:
+.str "WINDOW"
+s_notice:
+.str "NaN/0S  |  NATIVE WINDOW MANAGER"
+; ---- wm_draw_all: desktop, windows and native taskbar ----
 wm_draw_all:
 ST r15,r14,0
 ADD r14,r14,r13
@@ -696,9 +741,201 @@ ADD r1,r1,r13
 ST r1,r0,@da_i
 JMP @da_loop
 da_done:
+CALL @wm_draw_taskbar
 SUB r14,r14,r13
 LD r15,r14,0
 RET
+
+; Taskbar is drawn in the guest framebuffer after all windows. Each
+; visible or minimized app occupies its stable slot (8 windows max).
+; The focused slot receives the vivid accent; hidden windows are dimmed.
+wm_draw_taskbar:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r2,r0,@fb_h
+MOVI r3,#TASKH
+SUB r2,r2,r3
+ST r2,r0,@wd_y
+MOVI r1,0
+LD r3,r0,@fb_w
+MOVI r4,#TASKH
+MOVI r5,#C_BAR
+CALL @wm_rect
+MOVI r1,4
+LD r2,r0,@wd_y
+MOVI r3,5
+ADD r2,r2,r3
+MOVI r3,@s_dock
+MOVI r4,#C_YEL
+CALL @fb_text7
+MOVI r1,0
+ST r1,r0,@wd_i
+wd_loop:
+LD r1,r0,@wd_i
+MOVI r2,#MAXW
+CMP r1,r2
+JMP[GE] @wd_done
+CALL @wm_wbase
+LD r2,r1,#W_ALIVE
+CMP r2,r0
+JMP[EQ] @wd_next
+ST r1,r0,@wd_b
+; 106px slots begin after the NaN/0S launcher label.
+LD r6,r0,@wd_i
+MOVI r7,106
+MUL r6,r6,r7
+MOVI r7,140
+ADD r6,r6,r7
+ST r6,r0,@wd_x
+LD r1,r0,@fb_w
+MOVI r2,100
+ADD r2,r2,r6
+CMP r2,r1
+JMP[GT] @wd_done
+LD r1,r0,@wd_b
+LD r2,r1,#W_FLAGS
+MOVI r3,2
+BOOL.8 r2,r2,r3
+MOVI r5,#C_INACTIVE
+CMP r2,r0
+JMP[NE] @wd_frame
+LD r1,r0,@wd_i
+CALL @wm_top
+LD r2,r0,@wd_i
+CMP r1,r2
+JMP[NE] @wd_frame
+MOVI r5,#C_FOC
+wd_frame:
+LD r1,r0,@wd_x
+LD r2,r0,@wd_y
+MOVI r3,5
+ADD r2,r2,r3
+MOVI r3,100
+MOVI r4,20
+CALL @wm_rect
+LD r1,r0,@wd_b
+LD r3,r1,#W_TITLE
+LD r1,r0,@wd_x
+MOVI r4,5
+ADD r1,r1,r4
+LD r2,r0,@wd_y
+MOVI r4,7
+ADD r2,r2,r4
+MOVI r4,#C_TXT
+CALL @fb_text7
+wd_next:
+LD r1,r0,@wd_i
+ADD r1,r1,r13
+ST r1,r0,@wd_i
+JMP @wd_loop
+wd_done:
+LD r1,r0,@wm_notice_ticks
+CMP r1,r0
+JMP[EQ] @wd_ret
+; Compact toast above taskbar. Notification text uses a fixed in-guest
+; string, so no host-side DOM or notifications are needed.
+MOVI r1,18
+LD r2,r0,@wd_y
+MOVI r3,33
+SUB r2,r2,r3
+MOVI r3,330
+MOVI r4,28
+MOVI r5,#C_FOC
+CALL @wm_rect
+MOVI r1,24
+LD r2,r0,@wd_y
+MOVI r3,29
+SUB r2,r2,r3
+MOVI r3,@s_notice
+MOVI r4,#C_TXT
+CALL @fb_text7
+wd_ret:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+wd_i:
+.word 0
+wd_x:
+.word 0
+wd_y:
+.word 0
+wd_b:
+.word 0
+wm_notice_ticks:
+.word 0
+
+; wm_notice: r1=duration in tick periods, zero means 15 cycles.
+wm_notice:
+CMP r1,r0
+JMP[NE] @wn_store
+MOVI r1,15
+wn_store:
+ST r1,r0,@wm_notice_ticks
+MOVI r2,1
+ST r2,r0,@wm_redraw
+RET
+
+; wm_minimize: r1=window id. Preserve app state and buffers while removing
+; the window from z-order; never minimize the last visible window.
+wm_minimize:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,@wm_min_id
+LD r2,r0,@wm_zn
+MOVI r3,2
+CMP r2,r3
+JMP[LT] @wm_min_done
+CALL @wm_wbase
+LD r2,r1,#W_FLAGS
+MOVI r3,2
+BOOL.14 r2,r2,r3
+ST r2,r1,#W_FLAGS
+LD r1,r0,@wm_min_id
+CALL @wm_zremove
+MOVI r1,1
+ST r1,r0,@wm_redraw
+wm_min_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+wm_min_id:
+.word 0
+
+; wm_restore_minimized: restore the most recently indexed live minimized slot.
+wm_restore_minimized:
+ST r15,r14,0
+ADD r14,r14,r13
+MOVI r8,0
+wm_rm_loop:
+CMP r8,r0
+JMP[LT] @wm_rm_done
+MOVI r1,#MAXW
+CMP r8,r1
+JMP[GE] @wm_rm_done
+ADD r1,r8,r0
+CALL @wm_wbase
+LD r2,r1,#W_ALIVE
+CMP r2,r0
+JMP[EQ] @wm_rm_next
+LD r2,r1,#W_FLAGS
+MOVI r3,2
+BOOL.8 r4,r2,r3
+CMP r4,r0
+JMP[EQ] @wm_rm_next
+MOVI r3,0xFFFD
+BOOL.8 r2,r2,r3
+ST r2,r1,#W_FLAGS
+ADD r1,r8,r0
+CALL @wm_raise
+JMP @wm_rm_done
+wm_rm_next:
+ADD r8,r8,r13
+JMP @wm_rm_loop
+wm_rm_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
 da_i:
 .word 0
 s_hint:
