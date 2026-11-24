@@ -93,30 +93,6 @@ if python3 tools/nan16_pack_image.py "$T/test.n16pack" \
     --header "$T/overflow.h" --base 0x05000000 >/dev/null 2>"$T/layout4.err"; then
     echo "vfs_pack: FAIL (pack base inside heap was accepted)"; exit 1
 fi
-# Tcl-suite-sized layout: a 25,806,592-byte N16PACK1 archive (the current
-# suite image size).  In guest bytes it spans base..0x0289c700, below the
-# 0x03000000 output copy; the host image is 33,554,432 padding + 51,613,184
-# encoded bytes = 85,167,616 bytes.  Check both budgets.
-python3 - "$T/suite-raw.bin" <<'PY'
-import sys
-n = 25806592 - (12 + 8 + len("/suite/blob"))
-with open(sys.argv[1], "wb") as f:
-    f.truncate(n)
-PY
-python3 tools/nan16_suite_pack.py "$T/suite.n16pack"     --file "/suite/blob=$T/suite-raw.bin" --check
-[ "$(wc -c < "$T/suite.n16pack")" = 25806592 ] || {
-    echo "vfs_pack: FAIL (suite pack size mismatch)"; exit 1; }
-python3 tools/nan16_pack_image.py "$T/suite.n16pack"     --header "$T/suite_pack.h" --max-image 134217728 > "$T/suite.layout"
-cat "$T/suite.layout"
-grep -q '0x1000000..0x289c700' "$T/suite.layout" || {
-    echo "vfs_pack: FAIL (unexpected suite guest span)"; exit 1; }
-if python3 tools/nan16_pack_image.py "$T/suite.n16pack"     --header "$T/suite_pack.h" --max-image 80000000 >/dev/null 2>"$T/layout5.err"; then
-    echo "vfs_pack: FAIL (suite encoded image exceeded budget but was accepted)"
-    exit 1
-fi
-grep -q 'exceeds budget' "$T/layout5.err" || {
-    echo "vfs_pack: FAIL (unexpected suite budget error)"; cat "$T/layout5.err"; exit 1; }
-echo "vfs_pack: 25.8 MB suite layout PASS"
 echo "vfs_pack: layout guards PASS"
 
 echo "vfs_pack: build guest probe"
@@ -148,18 +124,40 @@ marker=$(tail -n 1 "$T/run.txt")
     echo "vfs_pack: FAIL (completion marker '$marker')"; tail -5 "$T/run.err"; exit 1; }
 
 
-echo "vfs_pack: 2,133-file dynamic VFS registration test"
+echo "vfs_pack: 2,133-file, 25,806,592-byte suite-sized pack"
 python3 - "$T/many" <<'PY'
 import os, sys
 root = sys.argv[1]
 os.makedirs(root, exist_ok=True)
-for i in range(2133):
+name = lambda i: "/many/f%04d.bin" % i
+overhead = 12 + 2133 * (8 + len(name(0)))
+tail = 5 * 2132
+first = 25806592 - overhead - tail
+if first <= 0:
+    sys.exit("bad suite-size arithmetic")
+with open(os.path.join(root, "f0000.bin"), "wb") as f:
+    f.truncate(first)
+for i in range(1, 2133):
     with open(os.path.join(root, "f%04d.bin" % i), "wb") as f:
         f.write(bytes([i & 0xff, (i >> 8) & 0xff, 0, 0, 0x80]))
 PY
 python3 tools/nan16_suite_pack.py "$T/many.n16pack" --tree "$T/many=/many" --check
+[ "$(wc -c < "$T/many.n16pack")" = 25806592 ] || {
+    echo "vfs_pack: FAIL (suite pack size mismatch)"; exit 1; }
 mkdir -p "$T/many_inc"
-python3 tools/nan16_pack_image.py "$T/many.n16pack"     --header "$T/many_inc/guest_pack.h" --base "$BASE" --max-image "$MAX_IMAGE" >/dev/null
+python3 tools/nan16_pack_image.py "$T/many.n16pack" \
+    --header "$T/many_inc/guest_pack.h" --base "$BASE" --max-image "$MAX_IMAGE" > "$T/many.layout"
+cat "$T/many.layout"
+grep -q '0x1000000..0x289c700' "$T/many.layout" || {
+    echo "vfs_pack: FAIL (unexpected suite guest span)"; exit 1; }
+if python3 tools/nan16_pack_image.py "$T/many.n16pack" \
+    --header "$T/many_inc/guest_pack.h" --max-image 80000000 >/dev/null 2>"$T/layout5.err"; then
+    echo "vfs_pack: FAIL (suite encoded image exceeded budget but was accepted)"
+    exit 1
+fi
+grep -q 'exceeds budget' "$T/layout5.err" || {
+    echo "vfs_pack: FAIL (unexpected suite budget error)"; cat "$T/layout5.err"; exit 1; }
+echo "vfs_pack: 25.8 MB suite layout PASS"
 "$T/tcc0" -nostdlib -DVFS_PACK_MANY -DMANY_COUNT=2133 -DMANY_I=2132 \
     -o "$T/many.raw.bin" -I"$T/many_inc" -I"$LIBC/include" -I"$TT/include" -I"$TT" \
     "$LIBC/src/libc.c" src/tests/tcc/vfs_pack_probe.c
