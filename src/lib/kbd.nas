@@ -4,7 +4,9 @@
 ;   kbd_poll  : drain KEYQ, track Shift/Ctrl/Alt/Caps, push press events into a 16-entry ring
 ;   kbd_get   : r1 = next event or 0
 ;   kbd_mods  : r1 = current mods (1 shift,2 ctrl,4 alt,8 caps)
-; event = code | mods<<16 ; see generator header for the code map. F1..F12 = 0x101..0x10C, arrows 0x110..0x113.
+; event = code | mods<<16 ; F1..F12 = 0x101..0x10C, arrows = 0x110..0x113.
+; NaN/0S virtual F0: otherwise-unmapped PS/2 Set-1 scancode 0x54 -> 0x100.
+; F11/F12 remain standard Set-1 0x57/0x58 -> 0x10B/0x10C.
 kbd_init:
 MOVI r2,0xFFFF
 SHL r2,r2,16
@@ -209,7 +211,7 @@ kt_n:
 .word 100,102,103,104,106,107,108,59,39,96,0,92,122,120,99,118
 .word 98,110,109,44,46,47,0,42,0,32,0,257,258,259,260,261
 .word 262,263,264,265,266,0,0,0,0,0,45,0,0,0,43,0
-.word 0,0,0,0,0,0,0,267,268,0,0,0,0,0,0,0
+.word 0,0,0,0,256,0,0,267,268,0,0,0,0,0,0,0
 .word 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 .word 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 kt_s:
@@ -218,7 +220,7 @@ kt_s:
 .word 68,70,71,72,74,75,76,58,34,126,0,124,90,88,67,86
 .word 66,78,77,60,62,63,0,42,0,32,0,257,258,259,260,261
 .word 262,263,264,265,266,0,0,0,0,0,45,0,0,0,43,0
-.word 0,0,0,0,0,0,0,267,268,0,0,0,0,0,0,0
+.word 0,0,0,0,256,0,0,267,268,0,0,0,0,0,0,0
 .word 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 .word 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 kt_e:
