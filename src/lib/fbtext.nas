@@ -74,7 +74,8 @@ BOOL.8 r12,r8,r11
 CMP r12,r0
 JMP[EQ] @f7_skip
 LD r4,r0,@f7_c
-VPOKE r4,r9
+; Single-pixel block fill also works in the offscreen scene.
+FBFILL r13,r9,r4
 f7_skip:
 LD r10,r0,@f7_colx
 ADD r10,r10,r13

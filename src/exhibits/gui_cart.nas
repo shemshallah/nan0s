@@ -5649,6 +5649,7 @@ fs_useinc_src:
 .str "#include \"/inc.h\"\nint main(void){ printf(\"%d\\n\", add(20,22)); return 0; }\n"
 
 ; Native retained scene: [W*H, 2*W*H) in the existing 2M VRAM arena.
+; FBFILL/FBCOPY can address that arena; VPOKE/VPEEK are visible-only.
 ; Modes too large for two surfaces retain the direct-renderer fallback.
 g_scene_init:
 ST r0,r0,@fb_scene_offset
@@ -5657,7 +5658,6 @@ ST r0,r0,@fb_dirty
 ST r0,r0,@gs_ready
 ST r13,r0,@gb_force
 ST r0,r0,@ms_cursor_saved
-ST r0,r0,@ms_cursor_target
 LD r1,r0,@fb_w
 LD r2,r0,@fb_h
 MUL r3,r1,r2
@@ -5899,8 +5899,10 @@ ADD r2,r2,r6
 LD r3,r0,@ls_bw
 LD r4,r0,@ls_bh
 JMP @fb_damage
-; Cursor drawn into the hidden scene before dirty spans are copied. Erasing
-; it afterwards affects only the hidden scene; the front never loses it.
+; Present dirty spans, splitting around the opaque cursor on each row.
+; The cursor remains in front VRAM during every timer or structural update;
+; no offscreen pixel reads are needed. On pointer movement the old opaque
+; footprint is restored from the cursor-free scene by ms_scene_erase.
 g_present:
 ST r15,r14,0
 ADD r14,r14,r13
@@ -5910,15 +5912,13 @@ JMP[EQ] @gp_direct
 LD r2,r0,@fb_dirty
 CMP r2,r0
 JMP[EQ] @gp_direct
-ST r1,r0,@ms_cursor_target
-ST r0,r0,@ms_cursor_saved
-CALL @ms_draw
 LD r10,r0,@fb_w
 LD r11,r0,@fb_h
 LD r12,r0,@fb_scene_offset
 MOVI r7,0x8200
 MOVHI r7,5
 MOVI r6,0
+MOVI r4,0
 MOVI r5,0xFFFF
 gp_row:
 LD r8,r7,0
@@ -5926,25 +5926,72 @@ CMP r8,r0
 JMP[EQ] @gp_next
 BOOL.8 r1,r8,r5
 SHR r2,r8,16
+LD r8,r0,@ms_cursor_saved
+CMP r8,r0
+JMP[EQ] @gp_full
+LD r8,r0,@ms_tick
+SUB r8,r4,r8
+SHR r9,r8,31
+CMP r9,r0
+JMP[NE] @gp_full
+MOVI r9,13
+CMP r8,r9
+JMP[GE] @gp_full
+MOVI r9,9
+CMP r8,r9
+JMP[GE] @gp_tail
+LD r9,r0,@ms_frame
+ADD r8,r9,r8
+ADD r8,r8,r13
+; r8=exclusive right, r9=left; swap to left/right.
+ADD r3,r8,r0
+ADD r8,r9,r0
+ADD r9,r3,r0
+JMP @gp_overlap
+gp_tail:
+LD r8,r0,@ms_frame
+MOVI r9,5
+ADD r9,r8,r9
+MOVI r3,2
+ADD r8,r8,r3
+gp_overlap:
+CMP r2,r8
+JMP[LE] @gp_full
+CMP r1,r9
+JMP[GE] @gp_full
+; Copy the changed pixels left of the opaque cursor.
+CMP r1,r8
+JMP[GE] @gp_right
+SUB r3,r8,r1
+ADD r1,r1,r6
+ADD r8,r1,r12
+FBCOPY r3,r1,r8
+gp_right:
+; Copy changed pixels to its right, preserving the opaque pixels.
+CMP r2,r9
+JMP[LE] @gp_clean
+SUB r3,r2,r9
+ADD r1,r9,r6
+ADD r8,r1,r12
+FBCOPY r3,r1,r8
+JMP @gp_clean
+gp_full:
 SUB r3,r2,r1
 ADD r1,r1,r6
-ADD r2,r1,r12
-FBCOPY r3,r1,r2
+ADD r8,r1,r12
+FBCOPY r3,r1,r8
+gp_clean:
 ST r0,r7,0
 gp_next:
 ADD r7,r7,r13
 ADD r6,r6,r10
+ADD r4,r4,r13
 SUB r11,r11,r13
 CMP r11,r0
 JMP[NE] @gp_row
 ST r0,r0,@fb_dirty
-CALL @ms_erase
-ST r0,r0,@ms_cursor_target
-ST r13,r0,@ms_cursor_saved
-JMP @gp_end
 gp_direct:
 CALL @ms_draw
-gp_end:
 SUB r14,r14,r13
 LD r15,r14,0
 RET

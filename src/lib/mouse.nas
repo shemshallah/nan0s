@@ -697,8 +697,6 @@ RET
 
 ; Pointer: guest-native save-under cursor. Erase before any app paints;
 ; invalidate saved pixels before a complete frame replaces the framebuffer.
-ms_cursor_target:
-.word 0
 ms_cursor_saved:
 .word 0
 ms_cursor_pixels:
@@ -708,6 +706,9 @@ LD r1,r0,@ms_cursor_saved
 CMP r1,r0
 RET[EQ]
 ST r0,r0,@ms_cursor_saved
+LD r12,r0,@fb_scene_offset
+CMP r12,r0
+JMP[NE] @ms_scene_erase
 MOVI r11,0
 JMP @ms_cursor_blit
 ms_draw:
@@ -737,8 +738,6 @@ ADD r9,r2,r4
 CMP r9,r6
 JMP[GE] @ms_cursor_next
 MUL r9,r9,r5
-ADD r9,r9,r8
-LD r8,r0,@ms_cursor_target
 ADD r9,r9,r8
 CMP r11,r0
 JMP[EQ] @ms_cursor_restore
@@ -787,4 +786,43 @@ ADD r4,r4,r13
 MOVI r8,13
 CMP r4,r8
 JMP[LT] @ms_cursor_row
+RET
+
+; Restore the old opaque cursor footprint from the retained scene. The
+; scene never contains a cursor. No offscreen VPEEK or front scratch pixel.
+ms_scene_erase:
+LD r1,r0,@ms_frame
+LD r2,r0,@ms_tick
+LD r5,r0,@fb_w
+LD r6,r0,@fb_h
+MOVI r4,0
+mse_row:
+ADD r9,r2,r4
+CMP r9,r6
+RET[GE]
+MOVI r8,9
+CMP r4,r8
+JMP[GE] @mse_tail
+ADD r8,r1,r0
+ADD r10,r4,r13
+JMP @mse_clip
+mse_tail:
+MOVI r8,2
+ADD r8,r1,r8
+MOVI r10,3
+mse_clip:
+CMP r8,r5
+JMP[GE] @mse_next
+ADD r11,r8,r10
+CMP r11,r5
+SUB[GT] r10,r5,r8
+MUL r9,r9,r5
+ADD r9,r9,r8
+ADD r11,r9,r12
+FBCOPY r10,r9,r11
+mse_next:
+ADD r4,r4,r13
+MOVI r8,13
+CMP r4,r8
+JMP[LT] @mse_row
 RET
