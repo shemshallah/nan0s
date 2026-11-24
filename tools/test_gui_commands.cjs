@@ -141,6 +141,19 @@ assert.doesNotMatch(mouse, /document\.|<div|window\.addEventListener|#include <s
   'Native mouse logic must not be implemented in JS or C');
 console.log('PASS: raw NaN16 PS/2 AUX init, packet decoder, mouse hit testing, drag, resize, taskbar and modal');
 
+// Avoid the illusion of spontaneous reopening when a topmost clone closes.
+// Launcher Terminal activates an existing window, and titles identify slots.
+assert.match(shell, /CMP r1,r0\s*\nJMP\[EQ\] @sh_launch_existing/,
+  'Terminal tile must focus an existing terminal rather than spawn clones');
+assert.match(shell, /sh_launch_existing:\s*\nCALL @gui_single/,
+  'Guest launcher must delegate reuse and focus to the native single-instance helper');
+assert.match(wm, /LD r3,r0,@dw_id[\s\S]*?CALL @fb_char7/,
+  'Native window title bar must render its stable instance ID');
+assert.match(wm, /LD r3,r0,@wd_i[\s\S]*?CALL @fb_char7/,
+  'Taskbar must render the matching native instance ID');
+assert.match(wm, /wm_close:[\s\S]*?CALL @wm_zremove[\s\S]*?ST r0,r1,#W_ALIVE/,
+  'Closing a window must unlink z-order and kill exactly its live slot');
+
 console.log('PASS: raw NaN16 taskbar, launcher, modal, notification, themes, tile, snap, resize and restore');
 
 console.log('PASS: F0 native help, F1-F12 mapping, n/b routing, build command help, disk builder');
