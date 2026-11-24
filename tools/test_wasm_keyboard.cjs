@@ -16,6 +16,20 @@ async function main() {
   assert.match(html, /@media\s*\(pointer:\s*coarse\)[\s\S]*?\.typebar\s*\{\s*position:\s*fixed;/,
     'Touch layout must pin the keyboard input to the viewport');
 
+  // Parse the real on-screen controls: omitted or wrong key codes fail the test.
+  const fnSection = html.match(/<div class="function-keys" id="function-keys"[^>]*>([\s\S]*?)<\/div>/);
+  assert.ok(fnSection, 'Mobile function-key rail is required');
+  const functionButtons = [...fnSection[1].matchAll(/<button[^>]*data-code="(\d+)"[^>]*>(F\d+)<\/button>/g)]
+    .map(m => ({
+      tagName: 'BUTTON', disabled: true, label: m[2],
+      getAttribute(name) { return name === 'data-code' ? m[1] : null; },
+    }));
+  assert.deepEqual(functionButtons.map(b => [b.label, +b.getAttribute('data-code')]), [
+    ['F0', 0x54], ['F1', 0x3b], ['F2', 0x3c], ['F3', 0x3d], ['F4', 0x3e],
+    ['F5', 0x3f], ['F6', 0x40], ['F7', 0x41], ['F8', 0x42], ['F9', 0x43],
+    ['F10', 0x44], ['F11', 0x57], ['F12', 0x58],
+  ], 'All F0-F12 button labels must match PS/2 Set-1 codes');
+
   class Element {
     constructor() { this.listeners = {}; this.value = ''; this.disabled = true; this.className = ''; this.textContent = ''; }
     addEventListener(type, handler) { (this.listeners[type] ||= []).push(handler); }
@@ -35,10 +49,13 @@ async function main() {
   }
   const elements = Object.fromEntries(
     ['type', 'clear-type', 'pad', 'status', 'screen_container', 'serial', 'restart', 'fullscreen',
-     'zoom-out', 'zoom-in', 'zoom-fit', 'zoom-level', 'image-fingerprint', 'download-replica']
+     'zoom-out', 'zoom-in', 'zoom-fit', 'zoom-level', 'image-fingerprint', 'download-replica',
+     'function-keys']
       .map(id => [id, new Element()])
   );
   elements.screen_container.clientWidth = 360;
+  elements['function-keys'].querySelectorAll = selector =>
+    selector === 'button' ? functionButtons : [];
   const document = { getElementById(id) { assert.ok(elements[id], 'Missing mock element ' + id); return elements[id]; } };
   const window = { matchMedia() { return { matches: true }; } };
   let emulator;
@@ -80,6 +97,20 @@ async function main() {
   assert.equal(elements['zoom-in'].disabled, false);
   assert.equal(elements['zoom-out'].disabled, false);
   assert.equal(elements['zoom-fit'].disabled, false);
+  assert.ok(functionButtons.every(b => b.disabled === false),
+    'All guest F0-F12 controls must activate when v86 is ready');
+  // A tap emits a real make/break pair without fake text or host shortcuts.
+  for (const btn of functionButtons) {
+    emulator.codes.length = 0;
+    const press = elements['function-keys'].dispatch('pointerdown', {
+      target: btn, cancelable: true,
+    });
+    assert.equal(press.defaultPrevented, true, 'F-key tap must preserve Android IME focus');
+    elements['function-keys'].dispatch('click', { target: btn });
+    const scan = Number(btn.getAttribute('data-code'));
+    assert.deepEqual(emulator.codes, [scan, scan | 0x80], btn.label + ' must deliver PS/2 make/break');
+  }
+  emulator.codes.length = 0;
   assert.ok(emulator.options.fda && emulator.options.hda && emulator.options.hdb,
     'Full system must use floppy, source IDE master, and independent output IDE slave');
   assert.equal(elements['download-replica'].disabled, true, 'Never download an unverified output');
@@ -162,6 +193,16 @@ async function main() {
   const key = code => [code, code | 0x80];
   const shift = code => [0x2a, code, code | 0x80, 0xaa];
 
+  clear();
+  input.dispatch('keydown', { key: 'F0' });
+  check('external virtual F0 while text field focused', emulator.codes, key(0x54));
+  clear();
+  input.dispatch('keydown', { key: 'F10' });
+  check('physical F10 while text field focused', emulator.codes, key(0x44));
+  clear();
+  input.dispatch('keydown', { key: 'F12' });
+  check('physical F12 while text field focused', emulator.codes, key(0x58));
+
   clear(); value('a');
   check('lowercase a', emulator.codes, key(0x1e));
 
@@ -196,6 +237,6 @@ async function main() {
   check('Clear never sends guest backspaces', emulator.codes, []);
   assert.equal(input.value, '');
 
-  console.log('PASS: Android IME keyboard input, shifts, composition, corrections, special keys, clear, full-system disks');
+  console.log('PASS: Android IME, F0-F12 PS/2 scancodes, function rail, focus, pinch, and disk controls');
 }
 main().catch(err => { console.error(err); process.exitCode = 1; });
