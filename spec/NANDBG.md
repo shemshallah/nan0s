@@ -998,9 +998,9 @@ The second CLI accepts `carts load <id> step next finish run regs mem [addr]
 log hist stack types screen serial dis [addr] undo [n] redo [n] break bp bpts
 watch wp wpts setr setm setw setc goto checkpoint restore reset help quit`.
 `break` is a fast single breakpoint at PC; `bp <hex>`/`wp <hex>` toggle table
-entries and `bpts`/`wpts` list them. `setr <n> <hex>`, `setm <addr> <hex>`, `setw <addr> <word> <class>`,
-`setc <addr> <class>` and `goto <hex>` are typed edits backed by ABI2
-`reg_set`, `mem_set`, `mem_seth`, `map` and `pc_set`.
+entries and `bpts`/`wpts` list them. `setr <n> <hex>`, `setm <addr> <hex>`,
+`setw <addr> <word> <class>`, `setc <addr> <class>` and `goto <hex>` are typed
+edits backed by ABI2 `reg_set`, `mem_set`, `mem_seth`, `map` and `pc_set`.
 `undo [n]` rewinds one or `n` recorded scalar steps, restoring registers, PC,
 condition, shadow-call depth and up to two guest memory words per step; each
 restored PC is printed. `redo [n]` restores the saved post-step states in

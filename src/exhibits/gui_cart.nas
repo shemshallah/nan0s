@@ -6638,6 +6638,122 @@ ttn15:
 .str "DS"
 
 
+; ---- bp <hex> / wp <hex> / goto <hex> ----
+tdbg_bp_arg:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @tdbg_args_reset
+CALL @tdbg_nexthex
+CMP r2,r0
+JMP[EQ] @tbpa_bad
+ST r1,r0,@tbpa_v
+ST r14,r0,@dbg_sp
+LD r1,r0,@tbpa_v
+CALL #DBG_BP_TOGGLE
+LD r14,r0,@dbg_sp
+ST r1,r0,@tbpa_r
+MOVI r2,66
+CALL @tdbg_ch
+MOVI r2,80
+CALL @tdbg_ch
+MOVI r2,61
+CALL @tdbg_ch
+LD r1,r0,@tk_id
+LD r2,r0,@tbpa_v
+MOVI r3,4
+CALL @dbg_puthex
+MOVI r2,32
+CALL @tdbg_ch
+LD r1,r0,@tbpa_r
+CMP r1,r0
+MOVI[NE] r2,43
+MOVI[EQ] r2,45
+CALL @tdbg_ch
+MOVI r2,10
+CALL @tdbg_ch
+JMP @tbpa_done
+tbpa_bad:
+MOVI r2,@s_tdbg_badarg
+CALL @tdbg_str
+tbpa_done:
+SUB r14,r14,r13
+LD r15,r14,0
+JMP @tdbg_done
+tbpa_v:
+.word 0
+tbpa_r:
+.word 0
+
+tdbg_wp_arg:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @tdbg_args_reset
+CALL @tdbg_nexthex
+CMP r2,r0
+JMP[EQ] @twpa_bad
+ST r1,r0,@twpa_v
+ST r14,r0,@dbg_sp
+LD r1,r0,@twpa_v
+CALL #DBG_WP_TOGGLE
+LD r14,r0,@dbg_sp
+ST r1,r0,@twpa_r
+MOVI r2,87
+CALL @tdbg_ch
+MOVI r2,61
+CALL @tdbg_ch
+LD r1,r0,@tk_id
+LD r2,r0,@twpa_v
+MOVI r3,4
+CALL @dbg_puthex
+MOVI r2,32
+CALL @tdbg_ch
+LD r1,r0,@twpa_r
+CMP r1,r0
+MOVI[NE] r2,43
+MOVI[EQ] r2,45
+CALL @tdbg_ch
+MOVI r2,10
+CALL @tdbg_ch
+JMP @twpa_done
+twpa_bad:
+MOVI r2,@s_tdbg_badarg
+CALL @tdbg_str
+twpa_done:
+SUB r14,r14,r13
+LD r15,r14,0
+JMP @tdbg_done
+twpa_v:
+.word 0
+twpa_r:
+.word 0
+
+tdbg_goto:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @tdbg_args_reset
+CALL @tdbg_nexthex
+CMP r2,r0
+JMP[EQ] @tgt_bad
+ST r1,r0,@tgt_pc
+ST r14,r0,@dbg_sp
+LD r1,r0,@tgt_pc
+CALL #DBG_PC_SET
+LD r14,r0,@dbg_sp
+CALL @tdbg_inval
+CALL @dbg_state
+SUB r14,r14,r13
+LD r15,r14,0
+JMP @tdbg_done
+tgt_bad:
+MOVI r2,@s_tdbg_badarg
+CALL @tdbg_str
+SUB r14,r14,r13
+LD r15,r14,0
+JMP @tdbg_done
+tgt_pc:
+.word 0
+
+
 ; ---- exact redo: save the post-step state before undo rewinds ----
 tdbg_redo_save:
 ST r15,r14,0
@@ -7406,6 +7522,11 @@ CALL @fs_prefix
 CMP r1,r0
 JMP[NE] @tdbg_bpts
 LA r1,#FNB
+LA r2,@s_tdbg_bp_arg
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @tdbg_bp_arg
+LA r1,#FNB
 LA r2,@s_tdbg_wpts
 CALL @fs_prefix
 CMP r1,r0
@@ -7440,6 +7561,16 @@ LA r2,@s_tdbg_types
 CALL @fs_prefix
 CMP r1,r0
 JMP[NE] @tdbg_types
+LA r1,#FNB
+LA r2,@s_tdbg_wp_arg
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @tdbg_wp_arg
+LA r1,#FNB
+LA r2,@s_tdbg_goto
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @tdbg_goto
 LA r1,#FNB
 LA r2,@s_tdbg_setr
 CALL @fs_prefix
@@ -7907,11 +8038,11 @@ s_dbg_loaded:
 s_dbg_nocart:
 .str "no cart\n"
 s_tdbg_banner:
-.str "NANDBG TERMINAL MONITOR\ncarts load <id> step next finish run regs break watch bpts wpts mem dis screen serial log hist stack types undo redo setr setm setw setc checkpoint restore reset pc quit\n"
+.str "NANDBG TERMINAL MONITOR\ncarts load <id> step next finish run regs break watch bpts wpts mem dis screen serial log hist stack types goto bp wp undo redo setr setm setw setc checkpoint restore reset pc quit\n"
 s_tdbg_prompt:
 .str "> "
 s_tdbg_help:
-.str "carts load <id> step next finish run regs break watch bpts wpts mem dis screen serial log hist stack types undo redo setr setm setw setc checkpoint restore reset pc quit"
+.str "carts load <id> step next finish run regs break watch bpts wpts mem dis screen serial log hist stack types goto bp wp undo redo setr setm setw setc checkpoint restore reset pc quit"
 s_tdbg_carts:
 .str "carts"
 s_tdbg_load:
@@ -7950,6 +8081,12 @@ s_tdbg_stack:
 .str "stack"
 s_tdbg_types:
 .str "types"
+s_tdbg_bp_arg:
+.str "bp"
+s_tdbg_wp_arg:
+.str "wp"
+s_tdbg_goto:
+.str "goto"
 s_tdbg_nolog:
 .str "no log\n"
 s_tdbg_histp:

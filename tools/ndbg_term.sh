@@ -98,6 +98,21 @@ if ! grep -qx '!DFC@20002003 W=0000000F7F000000' "$T/blog.lf" ||
   echo "ndbg_term: LOG FAIL"; cat "$T/blog"; exit 1
 fi
 
+# typed breakpoint/watchpoint table edits and goto
+"$CLI" --img "$T/guest.bin" --steps 120000000 \
+  --keys "@20000000,d,e,b,u,g,ENTER,@2000000,l,o,a,d,SPACE,1,ENTER,@2000000,b,p,SPACE,2,0,0,1,ENTER,@2000000,w,p,SPACE,2,0,0,2,ENTER,@2000000,b,p,t,s,ENTER,@2000000,w,p,t,s,ENTER,@2000000,g,o,t,o,SPACE,2,0,0,3,ENTER,@2000000,b,p,SPACE,2,0,0,1,ENTER,@2000000,w,p,SPACE,2,0,0,2,ENTER,@3000000,q,u,i,t,ENTER,@3000000" \
+  --serial > "$T/bpwp" 2>/dev/null || true
+tr -d '\r' < "$T/bpwp" > "$T/bpwp.lf"
+if ! grep -qx 'BP=2001 +' "$T/bpwp.lf" ||
+   ! grep -qx 'W=2002 +' "$T/bpwp.lf" ||
+   ! grep -qx 'BP=2001 -' "$T/bpwp.lf" ||
+   ! grep -qx 'W=2002 -' "$T/bpwp.lf" ||
+   ! grep -qx '2001 ' "$T/bpwp.lf" ||
+   ! grep -qx '2002 ' "$T/bpwp.lf" ||
+   ! grep -qx 'S=0 PC=2003' "$T/bpwp.lf"; then
+  echo "ndbg_term: BPWP FAIL"; cat "$T/bpwp"; exit 1
+fi
+
 # captured display: run Baby to the key wait and dump the text buffer
 "$CLI" --img "$T/guest.bin" --steps 160000000 \
   --keys "@20000000,d,e,b,u,g,ENTER,@2000000,l,o,a,d,SPACE,1,ENTER,@2000000,r,u,n,ENTER,@4000000,s,c,r,e,e,n,ENTER,@4000000,q,u,i,t,ENTER,@3000000" \
@@ -147,5 +162,5 @@ sed 's/BP=2001/BP=2002/'    "$T/out.lf" > "$T/negative"
 if cmp -s "$T/out.lf" "$T/negative"; then
   echo "ndbg_term: NEGATIVE FAIL"; exit 1
 fi
-echo "ndbg_term: PASS (terminal debug: carts/load, step/dis/regs/break/watch/bpts/wpts/mem/run; screen/serial; setr/setm/setw/setc; next/finish; log/hist/stack/types; undo/multi-redo/checkpoint/restore, exact)"
+echo "ndbg_term: PASS (terminal debug: carts/load, step/dis/regs/break/watch/bpts/wpts/mem/run; screen/serial; setr/setm/setw/setc; next/finish; log/hist/stack/types; bp/wp/goto; undo/multi-redo/checkpoint/restore, exact)"
 echo "ndbg_term: NEGATIVE PASS (mutated transcript rejected)"
