@@ -4,7 +4,7 @@
 set -e
 cd "$(dirname "$0")/.."
 python3 tools/nasm1check.py
-T="${TMPDIR:-/data/data/com.termux/files/usr/tmp}/opencode"
+T="${TMPDIR:-$PWD/build}/opencode"
 mkdir -p "$T"
 python3 tools/mkimg1.py x86/boot/kboot0.xa x86/native/kan16.xa src/prog/selftest.nas "$T/selftest1.img"
 sh x86/tools/mkall.sh
