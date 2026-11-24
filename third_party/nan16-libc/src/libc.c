@@ -1079,11 +1079,22 @@ int open(const char *name, int flags, ...)
     if (vfs_abspath(name, abs) < 0) return -1;
     f = mf_find(abs);
     if (!f) {
+        char parent[VFS_NAME_MAX];
+        const char *slash;
+        size_t plen;
         if (!(flags & O_CREAT)) { errno = ENOENT; return -1; }
+        /* O_CREAT creates a file only in an existing (real or implicit)
+           directory.  A missing parent is ENOENT, not an implicit dir. */
+        slash = strrchr(abs, '/');
+        plen = slash ? (size_t)(slash - abs) : 0;
+        if (plen == 0) strcpy(parent, "/");
+        else { memcpy(parent, abs, plen); parent[plen] = 0; }
+        if (!mf_isdir_name(parent)) { errno = ENOENT; return -1; }
         f = mf_new(abs);
         if (!f) return -1;
     } else {
         if (f->isdir) { errno = EISDIR; return -1; }
+        if ((flags & O_CREAT) && (flags & O_EXCL)) { errno = EEXIST; return -1; }
         if ((flags & (O_WRONLY | O_RDWR)) && !f->writable) {
             errno = EACCES; return -1;
         }
