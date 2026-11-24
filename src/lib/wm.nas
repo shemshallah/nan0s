@@ -64,6 +64,10 @@
 .equ C_INACTIVE 8
 .equ TASKH 29
 .equ WM_MIN 2
+.equ WM_CLOSE_X 24
+.equ WM_CTL_W 24
+.equ WM_MAX_X 48
+.equ WM_MIN_X 72
 ; ---- rect (clipped to the screen): r1=x r2=y r3=w r4=h r5=colour ; clobbers r1-r8 ----
 wm_rect:
 ; Reject empty rectangles and clip signed origins before forming a VRAM address.
@@ -794,7 +798,7 @@ LD r3,r9,#W_TITLE
 LD r5,r9,#W_X
 LD r6,r9,#W_W
 ADD r5,r5,r6
-MOVI r6,49
+MOVI r6,75
 SUB r5,r5,r6
 ST r5,r0,@t7_clip
 MOVI r4,#C_TXT
@@ -804,12 +808,12 @@ LD r9,r0,@dw_b
 LD r1,r9,#W_X
 LD r3,r9,#W_W
 ADD r1,r1,r3
-MOVI r5,16
+MOVI r5,#WM_CLOSE_X
 SUB r1,r1,r5
 LD r2,r9,#W_Y
 MOVI r5,2
 ADD r2,r2,r5
-MOVI r3,13
+MOVI r3,21
 MOVI r4,13
 MOVI r5,#C_CONTROL_CLOSE
 CALL @wm_round
@@ -817,7 +821,7 @@ LD r9,r0,@dw_b
 LD r1,r9,#W_X
 LD r3,r9,#W_W
 ADD r1,r1,r3
-MOVI r5,13
+MOVI r5,17
 SUB r1,r1,r5
 LD r2,r9,#W_Y
 MOVI r5,3
@@ -829,12 +833,12 @@ LD r9,r0,@dw_b
 LD r1,r9,#W_X
 LD r3,r9,#W_W
 ADD r1,r1,r3
-MOVI r5,31
+MOVI r5,#WM_MAX_X
 SUB r1,r1,r5
 LD r2,r9,#W_Y
 MOVI r5,2
 ADD r2,r2,r5
-MOVI r3,13
+MOVI r3,21
 MOVI r4,13
 MOVI r5,#C_CONTROL
 CALL @wm_round
@@ -842,7 +846,7 @@ LD r9,r0,@dw_b
 LD r1,r9,#W_X
 LD r3,r9,#W_W
 ADD r1,r1,r3
-MOVI r5,28
+MOVI r5,41
 SUB r1,r1,r5
 LD r2,r9,#W_Y
 MOVI r5,3
@@ -856,12 +860,12 @@ LD r9,r0,@dw_b
 LD r1,r9,#W_X
 LD r3,r9,#W_W
 ADD r1,r1,r3
-MOVI r5,46
+MOVI r5,#WM_MIN_X
 SUB r1,r1,r5
 LD r2,r9,#W_Y
 MOVI r5,2
 ADD r2,r2,r5
-MOVI r3,13
+MOVI r3,21
 MOVI r4,13
 MOVI r5,#C_CONTROL
 CALL @wm_round
@@ -869,7 +873,7 @@ LD r9,r0,@dw_b
 LD r1,r9,#W_X
 LD r3,r9,#W_W
 ADD r1,r1,r3
-MOVI r5,43
+MOVI r5,65
 SUB r1,r1,r5
 LD r2,r9,#W_Y
 MOVI r5,3
