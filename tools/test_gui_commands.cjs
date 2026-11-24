@@ -127,6 +127,12 @@ assert.match(mouse, /CALL @sh_click/, 'Native modal and launcher clicks must be 
 assert.match(mouse, /CALL @wm_minimize/, 'Native minimize button must be clickable');
 assert.match(mouse, /CALL @wm_enlarge/, 'Native maximize button must be clickable');
 assert.match(mouse, /ms_drag_resize:/, 'The bottom-right resize grip must be draggable');
+assert.match(mouse, /ms_release:[\s\S]*?CALL @wm_snap[\s\S]*?ms_release_end:/,
+  'Dropping a dragged native window near a desktop edge must snap it');
+assert.match(mouse, /ms_hit_move:[\s\S]*?TICK r2[\s\S]*?MOVI r5,350[\s\S]*?CALL @wm_enlarge/,
+  'Double-clicking a guest title bar must toggle native maximize or restore');
+assert.match(mouse, /MOVI r1,0xFFFF\s*\nST r1,r0,@ms_last_title_id/,
+  'Double-click history must be reset on native mouse startup');
 assert.doesNotMatch(mouse, /document\.|<div|window\.addEventListener|#include <stdio/,
   'Native mouse logic must not be implemented in JS or C');
 console.log('PASS: raw NaN16 PS/2 AUX init, packet decoder, mouse hit testing, drag, resize, taskbar and modal');
