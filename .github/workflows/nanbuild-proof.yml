@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
     paths:
+      - "src/lib/mouse.nas"
+      - "src/lib/wm.nas"
+      - "src/lib/shell.nas"
       - "src/lib/bootbuild.nas"
       - "src/exhibits/gui_cart.nas"
       - "tools/qgate_nanbuild.sh"
