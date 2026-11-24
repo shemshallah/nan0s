@@ -164,6 +164,7 @@ MOVI r2,0
 MOVI r3,256
 BFILL r1,r2,r3
 ST r0,r0,@wm_zn
+ST r0,r0,@wm_tick_overlay
 ST r0,r0,@wm_notice_ticks
 ST r0,r0,@wm_theme
 MOVI r1,#C_DESK
@@ -252,11 +253,26 @@ wm_raise:
 ST r15,r14,0
 ADD r14,r14,r13
 ST r1,r0,@rz_id
+; Never insert a closed or out-of-range slot into the visible stack.
+MOVI r2,#MAXW
+CMP r1,r2
+JMP[GE] @rz_done
+CALL @wm_wbase
+LD r2,r1,#W_ALIVE
+CMP r2,r0
+JMP[EQ] @rz_done
+; Raising a live minimized window also restores its visibility flag.
+LD r2,r1,#W_FLAGS
+MOVI r3,0xFFFD
+BOOL.8 r2,r2,r3
+ST r2,r1,#W_FLAGS
+LD r1,r0,@rz_id
 CALL @wm_zremove
 LD r1,r0,@rz_id
 CALL @wm_zpush
 MOVI r1,1
 ST r1,r0,@wm_redraw
+rz_done:
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -372,6 +388,7 @@ CALL @wm_zremove
 LD r1,r0,@wcl_id
 CALL @wm_wbase
 ST r0,r1,#W_ALIVE
+ST r0,r1,#W_FLAGS
 MOVI r1,1
 ST r1,r0,@wm_redraw
 SUB r14,r14,r13
@@ -379,14 +396,32 @@ LD r15,r14,0
 RET
 wcl_id:
 .word 0
-; ---- wm_covered: r1=id -> r1=1 if a higher window overlaps it ----
+; ---- wm_covered: r1=id -> 1 if unsafe to paint directly (hidden/dead/overlapped/modal) ----
 wm_covered:
 ST r1,r0,@cv_id
+LD r2,r0,@wm_tick_overlay
+CMP r2,r0
+JMP[NE] @cv_yes
+MOVI r2,#MAXW
+CMP r1,r2
+JMP[GE] @cv_yes
+SHL r3,r1,5
+MOVI r4,#WTL
+MOVHI r4,#WTH
+ADD r3,r3,r4
+LD r4,r3,#W_ALIVE
+CMP r4,r0
+JMP[EQ] @cv_yes
+LD r4,r3,#W_FLAGS
+MOVI r5,#WM_MIN
+BOOL.8 r4,r4,r5
+CMP r4,r0
+JMP[NE] @cv_yes
 LD r2,r0,@wm_zn
 MOVI r3,0
 cv_find:
 CMP r3,r2
-JMP[GE] @cv_no
+JMP[GE] @cv_yes
 MOVI r4,#ZOL
 MOVHI r4,#ZOH
 ADD r4,r4,r3
@@ -440,11 +475,14 @@ LD r11,r5,#W_H
 ADD r11,r10,r11
 CMP r11,r8
 JMP[LE] @cv_next
+cv_yes:
 MOVI r1,1
 RET
 cv_no:
 MOVI r1,0
 RET
+wm_tick_overlay:
+.word 0
 cv_id:
 .word 0
 cv_j:
