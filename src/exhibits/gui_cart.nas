@@ -93,6 +93,8 @@ CMP r1,r0
 JMP[EQ] @g_exit
 CALL @kbd_poll
 CALL @kbd_get
+SHR r2,r1,16
+ST r2,r0,@g_mods
 MOVI r4,0xFFFF
 BOOL.8 r1,r1,r4
 CMP r1,r0
@@ -125,6 +127,10 @@ g_quit:
 .word 0
 g_move:
 .word 0
+g_resize:
+.word 0
+g_mods:
+.word 0
 g_cnt:
 .word 0
 g_last:
@@ -150,6 +156,11 @@ JMP[EQ] @gb_clock
 LD r1,r0,@gb_x
 MOVI r2,2
 MOVI r3,@s_move
+LD r5,r0,@g_resize
+CMP r5,r0
+JMP[EQ] @gb_mode_label
+MOVI r3,@s_resize
+gb_mode_label:
 MOVI r4,#C_YEL
 CALL @fb_text7
 gb_clock:
@@ -176,6 +187,8 @@ gb_x:
 .word 0
 s_move:
 .str "MOVE"
+s_resize:
+.str "RESIZE"
 ; ---- tick every live window ----
 g_ticks:
 ST r15,r14,0
@@ -384,10 +397,25 @@ gk_n7:
 MOVI r2,0x102
 CMP r1,r2
 JMP[NE] @gk_notf3
+; Shift+F2 toggles keyboard resize; F2 toggles move mode.
+LD r2,r0,@g_mods
+MOVI r3,1
+BOOL.8 r2,r2,r3
+CMP r2,r0
+JMP[EQ] @gk_f2_move
+LD r2,r0,@g_resize
+MOVI r3,1
+BOOL.6 r2,r2,r3
+ST r2,r0,@g_resize
+ST r2,r0,@g_move
+JMP @gk_f2_done
+gk_f2_move:
+ST r0,r0,@g_resize
 LD r2,r0,@g_move
 MOVI r3,1
 BOOL.6 r2,r2,r3
 ST r2,r0,@g_move
+gk_f2_done:
 CALL @g_bar
 JMP @gk_ret
 gk_notf3:
@@ -492,6 +520,105 @@ LD r15,r14,0
 RET
 ge_id:
 .word 0
+; ---- raw-NaN16 keyboard window resize; Shift+F2 then arrows, Enter ends ----
+g_resizekey:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @wm_top
+MOVI r2,0xFFFF
+CMP r1,r2
+JMP[EQ] @gr_done
+CALL @wm_wbase
+ST r1,r0,@gr_b
+LD r2,r1,#W_FLAGS
+CMP r2,r0
+JMP[NE] @gr_done
+LD r1,r0,@g_key
+MOVI r2,0x112
+CMP r1,r2
+JMP[NE] @gr_right
+MOVI r6,0
+JMP @gr_width
+gr_right:
+MOVI r2,0x113
+CMP r1,r2
+JMP[NE] @gr_up
+MOVI r6,1
+gr_width:
+LD r1,r0,@gr_b
+LD r3,r1,#W_W
+MOVI r4,8
+CMP r6,r0
+JMP[NE] @gr_wadd
+SUB r3,r3,r4
+JMP @gr_wclamp
+gr_wadd:
+ADD r3,r3,r4
+gr_wclamp:
+MOVI r4,160
+CMP r3,r4
+JMP[GE] @gr_wmax
+ADD r3,r4,r0
+gr_wmax:
+LD r5,r0,@fb_w
+LD r4,r1,#W_X
+SUB r5,r5,r4
+MOVI r4,8
+SUB r5,r5,r4
+CMP r3,r5
+JMP[LE] @gr_wstore
+ADD r3,r5,r0
+gr_wstore:
+ST r3,r1,#W_W
+JMP @gr_changed
+gr_up:
+MOVI r2,0x110
+CMP r1,r2
+JMP[NE] @gr_down
+MOVI r6,0
+JMP @gr_height
+gr_down:
+MOVI r2,0x111
+CMP r1,r2
+JMP[NE] @gr_done
+MOVI r6,1
+gr_height:
+LD r1,r0,@gr_b
+LD r3,r1,#W_H
+MOVI r4,8
+CMP r6,r0
+JMP[NE] @gr_hadd
+SUB r3,r3,r4
+JMP @gr_hclamp
+gr_hadd:
+ADD r3,r3,r4
+gr_hclamp:
+MOVI r4,100
+CMP r3,r4
+JMP[GE] @gr_hmax
+ADD r3,r4,r0
+gr_hmax:
+LD r5,r0,@fb_h
+LD r4,r1,#W_Y
+SUB r5,r5,r4
+MOVI r4,#TASKH
+SUB r5,r5,r4
+MOVI r4,6
+SUB r5,r5,r4
+CMP r3,r5
+JMP[LE] @gr_hstore
+ADD r3,r5,r0
+gr_hstore:
+ST r3,r1,#W_H
+gr_changed:
+MOVI r1,1
+ST r1,r0,@wm_redraw
+gr_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+gr_b:
+.word 0
 ; ---- move mode: arrows move the focused window by 8 px, ENTER leaves ----
 g_movekey:
 ST r15,r14,0
@@ -501,9 +628,16 @@ MOVI r2,13
 CMP r1,r2
 JMP[NE] @gm_arrows
 ST r0,r0,@g_move
+ST r0,r0,@g_resize
 CALL @g_bar
 JMP @gm_ret
 gm_arrows:
+LD r2,r0,@g_resize
+CMP r2,r0
+JMP[EQ] @gm_move_arrows
+CALL @g_resizekey
+JMP @gm_ret
+gm_move_arrows:
 CALL @wm_top
 MOVI r2,0xFFFF
 CMP r1,r2
