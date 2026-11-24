@@ -39,7 +39,17 @@ dr_c:
 dis_word:
   ST r15,r0,@dw_lnk
   ST r1,r0,@dw_addr
+  ST r1,r0,@dw_disp
+  JMP @dw_body
+
+; r1=host word, r2=display address
+dis_word_at:
+  ST r15,r0,@dw_lnk
+  ST r1,r0,@dw_addr
+  ST r2,r0,@dw_disp
+dw_body:
   MOVI r2,4
+  LD r1,r0,@dw_disp
   CALL @dis_hexq
   CALL @dis_putsp
   LD r1,r0,@dw_addr
@@ -57,14 +67,16 @@ dw_ok:
   MOVI r2,4
   CALL @dis_hexq
   MOVI r1,95
-  PUTC r1
+  ADD r9,r1,r0
+  CALL @dis_out
   LD r1,r0,@dw_addr
   LD r1,r1,0
   ST r1,r0,@dw_p
   MOVI r2,8
   CALL @dis_hexq
   MOVI r1,95
-  PUTC r1
+  ADD r9,r1,r0
+  CALL @dis_out
   LD r3,r0,@dw_n
   MOVI r4,3
   BOOL.8 r4,r3,r4
@@ -129,7 +141,8 @@ do_lp:
   JMP @do_val
 do_comma:
   MOVI r1,44
-  PUTC r1
+  ADD r9,r1,r0
+  CALL @dis_out
 do_val:
   LD r3,r0,@dw_kind
   LD r6,r0,@dw_p
@@ -138,19 +151,23 @@ do_val:
   CMP r2,r0
   JMP[EQ] @do_num
   MOVI r4,114
-  PUTC r4
+  ADD r9,r4,r0
+  CALL @dis_out
 do_num:
   LD r1,r0,@dw_val
   CALL @dis_dec
   JMP @do_lp
 dw_nl:
   MOVI r1,10
-  PUTC r1
+  ADD r9,r1,r0
+  CALL @dis_out
   LD r15,r0,@dw_lnk
   RET
 dw_lnk:
 .word 0
 dw_addr:
+.word 0
+dw_disp:
 .word 0
 dw_n:
 .word 0
@@ -211,7 +228,8 @@ dis_putpred:
   CMP r3,r4
   JMP[EQ] @pp_out
   MOVI r1,91
-  PUTC r1
+  ADD r9,r1,r0
+  CALL @dis_out
   LD r1,r3,@t_pred
   CMP r1,r0
   JMP[EQ] @pp_num
@@ -219,12 +237,14 @@ dis_putpred:
   JMP @pp_close
 pp_num:
   MOVI r1,110
-  PUTC r1
+  ADD r9,r1,r0
+  CALL @dis_out
   LD r1,r0,@dw_n
   CALL @dis_dec
 pp_close:
   MOVI r1,93
-  PUTC r1
+  ADD r9,r1,r0
+  CALL @dis_out
 pp_out:
   LD r15,r0,@pp_lnk
   RET
@@ -233,12 +253,18 @@ pp_lnk:
 
 ; ---- printing primitives ---------------------------------------------------
 dis_putsp:
+  ST r15,r0,@psp_lnk
   MOVI r1,32
-  PUTC r1
+  ADD r9,r1,r0
+  CALL @dis_out
+  LD r15,r0,@psp_lnk
   RET
+psp_lnk:
+.word 0
 
 ; puts: r1=ptr to NUL-terminated 4-chars/word LSB-first string
 dis_puts:
+  ST r15,r0,@ps_lnk
   MOVI r4,255
 dp1:
   LD r2,r1,0
@@ -246,16 +272,23 @@ dp1:
 dp2:
   BOOL.8 r5,r2,r4
   CMP r5,r0
-  RET[EQ]
-  PUTC r5
+  JMP[EQ] @dp_out
+  ADD r9,r5,r0
+  CALL @dis_out
   SHR r2,r2,8
   SUB r3,r3,r13
   JMP[NE] @dp2
   ADD r1,r1,r13
   JMP @dp1
+dp_out:
+  LD r15,r0,@ps_lnk
+  RET
+ps_lnk:
+.word 0
 
 ; putn: r1=ptr to a 2-word space-padded name, stops at space or NUL
 dis_putn:
+  ST r15,r0,@pn_lnk
   MOVI r4,255
   MOVI r6,32
 pn_w:
@@ -264,18 +297,25 @@ pn_w:
 pn_c:
   BOOL.8 r5,r2,r4
   CMP r5,r6
-  RET[EQ]
+  JMP[EQ] @pn_out
   CMP r5,r0
-  RET[EQ]
-  PUTC r5
+  JMP[EQ] @pn_out
+  ADD r9,r5,r0
+  CALL @dis_out
   SHR r2,r2,8
   SUB r3,r3,r13
   JMP[NE] @pn_c
   ADD r1,r1,r13
   JMP @pn_w
+pn_out:
+  LD r15,r0,@pn_lnk
+  RET
+pn_lnk:
+.word 0
 
 ; hexn: r1=0..15 -> one hex digit
 dis_hexn:
+  ST r15,r0,@hn_lnk
   MOVI r2,10
   CMP r1,r2
   JMP[LT] @hn_d
@@ -285,8 +325,12 @@ hn_d:
   MOVI r2,48
 hn_o:
   ADD r2,r2,r1
-  PUTC r2
+  ADD r9,r2,r0
+  CALL @dis_out
+  LD r15,r0,@hn_lnk
   RET
+hn_lnk:
+.word 0
 
 ; hexq: r1=value r2=digit count (1..8), MSD first
 dis_hexq:
@@ -325,13 +369,14 @@ hq_val:
 
 ; dec: r1 -> unsigned decimal, no leading zeros (leaf, subtraction only)
 dis_dec:
+  ST r15,r0,@dd_lnk
   MOVI r2,@t_pow
   MOVI r3,0
   MOVI r7,48
 dd_p:
   LD r4,r2,0
   CMP r4,r0
-  RET[EQ]
+  JMP[EQ] @dd_out
   MOVI r5,0
 dd_s:
   CMP r1,r4
@@ -350,10 +395,16 @@ dd_emit:
 dd_pr:
   MOVI r3,1
   ADD r6,r5,r7
-  PUTC r6
+  ADD r9,r6,r0
+  CALL @dis_out
 dd_nx:
   ADD r2,r2,r13
   JMP @dd_p
+dd_out:
+  LD r15,r0,@dd_lnk
+  RET
+dd_lnk:
+.word 0
 
 ; ---- tables ------------------------------------------------------------------
 s_gate:
