@@ -68,21 +68,30 @@ The official multi-thread warning remains: `Multi-threaded tests skipped:
 Linked against a non-threadsafe Tcl build`; Tcl/SQLite are still
 `TCL_THREADS=0` / `SQLITE_THREADSAFE=0`.
 
-### Formatter follow-up (not yet green)
+### Formatter resolution: atof1 green
 
-Main added an accurate float formatter plus the `nan16_digits_hook` backed by
-`TclDoubleDigits`, and fast 64/32-bit division.  After merging those changes:
+The hook now calls `TclDoubleDigits(value, -1, TCL_DD_SHORTEST, ...)` and
+copies only through the returned `end` pointer (commit `2a038b0`), with the
+libc float formatter and fast 64/32-bit division from main.  This is exact
+and fast:
 
-- `format %e 1.5` in a tclsh cartridge consumes the entire 3B-step budget
-  before printing the result; a mapped build puts the last PC next to
-  `StrictInt64Conversion` in Tcl's `TclDoubleDigits` path.  The hook is
-  therefore still far too slow for `format %.32e`.
-- `atof1.test` with a 40B-step budget still does not reach the harness
-  summary (step budget exhausted at PC 3,011,787, again in the
-  `TclDoubleDigits`/`StrictInt64Conversion` path).
-- Therefore the first real veryquick failure remains the atof1 floating
-  conversion; veryquick has not been rerun to a green summary after the
-  formatter merge.
+```
+$ nan_cli ... --guest-script /sqlite/test/atof1.test --mem 256
+0 errors out of 40006 tests on  NaN16 32-bit
+steps: 92,184,860,546
+main:  0
+```
+
+`format %.32e 1.2345678901234567` now produces
+`1.23456789012345670000000000000000e+00`, and `format %e 1.5` produces
+`1.500000e+00` in about 107M steps.  The 1000 atof1 failures in the old
+veryquick run are gone; they were the only failure class observed there.
+
+veryquick has **not** yet produced a final summary after this fix.  A
+180,000,000,000-step run reached the step limit with no summary
+(`pc=38427`), so the complete aggregate needs a larger budget (the full
+atof1 file alone is 92.18B steps and veryquick runs the atof cases twice).
+That run is not called green; the exact official atof1 summary is green.
 
 ## Milestone 2 — official SQLite 3.54.1 testfixture
 
