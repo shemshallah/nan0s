@@ -52,14 +52,18 @@ if ! grep -qx 'carts' "$T/out.lf" ||
 fi
 # typed edits in a fresh session
 "$CLI" --img "$T/guest.bin" --steps 80000000 \
-  --keys "$DBGKEYS,@1000000,l,o,a,d,SPACE,1,ENTER,@1000000,g,o,t,o,SPACE,2,0,0,1,ENTER,@1000000,s,e,t,r,SPACE,1,SPACE,4,2,ENTER,@1000000,g,o,t,o,SPACE,3,0,0,0,ENTER,@1000000,s,e,t,m,SPACE,3,0,0,0,SPACE,1,2,3,4,ENTER,@1000000,m,e,m,ENTER,@1000000" \
+  --keys "$DBGKEYS,@1000000,l,o,a,d,SPACE,1,ENTER,@1000000,g,o,t,o,SPACE,2,0,0,1,ENTER,@1000000,s,e,t,r,SPACE,1,SPACE,4,2,ENTER,@1000000,g,o,t,o,SPACE,3,0,0,0,ENTER,@1000000,s,e,t,m,SPACE,3,0,0,0,SPACE,1,2,3,4,ENTER,@1000000,m,e,m,ENTER,@1000000,s,e,t,w,SPACE,3,0,0,0,SPACE,5,6,7,8,SPACE,9,ENTER,@1000000,m,e,m,ENTER,@1000000,s,e,t,c,SPACE,3,0,0,0,SPACE,5,ENTER,@1000000,m,e,m,ENTER,@1000000" \
   --serial > "$T/edit" 2>/dev/null || true
 tr -d '\r' < "$T/edit" > "$T/edit.lf"
 if ! grep -qx 'PC=2001' "$T/edit.lf" ||
    ! grep -qx 'R1=00000042' "$T/edit.lf" ||
    ! grep -qx 'PC=3000' "$T/edit.lf" ||
    ! grep -qx 'M3000=00001234' "$T/edit.lf" ||
-   ! grep -qx 'M300000001234A' "$T/edit.lf"; then
+   ! grep -qx 'M300000001234A' "$T/edit.lf" ||
+   ! grep -qx 'W3000=00005678/9' "$T/edit.lf" ||
+   ! grep -qx 'M3000000056789' "$T/edit.lf" ||
+   ! grep -qx 'C3000=5' "$T/edit.lf" ||
+   ! grep -qx 'M3000000056785' "$T/edit.lf"; then
   echo "ndbg_gui: EDIT FAIL"; cat "$T/edit"; exit 1
 fi
 
@@ -211,5 +215,5 @@ if cmp -s "$T/edit.lf" "$T/negative"; then
   echo "ndbg_gui: NEGATIVE FAIL (mutated transcript accepted)"
   exit 1
 fi
-echo "ndbg_gui: PASS (carts/load, break/log/mem, next/finish; screen/serial; setr/setm/goto; bp/wp tables; undo [n]/redo [n]; checkpoint/restore)"
+echo "ndbg_gui: PASS (carts/load, break/log/mem, next/finish; screen/serial; setr/setm/goto; bp/wp tables; undo [n]/redo [n]; checkpoint/restore; setw/setc)"
 echo "ndbg_gui: NEGATIVE PASS (mutated transcript rejected)"

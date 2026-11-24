@@ -48,6 +48,7 @@
 .equ DBG_MEM_GETH_CLS 5969
 .equ DBG_CKPT_TO 5970
 .equ DBG_CKPT_FROM 5971
+.equ DBG_MAP 5972
 .equ TOC_SNAP 0x70000
 .org 8192
 JMP @cart_entry
@@ -1800,6 +1801,16 @@ CALL @fs_prefix
 CMP r1,r0
 JMP[NE] @dd_log
 LA r1,#FNB
+LA r2,@s_dbg_setw
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @dd_setw
+LA r1,#FNB
+LA r2,@s_dbg_setc
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @dd_setc
+LA r1,#FNB
 LA r2,@s_dbg_setr
 CALL @fs_prefix
 CMP r1,r0
@@ -1954,6 +1965,14 @@ JMP @dd_done
 dd_setr:
 ST r0,r0,@rd_rd
 CALL @dbg_setr
+JMP @dd_done
+dd_setw:
+ST r0,r0,@rd_rd
+CALL @dbg_setw
+JMP @dd_done
+dd_setc:
+ST r0,r0,@rd_rd
+CALL @dbg_setc
 JMP @dd_done
 dd_setm:
 ST r0,r0,@rd_rd
@@ -2652,6 +2671,161 @@ arg_ptr:
 .word 0
 
 ; ---- undo one or more recorded scalar steps ----
+; ---- typed word and class setters ----
+dbg_setw:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @dbg_args_reset
+CALL @dbg_nexthex
+CMP r2,r0
+JMP[EQ] @dsw_bad
+ST r1,r0,@dsw_a
+CALL @dbg_nexthex
+CMP r2,r0
+JMP[EQ] @dsw_bad
+ST r1,r0,@dsw_v
+CALL @dbg_nexthex
+CMP r2,r0
+JMP[EQ] @dsw_bad
+ST r1,r0,@dsw_c
+MOVI r2,15
+CMP r1,r2
+JMP[GT] @dsw_bad
+ST r14,r0,@dbg_sp
+LD r1,r0,@dsw_a
+CALL #DBG_MAP
+LD r14,r0,@dbg_sp
+ST r1,r0,@dsw_h
+ST r14,r0,@dbg_sp
+LD r1,r0,@dsw_h
+LD r2,r0,@dsw_v
+LD r3,r0,@dsw_c
+CALL #DBG_MEM_SETH
+LD r14,r0,@dbg_sp
+ST r14,r0,@dbg_sp
+CALL #DBG_UINVAL
+LD r14,r0,@dbg_sp
+ST r0,r0,@rd_rd
+LD r1,r0,@dk_id
+MOVI r2,87
+CALL @vc_putc
+MOVI r1,87
+PUTC r1
+LD r1,r0,@dk_id
+LD r2,r0,@dsw_a
+MOVI r3,4
+CALL @dbg_puthex
+LD r1,r0,@dk_id
+MOVI r2,61
+CALL @vc_putc
+MOVI r1,61
+PUTC r1
+LD r1,r0,@dk_id
+LD r2,r0,@dsw_v
+MOVI r3,8
+CALL @dbg_puthex
+LD r1,r0,@dk_id
+MOVI r2,47
+CALL @vc_putc
+MOVI r1,47
+PUTC r1
+LD r1,r0,@dk_id
+LD r2,r0,@dsw_c
+MOVI r3,1
+CALL @dbg_puthex
+MOVI r1,10
+PUTC r1
+JMP @dsw_done
+dsw_bad:
+LD r1,r0,@dk_id
+MOVI r2,@s_dbg_badarg
+CALL @vc_puts
+dsw_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+dsw_a:
+.word 0
+dsw_v:
+.word 0
+dsw_c:
+.word 0
+dsw_h:
+.word 0
+
+dbg_setc:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @dbg_args_reset
+CALL @dbg_nexthex
+CMP r2,r0
+JMP[EQ] @dsc_bad
+ST r1,r0,@dsc_a
+CALL @dbg_nexthex
+CMP r2,r0
+JMP[EQ] @dsc_bad
+ST r1,r0,@dsc_c
+MOVI r2,15
+CMP r1,r2
+JMP[GT] @dsc_bad
+ST r14,r0,@dbg_sp
+LD r1,r0,@dsc_a
+CALL #DBG_MAP
+LD r14,r0,@dbg_sp
+ST r1,r0,@dsc_h
+ST r14,r0,@dbg_sp
+LD r1,r0,@dsc_h
+CALL #DBG_MEM_GETH
+LD r14,r0,@dbg_sp
+ST r1,r0,@dsc_v
+ST r14,r0,@dbg_sp
+LD r1,r0,@dsc_h
+LD r2,r0,@dsc_v
+LD r3,r0,@dsc_c
+CALL #DBG_MEM_SETH
+LD r14,r0,@dbg_sp
+ST r14,r0,@dbg_sp
+CALL #DBG_UINVAL
+LD r14,r0,@dbg_sp
+ST r0,r0,@rd_rd
+LD r1,r0,@dk_id
+MOVI r2,67
+CALL @vc_putc
+MOVI r1,67
+PUTC r1
+LD r1,r0,@dk_id
+LD r2,r0,@dsc_a
+MOVI r3,4
+CALL @dbg_puthex
+LD r1,r0,@dk_id
+MOVI r2,61
+CALL @vc_putc
+MOVI r1,61
+PUTC r1
+LD r1,r0,@dk_id
+LD r2,r0,@dsc_c
+MOVI r3,1
+CALL @dbg_puthex
+MOVI r1,10
+PUTC r1
+JMP @dsc_done
+dsc_bad:
+LD r1,r0,@dk_id
+MOVI r2,@s_dbg_badarg
+CALL @vc_puts
+dsc_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+dsc_a:
+.word 0
+dsc_c:
+.word 0
+dsc_h:
+.word 0
+dsc_v:
+.word 0
+
 ; ---- checkpoint: registers + the 64K cart arena ----
 dbg_checkpoint:
 ST r15,r14,0
@@ -4263,7 +4437,7 @@ dt_col:
 
 ; debug strings and the 16 type tags
 s_dbg_banner:
-.str "\nNANDBG DEBUG CLI\ncarts load <id> step next finish run regs mem [addr] log hist\nstack types screen serial undo [n] redo [n] break bp bpts watch wp wpts setr setm goto\ncheckpoint restore reset help quit\n"
+.str "\nNANDBG DEBUG CLI\ncarts load <id> step next finish run regs mem [addr] log hist\nstack types screen serial undo [n] redo [n] break bp bpts watch wp wpts setr setm setw setc goto\ncheckpoint restore reset help quit\n"
 s_dbg_prompt:
 .str "> "
 s_dbg_help:
@@ -4310,6 +4484,10 @@ s_dbg_screen:
 .str "screen"
 s_dbg_setr:
 .str "setr"
+s_dbg_setw:
+.str "setw"
+s_dbg_setc:
+.str "setc"
 s_dbg_setm:
 .str "setm"
 s_dbg_goto:
@@ -4341,7 +4519,7 @@ s_dbg_quit:
 s_dbg_exit:
 .str "exit"
 s_dbg_helpfull:
-.str "carts load <id> step next finish run regs mem [addr] log hist stack types screen serial undo [n] redo [n] break bp bpts watch wp wpts setr setm goto checkpoint restore reset quit\n"
+.str "carts load <id> step next finish run regs mem [addr] log hist stack types screen serial undo [n] redo [n] break bp bpts watch wp wpts setr setm setw setc goto checkpoint restore reset quit\n"
 s_dbg_carts_cmd:
 .str "carts"
 s_dbg_carts:

@@ -977,7 +977,7 @@ resident core at 6200. The ABI is fixed:
 5958 wp_toggle  5959 pc_set     5960 tbuf       5961 mem_geth
 5962 mem_seth  5963 usnap      5964 uinval     5965 udone
 5966 state_set 5967 state_get 5968 upop       5969 mem_geth_cls
-5970 ckpt_to   5971 ckpt_from
+5970 ckpt_to   5971 ckpt_from 5972 map
 ```
 
 `dbg_cart` copies a sealed TOC payload to `0x80000` and maps guest words
@@ -987,10 +987,11 @@ the store is never modified, so its seal remains valid. The demo target at
 
 The second CLI accepts `carts load <id> step next finish run regs mem [addr]
 log hist stack types screen serial undo [n] redo [n] break bp bpts watch wp
-wpts setr setm goto checkpoint restore reset help quit`.
+wpts setr setm setw setc goto checkpoint restore reset help quit`.
 `break` is a fast single breakpoint at PC; `bp <hex>`/`wp <hex>` toggle table
-entries and `bpts`/`wpts` list them. `setr <n> <hex>`, `setm <addr> <hex>` and
-`goto <hex>` are typed edits backed by ABI2 `reg_set`, `mem_set` and `pc_set`.
+entries and `bpts`/`wpts` list them. `setr <n> <hex>`, `setm <addr> <hex>`, `setw <addr> <word> <class>`,
+`setc <addr> <class>` and `goto <hex>` are typed edits backed by ABI2
+`reg_set`, `mem_set`, `mem_seth`, `map` and `pc_set`.
 `undo [n]` rewinds one or `n` recorded scalar steps, restoring registers, PC,
 condition, shadow-call depth and up to two guest memory words per step; each
 restored PC is printed. `redo [n]` restores the saved post-step states in

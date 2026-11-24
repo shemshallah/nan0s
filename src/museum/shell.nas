@@ -957,7 +957,8 @@ dbg_abi2:
   JMP @dbg_mem_geth_cls ; 5969  r1=host word -> class
   JMP @dbg_ckpt_to    ; 5970  arena -> checkpoint buffer
   JMP @dbg_ckpt_from  ; 5971  checkpoint buffer -> arena
-.org 5972
+  JMP @dbg_map        ; 5972  guest word -> host word
+.org 5973
 dbg_mem_get:
   ST r15,r0,@dmg_lnk
   CALL @nd_addr
@@ -1144,7 +1145,6 @@ dbg_udone:
   SUB r1,r1,r13
   ST r1,r0,@nd_steps
   ST r0,r0,@nd_status
-  ST r0,r0,@nd_reason
 du_ret:
   LD r1,r0,@nd_ud
   RET
@@ -1336,6 +1336,12 @@ dbg_ckpt_from:
   LA r3,0x10000
   BCOPY r1,r2,r3
   MOVI r1,1
+  LD r15,r0,@nd_ealnk
+  RET
+
+dbg_map:
+  ST r15,r0,@nd_ealnk
+  CALL @nd_addr
   LD r15,r0,@nd_ealnk
   RET
 

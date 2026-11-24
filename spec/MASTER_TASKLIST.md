@@ -296,8 +296,9 @@ Design: `spec/NANDBG.md`. Gates: `tools/ndbg.sh`, `tools/ndbg_diff.sh`,
 - [x] Breakpoint/watchpoint tables in the core, ABI2 list/toggle entries,
       `bp <hex>`/`wp <hex>`/`bpts`/`wpts`/`watch` GUI commands; fast single
       break remains.
-- [x] Typed `setr <n> <hex>`, `setm <addr> <hex>` and `goto <hex>` commands on
-      ABI2 register/memory/PC setters.
+- [x] Typed `setr <n> <hex>`, `setm <addr> <hex>`, `setw <addr> <word>
+      <class>`, `setc <addr> <class>` and `goto <hex>` commands on ABI2
+      register/memory/class/PC setters.
 - [x] Debug-pane vector I/O capture into a private 25x80 text buffer;
       `screen` CLI command.
 - [x] Serial capture from target `PUTC` into 0x61000; `serial` CLI command.
