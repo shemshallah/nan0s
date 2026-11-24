@@ -448,3 +448,5 @@ tloop:
   ST r1,r4,0
   MOVI r3,0xAA
   HALT
+
+.include "ndr.nas"

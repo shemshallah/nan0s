@@ -1,12 +1,3 @@
-> **Shipping note:** this copy is vendored into NaN/0S. The standalone core,
-> monitor, tests, and gates are integrated. The Silver Slate terminal now wires
-> a `debug` monitor (`carts`, `load <id>`, `step`/`next`/`finish`, `run`,
-> `regs`, `log`/`hist`/`stack`/`types`, `break`, `watch`, `bpts`, `wpts`,
-> `mem [addr]`, `dis [addr]`, `screen`, `serial`, `setr`/`setm`/`setw`/`setc`,
-> multi-level `undo [n]`/`redo [n]`, `checkpoint`, `restore`, `reset`, `pc`,
-> `quit`); the richer
-> full-screen pane front end also remains in `shemshallah/ndbg`.
-
 # NANDBG — a NaN-native bare-metal debug system
 
 **The Quiet Room.**  
@@ -403,7 +394,9 @@ w7  SEAL     10            FNV1a32 over w0..w6, or the mirrored twin
 in the register words.
 
 The proof implements w0–w3; that is enough to show the type and the exact
-faulting word. The final record adds the register operands and the seal.
+faulting word. `ndr.nas` now adds w4–w6 from the decoded `a`/`b`/`d`
+registers and writes the FNV-1a/32 seal in w7. The log ring still stores the
+four-word summary; the rich eight-word ring and mirror pair are next.
 
 ### 4.3 The mirror pair
 
@@ -999,16 +992,16 @@ The second CLI accepts `carts load <id> step next finish run regs mem [addr]
 log hist stack types screen serial dis [addr] undo [n] redo [n] break bp bpts
 watch wp wpts setr setm setw setc goto checkpoint restore reset help quit`.
 `break` is a fast single breakpoint at PC; `bp <hex>`/`wp <hex>` toggle table
-entries and `bpts`/`wpts` list them. `setr <n> <hex>`, `setm <addr> <hex>`,
-`setw <addr> <word> <class>`, `setc <addr> <class>` and `goto <hex>` are typed
-edits backed by ABI2 `reg_set`, `mem_set`, `mem_seth`, `map` and `pc_set`.
+entries and `bpts`/`wpts` list them. `setr <n> <hex>`, `setm <addr> <hex>`, `setw <addr> <word> <class>`,
+`setc <addr> <class>` and `goto <hex>` are typed edits backed by ABI2
+`reg_set`, `mem_set`, `mem_seth`, `map` and `pc_set`.
 `undo [n]` rewinds one or `n` recorded scalar steps, restoring registers, PC,
 condition, shadow-call depth and up to two guest memory words per step; each
 restored PC is printed. `redo [n]` restores the saved post-step states in
 reverse order and re-exposes their undo records. Manual edits and new steps
 clear the redo history. `checkpoint` snapshots the 16 registers, PC, condition,
-call depth, the 64K cart arena, and the captured screen/serial window; `restore`
-copies them back and clears the undo/redo history. Checkpoints are invalidated by `load`, `reset` and a new
+call depth and the 64K cart arena; `restore` copies them back and clears the
+undo/redo history. Checkpoints are invalidated by `load`, `reset` and a new
 debug window. `dis [addr]` disassembles eight words from PC or an address using
 the shared `src/tools/disasm.nas`; guest addresses are mapped to host words
 through ABI2 `map`. `screen` prints the captured 80x25 cart text screen. `serial` prints
