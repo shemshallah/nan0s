@@ -267,6 +267,7 @@
   var isTouchView = typeof window !== "undefined" && !!(window.matchMedia && window.matchMedia("(pointer: coarse), (max-width: 760px)").matches);
   var guestWidth = 1024;
   var zoom = isTouchView ? 1.5 : 1;
+  var autoFitPending = isTouchView;
   var padEl = document.getElementById("pad");
   var functionKeysEl = document.getElementById("function-keys");
   var typeEl = document.getElementById("type");
@@ -284,7 +285,8 @@
     else emulator.keyboard_send_scancodes([code, code | 0x80]);
   }
 
-  function updateGuestZoom(next) {
+  function updateGuestZoom(next, automatic) {
+    if (!automatic) autoFitPending = false;
     // Full-screen Fit must be possible even on narrow phone viewports.
     zoom = Math.max(0.25, Math.min(4, next));
     zoomLevelEl.textContent = Math.round(zoom * 100) + "%";
@@ -461,14 +463,16 @@
       zoomOutBtn.disabled = false;
       zoomInBtn.disabled = false;
       zoomFitBtn.disabled = false;
-      updateGuestZoom(zoom);
+      updateGuestZoom(zoom, true);
       setInputEnabled(true);
     });
     emulator.add_listener("screen-set-size", function (size) {
       // When the guest switches from SeaBIOS text to 1024x768 graphics, keep
       // the user's zoom rather than allowing the canvas to shrink to fit.
       if (size && size[0] > 0) guestWidth = size[0];
-      updateGuestZoom(zoom);
+      if (autoFitPending && size && size[0] >= 640 && size[1] >= 400) {
+        fitGuestScreen();
+      } else updateGuestZoom(zoom, true);
     });
     emulator.add_listener("serial0-output-byte", function (b) {
       serialBuf += String.fromCharCode(b);
@@ -553,6 +557,13 @@
   fsBar.addEventListener("touchstart", function (e) { e.stopPropagation(); }, { passive:true });
   fsBar.addEventListener("touchmove", function (e) { e.stopPropagation(); }, { passive:true });
   fsBar.addEventListener("mousedown", function (e) { e.stopPropagation(); });
+  // Host controls must not leak touch presses/releases to v86's mouse adapter.
+  [typeEl, clearTypeBtn, functionKeysEl, padEl, fsBar, restartBtn, fsBtn,
+   zoomOutBtn, zoomFitBtn, zoomInBtn, replicaBtn, keyboardExitFsBtn].forEach(function (el) {
+    ["touchstart", "touchmove", "touchend", "touchcancel", "mousedown", "mouseup"].forEach(function (name) {
+      el.addEventListener(name, function (e) { e.stopPropagation(); }, { passive:true });
+    });
+  });
   fsKeysBtn.addEventListener("click", function () {
     var open = !document.body.classList.contains("nan0s-keys-open");
     document.body.classList.toggle("nan0s-keys-open", open);
