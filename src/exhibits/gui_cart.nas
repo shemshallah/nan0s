@@ -376,6 +376,15 @@ gk_notf12:
 MOVI r2,0x105
 CMP r1,r2
 JMP[NE] @gk_n5
+; Shift+F5 cycles 3 native palettes; ordinary F5 opens Settings.
+LD r1,r0,@g_mods
+MOVI r2,1
+BOOL.8 r1,r1,r2
+CMP r1,r0
+JMP[EQ] @gk_f5_settings
+CALL @wm_theme_toggle
+JMP @gk_ret
+gk_f5_settings:
 MOVI r1,4
 CALL @gui_single
 JMP @gk_ret
