@@ -13,6 +13,8 @@ typedef long off_t;
 extern char **environ;
 ssize_t read(int, void *, size_t);
 ssize_t write(int, const void *, size_t);
+ssize_t readlink(const char *, char *, size_t);
+int symlink(const char *, const char *);
 int close(int);
 off_t lseek(int, off_t, int);
 int ftruncate(int, off_t);
