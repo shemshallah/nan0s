@@ -79,5 +79,28 @@ jobs:
           fi
           git diff --cached --stat
           git commit -m "build: publish guest GUI fix and synchronized WASM image"
-          # A normal fast-forward push; never overwrite somebody else's changes.
-          git push origin HEAD:main
+          # Modern-WM development may advance main while QEMU tests run.
+          # Never publish a stale boot image built from older NaN16 sources.
+          # If only unrelated docs/tests advanced, replay the generated image
+          # commit on the new tip and attempt an ordinary fast-forward push.
+          # There is NO force push, reset of remote main, or binary overwrite.
+          for attempt in 1 2 3; do
+            git fetch origin main
+            if ! git diff --quiet HEAD^ origin/main -- \
+              src/exhibits/gui_cart.nas src/lib/wm.nas src/lib/shell.nas \
+              src/lib/kbd.nas src/lib/bootbuild.nas tools/build.sh; then
+              echo "A newer NaN16 source is on main; this obsolete image must not publish."
+              exit 0
+            fi
+            if ! git rebase origin/main; then
+              git rebase --abort || true
+              echo "Generated image could not safely rebase; skipping obsolete publisher."
+              exit 0
+            fi
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            echo "Concurrent push during attempt $attempt; fetching latest source..."
+          done
+          echo "::error::Publisher encountered three concurrent push races."
+          exit 1
