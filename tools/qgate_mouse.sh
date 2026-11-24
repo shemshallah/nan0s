@@ -5,7 +5,7 @@
 set -eu
 cd "$(dirname "$0")/.."
 export LC_ALL=C
-T="${TMPDIR:-/tmp}/nan0s_mouse_$$_$RANDOM"
+T="${TMPDIR:-/tmp}/nan0s_mouse_$"
 mkdir -p "$T"
 trap 'rm -rf "$T"' EXIT
 cp build/nan0s.img "$T/source.img"
