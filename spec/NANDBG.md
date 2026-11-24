@@ -1007,8 +1007,8 @@ condition, shadow-call depth and up to two guest memory words per step; each
 restored PC is printed. `redo [n]` restores the saved post-step states in
 reverse order and re-exposes their undo records. Manual edits and new steps
 clear the redo history. `checkpoint` snapshots the 16 registers, PC, condition,
-call depth and the 64K cart arena; `restore` copies them back and clears the
-undo/redo history. Checkpoints are invalidated by `load`, `reset` and a new
+call depth, the 64K cart arena, and the captured screen/serial window; `restore`
+copies them back and clears the undo/redo history. Checkpoints are invalidated by `load`, `reset` and a new
 debug window. `dis [addr]` disassembles eight words from PC or an address using
 the shared `src/tools/disasm.nas`; guest addresses are mapped to host words
 through ABI2 `map`. `screen` prints the captured 80x25 cart text screen. `serial` prints

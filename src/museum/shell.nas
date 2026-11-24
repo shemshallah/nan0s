@@ -1315,13 +1315,18 @@ dbg_mem_geth_cls:
   LDN r1,r1,0
   RET
 
-; ---- checkpoint arena copies (64K words) -------------------------------
-; The GUI saves registers and the header; these two helpers move the arena.
+; ---- checkpoint arena and capture copies (64K words + 8K) -------------
+; The GUI saves registers and the header; these helpers move the 64K cart
+; arena and the captured screen/serial window at 0x60000..0x62000.
 dbg_ckpt_to:
   ST r15,r0,@nd_ealnk
   LA r1,0x91000
   LA r2,0x80000
   LA r3,0x10000
+  BCOPY r1,r2,r3
+  LA r1,0xA1000
+  LA r2,0x60000
+  LA r3,0x2000
   BCOPY r1,r2,r3
   MOVI r1,1
   LD r15,r0,@nd_ealnk
@@ -1332,6 +1337,10 @@ dbg_ckpt_from:
   LA r1,0x80000
   LA r2,0x91000
   LA r3,0x10000
+  BCOPY r1,r2,r3
+  LA r1,0x60000
+  LA r2,0xA1000
+  LA r3,0x2000
   BCOPY r1,r2,r3
   MOVI r1,1
   LD r15,r0,@nd_ealnk

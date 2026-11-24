@@ -123,7 +123,10 @@ records, `hist` the newest eight PCs, `stack` the shadow frames, and `types`
 the live 4x4 type matrix. `bp <hex>`/`wp <hex>` toggle table entries and
 print `BP=... +`/`-` or `W=... +`/`-`; `goto <hex>` moves the PC and invalidates
 the time-travel rings. `mem [addr]` and `dis [addr]` accept an optional base,
-and `undo [n]`/`redo [n]` repeat a recorded scalar step. The richer 80x25 pane front end remains in
+and `undo [n]`/`redo [n]` repeat a recorded scalar step. `checkpoint` saves the
+registers, PC, flags, call depth, the 64K cart arena, and the captured
+screen/serial window; `restore` reloads them. The richer 80x25 pane front end
+remains in
 `shemshallah/ndbg`; the terminal monitor now covers its command set.
 
 ## Keeping this copy updated from ndbg
