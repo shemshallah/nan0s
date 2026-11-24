@@ -122,7 +122,11 @@ assert.match(mouse, /CALL @ms_update\s*\nLD r10,r0,@ms_budget/,
 assert.match(mouse, /MOVI r2,0xC0[\s\S]*JMP\[NE\] @ms_update_done/,
   'Mouse overflow bits must discard invalid movement packets');
 assert.match(mouse, /CALL @wm_raise/, 'Mouse click must focus overlapped windows');
-assert.match(mouse, /CALL @wm_activate_slot/, 'Taskbar clicks must activate windows');
+assert.match(mouse, /CALL @wm_taskbar_select/, 'Taskbar clicks must select or reveal windows');
+assert.match(mouse, /CALL @ms_cycle_under_pointer/,
+  'Right-click must cycle overlapping windows directly under the pointer');
+assert.match(wm, /wm_taskbar_select:[\s\S]*?CALL @wm_minimize[\s\S]*?CALL @wm_activate_slot/,
+  'Clicking an active taskbar window must expose what is underneath without closing it');
 assert.match(mouse, /CALL @sh_click/, 'Native modal and launcher clicks must be dispatched');
 assert.match(mouse, /CALL @wm_minimize/, 'Native minimize button must be clickable');
 assert.match(mouse, /CALL @wm_enlarge/, 'Native maximize button must be clickable');
