@@ -11,6 +11,44 @@
 .equ VCW 128
 .equ CEB 8800000
 .equ CE_BUF 2200000
+.equ DBG_KIND 8
+.equ DBG_RESET 5800
+.equ DBG_STEP 5801
+.equ DBG_RUN 5802
+.equ DBG_BEGIN 5803
+.equ DBG_REG 5804
+.equ DBG_PC 5805
+.equ DBG_STATUS 5806
+.equ DBG_HIST 5807
+.equ DBG_STACK 5808
+.equ DBG_COUNTS 5809
+.equ DBG_BREAK 5810
+.equ DBG_WATCH 5811
+.equ DBG_REC 5812
+.equ DBG_CART 5813
+.equ DBG_MEM 5950
+.equ DBG_MEM_CLS 5952
+.equ DBG_LOG 5951
+.equ DBG_REG_SET 5953
+.equ DBG_MEM_SET 5954
+.equ DBG_BP_LIST 5955
+.equ DBG_BP_TOGGLE 5956
+.equ DBG_WP_LIST 5957
+.equ DBG_WP_TOGGLE 5958
+.equ DBG_PC_SET 5959
+.equ DBG_TBUF 5960
+.equ DBG_MEM_GETH 5961
+.equ DBG_MEM_SETH 5962
+.equ DBG_USNAP 5963
+.equ DBG_UINVAL 5964
+.equ DBG_UDONE 5965
+.equ DBG_STATE_SET 5966
+.equ DBG_STATE_GET 5967
+.equ DBG_UPOP 5968
+.equ DBG_MEM_GETH_CLS 5969
+.equ DBG_CKPT_TO 5970
+.equ DBG_CKPT_FROM 5971
+.equ TOC_SNAP 0x70000
 .org 8192
 JMP @cart_entry
 .include "../lib/fb.nas"
@@ -246,6 +284,7 @@ kdef:
 .word 520,260,@t_net,0
 .word 560,300,@t_util,0
 .word 560,340,@t_br,0
+.word 700,380,@t_dbg,0
 t_term:
 .str "TERMINAL"
 t_lat:
@@ -263,6 +302,7 @@ kt:
 .word @nn_init,@nn_draw,@nn_key,@nn_tick
 .word @ut_init,@ut_draw,@nop_k,@ut_tick
 .word @br_init,@br_draw,@br_key,@nop_k
+.word @dbg_init,@term_draw,@dbg_key,@nop_k
 nop_k:
 RET
 ; ---- global key handling ----
@@ -1602,6 +1642,2766 @@ LD r15,r14,0
 RET
 gs_k:
 .word 0
+; ====================== NANDBG DEBUG CLI (kind 8) ======================
+; A second terminal-shaped CLI. The terminal command `debug` opens it.
+; It drives the resident core at 40000 against the demo target at 44000.
+dbg_init:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,@di_id
+ST r0,r0,@rd_rd
+CALL @term_fit
+ST r14,r0,@dbg_sp
+CALL #DBG_BEGIN
+LD r14,r0,@dbg_sp
+CALL @dbg_ckpt_clear
+LD r1,r0,@di_id
+MOVI r2,@s_dbg_banner
+CALL @vc_puts
+LD r1,r0,@di_id
+MOVI r2,@s_dbg_prompt
+CALL @vc_puts
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+di_id:
+.word 0
+
+dbg_key:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,@dk_id
+ST r3,r0,@dk_k
+MOVI r4,13
+CMP r3,r4
+JMP[EQ] @dk_enter
+LD r1,r0,@dk_id
+LD r3,r0,@dk_k
+CALL @term_key
+JMP @dk_ret
+dk_enter:
+LD r1,r0,@dk_id
+ST r1,r0,@tk_id
+CALL @fs_readline
+CALL @dbg_echo
+LD r1,r0,@dk_id
+MOVI r2,10
+CALL @vc_putc
+LD r1,r0,@dk_id
+CALL @dbg_dispatch
+CMP r1,r0
+JMP[NE] @dk_ret
+LD r1,r0,@dk_id
+MOVI r2,10
+CALL @vc_putc
+LD r1,r0,@dk_id
+MOVI r2,@s_dbg_prompt
+CALL @vc_puts
+LD r1,r0,@dk_id
+CALL @term_draw
+dk_ret:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+dk_id:
+.word 0
+dk_k:
+.word 0
+
+; mirror the command line to COM1 for headless gates
+dbg_echo:
+ST r15,r14,0
+ADD r14,r14,r13
+LA r1,#FNB
+de_loop:
+LDB r2,r1,0
+CMP r2,r0
+JMP[EQ] @de_done
+PUTC r2
+ADD r1,r1,r13
+JMP @de_loop
+de_done:
+MOVI r2,10
+PUTC r2
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; ---- dbg_dispatch: full-line commands from FNB -> r1=1 when the window closes
+dbg_dispatch:
+ST r15,r14,0
+ADD r14,r14,r13
+MOVI r1,0
+ST r1,r0,@dd_rc
+
+LA r1,#FNB
+LA r2,@s_dbg_help
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @dd_help
+LA r1,#FNB
+LA r2,@s_dbg_step
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @dd_step
+LA r1,#FNB
+LA r2,@s_dbg_run
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @dd_run
+LA r1,#FNB
+LA r2,@s_dbg_regs
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @dd_regs
+LA r1,#FNB
+LA r2,@s_dbg_hist
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @dd_hist
+LA r1,#FNB
+LA r2,@s_dbg_stack
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @dd_stack
+LA r1,#FNB
+LA r2,@s_dbg_types
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @dd_types
+LA r1,#FNB
+LA r2,@s_dbg_carts_cmd
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @dd_carts
+LA r1,#FNB
+LA r2,@s_dbg_load
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @dd_load
+LA r1,#FNB
+LA r2,@s_dbg_next
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @dd_next
+LA r1,#FNB
+LA r2,@s_dbg_finish
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @dd_finish
+LA r1,#FNB
+LA r2,@s_dbg_mem
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @dd_mem
+LA r1,#FNB
+LA r2,@s_dbg_log
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @dd_log
+LA r1,#FNB
+LA r2,@s_dbg_setr
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @dd_setr
+LA r1,#FNB
+LA r2,@s_dbg_setm
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @dd_setm
+LA r1,#FNB
+LA r2,@s_dbg_goto
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @dd_goto
+LA r1,#FNB
+LA r2,@s_dbg_bpts
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @dd_bpts
+LA r1,#FNB
+LA r2,@s_dbg_wpts
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @dd_wpts
+LA r1,#FNB
+LA r2,@s_dbg_bpcmd
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @dd_bp
+LA r1,#FNB
+LA r2,@s_dbg_wpcmd
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @dd_wp
+LA r1,#FNB
+LA r2,@s_dbg_serial
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @dd_serial
+LA r1,#FNB
+LA r2,@s_dbg_screen
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @dd_screen
+LA r1,#FNB
+LA r2,@s_dbg_redo
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @dd_redo
+LA r1,#FNB
+LA r2,@s_dbg_undo
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @dd_undo
+LA r1,#FNB
+LA r2,@s_dbg_watch
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @dd_watch
+LA r1,#FNB
+LA r2,@s_dbg_break
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @dd_break
+LA r1,#FNB
+LA r2,@s_dbg_checkpoint
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @dd_checkpoint
+LA r1,#FNB
+LA r2,@s_dbg_restore
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @dd_restore
+LA r1,#FNB
+LA r2,@s_dbg_reset
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @dd_reset
+LA r1,#FNB
+LA r2,@s_dbg_quit
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @dd_quit
+LA r1,#FNB
+LA r2,@s_dbg_exit
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @dd_quit
+LD r1,r0,@dk_id
+MOVI r2,@s_dbg_helpfull
+CALL @vc_puts
+JMP @dd_done
+
+dd_help:
+LD r1,r0,@dk_id
+MOVI r2,@s_dbg_helpfull
+CALL @vc_puts
+JMP @dd_done
+dd_step:
+ST r0,r0,@rd_rd
+ST r14,r0,@dbg_sp
+CALL #DBG_STEP
+LD r14,r0,@dbg_sp
+CALL @dbg_show_state
+JMP @dd_done
+dd_run:
+ST r0,r0,@rd_rd
+ST r14,r0,@dbg_sp
+LA r1,1000000
+CALL #DBG_RUN
+LD r14,r0,@dbg_sp
+CALL @dbg_show_state
+JMP @dd_done
+dd_regs:
+CALL @dbg_regs
+JMP @dd_done
+dd_hist:
+CALL @dbg_hist
+JMP @dd_done
+dd_stack:
+CALL @dbg_stack
+JMP @dd_done
+dd_types:
+CALL @dbg_types
+JMP @dd_done
+dd_carts:
+CALL @dbg_carts
+JMP @dd_done
+dd_load:
+ST r0,r0,@rd_rd
+CALL @dbg_ckpt_clear
+CALL @dbg_load
+JMP @dd_done
+dd_next:
+ST r0,r0,@rd_rd
+CALL @dbg_next
+JMP @dd_done
+dd_finish:
+ST r0,r0,@rd_rd
+CALL @dbg_finish
+JMP @dd_done
+dd_mem:
+CALL @dbg_mem
+JMP @dd_done
+dd_log:
+CALL @dbg_log
+JMP @dd_done
+dd_bpts:
+CALL @dbg_bps
+JMP @dd_done
+dd_setr:
+ST r0,r0,@rd_rd
+CALL @dbg_setr
+JMP @dd_done
+dd_setm:
+ST r0,r0,@rd_rd
+CALL @dbg_setm
+JMP @dd_done
+dd_goto:
+ST r0,r0,@rd_rd
+CALL @dbg_goto
+JMP @dd_done
+dd_wpts:
+CALL @dbg_wps
+JMP @dd_done
+dd_bp:
+CALL @dbg_bp_arg
+JMP @dd_done
+dd_wp:
+CALL @dbg_wp_arg
+JMP @dd_done
+dd_undo:
+CALL @dbg_undo
+JMP @dd_done
+dd_redo:
+CALL @dbg_redo
+JMP @dd_done
+dd_screen:
+CALL @dbg_screen
+JMP @dd_done
+dd_serial:
+CALL @dbg_serial
+JMP @dd_done
+dd_break:
+ST r14,r0,@dbg_sp
+CALL #DBG_PC
+LD r14,r0,@dbg_sp
+ST r1,r0,@dd_pc
+ST r14,r0,@dbg_sp
+LD r1,r0,@dd_pc
+CALL #DBG_BREAK
+LD r14,r0,@dbg_sp
+MOVI r1,0
+ST r1,r0,@dd_rc
+LD r1,r0,@dk_id
+MOVI r2,@s_dbg_bp
+CALL @vc_puts
+LD r1,r0,@dk_id
+LD r2,r0,@dd_pc
+MOVI r3,4
+CALL @dbg_puthex
+LD r1,r0,@dk_id
+LD r2,r0,@dd_rc
+CMP r2,r0
+MOVI r2,@s_dbg_off
+MOVI[NE] r2,@s_dbg_on
+CALL @vc_puts
+MOVI r1,10
+PUTC r1
+JMP @dd_done
+dd_watch:
+ST r14,r0,@dbg_sp
+CALL #DBG_PC
+LD r14,r0,@dbg_sp
+ST r1,r0,@dd_pc
+ST r14,r0,@dbg_sp
+LD r1,r0,@dd_pc
+CALL #DBG_WP_TOGGLE
+LD r14,r0,@dbg_sp
+ST r1,r0,@dd_rc
+LD r1,r0,@dk_id
+MOVI r2,@s_dbg_w
+CALL @vc_puts
+LD r1,r0,@dk_id
+LD r2,r0,@dd_pc
+MOVI r3,4
+CALL @dbg_puthex
+LD r1,r0,@dk_id
+LD r2,r0,@dd_rc
+CMP r2,r0
+MOVI r2,@s_dbg_off
+MOVI[NE] r2,@s_dbg_on
+CALL @vc_puts
+MOVI r1,10
+PUTC r1
+JMP @dd_done
+dd_checkpoint:
+CALL @dbg_checkpoint
+JMP @dd_done
+dd_restore:
+CALL @dbg_restore
+JMP @dd_done
+dd_reset:
+ST r0,r0,@rd_rd
+CALL @dbg_ckpt_clear
+ST r14,r0,@dbg_sp
+CALL #DBG_BEGIN
+LD r14,r0,@dbg_sp
+LD r1,r0,@dk_id
+MOVI r2,@s_dbg_resetmsg
+CALL @vc_puts
+JMP @dd_done
+dd_quit:
+LD r1,r0,@dk_id
+CALL @wm_close
+MOVI r1,1
+ST r1,r0,@dd_rc
+JMP @dd_done
+dd_done:
+LD r1,r0,@dd_rc
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+dd_rc:
+.word 0
+dd_pc:
+.word 0
+dbg_sp:
+.word 0
+
+; ---- S=<n> PC=<hex> ----
+dbg_show_state:
+ST r15,r14,0
+ADD r14,r14,r13
+MOVI r1,83
+PUTC r1
+LD r1,r0,@dk_id
+MOVI r2,83
+CALL @vc_putc
+MOVI r1,61
+PUTC r1
+LD r1,r0,@dk_id
+MOVI r2,61
+CALL @vc_putc
+ST r14,r0,@dbg_sp
+CALL #DBG_STATUS
+LD r14,r0,@dbg_sp
+ST r1,r0,@ds_s
+LD r1,r0,@dk_id
+LD r2,r0,@ds_s
+MOVI r3,1
+CALL @dbg_puthex
+LD r1,r0,@dk_id
+MOVI r2,32
+CALL @vc_putc
+MOVI r1,32
+PUTC r1
+MOVI r1,80
+PUTC r1
+MOVI r1,67
+PUTC r1
+MOVI r1,61
+PUTC r1
+LD r1,r0,@dk_id
+MOVI r2,80
+CALL @vc_putc
+LD r1,r0,@dk_id
+MOVI r2,67
+CALL @vc_putc
+LD r1,r0,@dk_id
+MOVI r2,61
+CALL @vc_putc
+ST r14,r0,@dbg_sp
+CALL #DBG_PC
+LD r14,r0,@dbg_sp
+ST r1,r0,@ds_pc
+LD r1,r0,@dk_id
+LD r2,r0,@ds_pc
+MOVI r3,4
+CALL @dbg_puthex
+LD r1,r0,@dk_id
+MOVI r2,10
+CALL @vc_putc
+MOVI r1,10
+PUTC r1
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+ds_s:
+.word 0
+ds_pc:
+.word 0
+
+; ---- dbg_puthex r1=id r2=value r3=digits ----
+dbg_puthex:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,@dph_id
+ST r2,r0,@dph_v
+ST r3,r0,@dph_n
+CMP r3,r0
+JMP[EQ] @dph_end
+MOVI r4,1
+SUB r4,r3,r4
+MOVI r5,@dph_pow
+ADD r5,r5,r4
+LD r5,r5,0
+MUL r2,r2,r5
+ST r2,r0,@dph_v
+dph_loop:
+LD r3,r0,@dph_n
+CMP r3,r0
+JMP[EQ] @dph_end
+LD r2,r0,@dph_v
+SHR r4,r2,28
+SHL r2,r2,4
+ST r2,r0,@dph_v
+MOVI r5,48
+ADD r5,r5,r4
+MOVI r6,10
+CMP r4,r6
+MOVI r7,7
+ADD[GE] r5,r5,r7
+PUTC r5
+LD r1,r0,@dph_id
+ADD r2,r5,r0
+CALL @vc_putc
+LD r3,r0,@dph_n
+SUB r3,r3,r13
+ST r3,r0,@dph_n
+JMP @dph_loop
+dph_end:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+dph_id:
+.word 0
+dph_v:
+.word 0
+dph_n:
+.word 0
+dph_pow:
+.word 268435456,16777216,1048576,65536,4096,256,16,1
+
+; ---- next: step over a call; finish: run until the frame returns ----
+dbg_next:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r14,r0,@dbg_sp
+CALL #DBG_STACK
+LD r14,r0,@dbg_sp
+ST r2,r0,@dn_start
+MOVI r1,0
+ST r1,r0,@dn_n
+dn_loop:
+LD r1,r0,@dn_n
+LA r2,1000000
+CMP r1,r2
+JMP[GE] @dn_done
+ADDI r1,r1,1
+ST r1,r0,@dn_n
+ST r14,r0,@dbg_sp
+CALL #DBG_STEP
+LD r14,r0,@dbg_sp
+ST r1,r0,@dn_st
+CMP r1,r0
+JMP[NE] @dn_done
+ST r14,r0,@dbg_sp
+CALL #DBG_STACK
+LD r14,r0,@dbg_sp
+LD r1,r0,@dn_start
+CMP r2,r1
+JMP[LE] @dn_done
+JMP @dn_loop
+dn_done:
+CALL @dbg_show_state
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+dn_start:
+.word 0
+dn_n:
+.word 0
+dn_st:
+.word 0
+
+dbg_finish:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r14,r0,@dbg_sp
+CALL #DBG_STACK
+LD r14,r0,@dbg_sp
+ST r2,r0,@df_start
+CMP r2,r0
+JMP[NE] @df_frame
+ST r14,r0,@dbg_sp
+LA r1,1000000
+CALL #DBG_RUN
+LD r14,r0,@dbg_sp
+JMP @df_done
+df_frame:
+MOVI r1,0
+ST r1,r0,@df_n
+df_loop:
+LD r1,r0,@df_n
+LA r2,1000000
+CMP r1,r2
+JMP[GE] @df_done
+ADDI r1,r1,1
+ST r1,r0,@df_n
+ST r14,r0,@dbg_sp
+CALL #DBG_STEP
+LD r14,r0,@dbg_sp
+ST r1,r0,@df_st
+CMP r1,r0
+JMP[NE] @df_done
+ST r14,r0,@dbg_sp
+CALL #DBG_STACK
+LD r14,r0,@dbg_sp
+LD r1,r0,@df_start
+CMP r2,r1
+JMP[LT] @df_done
+JMP @df_loop
+df_done:
+CALL @dbg_show_state
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+df_start:
+.word 0
+df_n:
+.word 0
+df_st:
+.word 0
+
+; ---- target serial output, captured from PUTC ----
+dbg_serial:
+ST r15,r14,0
+ADD r14,r14,r13
+LA r1,0x61000
+ST r14,r0,@dbg_sp
+CALL #DBG_MEM_GETH
+LD r14,r0,@dbg_sp
+ST r1,r0,@se_len
+CMP r1,r0
+JMP[EQ] @se_none
+MOVI r1,0
+ST r1,r0,@se_i
+se_loop:
+LD r1,r0,@se_i
+LD r2,r0,@se_len
+CMP r1,r2
+JMP[GE] @se_done
+LA r3,0x61000
+ADD r3,r3,r1
+ADDI r3,r3,1
+ST r14,r0,@dbg_sp
+ADD r1,r3,r0
+CALL #DBG_MEM_GETH
+LD r14,r0,@dbg_sp
+MOVI r2,255
+BOOL.8 r1,r1,r2
+ST r1,r0,@se_ch
+LD r2,r0,@se_ch
+LD r1,r0,@dk_id
+CALL @vc_putc
+LD r2,r0,@se_ch
+PUTC r2
+LD r1,r0,@se_i
+ADD r1,r1,r13
+ST r1,r0,@se_i
+JMP @se_loop
+se_done:
+JMP @se_end
+se_none:
+LD r1,r0,@dk_id
+MOVI r2,@s_dbg_noser
+CALL @vc_puts
+MOVI r1,78
+PUTC r1
+MOVI r1,79
+PUTC r1
+MOVI r1,83
+PUTC r1
+MOVI r1,69
+PUTC r1
+MOVI r1,82
+PUTC r1
+MOVI r1,10
+PUTC r1
+se_end:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+se_len:
+.word 0
+se_i:
+.word 0
+se_ch:
+.word 0
+
+; ---- target text screen, captured from DISPSET/VPOKE ----
+dbg_screen:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r14,r0,@dbg_sp
+CALL #DBG_TBUF
+LD r14,r0,@dbg_sp
+ST r1,r0,@sc_ptr
+MOVI r1,0
+ST r1,r0,@sc_r
+sc_row:
+MOVI r1,0
+ST r1,r0,@sc_c
+sc_col:
+LD r2,r0,@sc_r
+MOVI r1,80
+MUL r2,r2,r1
+LD r3,r0,@sc_c
+ADD r2,r2,r3
+LD r1,r0,@sc_ptr
+ADD r1,r1,r2
+LD r2,r1,0
+MOVI r3,255
+BOOL.8 r2,r2,r3
+CMP r2,r0
+MOVI[EQ] r2,32
+ST r2,r0,@sc_ch
+LD r1,r0,@dk_id
+CALL @vc_putc
+LD r2,r0,@sc_ch
+PUTC r2
+LD r1,r0,@sc_c
+ADD r1,r1,r13
+ST r1,r0,@sc_c
+MOVI r2,80
+CMP r1,r2
+JMP[LT] @sc_col
+LD r1,r0,@dk_id
+MOVI r2,10
+CALL @vc_putc
+MOVI r1,10
+PUTC r1
+LD r1,r0,@sc_r
+ADD r1,r1,r13
+ST r1,r0,@sc_r
+MOVI r2,25
+CMP r1,r2
+JMP[LT] @sc_row
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+sc_ptr:
+.word 0
+sc_r:
+.word 0
+sc_c:
+.word 0
+sc_ch:
+.word 0
+
+; ---- typed arguments: setr <reg> <hex>, setm <addr> <hex>, goto <hex> ----
+dbg_args_reset:
+  LA r1,#FNB
+dar_loop:
+  LDB r2,r1,0
+  CMP r2,r0
+  JMP[EQ] @dar_bad
+  MOVI r3,32
+  CMP r2,r3
+  JMP[EQ] @dar_space
+  ADD r1,r1,r13
+  JMP @dar_loop
+dar_space:
+  ADD r1,r1,r13
+  LDB r2,r1,0
+  CMP r2,r0
+  JMP[EQ] @dar_bad
+  MOVI r3,32
+  CMP r2,r3
+  JMP[EQ] @dar_space
+  ST r1,r0,@arg_ptr
+  RET
+dar_bad:
+  ST r1,r0,@arg_ptr
+  RET
+
+; r1 = value, r2 = 1 valid. Skips spaces and parses up to 8 hex digits.
+dbg_nexthex:
+  LD r1,r0,@arg_ptr
+dnh_skip:
+  LDB r2,r1,0
+  MOVI r3,32
+  CMP r2,r3
+  JMP[NE] @dnh_start
+  ADD r1,r1,r13
+  JMP @dnh_skip
+dnh_start:
+  MOVI r4,0
+  MOVI r8,0
+dnh_loop:
+  LDB r2,r1,0
+  CMP r2,r0
+  JMP[EQ] @dnh_done
+  MOVI r3,48
+  CMP r2,r3
+  JMP[LT] @dnh_alpha
+  MOVI r3,57
+  CMP r2,r3
+  JMP[GT] @dnh_alpha
+  MOVI r3,48
+  SUB r2,r2,r3
+  JMP @dnh_digit
+dnh_alpha:
+  MOVI r3,65
+  CMP r2,r3
+  JMP[LT] @dnh_lower
+  MOVI r3,70
+  CMP r2,r3
+  JMP[GT] @dnh_lower
+  MOVI r3,55
+  SUB r2,r2,r3
+  JMP @dnh_digit
+dnh_lower:
+  MOVI r3,97
+  CMP r2,r3
+  JMP[LT] @dnh_done
+  MOVI r3,102
+  CMP r2,r3
+  JMP[GT] @dnh_done
+  MOVI r3,87
+  SUB r2,r2,r3
+dnh_digit:
+  SHL r4,r4,4
+  BOOL.14 r4,r4,r2
+  ADD r8,r8,r13
+  MOVI r3,8
+  CMP r8,r3
+  JMP[GE] @dnh_done
+  ADD r1,r1,r13
+  JMP @dnh_loop
+dnh_done:
+  ST r1,r0,@arg_ptr
+  CMP r8,r0
+  MOVI[NE] r2,1
+  MOVI[EQ] r2,0
+  ADD r1,r4,r0
+  RET
+
+dbg_setr:
+  ST r15,r14,0
+  ADD r14,r14,r13
+  CALL @dbg_args_reset
+  CALL @dbg_nexthex
+  CMP r2,r0
+  JMP[EQ] @dsr_bad
+  MOVI r3,16
+  CMP r1,r3
+  JMP[GE] @dsr_bad
+  ST r1,r0,@dsr_i
+  CALL @dbg_nexthex
+  CMP r2,r0
+  JMP[EQ] @dsr_bad
+  ST r1,r0,@dsr_v
+  ST r14,r0,@dbg_sp
+  LD r1,r0,@dsr_i
+  LD r2,r0,@dsr_v
+  CALL #DBG_REG_SET
+  LD r14,r0,@dbg_sp
+  ST r14,r0,@dbg_sp
+  CALL #DBG_UINVAL
+  LD r14,r0,@dbg_sp
+  LD r1,r0,@dk_id
+  MOVI r2,82
+  CALL @vc_putc
+  MOVI r1,82
+  PUTC r1
+  LD r1,r0,@dk_id
+  LD r2,r0,@dsr_i
+  MOVI r3,1
+  CALL @dbg_puthex
+  LD r1,r0,@dk_id
+  MOVI r2,61
+  CALL @vc_putc
+  MOVI r1,61
+  PUTC r1
+  LD r1,r0,@dk_id
+  LD r2,r0,@dsr_v
+  MOVI r3,8
+  CALL @dbg_puthex
+  MOVI r1,10
+  PUTC r1
+  JMP @dsr_done
+dsr_bad:
+  LD r1,r0,@dk_id
+  MOVI r2,@s_dbg_badarg
+  CALL @vc_puts
+dsr_done:
+  SUB r14,r14,r13
+  LD r15,r14,0
+  RET
+dsr_i:
+.word 0
+dsr_v:
+.word 0
+
+dbg_setm:
+  ST r15,r14,0
+  ADD r14,r14,r13
+  CALL @dbg_args_reset
+  CALL @dbg_nexthex
+  CMP r2,r0
+  JMP[EQ] @dsm_bad
+  ST r1,r0,@dsm_a
+  CALL @dbg_nexthex
+  CMP r2,r0
+  JMP[EQ] @dsm_bad
+  ST r1,r0,@dsm_v
+  ST r14,r0,@dbg_sp
+  LD r1,r0,@dsm_a
+  LD r2,r0,@dsm_v
+  CALL #DBG_MEM_SET
+  LD r14,r0,@dbg_sp
+  ST r14,r0,@dbg_sp
+  CALL #DBG_UINVAL
+  LD r14,r0,@dbg_sp
+  LD r1,r0,@dk_id
+  MOVI r2,77
+  CALL @vc_putc
+  MOVI r1,77
+  PUTC r1
+  LD r1,r0,@dk_id
+  LD r2,r0,@dsm_a
+  MOVI r3,4
+  CALL @dbg_puthex
+  LD r1,r0,@dk_id
+  MOVI r2,61
+  CALL @vc_putc
+  MOVI r1,61
+  PUTC r1
+  LD r1,r0,@dk_id
+  LD r2,r0,@dsm_v
+  MOVI r3,8
+  CALL @dbg_puthex
+  MOVI r1,10
+  PUTC r1
+  JMP @dsm_done
+dsm_bad:
+  LD r1,r0,@dk_id
+  MOVI r2,@s_dbg_badarg
+  CALL @vc_puts
+dsm_done:
+  SUB r14,r14,r13
+  LD r15,r14,0
+  RET
+dsm_a:
+.word 0
+dsm_v:
+.word 0
+
+dbg_goto:
+  ST r15,r14,0
+  ADD r14,r14,r13
+  CALL @dbg_args_reset
+  CALL @dbg_nexthex
+  CMP r2,r0
+  JMP[EQ] @dgt_bad
+  ST r1,r0,@dgt_pc
+  ST r14,r0,@dbg_sp
+  LD r1,r0,@dgt_pc
+  CALL #DBG_PC_SET
+  LD r14,r0,@dbg_sp
+  ST r14,r0,@dbg_sp
+  CALL #DBG_UINVAL
+  LD r14,r0,@dbg_sp
+  LD r1,r0,@dk_id
+  MOVI r2,80
+  CALL @vc_putc
+  LD r1,r0,@dk_id
+  MOVI r2,67
+  CALL @vc_putc
+  LD r1,r0,@dk_id
+  MOVI r2,61
+  CALL @vc_putc
+  MOVI r1,80
+  PUTC r1
+  MOVI r1,67
+  PUTC r1
+  MOVI r1,61
+  PUTC r1
+  LD r1,r0,@dk_id
+  LD r2,r0,@dgt_pc
+  MOVI r3,4
+  CALL @dbg_puthex
+  MOVI r1,10
+  PUTC r1
+  JMP @dgt_done
+dgt_bad:
+  LD r1,r0,@dk_id
+  MOVI r2,@s_dbg_badarg
+  CALL @vc_puts
+dgt_done:
+  SUB r14,r14,r13
+  LD r15,r14,0
+  RET
+dgt_pc:
+.word 0
+arg_ptr:
+.word 0
+
+; ---- undo one or more recorded scalar steps ----
+; ---- checkpoint: registers + the 64K cart arena ----
+dbg_checkpoint:
+ST r15,r14,0
+ADD r14,r14,r13
+LA r1,0x90000
+ST r1,r0,@ck_hdr
+MOVI r1,0
+ST r1,r0,@ck_i
+ck_sl:
+LD r4,r0,@ck_i
+MOVI r5,16
+CMP r4,r5
+JMP[GE] @ck_sg
+ST r14,r0,@dbg_sp
+LD r1,r0,@ck_i
+CALL #DBG_REG
+LD r14,r0,@dbg_sp
+ST r1,r0,@ck_v
+LD r1,r0,@ck_hdr
+LD r2,r0,@ck_i
+ADD r1,r1,r2
+LD r2,r0,@ck_v
+MOVI r3,0
+ST r14,r0,@dbg_sp
+CALL #DBG_MEM_SETH
+LD r14,r0,@dbg_sp
+LD r1,r0,@ck_i
+ADD r1,r1,r13
+ST r1,r0,@ck_i
+JMP @ck_sl
+ck_sg:
+ST r14,r0,@dbg_sp
+CALL #DBG_PC
+LD r14,r0,@dbg_sp
+ST r1,r0,@ck_pc
+LD r1,r0,@ck_hdr
+ADDI r1,r1,16
+LD r2,r0,@ck_pc
+MOVI r3,0
+ST r14,r0,@dbg_sp
+CALL #DBG_MEM_SETH
+LD r14,r0,@dbg_sp
+ST r14,r0,@dbg_sp
+CALL #DBG_STATE_GET
+LD r14,r0,@dbg_sp
+ST r1,r0,@ck_k
+ST r2,r0,@ck_cd
+LD r1,r0,@ck_hdr
+ADDI r1,r1,17
+LD r2,r0,@ck_k
+MOVI r3,0
+ST r14,r0,@dbg_sp
+CALL #DBG_MEM_SETH
+LD r14,r0,@dbg_sp
+LD r1,r0,@ck_hdr
+ADDI r1,r1,18
+LD r2,r0,@ck_cd
+MOVI r3,0
+ST r14,r0,@dbg_sp
+CALL #DBG_MEM_SETH
+LD r14,r0,@dbg_sp
+LD r1,r0,@ck_hdr
+ADDI r1,r1,19
+MOVI r2,0xC4EC
+MOVI r3,0
+ST r14,r0,@dbg_sp
+CALL #DBG_MEM_SETH
+LD r14,r0,@dbg_sp
+ST r14,r0,@dbg_sp
+CALL #DBG_CKPT_TO
+LD r14,r0,@dbg_sp
+MOVI r1,67
+PUTC r1
+MOVI r1,75
+PUTC r1
+MOVI r1,80
+PUTC r1
+MOVI r1,84
+PUTC r1
+MOVI r1,61
+PUTC r1
+MOVI r1,49
+PUTC r1
+MOVI r1,10
+PUTC r1
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+dbg_restore:
+ST r15,r14,0
+ADD r14,r14,r13
+LA r1,0x90000
+ST r1,r0,@ck_hdr
+ADDI r1,r1,19
+ST r14,r0,@dbg_sp
+CALL #DBG_MEM_GETH
+LD r14,r0,@dbg_sp
+MOVI r2,0xC4EC
+CMP r1,r2
+JMP[NE] @ckr_bad
+MOVI r1,0
+ST r1,r0,@ck_i
+ckr_rl:
+LD r4,r0,@ck_i
+MOVI r5,16
+CMP r4,r5
+JMP[GE] @ckr_rg
+LD r1,r0,@ck_hdr
+ADD r1,r1,r4
+ST r14,r0,@dbg_sp
+CALL #DBG_MEM_GETH
+LD r14,r0,@dbg_sp
+ST r1,r0,@ck_v
+LD r1,r0,@ck_i
+LD r2,r0,@ck_v
+ST r14,r0,@dbg_sp
+CALL #DBG_REG_SET
+LD r14,r0,@dbg_sp
+LD r1,r0,@ck_i
+ADD r1,r1,r13
+ST r1,r0,@ck_i
+JMP @ckr_rl
+ckr_rg:
+LD r1,r0,@ck_hdr
+ADDI r1,r1,16
+ST r14,r0,@dbg_sp
+CALL #DBG_MEM_GETH
+LD r14,r0,@dbg_sp
+ST r1,r0,@ck_pc
+LD r1,r0,@ck_pc
+ST r14,r0,@dbg_sp
+CALL #DBG_PC_SET
+LD r14,r0,@dbg_sp
+LD r1,r0,@ck_hdr
+ADDI r1,r1,17
+ST r14,r0,@dbg_sp
+CALL #DBG_MEM_GETH
+LD r14,r0,@dbg_sp
+ST r1,r0,@ck_k
+LD r1,r0,@ck_hdr
+ADDI r1,r1,18
+ST r14,r0,@dbg_sp
+CALL #DBG_MEM_GETH
+LD r14,r0,@dbg_sp
+ST r1,r0,@ck_cd
+LD r1,r0,@ck_k
+LD r2,r0,@ck_cd
+ST r14,r0,@dbg_sp
+CALL #DBG_STATE_SET
+LD r14,r0,@dbg_sp
+ST r14,r0,@dbg_sp
+CALL #DBG_CKPT_FROM
+LD r14,r0,@dbg_sp
+ST r14,r0,@dbg_sp
+CALL #DBG_UINVAL
+LD r14,r0,@dbg_sp
+ST r0,r0,@rd_rd
+MOVI r1,80
+PUTC r1
+MOVI r1,67
+PUTC r1
+MOVI r1,61
+PUTC r1
+LD r1,r0,@dk_id
+LD r2,r0,@ck_pc
+MOVI r3,4
+CALL @dbg_puthex
+MOVI r1,10
+PUTC r1
+JMP @ckr_done
+ckr_bad:
+LD r1,r0,@dk_id
+MOVI r2,@s_dbg_nockpt
+CALL @vc_puts
+MOVI r1,78
+PUTC r1
+MOVI r1,79
+PUTC r1
+MOVI r1,67
+PUTC r1
+MOVI r1,75
+PUTC r1
+MOVI r1,80
+PUTC r1
+MOVI r1,84
+PUTC r1
+MOVI r1,10
+PUTC r1
+ckr_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+dbg_ckpt_clear:
+ST r15,r0,@ck_lnk
+LA r1,0x90000
+ADDI r1,r1,19
+MOVI r2,0
+MOVI r3,0
+ST r14,r0,@dbg_sp
+CALL #DBG_MEM_SETH
+LD r14,r0,@dbg_sp
+LD r15,r0,@ck_lnk
+RET
+
+ck_hdr:
+.word 0
+ck_i:
+.word 0
+ck_v:
+.word 0
+ck_pc:
+.word 0
+ck_k:
+.word 0
+ck_cd:
+.word 0
+ck_lnk:
+.word 0
+
+; ---- redo recording: save the post-step state before undo restores it ----
+dbg_redo_save:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r1,r0,@rd_ri
+SHL r1,r1,5
+LA r2,0x62000
+ADD r1,r1,r2
+ST r1,r0,@rd_slot
+MOVI r1,0
+ST r1,r0,@rd_i
+drs_rl:
+LD r4,r0,@rd_i
+MOVI r5,16
+CMP r4,r5
+JMP[GE] @drs_rg
+ST r14,r0,@dbg_sp
+LD r1,r0,@rd_i
+CALL #DBG_REG
+LD r14,r0,@dbg_sp
+ST r1,r0,@rd_v
+LD r1,r0,@rd_slot
+LD r2,r0,@rd_i
+ADD r1,r1,r2
+LD r2,r0,@rd_v
+MOVI r3,0
+ST r14,r0,@dbg_sp
+CALL #DBG_MEM_SETH
+LD r14,r0,@dbg_sp
+LD r1,r0,@rd_i
+ADD r1,r1,r13
+ST r1,r0,@rd_i
+JMP @drs_rl
+drs_rg:
+ST r14,r0,@dbg_sp
+CALL #DBG_PC
+LD r14,r0,@dbg_sp
+ST r1,r0,@rd_pc
+LD r1,r0,@rd_slot
+ADDI r1,r1,16
+LD r2,r0,@rd_pc
+MOVI r3,0
+ST r14,r0,@dbg_sp
+CALL #DBG_MEM_SETH
+LD r14,r0,@dbg_sp
+ST r14,r0,@dbg_sp
+CALL #DBG_STATE_GET
+LD r14,r0,@dbg_sp
+ST r1,r0,@rd_k
+ST r2,r0,@rd_cd
+LD r1,r0,@rd_slot
+ADDI r1,r1,17
+LD r2,r0,@rd_k
+MOVI r3,0
+ST r14,r0,@dbg_sp
+CALL #DBG_MEM_SETH
+LD r14,r0,@dbg_sp
+LD r1,r0,@rd_slot
+ADDI r1,r1,18
+LD r2,r0,@rd_cd
+MOVI r3,0
+ST r14,r0,@dbg_sp
+CALL #DBG_MEM_SETH
+LD r14,r0,@dbg_sp
+LD r1,r0,@du_slot
+ADDI r1,r1,20
+ST r14,r0,@dbg_sp
+CALL #DBG_MEM_GETH
+LD r14,r0,@dbg_sp
+ST r1,r0,@rd_nw
+LD r1,r0,@rd_slot
+ADDI r1,r1,19
+LD r2,r0,@rd_nw
+MOVI r3,0
+ST r14,r0,@dbg_sp
+CALL #DBG_MEM_SETH
+LD r14,r0,@dbg_sp
+MOVI r1,0
+ST r1,r0,@rd_i
+drs_wl:
+LD r4,r0,@rd_i
+LD r5,r0,@rd_nw
+CMP r4,r5
+JMP[GE] @drs_wd
+MOVI r6,3
+MUL r6,r4,r6
+ADDI r6,r6,21
+LD r1,r0,@du_slot
+ADD r1,r1,r6
+ST r14,r0,@dbg_sp
+CALL #DBG_MEM_GETH
+LD r14,r0,@dbg_sp
+ST r1,r0,@rd_ha
+LD r1,r0,@rd_ha
+ST r14,r0,@dbg_sp
+CALL #DBG_MEM_GETH
+LD r14,r0,@dbg_sp
+ST r1,r0,@rd_v
+LD r1,r0,@rd_ha
+ST r14,r0,@dbg_sp
+CALL #DBG_MEM_GETH_CLS
+LD r14,r0,@dbg_sp
+ST r1,r0,@rd_c
+LD r4,r0,@rd_i
+MOVI r6,3
+MUL r6,r4,r6
+ADDI r6,r6,20
+LD r1,r0,@rd_slot
+ADD r1,r1,r6
+ST r1,r0,@rd_ep
+LD r1,r0,@rd_ep
+LD r2,r0,@rd_ha
+MOVI r3,0
+ST r14,r0,@dbg_sp
+CALL #DBG_MEM_SETH
+LD r14,r0,@dbg_sp
+LD r1,r0,@rd_ep
+ADDI r1,r1,1
+LD r2,r0,@rd_v
+MOVI r3,0
+ST r14,r0,@dbg_sp
+CALL #DBG_MEM_SETH
+LD r14,r0,@dbg_sp
+LD r1,r0,@rd_ep
+ADDI r1,r1,2
+LD r2,r0,@rd_c
+MOVI r3,0
+ST r14,r0,@dbg_sp
+CALL #DBG_MEM_SETH
+LD r14,r0,@dbg_sp
+LD r1,r0,@rd_i
+ADD r1,r1,r13
+ST r1,r0,@rd_i
+JMP @drs_wl
+drs_wd:
+LD r1,r0,@rd_ri
+ADD r1,r1,r13
+MOVI r2,31
+BOOL.8 r1,r1,r2
+ST r1,r0,@rd_ri
+LD r1,r0,@rd_rd
+MOVI r2,32
+CMP r1,r2
+JMP[GE] @drs_end
+ADD r1,r1,r13
+ST r1,r0,@rd_rd
+drs_end:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+dbg_undo:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @dbg_args_reset
+CALL @dbg_nexthex
+CMP r2,r0
+JMP[EQ] @du_one
+ST r1,r0,@du_n
+CMP r1,r0
+JMP[NE] @du_go
+du_one:
+MOVI r1,1
+ST r1,r0,@du_n
+du_go:
+CALL @dbg_undo_one
+LD r1,r0,@du_ok
+CMP r1,r0
+JMP[EQ] @du_wdone
+LD r1,r0,@du_n
+SUB r1,r1,r13
+ST r1,r0,@du_n
+CMP r1,r0
+JMP[GT] @du_go
+du_wdone:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+dbg_undo_one:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r14,r0,@dbg_sp
+CALL #DBG_USNAP
+LD r14,r0,@dbg_sp
+ST r1,r0,@du_idx
+ST r2,r0,@du_dep
+LA r1,0x30000
+ST r1,r0,@du_base
+LD r3,r0,@du_dep
+CMP r3,r0
+JMP[EQ] @du_none
+LD r1,r0,@du_idx
+SUB r1,r1,r13
+MOVI r2,31
+BOOL.8 r1,r1,r2
+SHL r1,r1,5
+LD r2,r0,@du_base
+ADD r1,r1,r2
+ST r1,r0,@du_slot
+CALL @dbg_redo_save
+MOVI r1,0
+ST r1,r0,@du_i
+du_rl:
+LD r4,r0,@du_i
+MOVI r5,16
+CMP r4,r5
+JMP[GE] @du_rg_done
+LD r1,r0,@du_slot
+ADD r1,r1,r4
+ST r14,r0,@dbg_sp
+CALL #DBG_MEM_GETH
+LD r14,r0,@dbg_sp
+ST r1,r0,@du_v
+LD r1,r0,@du_i
+LD r2,r0,@du_v
+ST r14,r0,@dbg_sp
+CALL #DBG_REG_SET
+LD r14,r0,@dbg_sp
+LD r1,r0,@du_i
+ADD r1,r1,r13
+ST r1,r0,@du_i
+JMP @du_rl
+du_rg_done:
+LD r1,r0,@du_slot
+ADDI r1,r1,16
+ST r14,r0,@dbg_sp
+CALL #DBG_MEM_GETH
+LD r14,r0,@dbg_sp
+ST r1,r0,@du_pc
+LD r1,r0,@du_pc
+ST r14,r0,@dbg_sp
+CALL #DBG_PC_SET
+LD r14,r0,@dbg_sp
+LD r1,r0,@du_slot
+ADDI r1,r1,17
+ST r14,r0,@dbg_sp
+CALL #DBG_MEM_GETH
+LD r14,r0,@dbg_sp
+ST r1,r0,@du_k
+LD r1,r0,@du_slot
+ADDI r1,r1,18
+ST r14,r0,@dbg_sp
+CALL #DBG_MEM_GETH
+LD r14,r0,@dbg_sp
+ST r1,r0,@du_cd
+LD r1,r0,@du_k
+LD r2,r0,@du_cd
+ST r14,r0,@dbg_sp
+CALL #DBG_STATE_SET
+LD r14,r0,@dbg_sp
+LD r1,r0,@du_slot
+ADDI r1,r1,20
+ST r14,r0,@dbg_sp
+CALL #DBG_MEM_GETH
+LD r14,r0,@dbg_sp
+ST r1,r0,@du_nw
+MOVI r1,0
+ST r1,r0,@du_i
+du_wl:
+LD r4,r0,@du_i
+LD r5,r0,@du_nw
+CMP r4,r5
+JMP[GE] @du_wdone
+MOVI r6,3
+MUL r6,r4,r6
+ADDI r6,r6,21
+LD r1,r0,@du_slot
+ADD r1,r1,r6
+ST r1,r0,@du_ep
+ST r14,r0,@dbg_sp
+CALL #DBG_MEM_GETH
+LD r14,r0,@dbg_sp
+ST r1,r0,@du_ha
+LD r1,r0,@du_ep
+ADDI r1,r1,1
+ST r14,r0,@dbg_sp
+CALL #DBG_MEM_GETH
+LD r14,r0,@dbg_sp
+ST r1,r0,@du_v
+LD r1,r0,@du_ep
+ADDI r1,r1,2
+ST r14,r0,@dbg_sp
+CALL #DBG_MEM_GETH
+LD r14,r0,@dbg_sp
+ST r1,r0,@du_c
+LD r1,r0,@du_ha
+LD r2,r0,@du_v
+LD r3,r0,@du_c
+ST r14,r0,@dbg_sp
+CALL #DBG_MEM_SETH
+LD r14,r0,@dbg_sp
+LD r1,r0,@du_i
+ADD r1,r1,r13
+ST r1,r0,@du_i
+JMP @du_wl
+du_wdone:
+ST r14,r0,@dbg_sp
+CALL #DBG_UDONE
+LD r14,r0,@dbg_sp
+MOVI r1,1
+ST r1,r0,@du_ok
+MOVI r1,80
+PUTC r1
+MOVI r1,67
+PUTC r1
+MOVI r1,61
+PUTC r1
+LD r1,r0,@dk_id
+LD r2,r0,@du_pc
+MOVI r3,4
+CALL @dbg_puthex
+MOVI r1,10
+PUTC r1
+JMP @du_done
+du_none:
+ST r0,r0,@du_ok
+LD r1,r0,@dk_id
+MOVI r2,@s_dbg_noundo
+CALL @vc_puts
+MOVI r1,78
+PUTC r1
+MOVI r1,79
+PUTC r1
+MOVI r1,85
+PUTC r1
+MOVI r1,78
+PUTC r1
+MOVI r1,68
+PUTC r1
+MOVI r1,79
+PUTC r1
+MOVI r1,10
+PUTC r1
+du_done:
+LD r14,r0,@dbg_sp
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+; ---- redo one or more saved post-step states ----
+dbg_redo:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @dbg_args_reset
+CALL @dbg_nexthex
+CMP r2,r0
+JMP[EQ] @ddr_one
+ST r1,r0,@rd_cnt
+CMP r1,r0
+JMP[NE] @ddr_start
+ddr_one:
+MOVI r1,1
+ST r1,r0,@rd_cnt
+ddr_start:
+LD r1,r0,@rd_rd
+CMP r1,r0
+JMP[EQ] @ddr_none
+ddr_loop:
+LD r1,r0,@rd_ri
+SUB r1,r1,r13
+MOVI r2,31
+BOOL.8 r1,r1,r2
+SHL r1,r1,5
+LA r2,0x62000
+ADD r1,r1,r2
+ST r1,r0,@rd_slot
+MOVI r1,0
+ST r1,r0,@rd_i
+ddr_rl:
+LD r4,r0,@rd_i
+MOVI r5,16
+CMP r4,r5
+JMP[GE] @ddr_rg
+LD r1,r0,@rd_slot
+ADD r1,r1,r4
+ST r14,r0,@dbg_sp
+CALL #DBG_MEM_GETH
+LD r14,r0,@dbg_sp
+ST r1,r0,@rd_v
+LD r1,r0,@rd_i
+LD r2,r0,@rd_v
+ST r14,r0,@dbg_sp
+CALL #DBG_REG_SET
+LD r14,r0,@dbg_sp
+LD r1,r0,@rd_i
+ADD r1,r1,r13
+ST r1,r0,@rd_i
+JMP @ddr_rl
+ddr_rg:
+LD r1,r0,@rd_slot
+ADDI r1,r1,16
+ST r14,r0,@dbg_sp
+CALL #DBG_MEM_GETH
+LD r14,r0,@dbg_sp
+ST r1,r0,@rd_pc
+LD r1,r0,@rd_pc
+ST r14,r0,@dbg_sp
+CALL #DBG_PC_SET
+LD r14,r0,@dbg_sp
+LD r1,r0,@rd_slot
+ADDI r1,r1,17
+ST r14,r0,@dbg_sp
+CALL #DBG_MEM_GETH
+LD r14,r0,@dbg_sp
+ST r1,r0,@rd_k
+LD r1,r0,@rd_slot
+ADDI r1,r1,18
+ST r14,r0,@dbg_sp
+CALL #DBG_MEM_GETH
+LD r14,r0,@dbg_sp
+ST r1,r0,@rd_cd
+LD r1,r0,@rd_k
+LD r2,r0,@rd_cd
+ST r14,r0,@dbg_sp
+CALL #DBG_STATE_SET
+LD r14,r0,@dbg_sp
+LD r1,r0,@rd_slot
+ADDI r1,r1,19
+ST r14,r0,@dbg_sp
+CALL #DBG_MEM_GETH
+LD r14,r0,@dbg_sp
+ST r1,r0,@rd_nw
+MOVI r1,0
+ST r1,r0,@rd_i
+ddr_wl:
+LD r4,r0,@rd_i
+LD r5,r0,@rd_nw
+CMP r4,r5
+JMP[GE] @ddr_wd
+MOVI r6,3
+MUL r6,r4,r6
+ADDI r6,r6,20
+LD r1,r0,@rd_slot
+ADD r1,r1,r6
+ST r1,r0,@rd_ep
+ST r14,r0,@dbg_sp
+CALL #DBG_MEM_GETH
+LD r14,r0,@dbg_sp
+ST r1,r0,@rd_ha
+LD r1,r0,@rd_ep
+ADDI r1,r1,1
+ST r14,r0,@dbg_sp
+CALL #DBG_MEM_GETH
+LD r14,r0,@dbg_sp
+ST r1,r0,@rd_v
+LD r1,r0,@rd_ep
+ADDI r1,r1,2
+ST r14,r0,@dbg_sp
+CALL #DBG_MEM_GETH
+LD r14,r0,@dbg_sp
+ST r1,r0,@rd_c
+LD r1,r0,@rd_ha
+LD r2,r0,@rd_v
+LD r3,r0,@rd_c
+ST r14,r0,@dbg_sp
+CALL #DBG_MEM_SETH
+LD r14,r0,@dbg_sp
+LD r1,r0,@rd_i
+ADD r1,r1,r13
+ST r1,r0,@rd_i
+JMP @ddr_wl
+ddr_wd:
+ST r14,r0,@dbg_sp
+CALL #DBG_UPOP
+LD r14,r0,@dbg_sp
+LD r1,r0,@rd_ri
+SUB r1,r1,r13
+MOVI r2,31
+BOOL.8 r1,r1,r2
+ST r1,r0,@rd_ri
+LD r1,r0,@rd_rd
+SUB r1,r1,r13
+ST r1,r0,@rd_rd
+MOVI r1,80
+PUTC r1
+MOVI r1,67
+PUTC r1
+MOVI r1,61
+PUTC r1
+LD r1,r0,@dk_id
+LD r2,r0,@rd_pc
+MOVI r3,4
+CALL @dbg_puthex
+MOVI r1,10
+PUTC r1
+LD r1,r0,@rd_cnt
+SUB r1,r1,r13
+ST r1,r0,@rd_cnt
+CMP r1,r0
+JMP[EQ] @ddr_end
+LD r1,r0,@rd_rd
+CMP r1,r0
+JMP[GT] @ddr_loop
+JMP @ddr_end
+ddr_none:
+LD r1,r0,@dk_id
+MOVI r2,@s_dbg_noredo
+CALL @vc_puts
+MOVI r1,78
+PUTC r1
+MOVI r1,79
+PUTC r1
+MOVI r1,82
+PUTC r1
+MOVI r1,69
+PUTC r1
+MOVI r1,68
+PUTC r1
+MOVI r1,79
+PUTC r1
+MOVI r1,10
+PUTC r1
+ddr_end:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+rd_ri:
+.word 0
+rd_rd:
+.word 0
+rd_slot:
+.word 0
+rd_i:
+.word 0
+rd_v:
+.word 0
+rd_ha:
+.word 0
+rd_pc:
+.word 0
+rd_k:
+.word 0
+rd_cd:
+.word 0
+rd_nw:
+.word 0
+rd_ep:
+.word 0
+rd_c:
+.word 0
+rd_cnt:
+.word 0
+
+
+du_base:
+.word 0
+du_ok:
+.word 0
+du_n:
+.word 0
+du_idx:
+.word 0
+du_dep:
+.word 0
+du_slot:
+.word 0
+du_i:
+.word 0
+du_v:
+.word 0
+du_ha:
+.word 0
+du_pc:
+.word 0
+du_k:
+.word 0
+du_cd:
+.word 0
+du_nw:
+.word 0
+du_ep:
+.word 0
+du_c:
+.word 0
+
+; ---- bp <hex> / wp <hex>: toggle a table entry ----
+dbg_bp_arg:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @dbg_args_reset
+CALL @dbg_nexthex
+CMP r2,r0
+JMP[EQ] @dbpa_bad
+ST r1,r0,@dbpa_v
+ST r14,r0,@dbg_sp
+LD r1,r0,@dbpa_v
+CALL #DBG_BP_TOGGLE
+LD r14,r0,@dbg_sp
+ST r1,r0,@dbpa_r
+LD r1,r0,@dk_id
+MOVI r2,@s_dbg_bpcmd
+CALL @vc_puts
+MOVI r1,66
+PUTC r1
+MOVI r1,80
+PUTC r1
+MOVI r1,61
+PUTC r1
+LD r1,r0,@dk_id
+LD r2,r0,@dbpa_v
+MOVI r3,4
+CALL @dbg_puthex
+LD r1,r0,@dk_id
+LD r2,r0,@dbpa_r
+CMP r2,r0
+MOVI r2,@s_dbg_off
+MOVI[NE] r2,@s_dbg_on
+CALL @vc_puts
+MOVI r1,10
+PUTC r1
+JMP @dbpa_done
+dbpa_bad:
+LD r1,r0,@dk_id
+MOVI r2,@s_dbg_badarg
+CALL @vc_puts
+dbpa_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+dbpa_v:
+.word 0
+dbpa_r:
+.word 0
+
+dbg_wp_arg:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @dbg_args_reset
+CALL @dbg_nexthex
+CMP r2,r0
+JMP[EQ] @dwpa_bad
+ST r1,r0,@dwpa_v
+ST r14,r0,@dbg_sp
+LD r1,r0,@dwpa_v
+CALL #DBG_WP_TOGGLE
+LD r14,r0,@dbg_sp
+ST r1,r0,@dwpa_r
+LD r1,r0,@dk_id
+MOVI r2,@s_dbg_w
+CALL @vc_puts
+MOVI r1,87
+PUTC r1
+MOVI r1,61
+PUTC r1
+LD r1,r0,@dk_id
+LD r2,r0,@dwpa_v
+MOVI r3,4
+CALL @dbg_puthex
+LD r1,r0,@dk_id
+LD r2,r0,@dwpa_r
+CMP r2,r0
+MOVI r2,@s_dbg_off
+MOVI[NE] r2,@s_dbg_on
+CALL @vc_puts
+MOVI r1,10
+PUTC r1
+JMP @dwpa_done
+dwpa_bad:
+LD r1,r0,@dk_id
+MOVI r2,@s_dbg_badarg
+CALL @vc_puts
+dwpa_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+dwpa_v:
+.word 0
+dwpa_r:
+.word 0
+
+; ---- breakpoint/watchpoint lists ----
+dbg_bps:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r14,r0,@dbg_sp
+CALL #DBG_BP_LIST
+LD r14,r0,@dbg_sp
+ST r1,r0,@bp_ptr
+ST r2,r0,@bp_n
+LD r1,r0,@dk_id
+MOVI r2,@s_dbg_bp
+CALL @vc_puts
+LD r1,r0,@dk_id
+LD r2,r0,@bp_n
+MOVI r3,1
+CALL @dbg_puthex
+LD r1,r0,@dk_id
+MOVI r2,58
+CALL @vc_putc
+MOVI r1,58
+PUTC r1
+MOVI r3,0
+ST r3,r0,@bp_i
+bp_loop:
+LD r3,r0,@bp_i
+LD r2,r0,@bp_n
+CMP r3,r2
+JMP[GE] @bp_done
+CMP r3,r0
+JMP[EQ] @bp_nospace
+MOVI r1,32
+PUTC r1
+bp_nospace:
+LD r1,r0,@bp_ptr
+ADD r1,r1,r3
+LD r2,r1,0
+LD r1,r0,@dk_id
+MOVI r3,4
+CALL @dbg_puthex
+LD r1,r0,@dk_id
+MOVI r2,32
+CALL @vc_putc
+LD r1,r0,@bp_i
+ADD r1,r1,r13
+ST r1,r0,@bp_i
+JMP @bp_loop
+bp_done:
+LD r1,r0,@dk_id
+MOVI r2,10
+CALL @vc_putc
+MOVI r1,10
+PUTC r1
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+bp_ptr:
+.word 0
+bp_n:
+.word 0
+bp_i:
+.word 0
+
+dbg_wps:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r14,r0,@dbg_sp
+CALL #DBG_WP_LIST
+LD r14,r0,@dbg_sp
+ST r1,r0,@wp_ptr
+ST r2,r0,@wp_n
+LD r1,r0,@dk_id
+MOVI r2,@s_dbg_w
+CALL @vc_puts
+LD r1,r0,@dk_id
+LD r2,r0,@wp_n
+MOVI r3,1
+CALL @dbg_puthex
+LD r1,r0,@dk_id
+MOVI r2,58
+CALL @vc_putc
+MOVI r1,58
+PUTC r1
+MOVI r3,0
+ST r3,r0,@wp_i
+wp_loop:
+LD r3,r0,@wp_i
+LD r2,r0,@wp_n
+CMP r3,r2
+JMP[GE] @wp_done
+CMP r3,r0
+JMP[EQ] @wp_nospace
+MOVI r1,32
+PUTC r1
+wp_nospace:
+LD r1,r0,@wp_ptr
+ADD r1,r1,r3
+LD r2,r1,0
+LD r1,r0,@dk_id
+MOVI r3,4
+CALL @dbg_puthex
+LD r1,r0,@dk_id
+MOVI r2,32
+CALL @vc_putc
+LD r1,r0,@wp_i
+ADD r1,r1,r13
+ST r1,r0,@wp_i
+JMP @wp_loop
+wp_done:
+LD r1,r0,@dk_id
+MOVI r2,10
+CALL @vc_putc
+MOVI r1,10
+PUTC r1
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+wp_ptr:
+.word 0
+wp_n:
+.word 0
+wp_i:
+.word 0
+
+; ---- memory words at PC, with classes ----
+dbg_mem:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @dbg_args_reset
+CALL @dbg_nexthex
+CMP r2,r0
+JMP[EQ] @dm_pc
+ST r1,r0,@dm_base
+JMP @dm_start
+dm_pc:
+ST r14,r0,@dbg_sp
+CALL #DBG_PC
+LD r14,r0,@dbg_sp
+ST r1,r0,@dm_base
+dm_start:
+MOVI r1,0
+ST r1,r0,@dm_i
+dm_loop:
+LD r1,r0,@dm_base
+LD r2,r0,@dm_i
+ADD r1,r1,r2
+ST r1,r0,@dm_addr
+ST r14,r0,@dbg_sp
+LD r1,r0,@dm_addr
+CALL #DBG_MEM
+LD r14,r0,@dbg_sp
+ST r1,r0,@dm_val
+ST r14,r0,@dbg_sp
+LD r1,r0,@dm_addr
+CALL #DBG_MEM_CLS
+LD r14,r0,@dbg_sp
+ST r1,r0,@dm_cls
+MOVI r1,77
+PUTC r1
+LD r1,r0,@dk_id
+LD r2,r0,@dm_addr
+MOVI r3,4
+CALL @dbg_puthex
+LD r1,r0,@dk_id
+MOVI r2,58
+CALL @vc_putc
+LD r1,r0,@dk_id
+LD r2,r0,@dm_val
+MOVI r3,8
+CALL @dbg_puthex
+LD r1,r0,@dk_id
+MOVI r2,32
+CALL @vc_putc
+LD r1,r0,@dk_id
+LD r2,r0,@dm_cls
+MOVI r3,1
+CALL @dbg_puthex
+LD r1,r0,@dk_id
+MOVI r2,10
+CALL @vc_putc
+MOVI r1,10
+PUTC r1
+LD r1,r0,@dm_i
+ADD r1,r1,r13
+ST r1,r0,@dm_i
+MOVI r2,8
+CMP r1,r2
+JMP[LT] @dm_loop
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+dm_base:
+.word 0
+dm_i:
+.word 0
+dm_addr:
+.word 0
+dm_val:
+.word 0
+dm_cls:
+.word 0
+
+; ---- last four diagnostic records ----
+dbg_log:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r14,r0,@dbg_sp
+CALL #DBG_LOG
+LD r14,r0,@dbg_sp
+ST r1,r0,@lg_ptr
+ST r2,r0,@lg_i
+CMP r2,r0
+JMP[NE] @lg_have
+LD r1,r0,@dk_id
+MOVI r2,@s_dbg_nolog
+CALL @vc_puts
+JMP @lg_done
+lg_have:
+ADD r3,r2,r0
+MOVI r4,4
+CMP r3,r4
+JMP[LE] @lg_cnt
+ADD r3,r4,r0
+lg_cnt:
+ST r3,r0,@lg_n
+SUB r3,r2,r3
+MOVI r4,15
+BOOL.8 r3,r3,r4
+ST r3,r0,@lg_s
+lg_loop:
+LD r2,r0,@lg_s
+SHL r2,r2,2
+LD r1,r0,@lg_ptr
+ADD r1,r1,r2
+LDN r3,r1,0
+ST r3,r0,@lg_t
+LD r3,r1,0
+SHR r3,r3,24
+ST r3,r0,@lg_c
+LD r3,r1,1
+LA r4,0xFFFFFF
+BOOL.8 r3,r3,r4
+ST r3,r0,@lg_site
+MOVI r1,68
+PUTC r1
+LD r1,r0,@dk_id
+LD r2,r0,@lg_t
+MOVI r3,1
+CALL @dbg_puthex
+LD r1,r0,@dk_id
+MOVI r2,58
+CALL @vc_putc
+LD r1,r0,@dk_id
+LD r2,r0,@lg_c
+MOVI r3,2
+CALL @dbg_puthex
+LD r1,r0,@dk_id
+MOVI r2,58
+CALL @vc_putc
+LD r1,r0,@dk_id
+LD r2,r0,@lg_site
+MOVI r3,6
+CALL @dbg_puthex
+LD r1,r0,@dk_id
+MOVI r2,10
+CALL @vc_putc
+MOVI r1,10
+PUTC r1
+LD r1,r0,@lg_s
+ADD r1,r1,r13
+MOVI r2,15
+BOOL.8 r1,r1,r2
+ST r1,r0,@lg_s
+LD r1,r0,@lg_n
+SUB r1,r1,r13
+ST r1,r0,@lg_n
+CMP r1,r0
+JMP[NE] @lg_loop
+lg_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+lg_ptr:
+.word 0
+lg_i:
+.word 0
+lg_s:
+.word 0
+lg_n:
+.word 0
+lg_t:
+.word 0
+lg_c:
+.word 0
+lg_site:
+.word 0
+
+; ---- carts: list visible TOC entries ----
+dbg_carts:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r1,r0,@dk_id
+MOVI r2,@s_dbg_carts
+CALL @vc_puts
+LA r1,#TOC_SNAP
+ST r1,r0,@dc_ptr
+MOVI r1,0
+ST r1,r0,@dc_n
+dc_loop:
+LD r8,r0,@dc_ptr
+LD r1,r8,0
+CMP r1,r0
+JMP[EQ] @dc_done
+LD r2,r8,7
+MOVI r3,1
+BOOL.8 r2,r2,r3
+CMP r2,r0
+JMP[NE] @dc_skip
+LD r1,r8,0
+ST r1,r0,@dc_id
+LD r1,r0,@dk_id
+LD r2,r0,@dc_id
+MOVI r3,1
+CALL @dbg_puthex
+LD r1,r0,@dk_id
+MOVI r2,32
+CALL @vc_putc
+LD r2,r8,3
+LD r1,r0,@dk_id
+CALL @vc_puts
+LD r1,r0,@dk_id
+MOVI r2,10
+CALL @vc_putc
+MOVI r1,10
+PUTC r1
+dc_skip:
+LD r1,r0,@dc_ptr
+ADDI r1,r1,16
+ST r1,r0,@dc_ptr
+LD r1,r0,@dc_n
+ADD r1,r1,r13
+ST r1,r0,@dc_n
+MOVI r2,87
+CMP r1,r2
+JMP[LT] @dc_loop
+dc_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+dc_ptr:
+.word 0
+dc_n:
+.word 0
+dc_id:
+.word 0
+
+; ---- load <catalog id>: copy the sealed payload to the debug arena ----
+dbg_load:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @dbg_argnum
+CMP r2,r0
+JMP[EQ] @dl_argbad
+ST r1,r0,@dl_id
+LA r1,#TOC_SNAP
+ST r1,r0,@dl_ptr
+dl_loop:
+LD r8,r0,@dl_ptr
+LD r1,r8,0
+CMP r1,r0
+JMP[EQ] @dl_bad
+LD r2,r8,7
+MOVI r3,1
+BOOL.8 r2,r2,r3
+CMP r2,r0
+JMP[NE] @dl_skip
+LD r2,r0,@dl_id
+CMP r1,r2
+JMP[EQ] @dl_found
+dl_skip:
+LD r1,r0,@dl_ptr
+ADDI r1,r1,16
+ST r1,r0,@dl_ptr
+JMP @dl_loop
+dl_found:
+ST r14,r0,@dbg_sp
+LD r1,r0,@dl_ptr
+CALL #DBG_CART
+LD r14,r0,@dbg_sp
+ST r1,r0,@dl_rc
+LD r1,r0,@dl_rc
+CMP r1,r0
+JMP[EQ] @dl_bad
+LD r1,r0,@dk_id
+MOVI r2,@s_dbg_loaded
+CALL @vc_puts
+CALL @dbg_show_state
+JMP @dl_done
+dl_argbad:
+dl_bad:
+LD r1,r0,@dk_id
+MOVI r2,@s_dbg_nocart
+CALL @vc_puts
+dl_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+dl_ptr:
+.word 0
+dl_id:
+.word 0
+dl_rc:
+.word 0
+
+; r1=value, r2=1 valid; parses the first decimal argument after the command
+dbg_argnum:
+ST r15,r14,0
+ADD r14,r14,r13
+LA r1,#FNB
+da_skip:
+LDB r2,r1,0
+CMP r2,r0
+JMP[EQ] @da_bad
+MOVI r3,32
+CMP r2,r3
+JMP[EQ] @da_sp
+ADD r1,r1,r13
+JMP @da_skip
+da_sp:
+ADD r1,r1,r13
+LDB r2,r1,0
+CMP r2,r0
+JMP[EQ] @da_bad
+MOVI r3,32
+CMP r2,r3
+JMP[EQ] @da_sp
+MOVI r4,0
+MOVI r5,0
+da_digit:
+LDB r2,r1,0
+CMP r2,r0
+JMP[EQ] @da_done
+MOVI r3,48
+CMP r2,r3
+JMP[LT] @da_done
+MOVI r3,57
+CMP r2,r3
+JMP[GT] @da_done
+MOVI r3,48
+SUB r2,r2,r3
+MOVI r3,10
+MUL r4,r4,r3
+ADD r4,r4,r2
+MOVI r5,1
+ADD r1,r1,r13
+JMP @da_digit
+da_done:
+ADD r1,r4,r0
+ADD r2,r5,r0
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+da_bad:
+MOVI r1,0
+MOVI r2,0
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; ---- registers, four per row ----
+dbg_regs:
+ST r15,r14,0
+ADD r14,r14,r13
+MOVI r1,0
+ST r1,r0,@dr_i
+dr_loop:
+LD r1,r0,@dk_id
+MOVI r2,82
+CALL @vc_putc
+MOVI r1,82
+PUTC r1
+LD r1,r0,@dk_id
+LD r2,r0,@dr_i
+MOVI r3,1
+CALL @dbg_puthex
+LD r1,r0,@dk_id
+MOVI r2,61
+CALL @vc_putc
+MOVI r1,61
+PUTC r1
+ST r14,r0,@dbg_sp
+LD r1,r0,@dr_i
+CALL #DBG_REG
+LD r14,r0,@dbg_sp
+ST r1,r0,@dr_v
+LD r1,r0,@dk_id
+LD r2,r0,@dr_v
+MOVI r3,8
+CALL @dbg_puthex
+LD r1,r0,@dk_id
+MOVI r2,32
+CALL @vc_putc
+LD r1,r0,@dr_i
+ADD r1,r1,r13
+ST r1,r0,@dr_i
+MOVI r2,3
+BOOL.8 r3,r1,r2
+CMP r3,r0
+JMP[NE] @dr_next
+LD r1,r0,@dk_id
+MOVI r2,10
+CALL @vc_putc
+MOVI r1,10
+PUTC r1
+dr_next:
+LD r1,r0,@dr_i
+MOVI r2,16
+CMP r1,r2
+JMP[LT] @dr_loop
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+dr_i:
+.word 0
+dr_v:
+.word 0
+
+; ---- last eight fetches ----
+dbg_hist:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r14,r0,@dbg_sp
+CALL #DBG_HIST
+LD r14,r0,@dbg_sp
+ST r1,r0,@dh_ptr
+ST r2,r0,@dh_hi
+LD r1,r0,@dk_id
+MOVI r2,@s_dbg_histp
+CALL @vc_puts
+LD r3,r0,@dh_hi
+MOVI r4,8
+SUB r3,r3,r4
+MOVI r4,63
+BOOL.8 r3,r3,r4
+ST r3,r0,@dh_s
+MOVI r1,0
+ST r1,r0,@dh_n
+dh_loop:
+LD r3,r0,@dh_s
+LD r1,r0,@dh_ptr
+ADD r1,r1,r3
+LD r2,r1,0
+LD r1,r0,@dk_id
+MOVI r3,4
+CALL @dbg_puthex
+LD r1,r0,@dk_id
+MOVI r2,32
+CALL @vc_putc
+LD r1,r0,@dh_s
+ADD r1,r1,r13
+MOVI r2,63
+BOOL.8 r1,r1,r2
+ST r1,r0,@dh_s
+LD r1,r0,@dh_n
+ADD r1,r1,r13
+ST r1,r0,@dh_n
+MOVI r2,8
+CMP r1,r2
+JMP[LT] @dh_loop
+LD r1,r0,@dk_id
+MOVI r2,10
+CALL @vc_putc
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+dh_ptr:
+.word 0
+dh_hi:
+.word 0
+dh_s:
+.word 0
+dh_n:
+.word 0
+
+; ---- shadow call stack, newest first, at most eight ----
+dbg_stack:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r14,r0,@dbg_sp
+CALL #DBG_STACK
+LD r14,r0,@dbg_sp
+ST r1,r0,@dst_ptr
+ST r2,r0,@dst_d
+LD r1,r0,@dk_id
+MOVI r2,@s_dbg_stackp
+CALL @vc_puts
+LD r1,r0,@dk_id
+LD r2,r0,@dst_d
+MOVI r3,1
+CALL @dbg_puthex
+LD r1,r0,@dk_id
+MOVI r2,58
+CALL @vc_putc
+LD r1,r0,@dk_id
+MOVI r2,32
+CALL @vc_putc
+LD r1,r0,@dst_d
+CMP r1,r0
+JMP[EQ] @dst_empty
+MOVI r2,8
+CMP r1,r2
+JMP[LE] @dst_n
+ADD r1,r2,r0
+dst_n:
+ST r1,r0,@dst_n
+dst_loop:
+LD r1,r0,@dst_d
+SUB r1,r1,r13
+ST r1,r0,@dst_d
+LD r2,r0,@dst_ptr
+ADD r2,r2,r1
+LD r2,r2,0
+LD r1,r0,@dk_id
+MOVI r3,4
+CALL @dbg_puthex
+LD r1,r0,@dk_id
+MOVI r2,32
+CALL @vc_putc
+LD r1,r0,@dst_n
+SUB r1,r1,r13
+ST r1,r0,@dst_n
+CMP r1,r0
+JMP[NE] @dst_loop
+JMP @dst_nl
+dst_empty:
+LD r1,r0,@dk_id
+MOVI r2,@s_dbg_empty
+CALL @vc_puts
+JMP @dst_done
+dst_nl:
+LD r1,r0,@dk_id
+MOVI r2,10
+CALL @vc_putc
+dst_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+dst_ptr:
+.word 0
+dst_d:
+.word 0
+dst_n:
+.word 0
+
+; ---- live 4x4 type matrix ----
+dbg_types:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r14,r0,@dbg_sp
+CALL #DBG_COUNTS
+LD r14,r0,@dbg_sp
+ST r1,r0,@dt_ptr
+MOVI r1,0
+ST r1,r0,@dt_i
+MOVI r1,0
+ST r1,r0,@dt_col
+dt_row:
+LD r1,r0,@dk_id
+MOVI r2,@s_dbg_typesp
+CALL @vc_puts
+MOVI r1,0
+ST r1,r0,@dt_col
+dt_col_loop:
+LD r3,r0,@dt_i
+MOVI r2,@dbg_tnames
+ADD r2,r2,r3
+LD r2,r2,0
+LD r1,r0,@dk_id
+CALL @vc_puts
+LD r1,r0,@dk_id
+MOVI r2,58
+CALL @vc_putc
+LD r3,r0,@dt_i
+LD r2,r0,@dt_ptr
+ADD r2,r2,r3
+LD r2,r2,0
+LD r1,r0,@dk_id
+MOVI r3,2
+CALL @dbg_puthex
+LD r1,r0,@dk_id
+MOVI r2,32
+CALL @vc_putc
+LD r1,r0,@dt_i
+ADD r1,r1,r13
+ST r1,r0,@dt_i
+LD r1,r0,@dt_col
+ADD r1,r1,r13
+ST r1,r0,@dt_col
+MOVI r2,4
+CMP r1,r2
+JMP[LT] @dt_col_loop
+LD r1,r0,@dk_id
+MOVI r2,10
+CALL @vc_putc
+LD r1,r0,@dt_i
+MOVI r2,16
+CMP r1,r2
+JMP[LT] @dt_row
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+dt_ptr:
+.word 0
+dt_i:
+.word 0
+dt_col:
+.word 0
+
+; debug strings and the 16 type tags
+s_dbg_banner:
+.str "\nNANDBG DEBUG CLI\ncarts load <id> step next finish run regs mem [addr] log hist\nstack types screen serial undo [n] redo [n] break bp bpts watch wp wpts setr setm goto\ncheckpoint restore reset help quit\n"
+s_dbg_prompt:
+.str "> "
+s_dbg_help:
+.str "help"
+s_dbg_step:
+.str "step"
+s_dbg_run:
+.str "run"
+s_dbg_regs:
+.str "regs"
+s_dbg_hist:
+.str "hist"
+s_dbg_stack:
+.str "stack"
+s_dbg_types:
+.str "types"
+s_dbg_mem:
+.str "mem"
+s_dbg_log:
+.str "log"
+s_dbg_nolog:
+.str "no log\n"
+s_dbg_badarg:
+.str "bad argument\n"
+s_dbg_noundo:
+.str "no undo\n"
+s_dbg_noredo:
+.str "no redo\n"
+s_dbg_nockpt:
+.str "no checkpoint\n"
+s_dbg_noser:
+.str "no serial\n"
+s_dbg_on:
+.str " +"
+s_dbg_off:
+.str " -"
+s_dbg_next:
+.str "next"
+s_dbg_finish:
+.str "finish"
+s_dbg_serial:
+.str "serial"
+s_dbg_screen:
+.str "screen"
+s_dbg_setr:
+.str "setr"
+s_dbg_setm:
+.str "setm"
+s_dbg_goto:
+.str "goto"
+s_dbg_bpcmd:
+.str "bp"
+s_dbg_wpcmd:
+.str "wp"
+s_dbg_bpts:
+.str "bpts"
+s_dbg_wpts:
+.str "wpts"
+s_dbg_checkpoint:
+.str "checkpoint"
+s_dbg_restore:
+.str "restore"
+s_dbg_redo:
+.str "redo"
+s_dbg_undo:
+.str "undo"
+s_dbg_watch:
+.str "watch"
+s_dbg_break:
+.str "break"
+s_dbg_reset:
+.str "reset"
+s_dbg_quit:
+.str "quit"
+s_dbg_exit:
+.str "exit"
+s_dbg_helpfull:
+.str "carts load <id> step next finish run regs mem [addr] log hist stack types screen serial undo [n] redo [n] break bp bpts watch wp wpts setr setm goto checkpoint restore reset quit\n"
+s_dbg_carts_cmd:
+.str "carts"
+s_dbg_carts:
+.str "CARTS\n"
+s_dbg_load:
+.str "load"
+s_dbg_loaded:
+.str "loaded\n"
+s_dbg_nocart:
+.str "no cart\n"
+s_dbg_histp:
+.str "HIST "
+s_dbg_stackp:
+.str "STACK "
+s_dbg_typesp:
+.str "TYPES "
+s_dbg_empty:
+.str "empty\n"
+s_dbg_bp:
+.str "BP="
+s_dbg_w:
+.str "W="
+s_dbg_resetmsg:
+.str "reset\n"
+dbg_tnames:
+.word @dt0,@dt1,@dt2,@dt3,@dt4,@dt5,@dt6,@dt7
+.word @dt8,@dt9,@dt10,@dt11,@dt12,@dt13,@dt14,@dt15
+dt0:
+.str "FC"
+dt1:
+.str "FM"
+dt2:
+.str "FD"
+dt3:
+.str "FS"
+dt4:
+.str "PC"
+dt5:
+.str "PM"
+dt6:
+.str "PD"
+dt7:
+.str "PS"
+dt8:
+.str "WC"
+dt9:
+.str "WM"
+dt10:
+.str "WD"
+dt11:
+.str "WS"
+dt12:
+.str "IC"
+dt13:
+.str "IM"
+dt14:
+.str "ID"
+dt15:
+.str "IS"
+
 ; ====================== SETTINGS (kind 4) ======================
 ; A0 selected row (0 x86, 1 Galaxy A32 5G, 2 RISC-V disabled, 3 custom)  A1 custom W  A2 custom H  A3 custom field (0 W, 1 H)  A5 message code
 ; A mode change arms a 10 s TICK countdown: ENTER keeps, ESC (or the timeout) reverts to the previous mode. While armed g_onkey routes every key to st_pendkey.
@@ -4256,6 +7056,8 @@ hk_k:
 ; Static service tabs; live TCP/Gopher sessions arrive after the TCP stack.
 t_br:
 .str "BROWSER"
+t_dbg:
+.str "NANDBG"
 br_tabs:
 .str "BROWSER 1 CHINET 2 TELEHACK 3 PROLINE 4 SDF\n5 FLOODGAP 6 FIDONET 7 ETERNAL-SEPT\n"
 br_status:
@@ -4441,6 +7243,11 @@ fs_dispatch:
 ST r15,r14,0
 ADD r14,r14,r13
 LA r1,#FNB
+LA r2,@fs_s_debug
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @fs_d_debug
+LA r1,#FNB
 LA r2,@fs_s_cc
 CALL @fs_prefix
 CMP r1,r0
@@ -4487,6 +7294,10 @@ CMP r1,r0
 JMP[NE] @fs_d_pwd
 MOVI r1,0
 JMP @fs_disp_d
+fs_d_debug:
+MOVI r1,#DBG_KIND
+CALL @gui_open_new
+JMP @fs_disp_y
 fs_d_cc:
 LA r1,#FNB
 ADDI r1,r1,3
@@ -4849,6 +7660,8 @@ SUB r14,r14,r13
 LD r15,r14,0
 RET
 
+fs_s_debug:
+.str "debug"
 fs_s_cc:
 .str "cc "
 fs_s_run:

@@ -121,6 +121,7 @@ STW r1,r2,r3
 ; ---- cold boot: run the system cart (GUI desktop) when the builder declared one;
 ; its entry opens a single CLI window (A2). ESC/q there returns to this menu.
 ; boot_rec is separate from the exhibit TOC, so slots stay free for exhibits.
+CALL @sh_snap_toc
 LA r10,@boot_rec
 LD r1,r10,0
 CMP r1,r0
@@ -333,6 +334,40 @@ JMP[EQ] @sh_key
 SUB r1,r1,r13
 ST r1,r0,@sh_page
 JMP @sh_redraw
+
+; Snapshot the catalog and titles before a large cart overwrites 22000/23600.
+; The GUI debugger reads this copy; the shell menu still uses the live TOC.
+sh_snap_toc:
+ST r15,r0,@sst_lnk
+LA r1,0x70000
+MOVI r2,#TOC_BASE
+LA r3,1408
+BCOPY r1,r2,r3
+LA r1,0x72000
+MOVI r2,23600
+LA r3,1408
+BCOPY r1,r2,r3
+MOVI r4,0
+LA r5,0x70000
+sst_loop:
+LD r6,r5,0
+CMP r6,r0
+JMP[EQ] @sst_done
+MOVI r2,16
+MUL r3,r4,r2
+LA r1,0x72000
+ADD r3,r3,r1
+ST r3,r5,3
+ADDI r5,r5,16
+ADD r4,r4,r13
+MOVI r2,87
+CMP r4,r2
+JMP[LT] @sst_loop
+sst_done:
+LD r15,r0,@sst_lnk
+RET
+sst_lnk:
+.word 0
 
 ; ---- load + seal-check + run the cartridge whose TOC entry is at r10 ----
 sh_run:
@@ -713,6 +748,596 @@ cpu_body:
 .str " Native core: x86, 5,800 bytes.\n Guest ISA: NaN16 double-endian, 16 truth-table classes.\n Clock: PIT TICK, 1,000 Hz class.\n AArch64 and RISC-V native cores: planned.\n Android root detection: host-only, not bare metal."
 
 
+; =============================================================================
+; NANDBG resident ABI and demo target (word 5800+)
+; The GUI terminal's `debug` command opens a second CLI that calls these
+; trampolines. 5700..8191 is the gap between the shell's strings and the cart
+; slot; the core lives below the slot and the target above it, so a debug
+; session and a loaded cart never overwrite each other.
+; =============================================================================
+.org 5800
+dbg_abi:
+  JMP @nd_reset       ; 5800  reset target state
+  JMP @nd_step        ; 5801  one instruction
+  JMP @nd_run         ; 5802  max steps in r1
+  JMP @dbg_begin      ; 5803  reset + demo target + guard window
+  JMP @dbg_reg        ; 5804  r1=index -> value
+  JMP @dbg_pc         ; 5805  -> pc
+  JMP @dbg_status     ; 5806  -> status
+  JMP @dbg_hist       ; 5807  -> r1=hist, r2=index
+  JMP @dbg_stack      ; 5808  -> r1=cs, r2=depth
+  JMP @dbg_counts     ; 5809  -> r1=counts
+  JMP @dbg_break      ; 5810  r1=address (toggle)
+  JMP @dbg_watch      ; 5811  r1=address
+  JMP @dbg_rec        ; 5812  -> r1=record
+  JMP @dbg_cart       ; 5813  r1=TOC entry -> load sealed cart into debug arena
+
+dbg_begin:
+  ST r15,r0,@dbg_begin_lnk
+  CALL @nd_reset
+  CALL @dbg_serclr
+  MOVI r1,1
+  ST r1,r0,@nd_urec
+  MOVI r1,@dbg_target
+  ST r1,r0,@nd_pc
+  ST r0,r0,@nd_gb
+  MOVI r1,0xFFFF
+  ST r1,r0,@nd_mask
+  ST r0,r0,@nd_map_lo
+  ST r0,r0,@nd_map_hi
+  ST r0,r0,@nd_map_dst
+  MOVI r1,1
+  ST r1,r0,@nd_iocap
+  LA r1,0x60000
+  ST r1,r0,@nd_tbuf
+  MOVI r1,@dbg_target
+  ST r1,r0,@nd_wlo
+  LA r1,0xFFFFFFFF
+  ST r1,r0,@nd_whi
+  ST r1,r0,@nd_brk
+  ST r1,r0,@nd_watch
+  ST r0,r0,@nd_bpn
+  ST r0,r0,@nd_wpn
+  ST r0,r0,@nd_li
+  LD r15,r0,@dbg_begin_lnk
+  RET
+dbg_begin_lnk:
+.word 0
+
+dbg_reg:
+  LD r1,r1,@nd_regs
+  RET
+dbg_pc:
+  LD r1,r0,@nd_pc
+  RET
+dbg_status:
+  LD r1,r0,@nd_status
+  RET
+dbg_hist:
+  MOVI r1,@nd_hist
+  LD r2,r0,@nd_hi
+  RET
+dbg_stack:
+  MOVI r1,@nd_cs
+  LD r2,r0,@nd_cd
+  RET
+dbg_counts:
+  MOVI r1,@nd_counts
+  RET
+dbg_break:
+  LD r2,r0,@nd_brk
+  CMP r1,r2
+  JMP[EQ] @dbg_brk_off
+  ST r1,r0,@nd_brk
+  RET
+dbg_brk_off:
+  LA r1,0xFFFFFFFF
+  ST r1,r0,@nd_brk
+  RET
+dbg_watch:
+  ST r1,r0,@nd_watch
+  RET
+dbg_rec:
+  MOVI r1,@nd_rec
+  RET
+
+; dbg_cart: r1 = TOC entry (word address). Copy its sealed payload to the
+; debug arena, then map [8192, 8192+span) onto the arena and point pc at 8192.
+; The store is never modified; the seal remains valid.
+.equ DBG_ARENA 0x80000
+.equ DBG_ARENA_SPAN 0x10000
+dbg_cart:
+  ST r15,r0,@dbg_cart_lnk
+  ST r1,r0,@dbg_toc
+  LD r2,r1,4            ; store word
+  LD r3,r1,5            ; length words
+  ST r2,r0,@dbg_store
+  ST r3,r0,@dbg_len
+  CMP r3,r0
+  JMP[EQ] @dbg_cart_bad
+  LA r1,#DBG_ARENA_SPAN
+  CMP r3,r1
+  JMP[GT] @dbg_cart_bad
+  ; BCOPY d=dst, a=src, b=count
+  LA r1,#DBG_ARENA
+  LD r2,r0,@dbg_store
+  LD r3,r0,@dbg_len
+  BCOPY r1,r2,r3
+  ; reset target registers/pc/flags/tables
+  CALL @nd_reset
+  CALL @dbg_serclr
+  MOVI r1,1
+  ST r1,r0,@nd_urec
+  ; map the cart image window; 8192..8192+max(len, 0x8000)
+  MOVI r1,8192
+  ST r1,r0,@nd_map_lo
+  LD r2,r0,@dbg_len
+  ADD r2,r2,r1
+  MOVI r3,40960
+  CMP r2,r3
+  JMP[GE] @dbg_cart_hi
+  ADD r2,r3,r0
+dbg_cart_hi:
+  ST r2,r0,@nd_map_hi
+  LA r1,#DBG_ARENA
+  ST r1,r0,@nd_map_dst
+  ; guard the arena; the shell/core below it stay read-only
+  ST r1,r0,@nd_wlo
+  LD r2,r0,@nd_map_hi
+  MOVI r3,8192
+  SUB r2,r2,r3
+  ADD r2,r2,r1
+  ST r2,r0,@nd_whi
+  ; capture cart display writes into the private text buffer
+  MOVI r1,1
+  ST r1,r0,@nd_iocap
+  LA r1,0x60000
+  ST r1,r0,@nd_tbuf
+  ; guest return address: a HALT word, so the cart's final RET stops
+  MOVI r1,@dbg_return
+  MOVI r2,15
+  ST r1,r2,@nd_regs
+  MOVI r1,8192
+  ST r1,r0,@nd_pc
+  ST r0,r0,@nd_gb
+  MOVI r1,0xFFFF
+  ST r1,r0,@nd_mask
+  LA r1,0xFFFFFFFF
+  ST r1,r0,@nd_brk
+  ST r1,r0,@nd_watch
+  ST r0,r0,@nd_bpn
+  ST r0,r0,@nd_wpn
+  ST r0,r0,@nd_li
+  MOVI r1,1
+  LD r15,r0,@dbg_cart_lnk
+  RET
+dbg_cart_bad:
+  MOVI r1,0
+  LD r15,r0,@dbg_cart_lnk
+  RET
+dbg_cart_lnk:
+.word 0
+dbg_toc:
+.word 0
+dbg_store:
+.word 0
+dbg_len:
+.word 0
+
+dbg_return:
+HALT
+
+; clear the captured serial length for a new debug session
+dbg_serclr:
+  LA r1,0x61000
+  ST r0,r1,0
+  RET
+
+.org 5950
+dbg_abi2:
+  JMP @dbg_mem_get    ; 5950  r1=guest word -> payload
+  JMP @dbg_log        ; 5951  -> r1=ring, r2=next index
+  JMP @dbg_mem_cls    ; 5952  r1=guest word -> class
+  JMP @dbg_reg_set    ; 5953  r1=index r2=value
+  JMP @dbg_mem_set    ; 5954  r1=guest word r2=value
+  JMP @dbg_bp_list    ; 5955  -> r1=table r2=count
+  JMP @dbg_bp_toggle  ; 5956  r1=pc -> r1=1 added / 0 removed
+  JMP @dbg_wp_list    ; 5957  -> r1=table r2=count
+  JMP @dbg_wp_toggle  ; 5958  r1=address -> r1=1 added / 0 removed
+  JMP @dbg_pc_set     ; 5959  r1=pc
+  JMP @dbg_tbuf       ; 5960  -> r1=target text buffer
+  JMP @dbg_mem_geth   ; 5961  r1=host word -> payload
+  JMP @dbg_mem_seth   ; 5962  r1=host word r2=payload r3=class
+  JMP @dbg_usnap      ; 5963  -> r1=base r2=index r3=depth
+  JMP @dbg_uinval     ; 5964  clear undo history
+  JMP @dbg_udone      ; 5965  commit one undo -> r1=depth left
+  JMP @dbg_state_set  ; 5966  r1=k r2=call depth
+  JMP @dbg_state_get  ; 5967  -> r1=k r2=call depth
+  JMP @dbg_upop       ; 5968  redo one undo-ring position
+  JMP @dbg_mem_geth_cls ; 5969  r1=host word -> class
+  JMP @dbg_ckpt_to    ; 5970  arena -> checkpoint buffer
+  JMP @dbg_ckpt_from  ; 5971  checkpoint buffer -> arena
+.org 5972
+dbg_mem_get:
+  ST r15,r0,@dmg_lnk
+  CALL @nd_addr
+  LD r1,r1,0
+  LD r15,r0,@dmg_lnk
+  RET
+dmg_lnk:
+.word 0
+dbg_log:
+  MOVI r1,@nd_log
+  LD r2,r0,@nd_li
+  RET
+
+dbg_reg_set:
+  ST r2,r1,@nd_regs
+  RET
+dbg_pc_set:
+  ST r1,r0,@nd_pc
+  RET
+dbg_tbuf:
+  LA r1,0x60000
+  RET
+dbg_mem_set:
+  ST r15,r0,@dms_lnk
+  ST r2,r0,@dms_v
+  CALL @nd_addr
+  LD r2,r0,@dms_v
+  ST r2,r1,0
+  LD r15,r0,@dms_lnk
+  RET
+dms_lnk:
+.word 0
+dms_v:
+.word 0
+
+dbg_bp_list:
+  MOVI r1,@nd_bpt
+  LD r2,r0,@nd_bpn
+  RET
+dbg_wp_list:
+  MOVI r1,@nd_wpt
+  LD r2,r0,@nd_wpn
+  RET
+
+; toggle a PC in the breakpoint table (16 entries, compact on remove)
+dbg_bp_toggle:
+  ST r15,r0,@dbt_lnk
+  ST r1,r0,@dbt_v
+  LD r2,r0,@nd_bpn
+  MOVI r4,0
+dbt_scan:
+  CMP r4,r2
+  JMP[GE] @dbt_add
+  LD r5,r4,@nd_bpt
+  LD r6,r0,@dbt_v
+  CMP r5,r6
+  JMP[EQ] @dbt_del
+  ADD r4,r4,r13
+  JMP @dbt_scan
+dbt_del:
+  ADD r7,r4,r0
+dbt_shift:
+  ADDI r7,r7,1
+  CMP r7,r2
+  JMP[GE] @dbt_dec
+  LD r5,r7,@nd_bpt
+  SUB r6,r7,r13
+  ST r5,r6,@nd_bpt
+  JMP @dbt_shift
+dbt_dec:
+  SUB r2,r2,r13
+  ST r2,r0,@nd_bpn
+  MOVI r1,0
+  LD r15,r0,@dbt_lnk
+  RET
+dbt_add:
+  MOVI r3,16
+  CMP r2,r3
+  JMP[GE] @dbt_full
+  LD r6,r0,@dbt_v
+  ST r6,r2,@nd_bpt
+  ADD r2,r2,r13
+  ST r2,r0,@nd_bpn
+  MOVI r1,1
+  LD r15,r0,@dbt_lnk
+  RET
+dbt_full:
+  MOVI r1,0
+  LD r15,r0,@dbt_lnk
+  RET
+dbt_lnk:
+.word 0
+dbt_v:
+.word 0
+
+; toggle an address in the watchpoint table (8 entries)
+dbg_wp_toggle:
+  ST r15,r0,@dwt_lnk
+  ST r1,r0,@dwt_v
+  LD r2,r0,@nd_wpn
+  MOVI r4,0
+dwt_scan:
+  CMP r4,r2
+  JMP[GE] @dwt_add
+  LD r5,r4,@nd_wpt
+  LD r6,r0,@dwt_v
+  CMP r5,r6
+  JMP[EQ] @dwt_del
+  ADD r4,r4,r13
+  JMP @dwt_scan
+dwt_del:
+  ADD r7,r4,r0
+dwt_shift:
+  ADDI r7,r7,1
+  CMP r7,r2
+  JMP[GE] @dwt_dec
+  LD r5,r7,@nd_wpt
+  SUB r6,r7,r13
+  ST r5,r6,@nd_wpt
+  JMP @dwt_shift
+dwt_dec:
+  SUB r2,r2,r13
+  ST r2,r0,@nd_wpn
+  MOVI r1,0
+  LD r15,r0,@dwt_lnk
+  RET
+dwt_add:
+  MOVI r3,8
+  CMP r2,r3
+  JMP[GE] @dwt_full
+  LD r6,r0,@dwt_v
+  ST r6,r2,@nd_wpt
+  ADD r2,r2,r13
+  ST r2,r0,@nd_wpn
+  MOVI r1,1
+  LD r15,r0,@dwt_lnk
+  RET
+dwt_full:
+  MOVI r1,0
+  LD r15,r0,@dwt_lnk
+  RET
+dwt_lnk:
+.word 0
+dwt_v:
+.word 0
+
+dbg_mem_cls:
+  ST r15,r0,@dmc_lnk
+  CALL @nd_addr
+  LDN r1,r1,0
+  LD r15,r0,@dmc_lnk
+  RET
+dmc_lnk:
+.word 0
+
+; host-word access for the undo ring and restore path
+dbg_mem_geth:
+  LD r1,r1,0
+  RET
+dbg_mem_seth:
+  STW r2,r1,r3
+  RET
+dbg_usnap:
+  LD r1,r0,@nd_ui
+  LD r2,r0,@nd_ud
+  RET
+dbg_uinval:
+  ST r0,r0,@nd_ud
+  RET
+dbg_udone:
+  LD r1,r0,@nd_ui
+  SUB r1,r1,r13
+  MOVI r2,31
+  BOOL.8 r1,r1,r2
+  ST r1,r0,@nd_ui
+  LD r1,r0,@nd_ud
+  CMP r1,r0
+  JMP[EQ] @du_ret
+  SUB r1,r1,r13
+  ST r1,r0,@nd_ud
+  LD r1,r0,@nd_steps
+  CMP r1,r0
+  JMP[EQ] @du_ret
+  SUB r1,r1,r13
+  ST r1,r0,@nd_steps
+  ST r0,r0,@nd_status
+  ST r0,r0,@nd_reason
+du_ret:
+  LD r1,r0,@nd_ud
+  RET
+dbg_state_set:
+  ST r1,r0,@nd_k
+  ST r2,r0,@nd_cd
+  RET
+
+; ---- undo recording ---------------------------------------------------------
+; Called at the start of each guest step. Saves 16 regs, pc, condition, shadow
+; call depth and two write-log slots in a 32-word record at 0x30000 + ui*32.
+nd_usave:
+  ST r15,r0,@nd_ealnk
+  LD r2,r0,@nd_urec
+  CMP r2,r0
+  JMP[EQ] @us_done
+  LD r1,r0,@nd_ui
+  SHL r1,r1,5
+  LA r2,0x30000
+  ADD r1,r1,r2
+  ST r1,r0,@nd_ubase
+  MOVI r2,0
+us_l:
+  LD r3,r2,@nd_regs
+  ADD r4,r1,r2
+  ST r3,r4,0
+  ADD r2,r2,r13
+  MOVI r3,16
+  CMP r2,r3
+  JMP[LT] @us_l
+  LD r3,r0,@nd_pc
+  ST r3,r1,16
+  LD r3,r0,@nd_k
+  ST r3,r1,17
+  LD r3,r0,@nd_cd
+  ST r3,r1,18
+  ST r0,r1,19
+  ST r0,r1,20
+  LD r1,r0,@nd_ui
+  ADD r1,r1,r13
+  MOVI r2,31
+  BOOL.8 r1,r1,r2
+  ST r1,r0,@nd_ui
+  LD r2,r0,@nd_ud
+  MOVI r3,32
+  CMP r2,r3
+  JMP[GE] @us_done
+  ADD r2,r2,r13
+  ST r2,r0,@nd_ud
+us_done:
+  LD r15,r0,@nd_ealnk
+  RET
+
+; r1 = host word address; logs the pre-write word and class for the current step
+nd_uwr:
+  ST r15,r0,@nd_ealnk
+  LD r2,r0,@nd_urec
+  CMP r2,r0
+  JMP[EQ] @uw_done
+  LD r2,r0,@nd_ubase
+  LD r3,r2,19
+  CMP r3,r0
+  JMP[NE] @uw_done
+  LD r3,r2,20
+  MOVI r4,2
+  CMP r3,r4
+  JMP[GE] @uw_full
+  MOVI r4,3
+  MUL r4,r4,r3
+  MOVI r5,21
+  ADD r4,r4,r5
+  ADD r5,r2,r4
+  ST r1,r5,0
+  LD r4,r1,0
+  ST r4,r5,1
+  LDN r4,r1,0
+  ST r4,r5,2
+  ADD r3,r3,r13
+  ST r3,r2,20
+  JMP @uw_done
+uw_full:
+  MOVI r1,1
+  ST r1,r2,19
+  ST r0,r0,@nd_ud
+uw_done:
+  LD r15,r0,@nd_ealnk
+  RET
+
+; a bulk or vector step changes state the ring does not snapshot
+nd_ubulk:
+  ST r15,r0,@nd_ealnk
+  LD r1,r0,@nd_urec
+  CMP r1,r0
+  JMP[EQ] @ub_done
+  LD r1,r0,@nd_ubase
+  MOVI r2,1
+  ST r2,r1,19
+  ST r0,r0,@nd_ud
+ub_done:
+  LD r15,r0,@nd_ealnk
+  RET
+
+.org 6200
+.include "../dbg/core.nas"
+
+.org 8100
+dbg_target:
+  MOVI r13,1
+  MOVI r1,0
+dbt_loop:
+  ADD r1,r1,r13
+  MOVI r2,10
+  CMP r1,r2
+  JMP[LT] @dbt_loop
+  MOVI r3,0xAA
+  HALT
+
+; ---- captured serial output -------------------------------------------------
+; PUTC from the target: while a debug session is active, append one character
+; per word at 0x61000 (length) .. 0x61001+. Otherwise pass through to COM1.
+nd_putc_cap:
+  LD r1,r0,@nd_iocap
+  CMP r1,r0
+  JMP[EQ] @npc_pass
+  LD r4,r5,@nd_regs
+  LA r1,0x61000
+  LD r2,r1,0
+  MOVI r3,4094
+  CMP r2,r3
+  JMP[GE] @nd_loop
+  ADD r3,r2,r13
+  ADD r3,r1,r3
+  ST r4,r3,0
+  ADD r2,r2,r13
+  ST r2,r1,0
+  JMP @nd_loop
+npc_pass:
+  LD r4,r5,@nd_regs
+  PUTC r4
+  JMP @nd_loop
+
+; return the target condition and shadow-call depth
+dbg_state_get:
+  LD r1,r0,@nd_k
+  LD r2,r0,@nd_cd
+  RET
+
+; redo restored the post-step state: re-expose the undo record it consumed
+dbg_upop:
+  LD r1,r0,@nd_ui
+  ADD r1,r1,r13
+  MOVI r2,31
+  BOOL.8 r1,r1,r2
+  ST r1,r0,@nd_ui
+  LD r1,r0,@nd_ud
+  MOVI r2,32
+  CMP r1,r2
+  JMP[GE] @up_done
+  ADD r1,r1,r13
+  ST r1,r0,@nd_ud
+up_done:
+  LD r1,r0,@nd_steps
+  ADD r1,r1,r13
+  ST r1,r0,@nd_steps
+  ST r0,r0,@nd_status
+  ST r0,r0,@nd_reason
+  RET
+
+dbg_mem_geth_cls:
+  LDN r1,r1,0
+  RET
+
+; ---- checkpoint arena copies (64K words) -------------------------------
+; The GUI saves registers and the header; these two helpers move the arena.
+dbg_ckpt_to:
+  ST r15,r0,@nd_ealnk
+  LA r1,0x91000
+  LA r2,0x80000
+  LA r3,0x10000
+  BCOPY r1,r2,r3
+  MOVI r1,1
+  LD r15,r0,@nd_ealnk
+  RET
+
+dbg_ckpt_from:
+  ST r15,r0,@nd_ealnk
+  LA r1,0x80000
+  LA r2,0x91000
+  LA r3,0x10000
+  BCOPY r1,r2,r3
+  MOVI r1,1
+  LD r15,r0,@nd_ealnk
+  RET
 
 ; ---- paged cartridge catalog area (builder writes 16-word entries at 22000) ----
 .org 22000

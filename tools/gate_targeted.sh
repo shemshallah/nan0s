@@ -31,7 +31,7 @@ if [ -z "$FILES" ]; then
   exit 0
 fi
 
-COMPILER="ncc_abi_sizes ncc_abi_ll ncc_alloc ncc_heap ncc_aligned ncc_headers ncc_ppexpr ncc_torture ncc_donut_exact ncc_macro_text ncc_include ncc_libm_exact ncc_iso_c nanthr_gate ncc_ctests ncc_dp4b"
+COMPILER="ncc_abi_sizes ncc_abi_ll ncc_alloc ncc_heap ncc_aligned ncc_headers ncc_ppexpr ncc_torture ncc_donut_exact ncc_macro_text ncc_include ncc_libm_exact ncc_iso_c ncc_ctests ncc_dp4b"
 m=1
 while [ "$m" -le 62 ]; do
   [ -f "tools/ncc_m$m.sh" ] && COMPILER="$COMPILER ncc_m$m"
@@ -52,10 +52,14 @@ for f in $FILES; do
       add "tcc_nan16_enc" ;;
     third_party/sqlite/*|src/tests/sqlite/*|tools/tcc_sqlite.sh)
       add "tcc_sqlite" ;;
-    src/lib/nanthr.nas|src/tests/nanthr*|tools/nanthr_gate.sh|spec/THREADS.md)
-      add "nanthr_gate" ;;
+    third_party/nan16-libc/*|tools/tcc_nan16_rawcc.sh|tools/nan16_embed_tree.py)
+      add "tcc_nan16_smoke tcc_nan16_selfhost tcc_nan16_rawcc tcc_sqlite" ;;
     spec/*|third_party/*|*.md|build/*|aarch64/android/app/src/main/assets/*)
       ;;
+    src/dbg/*|src/tests/ndbg_*|tools/ndbg*.sh)
+      add "ndbg ndbg_diff ndbg_mon ndbg_img ndbg_gui" ;;
+    src/exhibits/gui_cart.nas|src/museum/museum.nas|src/museum/shell.nas)
+      add "ndbg_gui qgate_gui" ;;
     src/lib/ncc.nas|src/lib/ppexpr.nas|src/lib/mpp.nas|src/lib/wide*.nas|src/lib/vscanf.nas|src/lib/iso*.nas|src/lib/mathx.nas|src/prog/nasm0_tables.nas|src/tools/disasm.nas|src/tests/ctests/*|src/tests/ncc_*)
       add "$COMPILER" ;;
     aarch64/android/core/*|aarch64/android/tests/*|aarch64/android/tools/nan_cli.c|aarch64/android/Makefile)
@@ -151,13 +155,16 @@ gate_files() {
       echo "src/lib/*.nas src/prog/nasm0_tables.nas src/tools/disasm.nas src/tests/ncc_*.nas src/tests/ctests/* aarch64/android/core/*.c aarch64/android/core/*.h aarch64/android/tests/*.c aarch64/android/tools/nan_cli.c aarch64/android/Makefile tools/nmk.awk tools/ncc_*.sh"
       ;;
     tcc_nan16_*)
-      echo "third_party/tinycc/nan16-* third_party/tinycc/tcc.h third_party/tinycc/libtcc.c third_party/tinycc/libtcc.h third_party/tinycc/tccelf.c third_party/nan16-libc/src/* third_party/nan16-libc/include/* aarch64/android/tools/nan_cli.c aarch64/android/core/* tools/tcc_nan16_*.sh"
+      echo "third_party/tinycc/nan16-* third_party/tinycc/tcc.h third_party/tinycc/libtcc.c third_party/tinycc/libtcc.h third_party/tinycc/tccelf.c third_party/nan16-libc/src/* third_party/nan16-libc/include/* aarch64/android/tools/nan_cli.c aarch64/android/core/* tools/tcc_nan16_*.sh tools/nan16_embed_tree.py"
+      ;;
+    ndbg_gui)
+      echo "src/museum/* src/exhibits/gui_cart.nas src/dbg/* tools/ndbg_gui.sh tools/mkimg.awk tools/nmk.awk x86/native/nan16_x86.nan"
       ;;
     tcc_sqlite)
       echo "third_party/sqlite/* third_party/tinycc/nan16-* third_party/tinycc/tcc.h third_party/tinycc/libtcc.c third_party/tinycc/libtcc.h third_party/tinycc/tccelf.c third_party/nan16-libc/src/* third_party/nan16-libc/include/* src/tests/sqlite/* aarch64/android/tools/nan_cli.c aarch64/android/core/* tools/tcc_sqlite.sh"
       ;;
     *)
-      echo "src/native/*.xa src/native/*.nan src/native64/* x86/native/* x86/boot/* src/translate/*.nas src/tests/*.nas tools/mkimg.awk tools/nmk.awk tools/mkall.sh tools/xgold.sh tools/nan_*.sh tools/xlate_x86.sh tools/qgate*.sh tools/mkproof.sh"
+      echo "src/native/*.xa src/native/*.nan src/native64/* x86/native/* x86/boot/* src/translate/*.nas src/dbg/* src/tests/ndbg_* src/tests/*.nas tools/mkimg.awk tools/nmk.awk tools/mkall.sh tools/xgold.sh tools/nan_*.sh tools/ndbg*.sh tools/xlate_x86.sh tools/qgate*.sh tools/mkproof.sh"
       ;;
   esac
 }
@@ -167,9 +174,9 @@ gate_key() {
 }
 COMPILER_KEY=$(gate_key ncc_m1)
 NATIVE_KEY=$(gate_key xlate_x86)
-TCC_KEY=$(gate_key tcc_nan16_smoke)
+TCC_KEY=$(gate_key tcc_nan16_rawcc)
 SQLITE_KEY=$(gate_key tcc_sqlite)
-key_for() { case "$1" in c_core_test|ncc_*) echo "$COMPILER_KEY" ;; tcc_nan16_*) echo "$TCC_KEY" ;; tcc_sqlite) echo "$SQLITE_KEY" ;; *) echo "$NATIVE_KEY" ;; esac; }
+key_for() { case "$1" in c_core_test|ncc_*) echo "$COMPILER_KEY" ;; tcc_nan16_*) echo "$TCC_KEY" ;; tcc_sqlite) echo "$SQLITE_KEY" ;; ndbg_gui) echo "$NATIVE_KEY" ;; *) echo "$NATIVE_KEY" ;; esac; }
 is_cached() {
   [ "${NO_CACHE:-0}" = 1 ] && return 1
   [ -f "$CACHE/$1.sha" ] || return 1
@@ -184,6 +191,7 @@ run_gate() {
     c_core_test) ( cd aarch64/android && timeout "$LONG_TIMEOUT" make -s test ) ;;
     mkproof) timeout "$LONG_TIMEOUT" sh tools/mkproof.sh src/tests/key_test.nas ;;
     tcc_nan16_selfhost) timeout "$LONG_TIMEOUT" sh tools/tcc_nan16_selfhost.sh --run ;;
+    tcc_nan16_rawcc) timeout "$LONG_TIMEOUT" sh tools/tcc_nan16_rawcc.sh ;;
     tcc_sqlite) timeout "$LONG_TIMEOUT" sh tools/tcc_sqlite.sh ;;
     mkall|qgate|qgate_gui|xmemgate) timeout "$LONG_TIMEOUT" sh "tools/$g.sh" ;;
     *) timeout "$TIMEOUT" sh "tools/$g.sh" ;;
