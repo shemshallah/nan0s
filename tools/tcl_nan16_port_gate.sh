@@ -94,7 +94,7 @@ ZL=$(for f in adler32 compress crc32 deflate infback inffast inflate \
 	inftrees trees uncompr zutil; do
     echo "$TCL_SRC/compat/zlib/$f.c"
 done)
-PORT_SRCS=$(ls "$PORT"/tclNan16*.c)
+PORT_SRCS=$(ls "$PORT"/tclNan16*.c | grep -v '/tclNan16Test')
 NGEN=$(echo $GEN | wc -w)
 NOO=$(echo $OO | wc -w)
 NTM=$(echo $TM | wc -w)
