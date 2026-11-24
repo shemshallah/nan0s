@@ -54,6 +54,12 @@ static inline void outb(uint16_t port, uint8_t v) {
 static inline void outl(uint16_t port, uint32_t v) {
   __asm__ volatile("outl %0,%1" : : "a"(v), "Nd"(port));
 }
+static inline uint8_t inb(uint16_t port) {
+  uint8_t v; __asm__ volatile("inb %1,%0" : "=a"(v) : "Nd"(port)); return v;
+}
+static inline uint16_t inw(uint16_t port) {
+  uint16_t v; __asm__ volatile("inw %1,%0" : "=a"(v) : "Nd"(port)); return v;
+}
 #endif
 static void serial_init(void) {
   outb(0x3F9, 0x00); outb(0x3FB, 0x80); outb(0x3F8, 0x01);
@@ -108,6 +114,91 @@ static uint64_t mkword(uint32_t payload, int n) {
          ((uint64_t)payload << 16) | ((uint64_t)near << 48);
 }
 static uint32_t word_payload(uint32_t i) { return (uint32_t)(MEM[i & MEM_MASK] >> 16); }
+
+/* ---- scalar FP (nan16.c/OPS.md semantics, SSE2 + freestanding helpers) ---- */
+static inline int is_nan32(uint32_t x) {
+  return (x & 0x7F800000u) == 0x7F800000u && (x & 0x007FFFFFu);
+}
+static inline float f32bits(uint32_t x) { float f; memcpy(&f, &x, 4); return f; }
+static inline uint32_t u32bits(float f) { uint32_t x; memcpy(&x, &f, 4); return x; }
+static float fp_inf(void) { return f32bits(0x7F800000u); }
+static float fp_sqrtf(float a) {
+  float r;
+  __asm__ volatile("sqrtss %1,%0" : "=x"(r) : "x"(a));
+  return r;
+}
+static float fp_expf(float x) {
+  if (x != x) return x;
+  if (x > 88.0f) return fp_inf();
+  if (x < -103.0f) return 0.0f;
+  int n = (int)(x * 1.4426950408889634f + (x < 0 ? -0.5f : 0.5f));
+  if (n < -126) return 0.0f;
+  float r = x - (float)n * 0.6931471805599453f;
+  float term = 1.0f, sum = 1.0f;
+  for (int i = 1; i <= 8; i++) { term *= r / (float)i; sum += term; }
+  uint32_t scale_bits = (uint32_t)(n + 127) << 23;
+  return sum * f32bits(scale_bits);
+}
+static float fp_logf(float x) {
+  if (x != x) return x;
+  if (x == 0.0f) return f32bits(0xFF800000u);
+  if (x < 0.0f) return f32bits(0x7FC00000u);
+  if (x == fp_inf()) return x;
+  uint32_t b = u32bits(x);
+  int e = (int)((b >> 23) & 0xFFu) - 127;
+  float m = f32bits((b & 0x007FFFFFu) | 0x3F800000u);
+  if (e == -127) { m = f32bits(b & 0x007FFFFFu); }
+  float z = (m - 1.0f) / (m + 1.0f), z2 = z * z, p = z, sum = 0.0f;
+  for (int k = 1; k <= 31; k += 2) { sum += p / (float)k; p *= z2; }
+  return 2.0f * sum + (float)e * 0.6931471805599453f;
+}
+static float fp_tanhf(float x) {
+  if (x != x) return x;
+  if (x > 12.0f) return 1.0f;
+  if (x < -12.0f) return -1.0f;
+  float e = fp_expf(2.0f * x);
+  return (e - 1.0f) / (e + 1.0f);
+}
+static uint32_t fp_bin(int op, uint32_t A, uint32_t B) {
+  if (is_nan32(A)) return A | 0x00400000u;
+  if (is_nan32(B)) return B | 0x00400000u;
+  volatile float a = f32bits(A), b = f32bits(B), r;
+  switch (op) {
+  case 0x30: r = a + b; break;
+  case 0x31: r = a - b; break;
+  case 0x32: r = a * b; break;
+  default: r = a / b; break;
+  }
+  uint32_t x = u32bits(r);
+  return is_nan32(x) ? 0xFFC00000u : x;
+}
+static uint32_t fp_div(uint32_t A, uint32_t B) {
+  if ((B & 0x7FFFFFFFu) == 0) {
+    if ((A & 0x7FFFFFFFu) == 0 || is_nan32(A)) return 0x7FC00000u;
+    return ((A ^ B) & 0x80000000u) | 0x7F800000u;
+  }
+  return fp_bin(0x33, A, B);
+}
+static uint32_t fp_sqrt(uint32_t A) {
+  if (is_nan32(A) || ((A & 0x80000000u) && (A & 0x7FFFFFFFu))) return 0x7FC00000u;
+  return u32bits(fp_sqrtf(f32bits(A)));
+}
+static uint32_t fp_cvtfi(uint32_t A) {
+  if (is_nan32(A)) return 0;
+  float f = f32bits(A);
+  if (f >= 2147483648.0f) return 0x7FFFFFFFu;
+  if (f <= -2147483648.0f) return 0x80000000u;
+  return (uint32_t)(int32_t)f;
+}
+static uint32_t fp_unary(uint32_t A, int op) {
+  if (is_nan32(A)) return A | 0x00400000u;
+  float a = f32bits(A), r;
+  if (op == 0x46) r = fp_expf(a);
+  else if (op == 0x47) r = fp_tanhf(a);
+  else r = fp_logf(a);
+  uint32_t x = u32bits(r);
+  return is_nan32(x) ? 0x7FC00000u : x;
+}
 
 /* ---- S1 state ---- */
 typedef struct {
@@ -273,8 +364,9 @@ static void guest_publish_time(void) {
   if (s.kentry != UNSET && !s.kin) S1_VECTOR(CAUSE_FAULT, (retpc), (faddr)); \
 } while (0)
 
-static uint32_t s1_run(uint32_t budget) {
-  uint32_t pc = s.pc, done = 0;
+static uint32_t s1_run(uint64_t budget) {
+  uint32_t pc = s.pc;
+  uint64_t done = 0;
   while (done < budget) {
     done++; s.steps++;
 #ifdef S1_GUEST
@@ -360,6 +452,16 @@ static uint32_t s1_run(uint32_t budget) {
       else if (op == 0x25) res = A / B; else res = A % B;
       s.r[d] = res; SETK(res == 0, 0); break; }
     case 0x2C: s.r[15] = pc; pc = A; break;
+    case 0x30: case 0x31: case 0x32: s.r[d] = fp_bin((int)op, A, B); s.k = 0; break;
+    case 0x33: s.r[d] = fp_div(A, B); s.k = 0; break;
+    case 0x34: s.r[d] = fp_sqrt(A); s.k = 0; break;
+    case 0x35: if (is_nan32(A) || is_nan32(B)) s.k = 3;
+      else SETK(f32bits(A) == f32bits(B), f32bits(A) < f32bits(B)); break;
+    case 0x36: { volatile float f = (float)(int32_t)A; s.r[d] = u32bits(f); s.k = 0; break; }
+    case 0x37: { uint32_t res = fp_cvtfi(A); s.r[d] = res; SETK(res == 0, 0); break; }
+    case 0x46: s.r[d] = fp_unary(A, 0x46); s.k = 0; break;
+    case 0x47: s.r[d] = fp_unary(A, 0x47); s.k = 0; break;
+    case 0x48: s.r[d] = fp_unary(A, 0x48); s.k = 0; break;
     case 0x29: { uint32_t s2 = (uint32_t)(int32_t)(int16_t)imm;
       uint64_t sum = (uint64_t)A + s2; s.r[d] = (uint32_t)sum;
       SETK((uint32_t)sum == 0, sum >> 32); break; }
@@ -739,6 +841,7 @@ void s1_main(void) {
 
 #else /* S1_GUEST: run a flat cartridge placed at guest word 0. */
 extern const uint32_t s1_guest_bytes;
+extern const uint32_t s1_guest_disk;
 extern const uint32_t s1_peek_count;
 extern const uint32_t s1_peek_specs[];
 
@@ -797,13 +900,38 @@ static void guest_frame(uint32_t rc) {
   serial_puts("@@NAN16 END "); serial_dec(end); serial_putc('\n');
 }
 
+static int ata_read_sector(uint32_t lba, uint8_t *dst) {
+  outb(0x1F6, (uint8_t)(0xE0u | ((lba >> 24) & 0x0Fu)));
+  outb(0x1F1, 0);
+  outb(0x1F2, 1);
+  outb(0x1F3, (uint8_t)(lba & 0xFFu));
+  outb(0x1F4, (uint8_t)((lba >> 8) & 0xFFu));
+  outb(0x1F5, (uint8_t)((lba >> 16) & 0xFFu));
+  outb(0x1F7, 0x20);                    /* READ SECTORS, PIO */
+  for (uint32_t spin = 0; spin < 2000000u; spin++) {
+    uint8_t st = inb(0x1F7);
+    if (st & 0x80u) continue;           /* BSY */
+    if (st & 0x01u) return -1;          /* ERR */
+    if (st & 0x08u) break;              /* DRQ */
+    if (spin == 1999999u) return -1;
+  }
+  for (int i = 0; i < 256; i++) ((uint16_t *)dst)[i] = inw(0x1F0);
+  return 0;
+}
 static uint32_t guest_load_image(void) {
   uint32_t bytes = s1_guest_bytes;
-  if (!bytes || (bytes % 8u) || bytes / 8u > MEM_WORDS || bytes > 0xC0000u) return 0;
-  /* The boot fixture staged guest bytes at physical 0x40000 (0x40000..0xFFFFF,
-     768 KiB max).  Copy them into guest word memory at word 0. */
-  const uint8_t *src = (const uint8_t *)0x40000u;
   uint32_t words = bytes / 8u;
+  if (!bytes || (bytes % 8u) || words > MEM_WORDS) return 0;
+  if (s1_guest_disk) {
+    uint32_t sectors = (bytes + 511u) / 512u;
+    for (uint32_t i = 0; i < sectors; i++)
+      if (ata_read_sector(i, (uint8_t *)MEM + (size_t)i * 512u)) return 0;
+    return words;
+  }
+  if (bytes > 0xC0000u) return 0;
+  /* Small path: the boot fixture staged guest bytes at physical 0x40000
+     (0x40000..0xFFFFF, 768 KiB max).  Copy them into guest word memory. */
+  const uint8_t *src = (const uint8_t *)0x40000u;
   for (uint32_t i = 0; i < words; i++) {
     uint64_t w = 0;
     for (int b = 0; b < 8; b++)

@@ -96,12 +96,22 @@ if [ -n "$PEEK" ]; then NPEEK=$(awk 'NF{n++} END{print n+0}' "$T/peeks.txt"); fi
   echo '.text'
 } > "$T/peek.S"
 
-GSECT=$(( (BYTES + 511) / 512 ))
-[ "$GSECT" -le 1536 ] || { echo "s1_runner: guest payload $BYTES bytes exceeds the 768 KiB boot staging window" >&2; exit 1; }
+# <=768 KiB: floppy staging through the boot fixture.  Larger: raw IDE disk
+# (QEMU if=ide) read by the S1 ATA PIO loader, no size cap below 2^28 sectors.
+if [ "$BYTES" -le $((768 * 1024)) ]; then
+  GDISK=0
+  GSECT=$(( (BYTES + 511) / 512 ))
+  [ "$GSECT" -le 1536 ] || { echo "s1_runner: bad small-image sector count" >&2; exit 1; }
+else
+  GDISK=1
+  GSECT=0
+fi
 cat > "$T/guest.S" <<EOF
 .section .rodata
 .global s1_guest_bytes
 s1_guest_bytes: .long $BYTES
+.global s1_guest_disk
+s1_guest_disk: .long $GDISK
 .text
 EOF
 
@@ -113,7 +123,7 @@ ld.lld -m elf_i386 --image-base=0 -Ttext=0x7C00 -e _start -o "$T/bootsec.elf" "$
 llvm-objcopy -O binary "$T/bootsec.elf" "$T/bootsec.bin"
 [ "$(wc -c < "$T/bootsec.bin")" -eq 512 ]
 clang --target=x86_64-none-elf -c src/native64/s1_boot.S -o "$T/boot.o"
-clang --target=x86_64-none-elf -std=gnu99 -O3 -Wall -Wextra \
+clang --target=x86_64-none-elf -std=gnu99 -O3 -Wall -Wextra -ffp-contract=off -fno-fast-math \
   -ffreestanding -fno-builtin -fno-stack-protector -mno-red-zone \
   -DS1_GUEST -DS1_GUEST_MEM="$WORDS" -DS1_GUEST_STEPS="$STEPS" \
   -DS1_GUEST_ZERO_WORDS="$SAFE" $STACK_DEF \
@@ -126,12 +136,21 @@ llvm-objcopy -O binary "$T/s1.elf" "$T/s1.bin"
 [ "$(wc -c < "$T/s1.bin")" -le 65536 ] || { echo "s1_runner: S1 image > 64 KiB" >&2; exit 1; }
 cat "$T/bootsec.bin" "$T/s1.bin" > "$T/image"
 truncate -s 66048 "$T/image"          # boot + 64 KiB kernel window
-cat "$T/guest.bin" >> "$T/image"      # LBA 129: boot staging at 0x40000
+if [ "$GDISK" -eq 0 ]; then
+  cat "$T/guest.bin" >> "$T/image"    # LBA 129: boot staging at 0x40000
+fi
 truncate -s 1474560 "$T/image"
+if [ "$GDISK" -eq 1 ]; then
+  cp "$T/guest.bin" "$T/guest.disk"
+  truncate -s $(( ((BYTES + 511) / 512) * 512 )) "$T/guest.disk"
+  DRIVE="-drive format=raw,if=ide,index=0,file=$T/guest.disk"
+else
+  DRIVE=""
+fi
 
 rm -f "$T/com" "$T/dbg"
 timeout "${S1_QEMU_TIMEOUT:-600}" "$QEMU_BIN" -m "$QMEM" \
-  -drive format=raw,if=floppy,file="$T/image" \
+  -drive format=raw,if=floppy,file="$T/image" $DRIVE -boot a \
   -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
   -display none -serial "file:$T/com" -debugcon "file:$T/dbg" \
   -no-reboot >/dev/null 2>&1 || true
