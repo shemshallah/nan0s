@@ -56,6 +56,11 @@ and `rmdir` returns `ENOTEMPTY` while children remain.
 `tools/nan16_vfs_dirs_gate.sh` checks stat/access, mkdir/rmdir, ENOTEMPTY,
 implicit `/suite/a`, and exact `dirent` order.
 
+The libc also keeps a guest cwd. Relative paths are joined to it, and `//`,
+`.` and `..` are folded before lookup; `chdir`/`getcwd`/`realpath` use the same
+normalization. `tools/nan16_vfs_paths_gate.sh` checks relative `open`/`stat`/
+`access`, `realpath(".././b.txt")`, and mkdir/rmdir through the cwd.
+
 Default mapping for the official suite:
 
 | host tree | guest prefix |

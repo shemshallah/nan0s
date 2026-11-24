@@ -500,6 +500,8 @@ typedef struct MemFile {
 } MemFile;
 static MemFile *files;
 static unsigned vfs_cap, vfs_used;
+static int vfs_abspath(const char *, char *);
+static MemFile *mf_find_p(const char *);
 
 typedef struct NFile {
     int fd;       /* 3.. or -1 for stdout/stderr */
@@ -699,7 +701,7 @@ int nan16_vfs_entry(unsigned i, const char **name, unsigned *size, int *isdir)
 }
 int nan16_vfs_get(const char *name, unsigned char **data, unsigned *size)
 {
-    MemFile *f = mf_find(name);
+    MemFile *f = mf_find_p(name);
     if (!f) return -1;
     *data = f->data; *size = f->size;
     return 0;
@@ -727,7 +729,65 @@ static int mf_isdir_name(const char *name)
             return 1;
     return 0;
 }
-int nan16_vfs_isdir(const char *name) { return mf_isdir_name(name); }
+static int vfs_abspath(const char *, char *);
+int nan16_vfs_isdir(const char *name)
+{
+    char abs[VFS_NAME_MAX];
+    if (vfs_abspath(name, abs) < 0) return 0;
+    return mf_isdir_name(abs);
+}
+/* Absolute, normalized guest path.  Handles relative paths against vfs_cwd,
+   duplicate slashes, "." and ".."; result keeps the leading "/" and drops any
+   trailing slash except for root. */
+static char vfs_cwd[VFS_NAME_MAX] = "/";
+static int vfs_abspath(const char *name, char *out)
+{
+    char joined[2 * VFS_NAME_MAX];
+    const char *p, *comp;
+    unsigned olen = 1, clen, len;
+    if (!name || !*name) { errno = ENOENT; return -1; }
+    if (name[0] == '/') {
+        if (strlen(name) >= sizeof joined) { errno = ENAMETOOLONG; return -1; }
+        strcpy(joined, name);
+    } else {
+        clen = (unsigned)strlen(vfs_cwd);
+        len = (unsigned)strlen(name);
+        if (clen + 1u + len >= sizeof joined) { errno = ENAMETOOLONG; return -1; }
+        strcpy(joined, vfs_cwd);
+        if (clen == 0 || joined[clen - 1] != '/') strcat(joined, "/");
+        strcat(joined, name);
+    }
+    out[0] = '/'; out[1] = 0;
+    p = joined;
+    while (*p) {
+        while (*p == '/') p++;
+        if (!*p) break;
+        comp = p;
+        while (*p && *p != '/') p++;
+        len = (unsigned)(p - comp);
+        if (len == 1 && comp[0] == '.') continue;
+        if (len == 2 && comp[0] == '.' && comp[1] == '.') {
+            while (olen > 1 && out[olen - 1] != '/') olen--;
+            if (olen > 1) olen--;
+            out[olen] = 0;
+            continue;
+        }
+        if (olen + (olen > 1 ? 1u : 0u) + len >= VFS_NAME_MAX) {
+            errno = ENAMETOOLONG; return -1;
+        }
+        if (olen > 1) out[olen++] = '/';
+        memcpy(out + olen, comp, len);
+        olen += len;
+        out[olen] = 0;
+    }
+    return 0;
+}
+static MemFile *mf_find_p(const char *name)
+{
+    char abs[VFS_NAME_MAX];
+    if (vfs_abspath(name, abs) < 0) return 0;
+    return mf_find(abs);
+}
 
 /* ------------------------------------------------------------ directory API */
 struct __nan16_DIR {
@@ -791,15 +851,11 @@ static int dir_add(DIR *d, const char *name, int isdir)
 DIR *opendir(const char *path)
 {
     DIR *d;
-    unsigned i, n;
+    unsigned i;
     char comp[VFS_NAME_MAX], norm[VFS_NAME_MAX];
-    if (!path || path[0] != '/' || !mf_isdir_name(path)) {
+    if (vfs_abspath(path, norm) < 0 || !mf_isdir_name(norm)) {
         errno = ENOENT; return 0;
     }
-    n = (unsigned)strlen(path);
-    while (n > 1 && path[n - 1] == '/') n--;
-    if (n >= VFS_NAME_MAX) { errno = EINVAL; return 0; }
-    memcpy(norm, path, n); norm[n] = 0;
     d = (DIR *)calloc(1, sizeof *d);
     if (!d) { errno = ENOMEM; return 0; }
     strcpy(d->path, norm);
@@ -842,11 +898,14 @@ int closedir(DIR *d)
 
 int open(const char *name, int flags, ...)
 {
-    MemFile *f = mf_find(name);
+    char abs[VFS_NAME_MAX];
+    MemFile *f;
     int i;
+    if (vfs_abspath(name, abs) < 0) return -1;
+    f = mf_find(abs);
     if (!f) {
-        if (!(flags & O_CREAT)) return -1;
-        f = mf_new(name);
+        if (!(flags & O_CREAT)) { errno = ENOENT; return -1; }
+        f = mf_new(abs);
         if (!f) return -1;
     }
     if (flags & O_TRUNC) { f->size = 0; f->pos = 0; }
@@ -925,9 +984,12 @@ off_t lseek(int fd, off_t off, int whence)
 }
 int unlink(const char *name)
 {
-    MemFile *f = mf_find(name);
+    char abs[VFS_NAME_MAX];
+    MemFile *f;
+    if (vfs_abspath(name, abs) < 0) return -1;
+    f = mf_find(abs);
     if (!f) {
-        if (mf_isdir_name(name)) { errno = EISDIR; return -1; }
+        if (mf_isdir_name(abs)) { errno = EISDIR; return -1; }
         errno = ENOENT; return -1;
     }
     if (f->isdir) { errno = EISDIR; return -1; }
@@ -941,11 +1003,8 @@ int rmdir(const char *name)
     char norm[VFS_NAME_MAX];
     unsigned n, i;
     MemFile *f;
-    if (!name || name[0] != '/') { errno = ENOENT; return -1; }
-    n = (unsigned)strlen(name);
-    while (n > 1 && name[n - 1] == '/') n--;
-    if (n >= VFS_NAME_MAX) { errno = EINVAL; return -1; }
-    memcpy(norm, name, n); norm[n] = 0;
+    if (vfs_abspath(name, norm) < 0) return -1;
+    n = (unsigned)strlen(norm);
     f = mf_find(norm);
     if (!f || !f->isdir) {
         if (!f && mf_isdir_name(norm)) { errno = ENOTEMPTY; return -1; }
@@ -966,9 +1025,37 @@ int rmdir(const char *name)
 int remove(const char *name) { return unlink(name); }
 int rename(const char *a, const char *b)
 {
-    MemFile *f = mf_find(a);
-    if (!f) return -1;
-    strncpy(f->name, b, VFS_NAME_MAX - 1); f->name[VFS_NAME_MAX - 1] = 0;
+    char absa[VFS_NAME_MAX], absb[VFS_NAME_MAX], tmp[VFS_NAME_MAX];
+    MemFile *f;
+    unsigned alen, i;
+    if (vfs_abspath(a, absa) < 0 || vfs_abspath(b, absb) < 0) return -1;
+    f = mf_find(absa);
+    if (!f) { errno = ENOENT; return -1; }
+    if (mf_find(absb) || mf_isdir_name(absb)) { errno = EEXIST; return -1; }
+    alen = (unsigned)strlen(absa);
+    if (f->isdir) {
+        for (i = 0; i < vfs_cap; i++) {
+            const char *suffix;
+            if (!files[i].used || &files[i] == f) continue;
+            if (strncmp(files[i].name, absa, alen) || files[i].name[alen] != '/')
+                continue;
+            suffix = files[i].name + alen;
+            if (strlen(absb) + strlen(suffix) >= VFS_NAME_MAX) {
+                errno = ENAMETOOLONG; return -1;
+            }
+        }
+        for (i = 0; i < vfs_cap; i++) {
+            const char *suffix;
+            if (!files[i].used || &files[i] == f) continue;
+            if (strncmp(files[i].name, absa, alen) || files[i].name[alen] != '/')
+                continue;
+            suffix = files[i].name + alen;
+            strcpy(tmp, absb);
+            strcat(tmp, suffix);
+            strcpy(files[i].name, tmp);
+        }
+    }
+    strcpy(f->name, absb);
     return 0;
 }
 
@@ -1179,9 +1266,12 @@ int fscanf(FILE *fp, const char *fmt, ...) { (void)fp; (void)fmt; return 0; }
 /* ---------------------------------------------------------------- system */
 int stat(const char *name, struct stat *st)
 {
-    MemFile *f = mf_find(name);
+    char abs[VFS_NAME_MAX];
+    MemFile *f;
+    if (vfs_abspath(name, abs) < 0) return -1;
+    f = mf_find(abs);
     if (!f) {
-        if (!mf_isdir_name(name)) { errno = ENOENT; return -1; }
+        if (!mf_isdir_name(abs)) { errno = ENOENT; return -1; }
         memset(st, 0, sizeof *st);
         st->st_mode = S_IFDIR | 0755;
         st->st_nlink = 2;
@@ -1204,28 +1294,52 @@ int fstat(int fd, struct stat *st)
 }
 int mkdir(const char *name, mode_t mode)
 {
+    char abs[VFS_NAME_MAX];
     MemFile *f;
     (void)mode;
-    if (!name || name[0] != '/') { errno = ENOENT; return -1; }
-    if (mf_find(name) || mf_isdir_name(name)) { errno = EEXIST; return -1; }
-    f = mf_new(name);
+    if (vfs_abspath(name, abs) < 0) return -1;
+    if (mf_find(abs) || mf_isdir_name(abs)) { errno = EEXIST; return -1; }
+    f = mf_new(abs);
     if (!f) { errno = ENOSPC; return -1; }
     f->isdir = 1;
     f->writable = 0;
     return 0;
 }
-char *getcwd(char *buf, size_t n) { if (n) { strncpy(buf, "/", n); buf[n - 1] = 0; } return buf; }
-int chdir(const char *p) { (void)p; return 0; }
+char *getcwd(char *buf, size_t n)
+{
+    if (!buf || n <= strlen(vfs_cwd)) { errno = ERANGE; return 0; }
+    strcpy(buf, vfs_cwd);
+    return buf;
+}
+int chdir(const char *p)
+{
+    char abs[VFS_NAME_MAX];
+    if (vfs_abspath(p, abs) < 0) return -1;
+    if (!mf_isdir_name(abs)) { errno = ENOENT; return -1; }
+    strcpy(vfs_cwd, abs);
+    return 0;
+}
 int access(const char *p, int m)
 {
-    MemFile *f = mf_find(p);
-    if (!f) return mf_isdir_name(p) ? 0 : -1;
+    char abs[VFS_NAME_MAX];
+    MemFile *f;
+    if (vfs_abspath(p, abs) < 0) return -1;
+    f = mf_find(abs);
+    if (!f) return mf_isdir_name(abs) ? 0 : -1;
     if ((m & W_OK) && !f->writable) { errno = EACCES; return -1; }
     return 0;
 }
 int isatty(int fd) { (void)fd; return 0; }
 int getpid(void) { return 1; }
-char *realpath(const char *p, char *out) { if (out) { strcpy(out, p); return out; } return strdup(p); }
+char *realpath(const char *p, char *out)
+{
+    char abs[VFS_NAME_MAX], *r = out;
+    if (vfs_abspath(p, abs) < 0) return 0;
+    if (!r) r = (char *)malloc(strlen(abs) + 1);
+    if (!r) { errno = ENOMEM; return 0; }
+    strcpy(r, abs);
+    return r;
+}
 void *mmap(void *a, size_t n, int p, int f, int fd, off_t o)
 {
     (void)a; (void)n; (void)p; (void)f; (void)o;
