@@ -1018,6 +1018,36 @@ static int vfs_resolve(const char *name, char *out)
     if (vfs_abspath(name, abs) < 0) return -1;
     return resolve_links(abs, out, 0);
 }
+int nan16_vfs_resolve(const char *name, char *out)
+{
+    return vfs_resolve(name, out);
+}
+int nan16_vfs_is_symlink_path(const char *name)
+{
+    char abs[VFS_NAME_MAX], cur[VFS_NAME_MAX];
+    const char *p;
+    unsigned olen = 0;
+    if (vfs_abspath(name, abs) < 0) return 0;
+    p = abs;
+    cur[0] = '/'; cur[1] = 0; olen = 1;
+    while (*p) {
+        const char *comp;
+        unsigned clen;
+        struct stat st;
+        while (*p == '/') p++;
+        if (!*p) break;
+        comp = p;
+        while (*p && *p != '/') p++;
+        clen = (unsigned)(p - comp);
+        if (olen + (olen > 1 ? 1u : 0u) + clen >= VFS_NAME_MAX) return 0;
+        if (olen > 1) cur[olen++] = '/';
+        memcpy(cur + olen, comp, clen);
+        olen += clen;
+        cur[olen] = 0;
+        if (lstat(cur, &st) == 0 && S_ISLNK(st.st_mode)) return 1;
+    }
+    return 0;
+}
 
 static MemFile *mf_find_p(const char *name)
 {

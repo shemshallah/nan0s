@@ -274,20 +274,20 @@ static int l_access(sqlite3_vfs *pVfs, const char *name, int flags, int *pResOut
 }
 static int l_fullpathname(sqlite3_vfs *pVfs, const char *name, int nOut, char *zOut)
 {
-    char *r;
+    char resolved[128];
+    int symlink = 0;
     (void)pVfs;
     if (nOut <= 0) return SQLITE_OK;
     if (!name) name = "";
-    r = realpath(name, 0);
-    if (r) {
-        strncpy(zOut, r, (size_t)nOut - 1);
+    symlink = nan16_vfs_is_symlink_path(name);
+    if (nan16_vfs_resolve(name, resolved) == 0) {
+        strncpy(zOut, resolved, (size_t)nOut - 1);
         zOut[nOut - 1] = 0;
-        free(r);
     } else {
         strncpy(zOut, name, (size_t)nOut - 1);
         zOut[nOut - 1] = 0;
     }
-    return SQLITE_OK;
+    return symlink ? SQLITE_OK_SYMLINK : SQLITE_OK;
 }
 static int l_randomness(sqlite3_vfs *pVfs, int nByte, char *zOut)
 {

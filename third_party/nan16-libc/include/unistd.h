@@ -40,6 +40,8 @@ int nan16_vfs_add_pack(const void *, unsigned);
 int nan16_vfs_add(const char *, const void *, unsigned);
 int nan16_vfs_add_ro(const char *, const void *, unsigned);
 int nan16_vfs_isdir(const char *);
+int nan16_vfs_resolve(const char *, char *);
+int nan16_vfs_is_symlink_path(const char *);
 /* Optional correctly-rounded double digit generator (Tcl port). */
 extern int (*nan16_digits_hook)(double, char *, int *);
 #endif
