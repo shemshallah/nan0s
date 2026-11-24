@@ -30,52 +30,90 @@ int errno;
 #define HDR_ALIGN 16u
 
 typedef struct Block {
-    unsigned size;
-    int free;
-    struct Block *next;
-    unsigned pad;       /* 16-byte header: keep the payload 16-byte aligned */
+    unsigned size;          /* payload bytes, 16-byte aligned */
+    unsigned prev_size;     /* previous physical block payload size, 0 at base */
+    unsigned free;          /* 0 allocated, 1 free */
+    unsigned pad;           /* 16-byte header, keeps payload 16-byte aligned */
 } Block;
 
 static Block *heap_head;
+static Block *free_head;
+static unsigned char *heap_end;
+
+#define BLK_NEXT(b) (*(Block **)(void *)((b) + 1))
+#define BLK_PREV(b) (*(Block **)(void *)((unsigned char *)((b) + 1) + 4))
 
 static unsigned align_up(unsigned n)
 {
     return (n + HDR_ALIGN - 1) & ~(HDR_ALIGN - 1);
 }
 
+static Block *block_next(Block *b)
+{
+    unsigned char *p = (unsigned char *)(b + 1) + b->size;
+    return (p + sizeof(Block) <= heap_end) ? (Block *)p : 0;
+}
+static Block *block_prev(Block *b)
+{
+    if (!b->prev_size) return 0;
+    return (Block *)((unsigned char *)b - b->prev_size - sizeof(Block));
+}
+static int block_valid(Block *b)
+{
+    unsigned long a = (unsigned long)b;
+    return a >= (unsigned long)HEAP_BASE &&
+           a + sizeof(Block) <= (unsigned long)heap_end &&
+           !(b->size & (HDR_ALIGN - 1)) && b->size <= HEAP_SIZE;
+}
+static void free_insert(Block *b)
+{
+    BLK_PREV(b) = 0;
+    BLK_NEXT(b) = free_head;
+    if (free_head) BLK_PREV(free_head) = b;
+    free_head = b;
+}
+static void free_remove(Block *b)
+{
+    Block *n = BLK_NEXT(b), *p = BLK_PREV(b);
+    if (p) BLK_NEXT(p) = n;
+    else free_head = n;
+    if (n) BLK_PREV(n) = p;
+}
 static void heap_init(void)
 {
     if (!heap_head) {
+        heap_end = (unsigned char *)HEAP_BASE + HEAP_SIZE;
         heap_head = (Block *)HEAP_BASE;
         heap_head->size = HEAP_SIZE - sizeof(Block);
+        heap_head->prev_size = 0;
         heap_head->free = 1;
-        heap_head->next = 0;
+        free_head = heap_head;
+        BLK_NEXT(heap_head) = 0;
+        BLK_PREV(heap_head) = 0;
     }
 }
 
 void *malloc(size_t n)
 {
-    Block *b, *prev = 0;
-    unsigned need, steps = 0;
+    Block *b;
+    unsigned need;
     heap_init();
-    if (n > HEAP_SIZE - HDR_ALIGN) return 0;
-    need = align_up((unsigned)n);
+    if (n > HEAP_SIZE - sizeof(Block)) return 0;
+    need = align_up(n ? (unsigned)n : 1);
     if (need < n) return 0;
-    for (b = heap_head; b; prev = b, b = b->next) {
-        if (++steps > HEAP_SIZE / sizeof(Block)) return 0;
-        if (b->next &&
-            ((unsigned long)b->next < (unsigned long)HEAP_BASE ||
-             (unsigned long)b->next + sizeof(Block) >
-                 (unsigned long)HEAP_BASE + HEAP_SIZE))
-            return 0;
-        if (b->free && b->size >= need) {
+    for (b = free_head; b; b = BLK_NEXT(b)) {
+        if (b->size >= need) {
+            free_remove(b);
             if (b->size >= need + sizeof(Block) + HDR_ALIGN) {
                 Block *nb = (Block *)((unsigned char *)(b + 1) + need);
+                Block *nn;
                 nb->size = b->size - need - sizeof(Block);
+                nb->prev_size = need;
                 nb->free = 1;
-                nb->next = b->next;
-                b->next = nb;
                 b->size = need;
+                nn = block_next(nb);
+                if (nn) nn->prev_size = nb->size;
+                free_insert(nb);
             }
             b->free = 0;
             return b + 1;
@@ -86,30 +124,30 @@ void *malloc(size_t n)
 
 void free(void *p)
 {
-    Block *b, *n;
-    unsigned long addr;
+    Block *b, *n, *pr;
     if (!p) return;
+    heap_init();
     b = (Block *)p - 1;
-    addr = (unsigned long)b;
-    if (addr < (unsigned long)HEAP_BASE ||
-        addr + sizeof(Block) > (unsigned long)HEAP_BASE + HEAP_SIZE)
-        return;
-    if (addr & (HDR_ALIGN - 1)) return;
-    if (b->size & (HDR_ALIGN - 1)) return;
-    if (b->size > HEAP_SIZE) return;
-    if (b->next &&
-        ((unsigned long)b->next < (unsigned long)HEAP_BASE ||
-         (unsigned long)b->next + sizeof(Block) >
-             (unsigned long)HEAP_BASE + HEAP_SIZE))
-        return;
-    if (b->free) return;
+    if (!block_valid(b) || b->free) return;
     b->free = 1;
-    for (n = heap_head; n; n = n->next) {
-        if (n->free && n->next && n->next->free) {
-            n->size += sizeof(Block) + n->next->size;
-            n->next = n->next->next;
-        }
+    n = block_next(b);
+    if (n && n->free) {
+        Block *nn;
+        free_remove(n);
+        b->size += sizeof(Block) + n->size;
+        nn = block_next(b);
+        if (nn) nn->prev_size = b->size;
     }
+    pr = block_prev(b);
+    if (pr && pr->free) {
+        Block *nn;
+        free_remove(pr);
+        pr->size += sizeof(Block) + b->size;
+        b = pr;
+        nn = block_next(b);
+        if (nn) nn->prev_size = b->size;
+    }
+    free_insert(b);
 }
 
 void *calloc(size_t n, size_t s)
@@ -120,17 +158,62 @@ void *calloc(size_t n, size_t s)
     if (p) memset(p, 0, n * s);
     return p;
 }
+/* Debug/integrity hook: returns 0 when the physical chain and free list agree. */
+int nan16_heap_check(void)
+{
+    Block *b, *f;
+    unsigned physical = 0, physical_free = 0, freecount = 0;
+    heap_init();
+    b = heap_head;
+    while (b) {
+        Block *n = block_next(b);
+        if (!block_valid(b)) return 1;
+        if (n && n->prev_size != b->size) return 2;
+        if (b->free) physical_free++;
+        physical++;
+        b = n;
+    }
+    for (f = free_head; f; f = BLK_NEXT(f)) {
+        if (!block_valid(f) || !f->free) return 3;
+        if (++freecount > physical) return 4;
+    }
+    if (freecount != physical_free) return 5;
+    return 0;
+}
 void *realloc(void *p, size_t n)
 {
-    Block *b;
+    Block *b, *nx;
     void *q;
     unsigned old;
     if (!p) return malloc(n);
     if (!n) { free(p); return 0; }
-    if (n > HEAP_SIZE - HDR_ALIGN) return 0;
+    if (n > HEAP_SIZE - sizeof(Block)) return 0;
+    heap_init();
     b = (Block *)p - 1;
+    if (!block_valid(b) || b->free) return 0;
     old = b->size;
     if (old >= n) return p;
+    nx = block_next(b);
+    if (nx && nx->free && old + sizeof(Block) + nx->size >= n) {
+        Block *nn;
+        unsigned need = align_up(n);
+        free_remove(nx);
+        b->size += sizeof(Block) + nx->size;
+        if (b->size >= need + sizeof(Block) + HDR_ALIGN) {
+            Block *nb = (Block *)((unsigned char *)(b + 1) + need);
+            nb->size = b->size - need - sizeof(Block);
+            nb->prev_size = need;
+            nb->free = 1;
+            b->size = need;
+            nn = block_next(nb);
+            if (nn) nn->prev_size = nb->size;
+            free_insert(nb);
+        } else {
+            nn = block_next(b);
+            if (nn) nn->prev_size = b->size;
+        }
+        return p;
+    }
     q = malloc(n);
     if (!q) return 0;
     memcpy(q, p, old);
