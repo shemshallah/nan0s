@@ -165,6 +165,13 @@ MOVI r3,256
 BFILL r1,r2,r3
 ST r0,r0,@wm_zn
 ST r0,r0,@wm_notice_ticks
+ST r0,r0,@wm_theme
+MOVI r1,#C_DESK
+ST r1,r0,@wm_theme_desk
+MOVI r1,#C_ACCENT
+ST r1,r0,@wm_theme_accent
+MOVI r1,#C_TITLE_F
+ST r1,r0,@wm_theme_title
 RET
 ; ---- wm_kcall: r1=id r2=slot r3=arg ; dispatch to the window kind ----
 wm_kcall:
@@ -573,7 +580,7 @@ LD r5,r0,@dw_foc
 MOVI r6,#C_TITLE_B
 CMP r5,r0
 JMP[EQ] @dw_tc
-MOVI r6,#C_TITLE_F
+LD r6,r0,@wm_theme_title
 dw_tc:
 ADD r5,r6,r0
 CALL @wm_rect
@@ -590,7 +597,7 @@ LD r3,r9,#W_W
 SUB r3,r3,r13
 SUB r3,r3,r13
 MOVI r4,2
-MOVI r5,#C_ACCENT
+LD r5,r0,@wm_theme_accent
 CALL @wm_rect
 dw_noaccent:
 LD r9,r0,@dw_b
@@ -701,7 +708,7 @@ s_notice:
 wm_draw_all:
 ST r15,r14,0
 ADD r14,r14,r13
-MOVI r1,#C_DESK
+LD r1,r0,@wm_theme_desk
 CALL @fb_clear
 MOVI r1,0
 MOVI r2,0
@@ -863,6 +870,47 @@ wd_b:
 .word 0
 wm_notice_ticks:
 .word 0
+wm_theme:
+.word 0
+wm_theme_desk:
+.word 18
+wm_theme_accent:
+.word 11
+wm_theme_title:
+.word 1
+; Shift+F5 guest-native theme cycling: Midnight, Ember, Ocean.
+wm_theme_toggle:
+LD r1,r0,@wm_theme
+ADD r1,r1,r13
+MOVI r2,3
+CMP r1,r2
+JMP[LT] @wm_theme_apply
+MOVI r1,0
+wm_theme_apply:
+ST r1,r0,@wm_theme
+MOVI r2,18
+MOVI r3,11
+MOVI r4,1
+CMP r1,r0
+JMP[EQ] @wm_theme_store
+MOVI r5,1
+CMP r1,r5
+JMP[NE] @wm_theme_ocean
+MOVI r2,20
+MOVI r3,13
+MOVI r4,5
+JMP @wm_theme_store
+wm_theme_ocean:
+MOVI r2,1
+MOVI r3,14
+MOVI r4,3
+wm_theme_store:
+ST r2,r0,@wm_theme_desk
+ST r3,r0,@wm_theme_accent
+ST r4,r0,@wm_theme_title
+MOVI r1,1
+ST r1,r0,@wm_redraw
+RET
 
 ; wm_notice: r1=duration in tick periods, zero means 15 cycles.
 wm_notice:
