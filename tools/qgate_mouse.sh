@@ -40,8 +40,8 @@ cp build/nan0s.img "$T/source.img"
   sleep 2
   echo "screendump $T/taskbar-click.ppm"
   sleep 0.5
-  # Guest pointer is now near (22,734). Click the Lattice app tile:
-  # first row, second column of native 4x2 launcher at (~422,264).
+  # Guest pointer is now (22,754). Click the Lattice app tile:
+  # first row, second column of native 4x2 launcher at (422,284).
   for shift in 100 100 100 100; do
     echo "mouse_move $shift 0"
     sleep 0.13
@@ -57,14 +57,12 @@ cp build/nan0s.img "$T/source.img"
   echo "mouse_button 0"
   sleep 1.3
   echo "screendump $T/app-click.ppm"
-  # App 2's initial title-bar point is near (220,69); drag by (80,65).
-  echo "mouse_move -100 0"
-  sleep 0.16
-  echo "mouse_move -102 0"
-  sleep 0.16
-  echo "mouse_move 0 -100"
-  sleep 0.16
-  echo "mouse_move 0 -95"
+  # Single-instance launcher centers Lattice at (322,40), 380x300.
+  # Move from (422,284) to its actual title bar (422,48).
+  for shift in -100 -100 -36; do
+    echo "mouse_move 0 $shift"
+    sleep 0.16
+  done
   sleep 0.7
   echo "screendump $T/before-drag.ppm"
   echo "mouse_button 1"
@@ -75,14 +73,13 @@ cp build/nan0s.img "$T/source.img"
   sleep 1.1
   echo "screendump $T/after-drag.ppm"
   sleep 0.5
-  # Drag the new bottom-right native resize grip. After the title drag the
-  # lattice frame is approximately x=168,y=127,w=380,h=300; the grip lies
-  # around (540,420), and PS/2 deltas remain within the signed 8-bit range.
-  for shift in 100 100 40; do
+  # The dragged lattice is now (402,105), 380x300. Its grip is (775,398).
+  # Current pointer is (502,113), so use bounded relative movements.
+  for shift in 100 100 73; do
     echo "mouse_move $shift 0"
     sleep 0.14
   done
-  for shift in 100 100 86; do
+  for shift in 100 100 85; do
     echo "mouse_move 0 $shift"
     sleep 0.14
   done
@@ -98,11 +95,12 @@ cp build/nan0s.img "$T/source.img"
   # Two windows now overlap. Select the original terminal through taskbar
   # slot zero, then restore the Lattice (slot one) and click its focused
   # taskbar button again to reveal the terminal without closing anything.
-  for shift in -100 -100 -100 -100; do
+  # Pointer after resize is (820,433). Terminal dock target is (190,750).
+  for shift in -100 -100 -100 -100 -100 -100 -30; do
     echo "mouse_move $shift 0"
     sleep 0.13
   done
-  for shift in 100 100 100; do
+  for shift in 100 100 100 17; do
     echo "mouse_move 0 $shift"
     sleep 0.13
   done
@@ -133,9 +131,12 @@ cp build/nan0s.img "$T/source.img"
   echo "screendump $T/lattice-restored.ppm"
   # A right click directly in the overlapping content selects the lower
   # window even though the upper window completely covers that point.
-  echo "mouse_move -40 0"
-  sleep 0.2
-  for shift in -100 -100 -100 -100 -35; do
+  # Slot one pointer is (296,750); the two windows overlap at (500,200).
+  for shift in 100 100 4; do
+    echo "mouse_move $shift 0"
+    sleep 0.13
+  done
+  for shift in -100 -100 -100 -100 -100 -50; do
     echo "mouse_move 0 $shift"
     sleep 0.13
   done
@@ -225,11 +226,11 @@ opened=changed(hover,clicked,launcher_region)
 print(f"NaN16 taskbar launcher click: {opened} pixels changed in native app-grid region")
 assert opened>10000, "Clicking the native taskbar launcher did not open the guest NaN16 app grid"
 launched=changed(app_hover,app_clicked,launcher_region)
-dragged=changed(before_drag,after_drag,(70,50,600,520))
+dragged=changed(before_drag,after_drag,(710,110,780,395))
 print(f"NaN16 launcher app-tile activation: {launched} pixels; native title drag: {dragged} pixels")
 assert launched>10000, "Native grid click failed to launch an application"
 assert dragged>10000, "Native PS/2 title-bar drag did not move a window"
-resized=changed(before_resize,after_resize,(160,120,700,540))
+resized=changed(before_resize,after_resize,(787,110,823,400))
 print(f"NaN16 window resize grip: {resized} changed framebuffer pixels")
 assert resized>1000, "Native PS/2 bottom-right resize grip did not resize the window"
 area=(65,56,640,525)
