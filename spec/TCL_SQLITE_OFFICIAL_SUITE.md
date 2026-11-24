@@ -217,6 +217,16 @@ Status legend: **done**, **partial**, **planned**.
 - [x] Guest testfixture selector: `--guest-script PATH` writes u32 length at
       `0x03EFF020` and up to 255 bytes at `0x03EFF024` before the cartridge
       starts, distinct from stdout/stderr at `0x03EFF000`.
+- [x] Aggregates run in one guest process. `nan_cli --steps 0/unlimited`
+      keeps a 64-bit step counter and runs until HALT; `--checkpoint FILE
+      --checkpoint-every S` writes an atomic sparse `NAN1` snapshot of guest
+      memory and CPU state (also on SIGINT/SIGTERM, exit 75), and `--img`
+      accepts that snapshot to resume. The console buffer and guest VFS are
+      in guest memory, so output and filesystem state survive a host restart.
+      `tools/nan16_suite_resume.sh` loops base cartridge -> checkpoint until
+      HALT; `nan_cli --checkpoint` plus SIGUSR1 dumps live console progress.
+- [x] `tools/s1_runner.sh --steps unlimited` passes `UINT64_MAX` to the
+      64-bit S1 guest loop; QEMU wall time is controlled by `S1_QEMU_TIMEOUT`.
 
 ### P4 — SQLite testfixture and official suite
 
