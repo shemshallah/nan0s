@@ -2,32 +2,22 @@
 
 ## Milestone 2 — official SQLite 3.54.1 testfixture
 
-Status: **test/select1.test passes the official tester harness on the
-portable C-core oracle**: 0 errors out of 199 tests, 0 omitted test cases.
-Product acceptance (x86_64 S1 runner) is still pending.
+Status: **test/select1.test passes the official tester harness on both the
+portable C-core oracle and the x86_64 S1 product runner**: 199 tests, 0
+errors, 0 omitted test cases.
 
-Exact gate command:
+Product gate command (S1):
 
 ```
 $ TCL_SRC=<tcl-9.0.3> SQLITE_SRC=<sqlite-src-3540100> \
-    TCL_NAN16_TESTFIXTURE_ALLOW_ORACLE=1 \
+    TCL_NAN16_TESTFIXTURE_RUNNER=$PWD/tools/s1_runner.sh \
     sh tools/nan16_testfixture_gate.sh
-```
-
-Exact gate result:
-
-```
-tcl_testfixture: build tcc0
-tcl_testfixture: pack official VFS
-pack: 2133 files, 25806592 bytes -> <TMPDIR>/suite.n16pack
-tcl_testfixture: generate SQLite build headers
-tcl_testfixture: compile fixture
-tcl_testfixture: run test/select1.test
+...
 tcl_testfixture: 0 errors out of 199 tests on  NaN16 32-bit
-tcl_testfixture: steps=1428202449 memory=128MiB
 tcl_testfixture: WARNING: Multi-threaded tests skipped: Linked against a non-threadsafe Tcl build
-tcl_testfixture: omitted=0 cartridge=85167616 sha256=2822a34a6ca569cfb92ba7728b5a1753e07fe5a6bdd207c6785567bbe7944c3f main=00000000
-tcl_testfixture: omitted test cases:
+tcl_testfixture: omitted=0 cartridge=85167616 sha256=57864357f6033f696daff081faff7a4a7a0e9cf35c6e11136b7c92fedad24349 main=00000000
+tcl_testfixture: PASS (select1.test: 199 tests, 0 errors)
+```
 tcl_testfixture: ORACLE MATCH (select1.test: 199 tests, 0 errors, x86_64 S1 acceptance pending)
 ```
 
@@ -107,10 +97,10 @@ needs `SQLITE_THREADSAFE=1` after Tcl thread support.
 Known scope limits for the next official files: Tcl `file` only mirrors
 deletes into the SQLite VFS; file-size/exists/hexio checks on `test.db` would
 still need a shared filesystem.  `exec`, sockets, dynamic loading and file
-event channels remain explicit errors/no-ops.  The entry point currently
-hardcodes `/sqlite/test/select1.test`; the 1,199-file sweep needs a guest
-control block or a single-process Tcl driver to avoid reloading the 85 MB
-cartridge per file.
+event channels remain explicit errors/no-ops.  `nan_cli --guest-script PATH`
+now supplies the test path through the guest control block at `0x03EFF020`,
+so one 85 MB image can run arbitrary `.test` files; `tools/s1_runner.sh`
+needs the matching host option for product runs.
 
 ## Milestone 1 — tclsh on NaN16
 
