@@ -83,6 +83,7 @@ LD r1,r0,@wm_redraw
 CMP r1,r0
 JMP[EQ] @g_nodraw
 ST r0,r0,@wm_redraw
+ST r0,r0,@ms_cursor_saved
 CALL @wm_draw_all
 CALL @g_bar
 CALL @sh_draw
@@ -103,7 +104,12 @@ BOOL.8 r1,r1,r4
 CMP r1,r0
 JMP[EQ] @g_tick
 ST r1,r0,@g_key
+CALL @ms_erase
 CALL @g_onkey
+LD r1,r0,@wm_redraw
+CMP r1,r0
+JMP[NE] @g_loop
+CALL @ms_draw
 JMP @g_loop
 g_tick:
 TICK r1
@@ -113,6 +119,7 @@ MOVI r4,#PERIOD
 CMP r3,r4
 JMP[LT] @g_loop
 ST r1,r0,@g_last
+CALL @ms_erase
 CALL @g_ticks
 CALL @wm_notice_tick
 CALL @g_bar
