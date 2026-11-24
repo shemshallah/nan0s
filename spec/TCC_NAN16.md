@@ -186,6 +186,22 @@ control block so any terminal client can retrieve them without host symbols:
 uses the portable C core only as an oracle and accepts an x86_64 runner via
 `NAN16_CONSOLE_RUNNER`.
 
+## Guest time
+
+The runner publishes monotonic time at guest byte `0x03EFF010`:
+
+| guest byte | contents |
+| --- | --- |
+| `0x03EFF010` | milliseconds since boot |
+| `0x03EFF014` | executed steps, low 32 bits |
+| `0x03EFF018` | executed steps, high 32 bits |
+
+The libc implements `gettimeofday`, `time`, `clock`, `clock_gettime` and
+`nanosleep` from this block. `gmtime`/`localtime` convert to UTC (locale and
+timezone files are not ported yet). `tools/nan16_time_gate.sh` checks time
+advance, a 10 ms sleep, and exact UTC values for 0 and 1700000000. The x86_64
+S1 kernel must publish the same block from its timer IRQ.
+
 ## Port shape
 
 TCC is a small retargetable C compiler. The port reuses:
