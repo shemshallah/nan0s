@@ -141,12 +141,13 @@ assert.doesNotMatch(mouse, /document\.|<div|window\.addEventListener|#include <s
   'Native mouse logic must not be implemented in JS or C');
 console.log('PASS: raw NaN16 PS/2 AUX init, packet decoder, mouse hit testing, drag, resize, taskbar and modal');
 
-// Avoid the illusion of spontaneous reopening when a topmost clone closes.
-// Launcher Terminal activates an existing window, and titles identify slots.
-assert.match(shell, /CMP r1,r0\s*\nJMP\[EQ\] @sh_launch_existing/,
-  'Terminal tile must focus an existing terminal rather than spawn clones');
-assert.match(shell, /sh_launch_existing:\s*\nCALL @gui_single/,
-  'Guest launcher must delegate reuse and focus to the native single-instance helper');
+// Repeated app-grid clicks activate the existing app instead of silently
+// stacking indistinguishable duplicates behind the topmost window.
+const launcher = shell.slice(shell.indexOf('sh_launch_selected:'), shell.indexOf('sh_dialog_key:'));
+assert.match(launcher, /LD r1,r0,@sh_sel[\s\S]*?CALL @gui_single/,
+  'All launcher tiles must focus/reuse an existing app instance');
+assert.doesNotMatch(launcher, /CALL @gui_open_new/,
+  'The native launcher must not silently create duplicate windows');
 assert.match(wm, /LD r3,r0,@dw_id[\s\S]*?CALL @fb_char7/,
   'Native window title bar must render its stable instance ID');
 assert.match(wm, /LD r3,r0,@wd_i[\s\S]*?CALL @fb_char7/,
