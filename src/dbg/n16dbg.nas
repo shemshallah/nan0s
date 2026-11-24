@@ -474,4 +474,3 @@ tloop:
   MOVI r3,0xAA
   HALT
 
-.include "ndr.nas"
