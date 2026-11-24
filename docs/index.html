@@ -109,7 +109,7 @@
     .typebar-row button { padding: 7px 10px; }
     /*
      * Never squeeze the native 1024x768 guest into the phone's width.
-     * Display at a readable pixel scale. One finger pans; two fingers zoom
+     * Display the native screen. One finger controls the guest; two fingers zoom
      * only the guest viewport, never the entire HTML page.
      */
     #screen_container {
@@ -198,7 +198,7 @@
     <button id="zoom-fit" type="button" disabled>Fit</button>
     <button id="download-replica" type="button" disabled title="Enabled after build nan0s verifies the full secondary IDE disk">Download rebuilt .img</button>
     <span class="hint" id="image-fingerprint" aria-live="polite" title="SHA-256 of the exact guest image fetched by this browser">guest disk: loading…</span>
-    <span class="hint"><b>Two-finger pinch zooms NaN/0S; one finger pans.</b> Type <b>build</b> + Enter for command help, or <b>build nan0s</b> + Enter to replicate the entire bootable disk onto an independent IDE slave. The guest verifies every sector, then enables the image download. · boots the complete guest (floppy + primary IDE) to the desktop with one terminal · <b>q</b> quits the GUI → museum menu (<b>1–8</b>, <b>ESC</b> back) · tap the keys below or the text bar to type</span>
+    <span class="hint"><b>Tap or drag with one finger to control NaN/0S; pinch or move two fingers to zoom/pan.</b> Type <b>build</b> + Enter for command help, or <b>build nan0s</b> + Enter to replicate the entire bootable disk onto an independent IDE slave. The guest verifies every sector, then enables the image download. · boots the complete guest (floppy + primary IDE) to the desktop with one terminal · <b>q</b> quits the GUI → museum menu (<b>1–8</b>, <b>ESC</b> back) · tap the keys below or the text bar to type</span>
   </div>
   <div class="pad" id="pad">
     <button type="button" data-code="1" disabled>Esc</button>
