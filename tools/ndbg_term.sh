@@ -64,9 +64,20 @@ if ! grep -qx 'S=1 PC=2012' "$T/ser.lf" ||
   echo "ndbg_term: SERIAL FAIL"; cat "$T/ser"; exit 1
 fi
 
-sed 's/BP=2001/BP=2002/'  "$T/out.lf" > "$T/negative"
+# time travel: undo one step, checkpoint, restore
+"$CLI" --img "$T/guest.bin" --steps 120000000 \
+  --keys "@20000000,d,e,b,u,g,ENTER,@2000000,l,o,a,d,SPACE,1,ENTER,@2000000,s,t,e,p,ENTER,@2000000,s,t,e,p,ENTER,@2000000,u,n,d,o,ENTER,@2000000,c,h,e,c,k,p,o,i,n,t,ENTER,@2000000,s,t,e,p,ENTER,@2000000,r,e,s,t,o,r,e,ENTER,@3000000,q,u,i,t,ENTER,@3000000" \
+  --serial > "$T/time" 2>/dev/null || true
+tr -d '\r' < "$T/time" > "$T/time.lf"
+if ! grep -qx 'CKPT=1' "$T/time.lf" ||
+   ! grep -qx 'S=0 PC=2002' "$T/time.lf" ||
+   ! grep -qx 'S=0 PC=2001' "$T/time.lf"; then
+  echo "ndbg_term: TIME FAIL"; cat "$T/time"; exit 1
+fi
+
+sed 's/BP=2001/BP=2002/'   "$T/out.lf" > "$T/negative"
 if cmp -s "$T/out.lf" "$T/negative"; then
   echo "ndbg_term: NEGATIVE FAIL"; exit 1
 fi
-echo "ndbg_term: PASS (terminal debug: carts/load, step/dis/regs/break/watch/bpts/wpts/mem/run; screen/serial, exact)"
+echo "ndbg_term: PASS (terminal debug: carts/load, step/dis/regs/break/watch/bpts/wpts/mem/run; screen/serial; undo/checkpoint/restore, exact)"
 echo "ndbg_term: NEGATIVE PASS (mutated transcript rejected)"
