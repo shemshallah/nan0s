@@ -92,4 +92,7 @@ captured Baby text buffer: `screencaps/ndbg_gui.png`.
 This suite is shipped as a component of `shemshallah/nan0s`. Refresh that
 checkout with `sh tools/ndbg_sync.sh /path/to/ndbg` from the nan0s tree. The
 standalone gates (`ndbg`, `ndbg_diff`, `ndbg_mon`, `ndbg_img`) are integrated
-there; the Silver Slate desktop pane port is still pending.
+there together with the Silver Slate terminal monitor: sealed-cart
+`carts`/`load`, `mem`, `dis`, captured `screen`/`serial`, typed setters,
+multi-level undo/redo, and checkpoint/restore. The richer pane remains in this
+repository.
