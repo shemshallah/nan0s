@@ -13,6 +13,13 @@
 #include "sqlite3.h"
 #include <string.h>
 #include <stdlib.h>
+#include <time.h>
+
+/* Guest monotonic clock published by the runner/kernel at 0x03EFF010. */
+static unsigned int nan_now_ms(void)
+{
+    return *(volatile unsigned int *)0x03EFF010u;
+}
 
 #define NAN_VFS_FILES 16
 #define NAN_VFS_NAME  64
@@ -308,22 +315,26 @@ static int nan_randomness(sqlite3_vfs *pVfs, int nByte, char *zOut)
 
 static int nan_sleep(sqlite3_vfs *pVfs, int microseconds)
 {
+    struct timespec ts;
     (void)pVfs;
-    (void)microseconds;
+    if (microseconds <= 0) return 0;
+    ts.tv_sec = microseconds / 1000000;
+    ts.tv_nsec = (long)(microseconds % 1000000) * 1000L;
+    nanosleep(&ts, 0);
     return 0;
 }
 
 static int nan_currenttime(sqlite3_vfs *pVfs, double *pTime)
 {
     (void)pVfs;
-    *pTime = 2440587.5;            /* 2000-01-01 12:00:00 UTC */
+    *pTime = 2440587.5 + ((double)nan_now_ms() / 1000.0) / 86400.0;
     return SQLITE_OK;
 }
 
 static int nan_currenttimeint64(sqlite3_vfs *pVfs, sqlite3_int64 *pTime)
 {
     (void)pVfs;
-    *pTime = 210866760000000LL;    /* milliseconds since the Unix epoch */
+    *pTime = (sqlite3_int64)nan_now_ms();
     return SQLITE_OK;
 }
 

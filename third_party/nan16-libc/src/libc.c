@@ -961,10 +961,15 @@ int open(const char *name, int flags, ...)
         if (!(flags & O_CREAT)) { errno = ENOENT; return -1; }
         f = mf_new(abs);
         if (!f) return -1;
+    } else {
+        if (f->isdir) { errno = EISDIR; return -1; }
+        if ((flags & (O_WRONLY | O_RDWR)) && !f->writable) {
+            errno = EACCES; return -1;
+        }
     }
     if (flags & O_TRUNC) { f->size = 0; f->pos = 0; }
     (void)i;
-    f->pos = 0;
+    f->pos = (flags & O_APPEND) ? f->size : 0;
     return (int)(f - files) + FD_VFS_BASE;
 }
 int creat(const char *name, int mode) { (void)mode; return open(name, O_CREAT | O_WRONLY | O_TRUNC); }
@@ -1035,6 +1040,42 @@ off_t lseek(int fd, off_t off, int whence)
     if (np < 0) np = 0;
     f->pos = (unsigned)np;
     return np;
+}
+static int mf_resize(MemFile *f, unsigned n)
+{
+    if (n > f->cap) {
+        unsigned nc = f->cap ? f->cap : 256;
+        unsigned char *nb;
+        while (nc < n) nc *= 2;
+        nb = (unsigned char *)malloc(nc);
+        if (!nb) { errno = ENOMEM; return -1; }
+        if (f->data) {
+            memcpy(nb, f->data, f->size);
+            free(f->data);
+        }
+        memset(nb + f->size, 0, nc - f->size);
+        f->data = nb;
+        f->cap = nc;
+    } else if (n > f->size) {
+        memset(f->data + f->size, 0, n - f->size);
+    }
+    f->size = n;
+    if (f->pos > n) f->pos = n;
+    return 0;
+}
+int ftruncate(int fd, off_t len)
+{
+    MemFile *f;
+    if (fd < FD_VFS_BASE || (unsigned)(fd - FD_VFS_BASE) >= vfs_cap) return -1;
+    f = &files[fd - FD_VFS_BASE];
+    if (!f->used || f->isdir || !f->writable || len < 0) { errno = EINVAL; return -1; }
+    return mf_resize(f, (unsigned)len);
+}
+int truncate(const char *name, off_t len)
+{
+    MemFile *f = mf_find_p(name);
+    if (!f || f->isdir || !f->writable || len < 0) { errno = EINVAL; return -1; }
+    return mf_resize(f, (unsigned)len);
 }
 int unlink(const char *name)
 {
@@ -1119,10 +1160,11 @@ FILE *fopen(const char *name, const char *mode)
     int i, fd;
     int flags = 0;
     if (strchr(mode, 'w')) flags = O_CREAT | O_WRONLY | O_TRUNC;
-    else if (strchr(mode, 'a')) flags = O_CREAT | O_WRONLY;
+    else if (strchr(mode, 'a')) flags = O_CREAT | O_WRONLY | O_APPEND;
     else flags = O_RDONLY;
     fd = open(name, flags, 0666);
     if (fd < 0) return 0;
+    if (flags & O_APPEND) lseek(fd, 0, SEEK_END);
     for (i = 0; i < MAXSTREAMS; i++) {
         if (!streams[i].fd && !streams[i].is_err) {
             streams[i].fd = fd; streams[i].is_err = 0; streams[i].eof = 0;
@@ -1214,8 +1256,24 @@ static void oprintf(Out *o, const char *fmt, va_list ap)
         fmt++;
         if (*fmt == '-') { left = 1; fmt++; }
         if (*fmt == '0') { zero = 1; fmt++; }
-        while (isdigit((unsigned char)*fmt)) width = width * 10 + (*fmt++ - '0');
-        if (*fmt == '.') { fmt++; prec = 0; while (isdigit((unsigned char)*fmt)) prec = prec * 10 + (*fmt++ - '0'); }
+        if (*fmt == '*') {
+            width = va_arg(ap, int);
+            if (width < 0) { left = 1; width = -width; }
+            fmt++;
+        } else {
+            while (isdigit((unsigned char)*fmt)) width = width * 10 + (*fmt++ - '0');
+        }
+        if (*fmt == '.') {
+            fmt++;
+            if (*fmt == '*') {
+                prec = va_arg(ap, int);
+                if (prec < 0) prec = -1;   /* negative precision = omitted */
+                fmt++;
+            } else {
+                prec = 0;
+                while (isdigit((unsigned char)*fmt)) prec = prec * 10 + (*fmt++ - '0');
+            }
+        }
         while (*fmt == 'l') { lng++; fmt++; }
         if (*fmt == 'z') { lng = 2; fmt++; }
         if (*fmt == 'h') { fmt++; if (*fmt == 'h') fmt++; }
@@ -1247,11 +1305,12 @@ static void oprintf(Out *o, const char *fmt, va_list ap)
         case 'c': oc(o, va_arg(ap, int)); break;
         case 's': {
             const char *s = va_arg(ap, const char *);
-            int n = 0;
+            int n = 0, k;
             if (!s) s = "(null)";
             while (s[n] && (prec < 0 || n < prec)) n++;
-            if (!left) for (; n < width; width--) oc(o, ' ');
-            while (n--) oc(o, *s++);
+            if (!left) for (k = n; k < width; k++) oc(o, ' ');
+            for (k = 0; k < n; k++) oc(o, s[k]);
+            if (left) for (k = n; k < width; k++) oc(o, ' ');
             break;
         }
         case 'f': case 'e': case 'g': {
@@ -1509,6 +1568,10 @@ void setbuf(FILE *fp, char *b) { (void)fp; (void)b; }
 /* ---------------------------------------------------------------- math */
 double ldexp(double x, int e)
 {
+    if (e > 1023) e = 1023;
+    if (e < -1074) e = -1074;
+    while (e >= 32) { x = x * 4294967296.0; e -= 32; }
+    while (e <= -32) { x = x * (1.0 / 4294967296.0); e += 32; }
     while (e > 0) { x = x * 2.0; e--; }
     while (e < 0) { x = x * 0.5; e++; }
     return x;
@@ -1530,13 +1593,17 @@ double fabs(double x) { return x < 0 ? -x : x; }
 long double fabsl(long double x) { return x < 0 ? -x : x; }
 double floor(double x)
 {
-    long long i = (long long)x;
+    long long i;
+    if (x >= 9223372036854775808.0 || x < -9223372036854775808.0) return x;
+    i = (long long)x;
     if ((double)i > x) i--;
     return (double)i;
 }
 double ceil(double x)
 {
-    long long i = (long long)x;
+    long long i;
+    if (x >= 9223372036854775808.0 || x < -9223372036854775808.0) return x;
+    i = (long long)x;
     if ((double)i < x) i++;
     return (double)i;
 }
@@ -1544,6 +1611,8 @@ double fmod(double a, double b)
 {
     long long q;
     if (b == 0.0) return 0.0;
+    if (a >= 9223372036854775808.0 || a < -9223372036854775808.0)
+        return 0.0;
     q = (long long)(a / b);
     return a - (double)q * b;
 }
@@ -1556,15 +1625,182 @@ double sqrt(double x)
     while (r != last) { last = r; r = (r + x / r) * 0.5; }
     return r;
 }
+
+#define NAN16_PI    3.14159265358979323846
+#define NAN16_PIO2  1.57079632679489661923
+#define NAN16_PIO4  0.78539816339744830962
+#define NAN16_LN2   0.69314718055994530942
+#define NAN16_ILN2  1.44269504088896340736
+#define NAN16_SQ1_2 0.70710678118654752440
+#define NAN16_LN10  2.30258509299404568402
+
+double trunc(double x)
+{
+    if (x >= 9223372036854775808.0 || x < -9223372036854775808.0) return x;
+    return (double)(long long)x;
+}
+double round(double x)
+{
+    if (x >= 0.0) return floor(x + 0.5);
+    return ceil(x - 0.5);
+}
+double copysign(double x, double y)
+{
+    union { double d; unsigned long long u; } v;
+    v.d = fabs(x);
+    if (y < 0.0 || (y == 0.0 && 1.0 / y < 0.0))
+        v.u |= 0x8000000000000000ULL;
+    return v.d;
+}
+double exp(double x)
+{
+    int k;
+    double r, r2, p;
+    if (x != x) return x;
+    if (x > 709.782712893384) return 1.0 / 0.0;
+    if (x < -745.133219101941) return 0.0;
+    k = (int)floor(x * NAN16_ILN2 + (x >= 0.0 ? 0.5 : -0.5));
+    r = x - (double)k * NAN16_LN2;
+    r2 = r * r;
+    p = 1.0 + r + r2 * (0.5 + r * (0.16666666666666666 +
+        r * (0.041666666666666664 + r * (0.008333333333333333 +
+        r * (0.001388888888888889 + r * (0.0001984126984126984 +
+        r * (0.0000248015873015873 + r * (0.0000027557319223985893 +
+        r * (0.0000002755731922398589 + r * (0.00000002505210838544172 +
+        r * 0.00000000208767569878681))))))))));
+    return ldexp(p, k);
+}
+double log(double x)
+{
+    int e, n, neg = 0;
+    double m, z, z2, term, sum;
+    if (x != x) return x;
+    if (x < 0.0) return 0.0 / 0.0;
+    if (x == 0.0) return -1.0 / 0.0;
+    if (x == 1.0) return 0.0;
+    if (x < 1.0) { x = 1.0 / x; neg = 1; }
+    m = frexp(x, &e);
+    if (m < NAN16_SQ1_2) { m *= 2.0; e--; }
+    z = (m - 1.0) / (m + 1.0);
+    z2 = z * z;
+    sum = 1.0;
+    term = 1.0;
+    for (n = 3; n <= 41; n += 2) {
+        term *= z2;
+        sum += term / (double)n;
+    }
+    sum = 2.0 * z * sum + (double)e * NAN16_LN2;
+    return neg ? -sum : sum;
+}
+double log10(double x) { return log(x) / NAN16_LN10; }
+double log2(double x) { return log(x) / NAN16_LN2; }
 double pow(double x, double y)
 {
-    long long n = (long long)y;
-    double r = 1.0;
-    int neg = 0;
-    if ((double)n != y) return 0.0;
-    if (n < 0) { neg = 1; n = -n; }
-    while (n) { if (n & 1) r = r * x; x = x * x; n >>= 1; }
-    return neg ? 1.0 / r : r;
+    double ax, r;
+    long long n;
+    int isint;
+    if (y == 0.0) return 1.0;
+    if (x == 1.0) return 1.0;
+    if (y == 1.0) return x;
+    n = (long long)y;
+    isint = ((double)n == y && y < 9007199254740992.0 && y > -9007199254740992.0);
+    if (x == 0.0) {
+        if (y < 0.0) return 1.0 / 0.0;
+        return 0.0;
+    }
+    if (x < 0.0 && !isint) return 0.0 / 0.0;
+    ax = x < 0.0 ? -x : x;
+    r = exp(y * log(ax));
+    if (x < 0.0 && (n & 1)) r = -r;
+    return r;
+}
+static void sin_cos(double x, double *sp, double *cp)
+{
+    double y, r, r2, s, c;
+    int q;
+    y = fmod(x, 2.0 * NAN16_PI);
+    if (y > NAN16_PI) y -= 2.0 * NAN16_PI;
+    if (y < -NAN16_PI) y += 2.0 * NAN16_PI;
+    q = (int)floor(y / NAN16_PIO2 + 0.5);
+    r = y - (double)q * 1.5707963267948966 - (double)q * 6.123233995736766e-17;
+    r2 = r * r;
+    s = r * (1.0 + r2 * (-0.16666666666666666 + r2 *
+        (0.008333333333333333 + r2 * (-0.0001984126984126984 + r2 *
+        (0.0000027557319223985893 + r2 * (-0.00000002505210838544172 +
+        r2 * 0.00000000016059043836821615))))));
+    c = 1.0 + r2 * (-0.5 + r2 * (0.041666666666666664 + r2 *
+        (-0.001388888888888889 + r2 * (0.0000248015873015873 + r2 *
+        (-0.0000002755731922398589 + r2 * 0.00000000208767569878681)))));
+    q = ((q % 4) + 4) % 4;
+    if (q == 0) { *sp = s; *cp = c; }
+    else if (q == 1) { *sp = c; *cp = -s; }
+    else if (q == 2) { *sp = -s; *cp = -c; }
+    else { *sp = -c; *cp = s; }
+}
+double sin(double x) { double s, c; sin_cos(x, &s, &c); return s; }
+double cos(double x) { double s, c; sin_cos(x, &s, &c); return c; }
+double tan(double x) { double s, c; sin_cos(x, &s, &c); return s / c; }
+static double atan_small(double z)
+{
+    double z2 = z * z, term = z, sum = z;
+    int n;
+    for (n = 3; n <= 49; n += 2) {
+        term *= -z2;
+        sum += term / (double)n;
+    }
+    return sum;
+}
+double atan(double x)
+{
+    if (x != x) return x;
+    if (x < 0.0) return -atan(-x);
+    if (x > 1.0) return NAN16_PIO2 - atan_small(1.0 / x);
+    if (x > 0.4142135623730950)
+        return NAN16_PIO4 + atan_small((x - 1.0) / (x + 1.0));
+    return atan_small(x);
+}
+double atan2(double y, double x)
+{
+    if (x > 0.0) return atan(y / x);
+    if (x < 0.0) return y >= 0.0 ? atan(y / x) + NAN16_PI
+                                 : atan(y / x) - NAN16_PI;
+    if (y > 0.0) return NAN16_PIO2;
+    if (y < 0.0) return -NAN16_PIO2;
+    return 0.0;
+}
+double asin(double x)
+{
+    if (x > 1.0 || x < -1.0) return 0.0 / 0.0;
+    return atan2(x, sqrt(1.0 - x * x));
+}
+double acos(double x)
+{
+    if (x > 1.0 || x < -1.0) return 0.0 / 0.0;
+    return atan2(sqrt(1.0 - x * x), x);
+}
+double sinh(double x)
+{
+    double e = exp(x);
+    return (e - 1.0 / e) * 0.5;
+}
+double cosh(double x)
+{
+    double e = exp(x);
+    return (e + 1.0 / e) * 0.5;
+}
+double tanh(double x)
+{
+    double e;
+    if (x > 20.0) return 1.0;
+    if (x < -20.0) return -1.0;
+    e = exp(2.0 * x);
+    return (e - 1.0) / (e + 1.0);
+}
+double modf(double x, double *iptr)
+{
+    double ip = trunc(x);
+    if (iptr) *iptr = ip;
+    return x - ip;
 }
 int isnan(double x) { return x != x; }
 int isinf(double x) { return x > 1.7976931348623157e308 || x < -1.7976931348623157e308; }

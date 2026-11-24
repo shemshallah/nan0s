@@ -26,7 +26,7 @@ static void add(const char *name, const char *data)
 
 int main(void)
 {
-    char cwd[128], abs[128], buf[8];
+    char cwd[128], abs[128], buf[64];
     struct stat st;
     int fd, r;
 
@@ -73,6 +73,41 @@ int main(void)
     printf("over=%d:%s\n", r, getenv("NAN16_X"));
     unsetenv("NAN16_X");
     printf("unset=%d\n", getenv("NAN16_X") == 0);
+
+    fd = open("/trunc.txt", O_CREAT | O_WRONLY, 0644);
+    if (fd >= 0) { write(fd, "abcdef", 6); close(fd); }
+    stat("/trunc.txt", &st);
+    r = (int)st.st_size;
+    printf("trunc0=%d\n", r);
+    printf("trunc1=%d\n", truncate("/trunc.txt", 3));
+    stat("/trunc.txt", &st);
+    printf("trunc2=%d\n", (int)st.st_size);
+    fd = open("/trunc.txt", O_RDWR);
+    r = fd >= 0 ? ftruncate(fd, 5) : -1;
+    if (fd >= 0) close(fd);
+    stat("/trunc.txt", &st);
+    printf("trunc3=%d:%d\n", r, (int)st.st_size);
+    fd = open("/trunc.txt", O_RDONLY);
+    r = fd >= 0 ? (int)read(fd, buf, 8) : -1;
+    if (fd >= 0) close(fd);
+    printf("trunc4=%d:%d:%d\n", r, !memcmp(buf, "abc", 3), buf[3] == 0 && buf[4] == 0);
+
+    printf("ro-open=%d\n", open("/suite/b.txt", O_WRONLY));
+    fd = open("/append.txt", O_CREAT | O_WRONLY, 0644);
+    if (fd >= 0) { write(fd, "a", 1); close(fd); }
+    fd = open("/append.txt", O_WRONLY | O_APPEND);
+    if (fd >= 0) { write(fd, "b", 1); close(fd); }
+    fd = open("/append.txt", O_RDONLY);
+    r = fd >= 0 ? (int)read(fd, buf, 4) : -1;
+    if (fd >= 0) close(fd);
+    printf("append=%d:%d\n", r, r == 2 && !memcmp(buf, "ab", 2));
+
+    r = snprintf(buf, sizeof buf, "[%.*s][%*s]", -1, "abc", 5, "x");
+    printf("star1=%d:%s\n", r, buf);
+    r = snprintf(buf, sizeof buf, "[%*.*s]", -4, 2, "abcdef");
+    printf("star2=%d:%s\n", r, buf);
+    r = snprintf(buf, sizeof buf, "%.*s", -3, "abcdef");
+    printf("star3=%d:%s\n", r, buf);
     printf("PATHS PASS\n");
     return 0;
 }

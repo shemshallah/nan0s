@@ -15,6 +15,8 @@ ssize_t read(int, void *, size_t);
 ssize_t write(int, const void *, size_t);
 int close(int);
 off_t lseek(int, off_t, int);
+int ftruncate(int, off_t);
+int truncate(const char *, off_t);
 int unlink(const char *);
 int rmdir(const char *);
 char *getcwd(char *, size_t);
