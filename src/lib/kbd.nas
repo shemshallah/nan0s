@@ -55,6 +55,13 @@ kbd_poll:
 ST r15,r14,0
 ADD r14,r14,r13
 kp_loop:
+LD r3,r0,@kb_t
+ADD r3,r3,r13
+MOVI r5,15
+BOOL.8 r3,r3,r5
+LD r4,r0,@kb_h
+CMP r3,r4
+JMP[EQ] @kp_done
 KEYQ r2
 CMP r2,r0
 JMP[EQ] @kp_done

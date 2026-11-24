@@ -161,4 +161,7 @@ assert.match(wm, /wm_close:[\s\S]*?CALL @wm_zremove[\s\S]*?ST r0,r1,#W_ALIVE/,
 
 console.log('PASS: raw NaN16 taskbar, launcher, modal, notification, themes, tile, snap, resize and restore');
 
+assert.match(source,/ce_enter:[\s\S]*?MOVI r2,@s_ce_demo\s*\nCALL @ce_streq/);
+assert.match(source,/tl_append:[\s\S]*?STB r5,r4,0/);
+assert.match(source,/ce_save:\s*\n;[^\n]*\nLD r1,r0,@ce_len/);
 console.log('PASS: F0 native help, F1-F12 mapping, n/b routing, build command help, disk builder');

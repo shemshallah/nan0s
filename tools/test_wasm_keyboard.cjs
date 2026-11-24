@@ -65,7 +65,7 @@ async function main() {
     querySelectorAll() { return []; }
   }
   const elements = Object.fromEntries(
-    ['type', 'clear-type', 'pad', 'status', 'screen_container', 'serial', 'restart', 'fullscreen',
+    ['type', 'clear-type', 'enter-mode', 'pad', 'status', 'screen_container', 'serial', 'restart', 'fullscreen',
      'zoom-out', 'zoom-in', 'zoom-fit', 'zoom-level', 'image-fingerprint', 'download-replica',
      'function-keys', 'fullscreen-stage', 'fullscreen-exitbar', 'exit-fullscreen',
      'exit-fullscreen-keyboard',
@@ -111,7 +111,7 @@ async function main() {
   };
   const frames = [];
   const requestAnimationFrame = callback => frames.push(callback);
-  vm.runInNewContext(code, { document, window, fetch, V86, setInterval() {}, requestAnimationFrame, console },
+  vm.runInNewContext(code, { document, window, fetch, V86, setInterval() {}, setTimeout(fn) { fn(); }, requestAnimationFrame, console },
     { filename: 'docs/index.html' });
   // Let fetchImage().then(boot) run.
   for (let i = 0; i < 10 && !emulator; ++i) await new Promise(resolve => setImmediate(resolve));
@@ -360,6 +360,23 @@ async function main() {
   check('Tab is forwarded to guest', emulator.codes, key(0x0f));
   assert.equal(tab.defaultPrevented, true);
 
+  clear(); value('.demo');
+  input.dispatch('keydown',{key:'Enter'});
+  input.dispatch('beforeinput',{inputType:'insertParagraph'});
+  input.dispatch('keyup',{key:'Enter'});
+  check('dot command and exactly one Enter',emulator.codes,[...key(0x34),...key(0x20),...key(0x12),...key(0x32),...key(0x18),...key(0x1c)]);
+  assert.equal(input.value,'');
+  emulator.codes.length=0; value('.run');
+  check('next command does not erase prior submitted command',emulator.codes,[...key(0x34),...key(0x13),...key(0x16),...key(0x31)]);
+  clear(); elements['enter-mode'].dispatch('click');
+  assert.equal(elements['enter-mode'].getAttribute('aria-checked'),'false');
+  input.dispatch('beforeinput',{inputType:'insertLineBreak'});
+  check('literal newline uses native Shift+Enter',emulator.codes,shift(0x1c));
+  clear(); value('int main() {\n\treturn 0;\n}');
+  assert.equal(input.value,'}');
+  assert.ok(emulator.codes.includes(0x2a),'pasted source preserves shifted punctuation/newlines');
+  elements['enter-mode'].dispatch('click');
+  assert.equal(elements['enter-mode'].getAttribute('aria-checked'),'true');
   clear(); value('a'); emulator.codes.length = 0;
   elements['clear-type'].dispatch('click');
   check('Clear never sends guest backspaces', emulator.codes, []);

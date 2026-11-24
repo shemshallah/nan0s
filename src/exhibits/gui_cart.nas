@@ -12,6 +12,9 @@
 .equ VCW 128
 .equ CEB 8800000
 .equ CE_BUF 2200000
+.equ CE_MAX 65535
+.equ TL_BASE 0x162200
+.equ TL_MAX 383
 .org 8192
 JMP @cart_entry
 .include "../lib/fb.nas"
@@ -805,6 +808,10 @@ term_init:
 ST r15,r14,0
 ADD r14,r14,r13
 ST r1,r0,@ti_id
+ADD r2,r1,r13
+LD r3,r0,@ce_mode
+CMP r2,r3
+ST[EQ] r0,r0,@ce_mode
 CALL @term_fit
 LD r1,r0,@ti_id
 MOVI r2,@s_banner
@@ -948,8 +955,7 @@ JMP @vp_done
 vp_bs:
 LD r4,r0,@vp_wb
 LD r6,r4,#W_A2
-MOVI r7,2
-CMP r6,r7
+CMP r6,r0
 JMP[LE] @vp_done
 SUB r6,r6,r13
 ST r6,r4,#W_A2
@@ -1158,7 +1164,11 @@ JMP[LT] @tk_ret
 MOVI r4,126
 CMP r3,r4
 JMP[GT] @tk_ret
-; printable
+; printable: retain the logical line independently of screen cells.
+CALL @tl_append
+CMP r1,r0
+JMP[EQ] @tk_ret
+LD r1,r0,@tk_id
 CALL @wm_wbase
 LD r2,r1,#W_A2
 LD r3,r1,#W_A3
@@ -1190,60 +1200,71 @@ LD r1,r0,@tk_id
 CALL @term_draw
 JMP @tk_ret
 tk_bs:
-CALL @wm_wbase
-LD r2,r1,#W_A2
-LD r3,r1,#W_A3
-MOVI r5,2
-CMP r2,r5
-JMP[LE] @tk_ret
+; Delete only bytes belonging to this logical input, never the prompt.
 LD r1,r0,@tk_id
-MOVI r4,0
-MOVI r5,#C_TXT
-CALL @vc_cell
+CALL @wm_wbase
+LD r2,r1,#W_A5
+CMP r2,r0
+JMP[EQ] @tk_ret
+SUB r2,r2,r13
+ST r2,r1,#W_A5
+LD r2,r1,#W_A2
+CMP r2,r0
+JMP[NE] @tk_bs_pop
+LD r3,r1,#W_A3
+CMP r3,r0
+JMP[EQ] @tk_ret
+SUB r3,r3,r13
+ST r3,r1,#W_A3
+LD r2,r1,#W_A0
+ST r2,r1,#W_A2
+tk_bs_pop:
 LD r1,r0,@tk_id
 MOVI r2,8
 CALL @vc_putc
 LD r1,r0,@tk_id
-CALL @term_cursor
-JMP @tk_ret
-tk_enter:
-LD r5,r0,@ce_mode
-CMP r5,r0
-JMP[EQ] @tk_line_mode
-CALL @ce_enter
-LD r1,r0,@tk_id
 CALL @term_draw
 JMP @tk_ret
-tk_line_mode:
+tk_enter:
 CALL @fs_readline
-CALL @fs_dispatch
-CMP r1,r0
-JMP[EQ] @tk_enter_normal
+; Shift+Enter is a literal newline, never a dot-command execution.
+LD r2,r0,@g_mods
+BOOL.8 r2,r2,r13
+ST r2,r0,@ce_literal
 LD r1,r0,@tk_id
 MOVI r2,10
 CALL @vc_putc
 LD r1,r0,@tk_id
-MOVI r2,@fs_s_prompt
-CALL @vc_puts
-LD r1,r0,@tk_id
-CALL @wm_wbase
-ST r0,r1,#W_A4
-LD r1,r0,@tk_id
-CALL @term_draw
-JMP @tk_ret
-tk_enter_normal:
-CALL @wm_wbase
-LD r5,r1,#W_A3
-MOVI r6,#VCW
-MUL r5,r5,r6
-MOVI r6,2
-ADD r5,r5,r6
-ST r5,r0,@tk_off
-LD r1,r0,@tk_id
-CALL @wm_vbuf
-LD r5,r0,@tk_off
-ADD r5,r1,r5
-LD r4,r5,0
+ADD r1,r1,r13
+LD r5,r0,@ce_mode
+CMP r1,r5
+JMP[NE] @tk_line_mode
+CALL @ce_enter
+JMP @tk_repaint
+tk_line_mode:
+LD r2,r0,@ce_literal
+CMP r2,r0
+JMP[NE] @tk_literal_shell
+; .demo is also available directly from an ordinary terminal.
+LA r1,#FNB
+MOVI r2,@s_ce_demo
+CALL @ce_streq
+CMP r1,r0
+JMP[EQ] @tk_dispatch
+CALL @ce_enter
+JMP @tk_repaint
+tk_dispatch:
+CALL @fs_dispatch
+CMP r1,r0
+JMP[NE] @tk_finish
+; Legacy shortcuts remain single-letter commands, not arbitrary prefixes.
+LD r2,r0,@fs_n
+CMP r2,r0
+JMP[EQ] @tk_finish
+CMP r2,r13
+JMP[NE] @tk_unknown
+LA r1,#FNB
+LDB r4,r1,0
 MOVI r6,65
 CMP r4,r6
 JMP[LT] @tk_lc
@@ -1253,26 +1274,29 @@ JMP[GT] @tk_lc
 MOVI r6,32
 ADD r4,r4,r6
 tk_lc:
-ST r4,r0,@tk_cmd
-tk_docmd:
 LD r1,r0,@tk_id
-MOVI r2,10
-CALL @vc_putc
-LD r1,r0,@tk_id
-LD r4,r0,@tk_cmd
 CALL @term_cmd
+JMP @tk_finish
+tk_unknown:
+LD r1,r0,@tk_id
+MOVI r2,@s_unk
+CALL @vc_puts
+tk_finish:
+; e/edit/write show their own editor help ending in a prompt.
+LD r1,r0,@tk_id
+ADD r1,r1,r13
+LD r2,r0,@ce_mode
+CMP r1,r2
+JMP[EQ] @tk_repaint
+CALL @tl_prompt
+JMP @tk_repaint
+tk_literal_shell:
+; Plain terminal newline leaves a fresh prompt, with no command dispatch.
+CALL @tl_prompt
+tk_repaint:
 LD r1,r0,@tk_id
 CALL @wm_wbase
 ST r0,r1,#W_A4
-LD r1,r0,@tk_id
-CALL @wm_wbase
-LD r2,r1,#W_A2
-CMP r2,r0
-JMP[NE] @tk_nopr
-LD r1,r0,@tk_id
-MOVI r2,@s_prompt
-CALL @vc_puts
-tk_nopr:
 LD r1,r0,@tk_id
 CALL @term_draw
 tk_ret:
@@ -1428,9 +1452,14 @@ JMP @tm_done
 ; The ncc front end is raw NaN16 (src/lib/ncc.nas); ncc_out routes every
 ; character it prints back into the focused terminal's virtual console.
 tm_exec:
-MOVI r1,1
+LD r1,r0,@tm_id
+ADD r1,r1,r13
 ST r1,r0,@ce_mode
 ST r0,r0,@ce_len
+LA r1,#CEB
+STB r0,r1,0
+LA r1,#FNPATH
+STB r0,r1,0
 LD r1,r0,@tm_id
 MOVI r2,@s_ce_help
 CALL @vc_puts
@@ -1440,14 +1469,12 @@ JMP @tm_done
 ; Type C lines in the terminal. Lines are accumulated at CE_BUF (packed
 ; 4 bytes/word). Dot commands: .run .demo .clear .quit.
 ce_begin_run:
-LD r1,r0,@ce_old
-ST r1,r0,@ce_len
+LD r1,r0,@ce_len
+CMP r1,r0
+JMP[EQ] @ce_empty
 LA r2,#CEB
 ADD r2,r2,r1
 STB r0,r2,0
-CMP r1,r0
-JMP[EQ] @ce_prompt
-ST r0,r0,@ce_mode
 LD r1,r0,@tk_id
 ST r1,r0,@gco_id
 LA r1,@gui_c_out
@@ -1460,9 +1487,7 @@ CALL @ncc_compile
 CALL @ncc_run
 ST r0,r0,@ncc_out
 JMP @ce_prompt
-
 ce_begin_demo:
-ST r0,r0,@ce_mode
 LD r1,r0,@tk_id
 ST r1,r0,@gco_id
 LA r1,@gui_c_out
@@ -1472,19 +1497,14 @@ CALL @ncc_compile
 CALL @ncc_run
 ST r0,r0,@ncc_out
 JMP @ce_prompt
-
-ce_prompt:
+ce_empty:
 LD r1,r0,@tk_id
-MOVI r2,10
-CALL @vc_putc
-LD r1,r0,@tk_id
-MOVI r2,@s_ce_prompt
+MOVI r2,@s_ce_empty
 CALL @vc_puts
-LD r1,r0,@tk_id
-CALL @wm_wbase
-ST r0,r1,#W_A4
+JMP @ce_prompt
+ce_prompt:
+CALL @tl_prompt
 JMP @ce_done
-
 ; ce_streq: r1=byte ptr, r2=word addr of .str -> 1/0
 ce_streq:
 SHL r2,r2,2
@@ -1505,95 +1525,61 @@ ce_st_n:
 MOVI r1,0
 RET
 
+
 ce_enter:
 ST r15,r14,0
 ADD r14,r14,r13
-; line geometry: text starts at column 2 of the cursor row
-LD r1,r0,@tk_id
-CALL @wm_wbase
-LD r5,r1,#W_A3
-ST r5,r0,@ce_row
-LD r6,r1,#W_A2
-ST r6,r0,@ce_col
-LD r1,r0,@tk_id
-CALL @wm_vbuf
-ST r1,r0,@ce_base
-LD r5,r0,@ce_row
-MOVI r6,#VCW
-MUL r5,r5,r6
-ADDI r5,r5,2
-ST r5,r0,@ce_start
-LD r6,r0,@ce_col
-MOVI r7,2
-SUB r6,r6,r7
-CMP r6,r0
-JMP[GE] @ce_n_ok
-MOVI r6,0
-ce_n_ok:
-ST r6,r0,@ce_n
-; destination = CEB + ce_len
-LD r7,r0,@ce_len
-LA r8,#CEB
-ADD r8,r8,r7
-ST r7,r0,@ce_old
-; source = base + start
-LD r3,r0,@ce_base
-LD r5,r0,@ce_start
-ADD r3,r3,r5
-LD r6,r0,@ce_n
-ce_cp_l:
-CMP r6,r0
-JMP[EQ] @ce_cp_d
-LD r4,r3,0
-STB r4,r8,0
-ADD r3,r3,r13
-ADD r8,r8,r13
-SUB r6,r6,r13
-JMP @ce_cp_l
-ce_cp_d:
-STB r0,r8,0
-LD r7,r0,@ce_old
-LD r6,r0,@ce_n
-ADD r7,r7,r6
-ST r7,r0,@ce_len
-LA r8,#CEB
-ADD r8,r8,r7
-MOVI r4,10
-STB r4,r8,0
-ADD r7,r7,r13
-ST r7,r0,@ce_len
-ADD r8,r8,r13
-STB r0,r8,0
-; dot command?  (single-letter dispatch after '.')
-LA r1,#CEB
-LD r2,r0,@ce_old
-ADD r1,r1,r2
-LDB r3,r1,0
-MOVI r4,46
-CMP r3,r4
+LD r1,r0,@ce_literal
+CMP r1,r0
 JMP[NE] @ce_text
-LDB r3,r1,1
-MOVI r4,114
-CMP r3,r4
-JMP[EQ] @ce_begin_run
-MOVI r4,100
-CMP r3,r4
-JMP[EQ] @ce_begin_demo
-MOVI r4,115
-CMP r3,r4
-JMP[EQ] @ce_save
-MOVI r4,99
-CMP r3,r4
-JMP[EQ] @ce_clear
-MOVI r4,113
-CMP r3,r4
-JMP[EQ] @ce_quit
-JMP @ce_text
+LA r1,#FNB
+MOVI r2,@s_ce_run
+CALL @ce_streq
+CMP r1,r0
+JMP[NE] @ce_begin_run
+LA r1,#FNB
+MOVI r2,@s_ce_demo
+CALL @ce_streq
+CMP r1,r0
+JMP[NE] @ce_begin_demo
+LA r1,#FNB
+MOVI r2,@s_ce_save
+CALL @ce_streq
+CMP r1,r0
+JMP[NE] @ce_save
+LA r1,#FNB
+MOVI r2,@s_ce_clear
+CALL @ce_streq
+CMP r1,r0
+JMP[NE] @ce_clear
+LA r1,#FNB
+MOVI r2,@s_ce_quit
+CALL @ce_streq
+CMP r1,r0
+JMP[NE] @ce_quit
+LA r1,#FNB
+MOVI r2,@s_ce_help_cmd
+CALL @ce_streq
+CMP r1,r0
+JMP[NE] @ce_help
+LA r1,#FNB
+LDB r2,r1,0
+MOVI r3,46
+CMP r2,r3
+JMP[NE] @ce_text
+LD r1,r0,@tk_id
+MOVI r2,@s_ce_unknown
+CALL @vc_puts
+JMP @ce_prompt
+ce_help:
+LD r1,r0,@tk_id
+MOVI r2,@s_ce_help
+CALL @vc_puts
+JMP @ce_done
 ce_clear:
 ST r0,r0,@ce_len
-LD r1,r0,@tk_id
-MOVI r2,10
-CALL @vc_putc
+LA r1,#CEB
+STB r0,r1,0
 LD r1,r0,@tk_id
 MOVI r2,@s_ce_cleared
 CALL @vc_puts
@@ -1601,22 +1587,42 @@ JMP @ce_prompt
 ce_quit:
 ST r0,r0,@ce_mode
 LD r1,r0,@tk_id
-MOVI r2,10
-CALL @vc_putc
-LD r1,r0,@tk_id
 MOVI r2,@s_ce_bye
 CALL @vc_puts
 JMP @ce_prompt
 ce_text:
+; Append complete logical line + LF, bounded and NUL terminated.
+LD r7,r0,@ce_len
+LD r6,r0,@fs_n
+ADD r5,r7,r6
+ADD r5,r5,r13
+LA r4,#CE_MAX
+CMP r5,r4
+JMP[GT] @ce_overflow
+ST r5,r0,@ce_len
+LA r3,#FNB
+LA r8,#CEB
+ADD r8,r8,r7
+ce_cp_l:
+CMP r6,r0
+JMP[EQ] @ce_cp_d
+LDB r4,r3,0
+STB r4,r8,0
+ADD r3,r3,r13
+ADD r8,r8,r13
+SUB r6,r6,r13
+JMP @ce_cp_l
+ce_cp_d:
+MOVI r4,10
+STB r4,r8,0
+ADD r8,r8,r13
+STB r0,r8,0
+JMP @ce_prompt
+ce_overflow:
 LD r1,r0,@tk_id
-MOVI r2,10
-CALL @vc_putc
-LD r1,r0,@tk_id
-MOVI r2,@s_ce_prompt
+MOVI r2,@s_ce_full
 CALL @vc_puts
-LD r1,r0,@tk_id
-CALL @wm_wbase
-ST r0,r1,#W_A4
+JMP @ce_prompt
 ce_done:
 SUB r14,r14,r13
 LD r15,r14,0
@@ -1624,6 +1630,18 @@ RET
 
 ce_mode:
 .word 0
+ce_literal:
+.word 0
+s_ce_save:
+.str ".save"
+s_ce_help_cmd:
+.str ".help"
+s_ce_unknown:
+.str "unknown editor command; .help\n"
+s_ce_full:
+.str "source buffer full\n"
+s_ce_empty:
+.str "no C source; type source or .demo\n"
 ce_len:
 .word 0
 ce_col:
@@ -1649,11 +1667,11 @@ s_ce_quit:
 s_ce_prompt:
 .str "> "
 s_ce_cleared:
-.str "source cleared\n> "
+.str "source cleared\n"
 s_ce_bye:
-.str "editor closed\n> "
+.str "editor closed\n"
 s_ce_help:
-.str "C editor: type C lines; .run compiles+runs, .demo demo, .clear, .quit\n> "
+.str "C editor: .run .demo .save .clear .quit .help\nShift+Enter: literal source line\n> "
 ; gui_c_out: terminal character hook. Preserves r2..r12 for the C runtime.
 gui_c_out:
 ST r15,r14,0
@@ -1681,6 +1699,7 @@ ADD r14,r14,r13
 ST r12,r14,0
 ADD r14,r14,r13
 ST r1,r0,@gco_ch
+PUTC r1
 LD r1,r0,@gco_id
 LD r2,r0,@gco_ch
 CALL @vc_putc
@@ -4796,41 +4815,51 @@ bk_ret:
 .equ FXEND  10760000
 .equ EXP_BUF 2670000
 
-; fs_readline: copy the current terminal input line (after "> ") into FNB
+; Logical command buffer: W_A5 is length, each slot has 512 bytes.
+; TL_BASE is byte address of word 0x58880, above damage and below STK.
+tl_append:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r1,r0,@tk_id
+CALL @wm_wbase
+LD r2,r1,#W_A5
+MOVI r3,#TL_MAX
+CMP r2,r3
+JMP[GE] @tl_full
+LD r4,r0,@tk_id
+SHL r4,r4,9
+LA r5,#TL_BASE
+ADD r4,r4,r5
+ADD r4,r4,r2
+LD r5,r0,@tk_k
+STB r5,r4,0
+ADD r2,r2,r13
+ST r2,r1,#W_A5
+MOVI r1,1
+JMP @tl_return
+tl_full:
+MOVI r1,0
+tl_return:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
 fs_readline:
 ST r15,r14,0
 ADD r14,r14,r13
 LD r1,r0,@tk_id
 CALL @wm_wbase
-LD r5,r1,#W_A3
-ST r5,r0,@fs_row
-LD r6,r1,#W_A2
-ST r6,r0,@fs_col
-LD r1,r0,@tk_id
-CALL @wm_vbuf
-ST r1,r0,@fs_base
-LD r5,r0,@fs_row
-MOVI r6,#VCW
-MUL r5,r5,r6
-ADDI r5,r5,2
-ST r5,r0,@fs_start
-LD r6,r0,@fs_col
-MOVI r7,2
-SUB r6,r6,r7
-CMP r6,r0
-JMP[GE] @fs_rl_ok
-MOVI r6,0
-fs_rl_ok:
+LD r6,r1,#W_A5
 ST r6,r0,@fs_n
-LD r3,r0,@fs_base
-LD r5,r0,@fs_start
+ST r0,r1,#W_A5
+LD r3,r0,@tk_id
+SHL r3,r3,9
+LA r5,#TL_BASE
 ADD r3,r3,r5
 LA r8,#FNB
-LD r6,r0,@fs_n
 fs_rl_l:
 CMP r6,r0
 JMP[EQ] @fs_rl_d
-LD r4,r3,0
+LDB r4,r3,0
 STB r4,r8,0
 ADD r3,r3,r13
 ADD r8,r8,r13
@@ -4839,6 +4868,25 @@ JMP @fs_rl_l
 fs_rl_d:
 STB r0,r8,0
 LD r1,r0,@fs_n
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+; Prompt always starts a clean visual line. No duplicate prompts.
+tl_prompt:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r1,r0,@tk_id
+CALL @wm_wbase
+LD r2,r1,#W_A2
+CMP r2,r0
+JMP[EQ] @tl_prompt_text
+LD r1,r0,@tk_id
+MOVI r2,10
+CALL @vc_putc
+tl_prompt_text:
+LD r1,r0,@tk_id
+MOVI r2,@s_prompt
+CALL @vc_puts
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -5218,7 +5266,10 @@ ST r15,r14,0
 ADD r14,r14,r13
 CALL @fs_savepath
 ST r0,r0,@ce_len
-MOVI r1,1
+LA r1,#CEB
+STB r0,r1,0
+LD r1,r0,@tk_id
+ADD r1,r1,r13
 ST r1,r0,@ce_mode
 LD r1,r0,@tk_id
 MOVI r2,@fs_s_editmsg
@@ -5236,6 +5287,9 @@ LD r1,r0,@fs_src
 CALL @nfs_data
 CMP r3,r0
 JMP[EQ] @fs_ed_nf
+LA r4,#CE_MAX
+CMP r2,r4
+JMP[GT] @fs_ed_big
 ST r1,r0,@fs_ptr
 ST r2,r0,@fs_len
 ; copy packed bytes into CE buffer
@@ -5254,10 +5308,19 @@ JMP @fs_ed_l
 fs_ed_d:
 LD r1,r0,@fs_len
 ST r1,r0,@ce_len
-MOVI r1,1
+LA r2,#CEB
+ADD r2,r2,r1
+STB r0,r2,0
+LD r1,r0,@tk_id
+ADD r1,r1,r13
 ST r1,r0,@ce_mode
 LD r1,r0,@tk_id
 MOVI r2,@fs_s_editmsg
+CALL @vc_puts
+JMP @fs_ed_e
+fs_ed_big:
+LD r1,r0,@tk_id
+MOVI r2,@s_ce_full
 CALL @vc_puts
 JMP @fs_ed_e
 fs_ed_nf:
@@ -5271,10 +5334,8 @@ RET
 
 ; ce_save: write the editor buffer to the current path
 ce_save:
-ST r15,r14,0
-ADD r14,r14,r13
-LD r1,r0,@ce_old
-ST r1,r0,@ce_len
+; Entered by JMP inside ce_enter: reuse its existing stack frame.
+LD r1,r0,@ce_len
 LA r2,#CEB
 ADD r2,r2,r1
 STB r0,r2,0
