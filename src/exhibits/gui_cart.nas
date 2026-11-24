@@ -30,6 +30,7 @@
 .equ DBG_MEM 5950
 .equ DBG_WATCH 5811
 .equ DBG_CART 5813
+.equ DBG_MAP 5972
 .equ TOC_SNAP 0x70000
 .org 8192
 JMP @cart_entry
@@ -42,6 +43,7 @@ JMP @cart_entry
 .include "../lib/bootbuild.nas"
 .include "../lib/shell.nas"
 .include "../lib/mouse.nas"
+.include "../tools/disasm.nas"
 cart_entry:
 ST r15,r0,@g_ret
 MOVI r13,1
@@ -5320,6 +5322,106 @@ CALL @dbg_state
 JMP @tdbg_done
 
 
+; ---- terminal disassembly: eight words at PC ----
+dbg_dis:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r14,r0,@dbg_sp
+CALL #DBG_PC
+LD r14,r0,@dbg_sp
+ST r1,r0,@dg_base
+MOVI r1,0
+ST r1,r0,@dg_i
+dg_loop:
+LD r1,r0,@dg_i
+MOVI r2,8
+CMP r1,r2
+JMP[GE] @dg_done
+LD r1,r0,@dg_base
+LD r2,r0,@dg_i
+ADD r1,r1,r2
+ST r1,r0,@dg_g
+ST r14,r0,@dbg_sp
+CALL #DBG_MAP
+LD r14,r0,@dbg_sp
+ST r1,r0,@dg_h
+LD r1,r0,@dg_h
+LD r2,r0,@dg_g
+CALL @dis_word_at
+LD r1,r0,@dg_i
+ADD r1,r1,r13
+ST r1,r0,@dg_i
+JMP @dg_loop
+dg_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+dg_base:
+.word 0
+dg_i:
+.word 0
+dg_g:
+.word 0
+dg_h:
+.word 0
+
+; route the shared disassembler to the terminal window and COM1
+dis_out:
+ST r15,r0,@do_lnk
+ST r1,r0,@do_1
+ST r2,r0,@do_2
+ST r3,r0,@do_3
+ST r4,r0,@do_4
+ST r5,r0,@do_5
+ST r6,r0,@do_6
+ST r7,r0,@do_7
+ST r8,r0,@do_8
+ST r11,r0,@do_11
+ST r13,r0,@do_13
+ST r9,r0,@do_c
+LD r1,r0,@tk_id
+LD r2,r0,@do_c
+CALL @vc_putc
+LD r9,r0,@do_c
+PUTC r9
+LD r1,r0,@do_1
+LD r2,r0,@do_2
+LD r3,r0,@do_3
+LD r4,r0,@do_4
+LD r5,r0,@do_5
+LD r6,r0,@do_6
+LD r7,r0,@do_7
+LD r8,r0,@do_8
+LD r11,r0,@do_11
+LD r13,r0,@do_13
+LD r15,r0,@do_lnk
+RET
+do_1:
+.word 0
+do_2:
+.word 0
+do_3:
+.word 0
+do_4:
+.word 0
+do_5:
+.word 0
+do_6:
+.word 0
+do_7:
+.word 0
+do_8:
+.word 0
+do_11:
+.word 0
+do_13:
+.word 0
+do_c:
+.word 0
+do_lnk:
+.word 0
+
+
 ; ---- NANDBG terminal monitor (resident ABI, minimal first pane) ----
 dbg_echo:
 ST r15,r14,0
@@ -5438,6 +5540,10 @@ CALL @tdbg_ch
 SUB r14,r14,r13
 LD r15,r14,0
 RET
+
+tdbg_dis:
+CALL @dbg_dis
+JMP @tdbg_done
 
 tdbg_carts:
 CALL @dbg_carts
@@ -5736,6 +5842,11 @@ LA r2,@s_tdbg_reset
 CALL @fs_prefix
 CMP r1,r0
 JMP[NE] @tdbg_reset
+LA r1,#FNB
+LA r2,@s_tdbg_dis
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @tdbg_dis
 LA r1,#FNB
 LA r2,@s_tdbg_quit
 CALL @fs_prefix
@@ -6153,11 +6264,11 @@ s_dbg_loaded:
 s_dbg_nocart:
 .str "no cart\n"
 s_tdbg_banner:
-.str "NANDBG TERMINAL MONITOR\ncarts load <id> step run regs break watch bpts wpts mem reset pc quit\n"
+.str "NANDBG TERMINAL MONITOR\ncarts load <id> step run regs break watch bpts wpts mem dis reset pc quit\n"
 s_tdbg_prompt:
 .str "> "
 s_tdbg_help:
-.str "carts load <id> step run regs break watch bpts wpts mem reset pc quit"
+.str "carts load <id> step run regs break watch bpts wpts mem dis reset pc quit"
 s_tdbg_carts:
 .str "carts"
 s_tdbg_load:
@@ -6172,6 +6283,8 @@ s_tdbg_break:
 .str "break"
 s_tdbg_pc:
 .str "pc"
+s_tdbg_dis:
+.str "dis"
 s_tdbg_mem:
 .str "mem"
 s_tdbg_watch:
