@@ -1,11 +1,18 @@
 # Tcl + SQLite official suite on NaN: OS/Tcl port checklist
 
-Status: **planning + foundation**. Target: run SQLite 3.54.1's official Tcl
+Status: **foundation running**. Target: run SQLite 3.54.1's official Tcl
 test suite (`test/*.test`, 1,199 files / 489,129 lines) against the NaN16
 SQLite port, with `testfixture` and Tcl built by **tcc1/tcc2 on the VM**.
 Everything above the S1 machine boundary is NaN code (Tcl/SQLite/libc are C
 compiled to NaN16; kernel services are NaN16). No host libc, host process,
 host filesystem or host Tcl is allowed in the execution path.
+
+Current foundations: the x86_64 S1 boots and runs flat guest cartridges
+(console/NFS2/VFS/time gates pass with `tools/s1_runner.sh`); Tcl 9.0.3
+milestone 1 runs a 110-command tclsh with real `init.tcl`/clock on the guest
+VFS (oracle, pending S1 FP/vector ops); the 2,133-file N16PACK1 suite pack
+registers with the dynamic VFS. Testfixture, threads, sockets, `exec` and
+the official run remain.
 
 This is deliberately larger than the SQLite amalgamation port. Tcl 9.0.3 is
 262,209 lines in 112 `generic/*.c` files; `testfixture` adds the SQLite test
@@ -174,18 +181,27 @@ Status legend: **done**, **partial**, **planned**.
 
 ### P3 — Tcl port
 
-- [ ] Vendor Tcl 9.0.3 with VENDOR hashes. Adapt `tclPort.h` to a
-      `tclNan16Port.h`; implement the `Tclp*` platform layer.
-- [ ] Channel drivers: console/tty, VFS files, pipes, sockets; nonblocking
-      modes and `fconfigure`.
-- [ ] Notifier/event loop: file events, timers, `after`, `update`, `vwait`.
+- [x] Vendor Tcl 9.0.3 with VENDOR hashes; the `tclNan16*` platform layer
+      replaces the Unix port (`TCL_THREADS=0`, real init.tcl/clock/msgcat).
+      Milestone 1: `tools/tcl_nan16_port_gate.sh` builds tclsh with tcc0 and
+      runs `/test.tcl` from the guest VFS; 110 commands after real `Tcl_Init`,
+      exact stdout `hello 42` / `2`. Integration cartridge 21,278,520 bytes,
+      SHA-256 `d95de99d80fd0e36d3ed8b712b01b3e39aac0d2cf9dae31b923f2b5fcbe3440c`.
+      Oracle only: the S1 interpreter still lacks FP/vector ops.
+- [x] Channel drivers: console and VFS files (open/read/write/seek/truncate,
+      relative paths, implicit dirs). Pipes/sockets remain explicit errors.
+- [~] Notifier/event loop: timers, `after`, `update`, `vwait` work; VFS file
+      handlers are accepted but never fire (no select/poll yet).
 - [ ] Thread package backed by the NaN thread ABI.
 - [ ] Dynamic loader adapter for `load`.
-- [ ] Library scripts on the guest VFS; `tclsh` runs script files and `-c`.
+- [x] Library scripts on the guest VFS; real `init.tcl`, `clock` and `msgcat`
+      run from `/usr/lib/tcl9.0`; `source`/glob/proc/OO verified.
+- [ ] Tcl's own test suite subset first; then thread/socket/load tests.
+- [~] Tcl builds with tcc0; tcc1/tcc2 build still pending.
 - [x] Guest console capture: fixed stdout/stderr control block at
       `0x03EFF000`, `nan_cli --guest-stdout/--guest-stderr`, exact console gate.
-- [ ] Tcl's own test suite subset first; then thread/socket/load tests.
-- [ ] Tcl build by tcc0, then by tcc1 on the VM.
+- [x] x86_64 S1 product runner: `tools/s1_runner.sh` passes console, NFS2,
+      VFS dirs/paths/capacity and time gates; guest FP/vector ops are next.
 
 ### P4 — SQLite testfixture and official suite
 
