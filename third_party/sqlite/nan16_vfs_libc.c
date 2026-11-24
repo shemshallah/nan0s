@@ -229,7 +229,11 @@ static int l_open(sqlite3_vfs *pVfs, const char *name, sqlite3_file *pFile,
     NanLFile *f = (NanLFile *)pFile;
     int oflags = O_RDONLY, fd;
     char tmp[64];
+    struct stat lst;
     (void)pVfs;
+    if (name && (flags & SQLITE_OPEN_NOFOLLOW)
+        && lstat(name, &lst) == 0 && S_ISLNK(lst.st_mode))
+        return SQLITE_CANTOPEN;
     f->fd = -1;
     f->del = 0;
     f->readonly = !(flags & (SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE));

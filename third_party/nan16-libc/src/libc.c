@@ -665,7 +665,7 @@ typedef struct MemFile {
     char name[VFS_NAME_MAX];
     unsigned char *data;
     unsigned size, cap, pos;
-    int used, writable, owned, isdir;
+    int used, writable, owned, isdir, islink;
 } MemFile;
 static MemFile *files;
 static unsigned vfs_cap, vfs_used;
@@ -748,6 +748,7 @@ init:
     files[slot].writable = 1;
     files[slot].owned = 1;
     files[slot].isdir = 0;
+    files[slot].islink = 0;
     vfs_used++;
     return &files[slot];
 }
@@ -766,6 +767,7 @@ static int mf_put_ro(unsigned slot, const char *name, const void *data,
     files[slot].writable = 0;
     files[slot].owned = 0;
     files[slot].isdir = 0;
+    files[slot].islink = 0;
     vfs_used++;
     return 0;
 }
@@ -783,7 +785,7 @@ int nan16_vfs_add(const char *name, const void *data, unsigned size)
     memcpy(f->data, data, size);
     f->size = f->cap = size;
     f->pos = 0; f->writable = 0; f->owned = 1;
-    f->isdir = 0;
+    f->isdir = 0; f->islink = 0;
     return 0;
 }
 
@@ -802,7 +804,7 @@ int nan16_vfs_add_ro(const char *name, const void *data, unsigned size)
     f->data = (unsigned char *)(void *)data;
     f->size = f->cap = size;
     f->pos = 0; f->writable = 0; f->owned = 0;
-    f->isdir = 0;
+    f->isdir = 0; f->islink = 0;
     return 0;
 }
 /* Register every file in an N16PACK1 archive (see
@@ -957,6 +959,66 @@ static int vfs_abspath(const char *name, char *out)
     }
     return 0;
 }
+/* Resolve every symbolic link in an absolute, normalized path.  The guest
+   VFS has no inodes; a link is a MemFile whose data is its target string.
+   Each expansion re-normalizes and recurses, so absolute/relative targets,
+   intermediate directory links and loops all follow normal POSIX rules. */
+static int resolve_links(const char *abs, char *out, int depth)
+{
+    const char *p = abs;
+    unsigned olen = 0;
+    if (depth > 8) { errno = ELOOP; return -1; }
+    out[0] = '/';
+    out[1] = 0;
+    olen = 1;
+    while (*p) {
+        const char *comp;
+        unsigned clen;
+        MemFile *f;
+        while (*p == '/') p++;
+        if (!*p) break;
+        comp = p;
+        while (*p && *p != '/') p++;
+        clen = (unsigned)(p - comp);
+        if (olen + (olen > 1 ? 1u : 0u) + clen >= VFS_NAME_MAX) {
+            errno = ENAMETOOLONG;
+            return -1;
+        }
+        if (olen > 1) out[olen++] = '/';
+        memcpy(out + olen, comp, clen);
+        olen += clen;
+        out[olen] = 0;
+        f = mf_find(out);
+        if (f && f->islink) {
+            char target[VFS_NAME_MAX], dir[VFS_NAME_MAX];
+            char joined[2 * VFS_NAME_MAX], norm[VFS_NAME_MAX];
+            char *slash;
+            if (f->size >= VFS_NAME_MAX) { errno = ENAMETOOLONG; return -1; }
+            memcpy(target, f->data, f->size);
+            target[f->size] = 0;
+            strcpy(dir, out);
+            slash = strrchr(dir, '/');
+            if (slash == dir) slash[1] = 0; else *slash = 0;
+            if (target[0] == '/') {
+                if (snprintf(joined, sizeof joined, "%s%s", target, p)
+                        >= (int)sizeof joined) { errno = ENAMETOOLONG; return -1; }
+            } else {
+                if (snprintf(joined, sizeof joined, "%s/%s%s", dir, target, p)
+                        >= (int)sizeof joined) { errno = ENAMETOOLONG; return -1; }
+            }
+            if (vfs_abspath(joined, norm) < 0) return -1;
+            return resolve_links(norm, out, depth + 1);
+        }
+    }
+    return 0;
+}
+static int vfs_resolve(const char *name, char *out)
+{
+    char abs[VFS_NAME_MAX];
+    if (vfs_abspath(name, abs) < 0) return -1;
+    return resolve_links(abs, out, 0);
+}
+
 static MemFile *mf_find_p(const char *name)
 {
     char abs[VFS_NAME_MAX];
@@ -1076,7 +1138,12 @@ int open(const char *name, int flags, ...)
     char abs[VFS_NAME_MAX];
     MemFile *f;
     int i;
-    if (vfs_abspath(name, abs) < 0) return -1;
+    if (flags & O_NOFOLLOW) {
+        struct stat lst;
+        if (lstat(name, &lst) < 0) return -1;
+        if (S_ISLNK(lst.st_mode)) { errno = ELOOP; return -1; }
+    }
+    if (vfs_resolve(name, abs) < 0) return -1;
     f = mf_find(abs);
     if (!f) {
         char parent[VFS_NAME_MAX];
@@ -1804,7 +1871,7 @@ int stat(const char *name, struct stat *st)
 {
     char abs[VFS_NAME_MAX];
     MemFile *f;
-    if (vfs_abspath(name, abs) < 0) return -1;
+    if (vfs_resolve(name, abs) < 0) return -1;
     f = mf_find(abs);
     if (!f) {
         if (!mf_isdir_name(abs)) { errno = ENOENT; return -1; }
@@ -1819,7 +1886,32 @@ int stat(const char *name, struct stat *st)
     st->st_nlink = f->isdir ? 2 : 1;
     return 0;
 }
-int lstat(const char *name, struct stat *st) { return stat(name, st); }
+int lstat(const char *name, struct stat *st)
+{
+    char abs[VFS_NAME_MAX];
+    MemFile *f;
+    if (vfs_abspath(name, abs) < 0) return -1;
+    f = mf_find(abs);
+    if (!f) {
+        if (!mf_isdir_name(abs)) { errno = ENOENT; return -1; }
+        memset(st, 0, sizeof *st);
+        st->st_mode = S_IFDIR | 0755;
+        st->st_nlink = 2;
+        return 0;
+    }
+    memset(st, 0, sizeof *st);
+    if (f->islink) {
+        st->st_mode = S_IFLNK | 0777;
+        st->st_size = (long)f->size;
+        st->st_nlink = 1;
+        return 0;
+    }
+    st->st_size = f->isdir ? 0 : (long)f->size;
+    st->st_mode = f->isdir ? (S_IFDIR | 0755)
+                           : (S_IFREG | (f->writable ? 0644 : 0444));
+    st->st_nlink = f->isdir ? 2 : 1;
+    return 0;
+}
 int chmod(const char *name, mode_t mode) { (void)mode; return access(name, F_OK); }
 int utimes(const char *name, const struct timeval times[2])
 {
@@ -1857,7 +1949,7 @@ char *getcwd(char *buf, size_t n)
 int chdir(const char *p)
 {
     char abs[VFS_NAME_MAX];
-    if (vfs_abspath(p, abs) < 0) return -1;
+    if (vfs_resolve(p, abs) < 0) return -1;
     if (!mf_isdir_name(abs)) { errno = ENOENT; return -1; }
     strcpy(vfs_cwd, abs);
     return 0;
@@ -1866,7 +1958,7 @@ int access(const char *p, int m)
 {
     char abs[VFS_NAME_MAX];
     MemFile *f;
-    if (vfs_abspath(p, abs) < 0) return -1;
+    if (vfs_resolve(p, abs) < 0) return -1;
     f = mf_find(abs);
     if (!f) {
         if (mf_isdir_name(abs)) return (m & X_OK) ? 0 : (m & W_OK) ? -1 : 0;
@@ -1881,22 +1973,47 @@ int access(const char *p, int m)
 }
 ssize_t readlink(const char *path, char *buf, size_t n)
 {
-    (void)path; (void)buf; (void)n;
-    errno = EINVAL;
-    return -1;
+    char abs[VFS_NAME_MAX];
+    MemFile *f;
+    size_t len;
+    if (vfs_abspath(path, abs) < 0) return -1;
+    f = mf_find(abs);
+    if (!f || !f->islink) { errno = EINVAL; return -1; }
+    len = f->size < n ? f->size : n;
+    memcpy(buf, f->data, len);
+    return (ssize_t)len;
 }
 int symlink(const char *target, const char *linkpath)
 {
-    (void)target; (void)linkpath;
-    errno = EPERM;
-    return -1;
+    char abs[VFS_NAME_MAX], parent[VFS_NAME_MAX];
+    const char *slash;
+    MemFile *f;
+    size_t plen;
+    if (!target || !*target) { errno = ENOENT; return -1; }
+    if (vfs_abspath(linkpath, abs) < 0) return -1;
+    if (mf_find(abs) || mf_isdir_name(abs)) { errno = EEXIST; return -1; }
+    slash = strrchr(abs, '/');
+    plen = slash ? (size_t)(slash - abs) : 0;
+    if (plen == 0) strcpy(parent, "/");
+    else { memcpy(parent, abs, plen); parent[plen] = 0; }
+    if (!mf_isdir_name(parent)) { errno = ENOENT; return -1; }
+    f = mf_new(abs);
+    if (!f) { errno = ENOSPC; return -1; }
+    f->size = (unsigned)strlen(target);
+    f->cap = f->size;
+    f->data = (unsigned char *)malloc(f->size + 1);
+    if (!f->data) { f->used = 0; return -1; }
+    memcpy(f->data, target, f->size + 1);
+    f->writable = 0;
+    f->islink = 1;
+    return 0;
 }
 int isatty(int fd) { (void)fd; return 0; }
 int getpid(void) { return 1; }
 char *realpath(const char *p, char *out)
 {
     char abs[VFS_NAME_MAX], *r = out;
-    if (vfs_abspath(p, abs) < 0) return 0;
+    if (vfs_resolve(p, abs) < 0) return 0;
     if (!r) r = (char *)malloc(strlen(abs) + 1);
     if (!r) { errno = ENOMEM; return 0; }
     strcpy(r, abs);
