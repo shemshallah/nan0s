@@ -91,6 +91,16 @@ int main(void)
     r = fd >= 0 ? (int)read(fd, buf, 8) : -1;
     if (fd >= 0) close(fd);
     printf("trunc4=%d:%d:%d\n", r, !memcmp(buf, "abc", 3), buf[3] == 0 && buf[4] == 0);
+
+    printf("ro-open=%d\n", open("/suite/b.txt", O_WRONLY));
+    fd = open("/append.txt", O_CREAT | O_WRONLY, 0644);
+    if (fd >= 0) { write(fd, "a", 1); close(fd); }
+    fd = open("/append.txt", O_WRONLY | O_APPEND);
+    if (fd >= 0) { write(fd, "b", 1); close(fd); }
+    fd = open("/append.txt", O_RDONLY);
+    r = fd >= 0 ? (int)read(fd, buf, 4) : -1;
+    if (fd >= 0) close(fd);
+    printf("append=%d:%d\n", r, r == 2 && !memcmp(buf, "ab", 2));
     printf("PATHS PASS\n");
     return 0;
 }

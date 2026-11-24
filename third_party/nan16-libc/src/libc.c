@@ -961,10 +961,15 @@ int open(const char *name, int flags, ...)
         if (!(flags & O_CREAT)) { errno = ENOENT; return -1; }
         f = mf_new(abs);
         if (!f) return -1;
+    } else {
+        if (f->isdir) { errno = EISDIR; return -1; }
+        if ((flags & (O_WRONLY | O_RDWR)) && !f->writable) {
+            errno = EACCES; return -1;
+        }
     }
     if (flags & O_TRUNC) { f->size = 0; f->pos = 0; }
     (void)i;
-    f->pos = 0;
+    f->pos = (flags & O_APPEND) ? f->size : 0;
     return (int)(f - files) + FD_VFS_BASE;
 }
 int creat(const char *name, int mode) { (void)mode; return open(name, O_CREAT | O_WRONLY | O_TRUNC); }
@@ -1155,10 +1160,11 @@ FILE *fopen(const char *name, const char *mode)
     int i, fd;
     int flags = 0;
     if (strchr(mode, 'w')) flags = O_CREAT | O_WRONLY | O_TRUNC;
-    else if (strchr(mode, 'a')) flags = O_CREAT | O_WRONLY;
+    else if (strchr(mode, 'a')) flags = O_CREAT | O_WRONLY | O_APPEND;
     else flags = O_RDONLY;
     fd = open(name, flags, 0666);
     if (fd < 0) return 0;
+    if (flags & O_APPEND) lseek(fd, 0, SEEK_END);
     for (i = 0; i < MAXSTREAMS; i++) {
         if (!streams[i].fd && !streams[i].is_err) {
             streams[i].fd = fd; streams[i].is_err = 0; streams[i].eof = 0;

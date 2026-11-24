@@ -77,6 +77,8 @@ trunc1=0
 trunc2=3
 trunc3=0:5
 trunc4=5:1:1
+ro-open=-1
+append=2:1
 PATHS PASS
 EOF
 if ! diff -u "$T/expected" "$T/out.norm"; then
