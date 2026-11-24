@@ -2,9 +2,9 @@
 
 ## Milestone 3 — guest script control block and veryquick
 
-Status: **veryquick runs the full official TESTSRC set, but is not green yet.**
-The first real failure is floating-point text formatting in the guest libc,
-not a missing test module or missing command.
+Status: **atof1 is green; veryquick is awaiting its 150B+ rerun.** The full
+official TESTSRC set runs, the shared libc/SQLite VFS is in place, and the
+only prior failure class (floating-point text formatting) is fixed.
 
 ### Guest script control block
 
@@ -68,21 +68,34 @@ The official multi-thread warning remains: `Multi-threaded tests skipped:
 Linked against a non-threadsafe Tcl build`; Tcl/SQLite are still
 `TCL_THREADS=0` / `SQLITE_THREADSAFE=0`.
 
-### Formatter follow-up (not yet green)
+### Formatter follow-up — atof1 green
 
-Main added an accurate float formatter plus the `nan16_digits_hook` backed by
-`TclDoubleDigits`, and fast 64/32-bit division.  After merging those changes:
+The float formatter now uses Tcl's own `TclDoubleDigits(value, -1,
+TCL_DD_SHORTEST, ...)` through `nan16_digits_hook`, copying only the digits
+before its returned `end` pointer.  The earlier fixed-17/no-shortest call was
+pathological; the shortest conversion plus 64-bit division fast paths is
+fast.
 
-- `format %e 1.5` in a tclsh cartridge consumes the entire 3B-step budget
-  before printing the result; a mapped build puts the last PC next to
-  `StrictInt64Conversion` in Tcl's `TclDoubleDigits` path.  The hook is
-  therefore still far too slow for `format %.32e`.
-- `atof1.test` with a 40B-step budget still does not reach the harness
-  summary (step budget exhausted at PC 3,011,787, again in the
-  `TclDoubleDigits`/`StrictInt64Conversion` path).
-- Therefore the first real veryquick failure remains the atof1 floating
-  conversion; veryquick has not been rerun to a green summary after the
-  formatter merge.
+Exact official result on the C-core oracle:
+
+```
+guest-script: /sqlite/test/atof1.test
+harness:      0 errors out of 40006 tests on  NaN16 32-bit
+steps:        92,184,860,546
+memory:       256 MiB, heap 128 MiB
+main result:  0
+all memory allocations freed - no leaks
+```
+
+`format %.32e 1.2345678901234567` now produces
+`1.23456789012345670000000000000000e+00`, matching the host.  The full
+fixture with the complete TESTSRC set also keeps select1 green: 199 tests,
+0 errors, cartridge 85,167,616 bytes, SHA-256
+`1348bb8895968b42e68e097fe6ecad886bf15c011843fbaaebd7f09aeda3d6e8`.
+
+Veryquick must still be rerun to a final summary with a budget above ~150B
+because it includes all 40,006 atof1 cases; the previous 47B/3,977-test run
+was aborted by the old formatter failures, not by a missing module.
 
 ## Milestone 2 — official SQLite 3.54.1 testfixture
 
