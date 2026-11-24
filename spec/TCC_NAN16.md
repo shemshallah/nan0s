@@ -96,6 +96,16 @@ Other fixes required for tcc1:
   name lookup.
 - VFS file descriptors start at 3, so writes to the first files do not alias
   stdout/stderr (fd 1/2).
+- The variadic call sequence kept the hidden pointer to the first variadic
+  argument in `r11`, but `nan_push_arg()` loads a 16-bit argument through
+  `nan_load_indirect()`, which uses `r11` as its high-byte scratch.  A
+  `short`/`ushort` variadic argument therefore replaced the pointer
+  (observed value 0) and `va_arg` read the first cartridge words.  Keep the
+  hidden pointer in `r9`, which the push paths do not use.  Official
+  `PRAGMA index_info` passes an `i16` column number through
+  `sqlite3VdbeMultiLoad()`; before the fix `sqlite3_expert_analyze()` saw
+  `SQLITE_NOMEM` (Tcl code 7), after it `ext/expert/expert1.test` is
+  **0 errors out of 69 tests**.
 
 Result: self1 compiles the TCC sources with the self-hosted libtcc to a
 byte-identical self2 (2,057,456 bytes), and self2 compiles `test.c` to 42.
