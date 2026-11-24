@@ -118,18 +118,26 @@ pal_tab:
 .word 15,63,63,63
 .word 16,16,59,34
 .word 17,4,12,7
-.word 18,6,5,13
-.word 19,30,30,40
+.word 18,5,7,12
+.word 19,9,12,18
 .word 20,12,5,4
-; Native desktop chrome: layered slate shadows, surfaces and muted controls.
-.word 21,3,3,7
-.word 22,5,5,10
-.word 23,14,19,29
-.word 24,10,13,20
-.word 25,25,31,42
-.word 26,22,27,37
-.word 27,43,15,21
-.word 28,8,10,17
+; Silver Slate: six-bit DAC entries, all guest-native.
+.word 21,2,3,5
+.word 22,4,5,8
+.word 23,19,23,30
+.word 24,14,17,23
+.word 25,42,46,51
+.word 26,23,27,34
+.word 27,31,21,25
+.word 28,8,10,15
+.word 29,9,12,18
+.word 30,49,53,58
+.word 31,27,31,37
+.word 32,13,17,23
+.word 33,30,34,41
+.word 34,5,7,11
+.word 35,34,39,45
+.word 36,20,24,31
 .word 0xFFFF
 fbi_ret:
 .word 0

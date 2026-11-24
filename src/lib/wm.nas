@@ -39,12 +39,12 @@
 .equ W_SW 18
 .equ W_SH 19
 .equ C_DESK 18
-.equ C_BAR 0
-.equ C_FOC 3
-.equ C_BLUR 8
+.equ C_BAR 28
+.equ C_FOC 30
+.equ C_BLUR 31
 .equ C_TITLE_F 1
 .equ C_TITLE_B 8
-.equ C_BODY 0
+.equ C_BODY 29
 .equ C_TXT 15
 .equ C_YEL 14
 .equ C_CLOSE 4
@@ -59,9 +59,15 @@
 .equ C_DOCK 28
 .equ C_SURFACE 19
 .equ C_DIVIDER 8
-.equ C_ACCENT 11
-.equ C_TASK 1
-.equ C_INACTIVE 8
+.equ C_ACCENT 30
+.equ C_TASK 23
+.equ C_INACTIVE 24
+.equ C_SILVER_HI 30
+.equ C_SILVER_LO 31
+.equ C_BEVEL_DARK 32
+.equ C_BEVEL_LIGHT 33
+.equ C_DOCK_EDGE 35
+.equ C_TITLE_LO 36
 .equ TASKH 29
 .equ WM_MIN 2
 .equ WM_CLOSE_X 24
@@ -133,7 +139,9 @@ wr_damage_ret:
 .word 0
 wr_damage_color:
 .word 0
-; Rounded 3px corners, using three clipped spans; native palette rendering.
+; Silver Slate curved silhouette. Symmetric 4/2/1-pixel corner steps.
+; Draw disjoint horizontal bands, never a rectangular clear behind a corner.
+; r1=x r2=y r3=w r4=h r5=color; preserves r9-r14.
 wm_round:
 ST r15,r14,0
 ADD r14,r14,r13
@@ -142,38 +150,91 @@ ST r2,r0,@rr_y
 ST r3,r0,@rr_w
 ST r4,r0,@rr_h
 ST r5,r0,@rr_c
-MOVI r6,6
+MOVI r6,8
 CMP r3,r6
 JMP[LE] @rr_plain
+MOVI r6,6
 CMP r4,r6
 JMP[LE] @rr_plain
-; full-width middle
-MOVI r6,2
-ADD r2,r2,r6
-MOVI r6,4
-SUB r4,r4,r6
-CALL @wm_rect
-; inset one pixel, all except first/last row
-LD r1,r0,@rr_x
-ADD r1,r1,r13
-LD r2,r0,@rr_y
-ADD r2,r2,r13
-LD r3,r0,@rr_w
-MOVI r6,2
-SUB r3,r3,r6
-LD r4,r0,@rr_h
-SUB r4,r4,r6
-LD r5,r0,@rr_c
-CALL @wm_rect
-; inset three pixels at the top and bottom
-LD r1,r0,@rr_x
 MOVI r6,3
+ADD r2,r2,r6
+MOVI r6,6
+SUB r4,r4,r6
+CALL @wm_rect
+LD r1,r0,@rr_x
+MOVI r6,4
 ADD r1,r1,r6
 LD r2,r0,@rr_y
 LD r3,r0,@rr_w
-MOVI r6,6
+MOVI r6,8
 SUB r3,r3,r6
-LD r4,r0,@rr_h
+MOVI r4,1
+LD r5,r0,@rr_c
+CALL @wm_rect
+LD r1,r0,@rr_x
+MOVI r6,4
+ADD r1,r1,r6
+LD r2,r0,@rr_y
+LD r6,r0,@rr_h
+ADD r2,r2,r6
+MOVI r6,1
+SUB r2,r2,r6
+LD r3,r0,@rr_w
+MOVI r6,8
+SUB r3,r3,r6
+MOVI r4,1
+LD r5,r0,@rr_c
+CALL @wm_rect
+LD r1,r0,@rr_x
+MOVI r6,2
+ADD r1,r1,r6
+LD r2,r0,@rr_y
+MOVI r6,1
+ADD r2,r2,r6
+LD r3,r0,@rr_w
+MOVI r6,4
+SUB r3,r3,r6
+MOVI r4,1
+LD r5,r0,@rr_c
+CALL @wm_rect
+LD r1,r0,@rr_x
+MOVI r6,2
+ADD r1,r1,r6
+LD r2,r0,@rr_y
+LD r6,r0,@rr_h
+ADD r2,r2,r6
+MOVI r6,2
+SUB r2,r2,r6
+LD r3,r0,@rr_w
+MOVI r6,4
+SUB r3,r3,r6
+MOVI r4,1
+LD r5,r0,@rr_c
+CALL @wm_rect
+LD r1,r0,@rr_x
+MOVI r6,1
+ADD r1,r1,r6
+LD r2,r0,@rr_y
+MOVI r6,2
+ADD r2,r2,r6
+LD r3,r0,@rr_w
+MOVI r6,2
+SUB r3,r3,r6
+MOVI r4,1
+LD r5,r0,@rr_c
+CALL @wm_rect
+LD r1,r0,@rr_x
+MOVI r6,1
+ADD r1,r1,r6
+LD r2,r0,@rr_y
+LD r6,r0,@rr_h
+ADD r2,r2,r6
+MOVI r6,3
+SUB r2,r2,r6
+LD r3,r0,@rr_w
+MOVI r6,2
+SUB r3,r3,r6
+MOVI r4,1
 LD r5,r0,@rr_c
 CALL @wm_rect
 JMP @rr_done
@@ -722,23 +783,51 @@ LD r3,r1,#W_W
 LD r4,r1,#W_H
 LD r1,r1,#W_X
 LD r5,r0,@dw_foc
-MOVI r6,#C_BLUR
+MOVI r6,#C_CHROME_EDGE
 CMP r5,r0
 JMP[EQ] @dw_bc
-MOVI r6,#C_FOC
+MOVI r6,#C_SILVER_HI
 dw_bc:
 ADD r5,r6,r0
 CALL @wm_round
-; Inset modern surface panel: colored outline, no app-layout changes.
+; One-pixel recessed inner bevel, then a slate body with two-pixel inset.
 LD r9,r0,@dw_b
 LD r1,r9,#W_X
 ADD r1,r1,r13
 LD r2,r9,#W_Y
 ADD r2,r2,r13
 LD r3,r9,#W_W
-SUB r3,r3,r13
-SUB r3,r3,r13
-MOVI r4,#TB
+MOVI r6,2
+SUB r3,r3,r6
+LD r4,r9,#W_H
+SUB r4,r4,r6
+MOVI r5,#C_BEVEL_DARK
+CALL @wm_round
+LD r9,r0,@dw_b
+LD r1,r9,#W_X
+MOVI r6,2
+ADD r1,r1,r6
+LD r2,r9,#W_Y
+ADD r2,r2,r6
+LD r3,r9,#W_W
+MOVI r6,4
+SUB r3,r3,r6
+LD r4,r9,#W_H
+SUB r4,r4,r6
+MOVI r5,#C_BODY
+CALL @wm_round
+; Rounded inset title cap. Focus is expressed through silver brightness,
+; not a cyan or green rail. All app content uses the same slate surface.
+LD r9,r0,@dw_b
+LD r1,r9,#W_X
+MOVI r6,2
+ADD r1,r1,r6
+LD r2,r9,#W_Y
+ADD r2,r2,r6
+LD r3,r9,#W_W
+MOVI r6,4
+SUB r3,r3,r6
+MOVI r4,15
 LD r5,r0,@dw_foc
 MOVI r6,#C_CHROME_IDLE
 CMP r5,r0
@@ -747,52 +836,26 @@ MOVI r6,#C_CHROME
 dw_tc:
 ADD r5,r6,r0
 CALL @wm_round
-; An active-window accent rail makes focus obvious under overlaps.
-LD r7,r0,@dw_foc
-CMP r7,r0
-JMP[EQ] @dw_noaccent
+; Subtle bevel highlight follows the flat portion of the curved cap.
 LD r9,r0,@dw_b
 LD r1,r9,#W_X
-MOVI r6,4
+MOVI r6,7
 ADD r1,r1,r6
 LD r2,r9,#W_Y
-ADD r2,r2,r13
+MOVI r6,2
+ADD r2,r2,r6
 LD r3,r9,#W_W
-MOVI r6,8
+MOVI r6,14
 SUB r3,r3,r6
 MOVI r4,1
-LD r5,r0,@wm_theme_accent
+MOVI r5,#C_BEVEL_LIGHT
 CALL @wm_rect
 dw_noaccent:
-LD r9,r0,@dw_b
-LD r1,r9,#W_X
-ADD r1,r1,r13
-LD r2,r9,#W_Y
-MOVI r3,16
-ADD r2,r2,r3
-LD r3,r9,#W_W
-SUB r3,r3,r13
-SUB r3,r3,r13
-LD r4,r9,#W_H
-MOVI r5,17
-SUB r4,r4,r5
-MOVI r5,#C_BODY
-CALL @wm_rect
-LD r9,r0,@dw_b
-LD r1,r9,#W_X
-MOVI r5,5
-ADD r1,r1,r5
-LD r2,r9,#W_Y
-MOVI r5,2
-ADD r2,r2,r5
-MOVI r3,@s_nan0s
-MOVI r4,#C_YEL
-CALL @fb_text7
 ; Display a stable slot number before the title. Two Terminal windows
 ; are now distinguishable, so closing one cannot look like it returned.
 LD r9,r0,@dw_b
 LD r1,r9,#W_X
-MOVI r5,55
+MOVI r5,8
 ADD r1,r1,r5
 LD r2,r9,#W_Y
 MOVI r5,3
@@ -800,11 +863,11 @@ ADD r2,r2,r5
 LD r3,r0,@dw_id
 MOVI r5,49
 ADD r3,r3,r5
-MOVI r4,#C_YEL
+MOVI r4,#C_CHROME_EDGE
 CALL @fb_char7
 LD r9,r0,@dw_b
 LD r1,r9,#W_X
-MOVI r5,70
+MOVI r5,22
 ADD r1,r1,r5
 LD r2,r9,#W_Y
 MOVI r5,2
@@ -830,6 +893,20 @@ MOVI r5,2
 ADD r2,r2,r5
 MOVI r3,21
 MOVI r4,13
+MOVI r5,#C_SILVER_LO
+CALL @wm_round
+LD r9,r0,@dw_b
+LD r1,r9,#W_X
+LD r3,r9,#W_W
+ADD r1,r1,r3
+MOVI r5,#WM_CLOSE_X
+SUB r1,r1,r5
+ADD r1,r1,r13
+LD r2,r9,#W_Y
+MOVI r5,3
+ADD r2,r2,r5
+MOVI r3,19
+MOVI r4,11
 MOVI r5,#C_CONTROL_CLOSE
 CALL @wm_round
 LD r9,r0,@dw_b
@@ -855,6 +932,20 @@ MOVI r5,2
 ADD r2,r2,r5
 MOVI r3,21
 MOVI r4,13
+MOVI r5,#C_SILVER_LO
+CALL @wm_round
+LD r9,r0,@dw_b
+LD r1,r9,#W_X
+LD r3,r9,#W_W
+ADD r1,r1,r3
+MOVI r5,#WM_MAX_X
+SUB r1,r1,r5
+ADD r1,r1,r13
+LD r2,r9,#W_Y
+MOVI r5,3
+ADD r2,r2,r5
+MOVI r3,19
+MOVI r4,11
 MOVI r5,#C_CONTROL
 CALL @wm_round
 LD r9,r0,@dw_b
@@ -882,6 +973,20 @@ MOVI r5,2
 ADD r2,r2,r5
 MOVI r3,21
 MOVI r4,13
+MOVI r5,#C_SILVER_LO
+CALL @wm_round
+LD r9,r0,@dw_b
+LD r1,r9,#W_X
+LD r3,r9,#W_W
+ADD r1,r1,r3
+MOVI r5,#WM_MIN_X
+SUB r1,r1,r5
+ADD r1,r1,r13
+LD r2,r9,#W_Y
+MOVI r5,3
+ADD r2,r2,r5
+MOVI r3,19
+MOVI r4,11
 MOVI r5,#C_CONTROL
 CALL @wm_round
 LD r9,r0,@dw_b
@@ -914,7 +1019,7 @@ MOVI r5,7
 SUB r2,r2,r5
 MOVI r3,8
 MOVI r4,2
-LD r5,r0,@wm_theme_accent
+MOVI r5,#C_CHROME_EDGE
 CALL @wm_rect
 SUB r14,r14,r13
 LD r15,r14,0
@@ -1000,8 +1105,18 @@ ST r2,r0,@wd_y
 MOVI r1,0
 LD r3,r0,@fb_w
 MOVI r4,#TASKH
+MOVI r5,#C_DOCK_EDGE
+CALL @wm_round
+MOVI r1,1
+LD r2,r0,@wd_y
+ADD r2,r2,r13
+LD r3,r0,@fb_w
+MOVI r6,2
+SUB r3,r3,r6
+MOVI r4,#TASKH
+SUB r4,r4,r6
 MOVI r5,#C_DOCK
-CALL @wm_rect
+CALL @wm_round
 MOVI r1,4
 LD r2,r0,@wd_y
 MOVI r3,5
@@ -1054,6 +1169,15 @@ ADD r2,r2,r3
 MOVI r3,100
 MOVI r4,20
 CALL @wm_round
+LD r1,r0,@wd_x
+ADD r1,r1,r13
+LD r2,r0,@wd_y
+MOVI r3,6
+ADD r2,r2,r3
+MOVI r3,98
+MOVI r4,18
+MOVI r5,#C_CHROME_IDLE
+CALL @wm_round
 ; Taskbar uses the exact same stable slot ID as the title bar.
 LD r1,r0,@wd_x
 MOVI r4,4
@@ -1074,8 +1198,13 @@ ADD r1,r1,r4
 LD r2,r0,@wd_y
 MOVI r4,7
 ADD r2,r2,r4
+LD r5,r0,@wd_x
+MOVI r6,97
+ADD r5,r5,r6
+ST r5,r0,@t7_clip
 MOVI r4,#C_TXT
 CALL @fb_text7
+ST r0,r0,@t7_clip
 wd_next:
 LD r1,r0,@wd_i
 ADD r1,r1,r13
@@ -1093,8 +1222,16 @@ MOVI r3,33
 SUB r2,r2,r3
 MOVI r3,330
 MOVI r4,28
-MOVI r5,#C_FOC
-CALL @wm_rect
+MOVI r5,#C_CHROME_EDGE
+CALL @wm_round
+MOVI r1,19
+LD r2,r0,@wd_y
+MOVI r3,32
+SUB r2,r2,r3
+MOVI r3,328
+MOVI r4,26
+MOVI r5,#C_CHROME
+CALL @wm_round
 MOVI r1,24
 LD r2,r0,@wd_y
 MOVI r3,29

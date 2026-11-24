@@ -770,7 +770,7 @@ ms_cursor_light:
 MOVI r10,#C_TXT
 JMP @ms_cursor_poke
 ms_cursor_dark:
-MOVI r10,#C_BODY
+MOVI r10,0
 JMP @ms_cursor_poke
 ms_cursor_restore:
 LD r10,r7,0
