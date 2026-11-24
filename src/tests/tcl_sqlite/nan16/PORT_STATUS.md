@@ -1,4 +1,118 @@
-# Tcl 9.0.3 on NaN16 — milestone 1 status
+# Tcl 9.0.3 on NaN16 — port status
+
+## Milestone 2 — official SQLite 3.54.1 testfixture
+
+Status: **test/select1.test passes the official tester harness on the
+portable C-core oracle**: 0 errors out of 199 tests, 0 omitted test cases.
+Product acceptance (x86_64 S1 runner) is still pending.
+
+Exact gate command:
+
+```
+$ TCL_SRC=<tcl-9.0.3> SQLITE_SRC=<sqlite-src-3540100> \
+    TCL_NAN16_TESTFIXTURE_ALLOW_ORACLE=1 \
+    sh tools/nan16_testfixture_gate.sh
+```
+
+Exact gate result:
+
+```
+tcl_testfixture: build tcc0
+tcl_testfixture: pack official VFS
+pack: 2133 files, 25806592 bytes -> <TMPDIR>/suite.n16pack
+tcl_testfixture: generate SQLite build headers
+tcl_testfixture: compile fixture
+tcl_testfixture: run test/select1.test
+tcl_testfixture: 0 errors out of 199 tests on  NaN16 32-bit
+tcl_testfixture: steps=1428202449 memory=128MiB
+tcl_testfixture: WARNING: Multi-threaded tests skipped: Linked against a non-threadsafe Tcl build
+tcl_testfixture: omitted=0 cartridge=85167616 sha256=2822a34a6ca569cfb92ba7728b5a1753e07fe5a6bdd207c6785567bbe7944c3f main=00000000
+tcl_testfixture: omitted test cases:
+tcl_testfixture: ORACLE MATCH (select1.test: 199 tests, 0 errors, x86_64 S1 acceptance pending)
+```
+
+- Guest memory: 128 MiB.  Steps used: 1,428,202,449.  Main result: 0.
+- Cartridge: 85,167,616 bytes, SHA-256
+  `2822a34a6ca569cfb92ba7728b5a1753e07fe5a6bdd207c6785567bbe7944c3f`.
+- Guest VFS: one N16PACK1 archive, 2,133 files / 25,806,592 bytes, mounted at
+  `0x01000000`; it contains the official `/sqlite/test` tree (excluding
+  `.db`, `.zip` and other non-source assets as defined by
+  `tools/nan16_suite_pack.py`) and the complete Tcl `library/` tree at
+  `/usr/lib/tcl9.0`.
+- No test in `select1.test` was skipped.  The only skip statement is the
+  official harness's process-wide thread warning: SQLite/Tcl are built
+  `SQLITE_THREADSAFE=0` / `TCL_THREADS=0`, so `run_thread_tests` skips the
+  multi-threaded tests.
+- First real failure: none.
+
+### Fixture identity
+
+The official C sources are used, not a custom SQL runner:
+
+- `third_party/sqlite/sqlite3.c` (pinned 3.54.1 amalgamation; the source tree
+  does not contain `sqlite3.c`), `ext/qrf/qrf.c`, `src/tclsqlite.c`.
+- `src/test_tclsh.c` supplies the official `sqlite3TestInit()`; it is wrapped
+  only to install the guest exit adapter and the Tcl library path.
+- `tclsqlite.c` is compiled with `-DTCLSH_INIT_PROC=sqlite3TestInit` and
+  `-DTCLSH_MAIN=Sqlite3TestMain`, so its official `main()`/script driver is
+  used.  The NaN16 ABI supplies no argv, so `tclNan16TestEntry.c` calls that
+  main with `{"/testfixture","/sqlite/test/select1.test"}`.
+- TESTSRC modules compiled: `test1.c`, `test2.c`, `test_config.c`,
+  `test_md5.c`, `test_hexio.c`, `test_malloc.c`, `test_mutex.c`,
+  `test_func.c`, `test_autoext.c`, `test_delete.c`, `test_pcache.c`,
+  `test_vfs.c`.
+- The official static extensions from `TESTSRC` are compiled (amatch,
+  appendvfs, basexx, cksumvfs, closure, csv, decimal, diskused, eval,
+  explain, fileio, fuzzer, ieee754, mmapwarm, nextchar, normalize, prefixes,
+  qpvtab, randomjson, regexp, remember, series, spellfix, stmtrand, strdup,
+  totype, unionvtab, wholenumber, zipfile).
+- Modules outside this select1 slice have empty TCL_OK initializers in
+  `tclNan16TestStubs.c`: test3/4/5/6/8/9, blob, demovfs, init, schema, sse,
+  tclvar, fs, Thread, Onefile, Osinst, backup, intarray, rtree, rtreedoc,
+  quota, multiplex, Superlock, Syscall, Fts5, Rbu, bestindex, Expert, window,
+  vdbecov, Recover, intck.  No command is fabricated: a later test that calls
+  one of these commands gets a real "invalid command name" failure.
+
+SQLite flags: the official `TESTFIXTURE_FLAGS` (including
+`SQLITE_DEFAULT_PAGE_SIZE=1024`, STMTVTAB, DBPAGE, BYTECODE, CARRAY,
+PERCENTILE, CKSUMVFS_STATIC, STATIC_RANDOMJSON, STRICT_SUBTYPE=1,
+SERIES_CONSTRAINT_VERIFY) plus `SQLITE_OS_OTHER=1`, `SQLITE_THREADSAFE=0`,
+`SQLITE_TEMP_STORE=3`, `SQLITE_OMIT_WAL`,
+`SQLITE_OMIT_LOAD_EXTENSION`, `SQLITE_OMIT_LOCALTIME`,
+`SQLITE_OMIT_DEPRECATED`, `SQLITE_OMIT_SHARED_CACHE`,
+`SQLITE_MAX_MMAP_SIZE=0`.
+`SQLITE_THREADSAFE=0` is the milestone-2 simplification; the final fixture
+needs `SQLITE_THREADSAFE=1` after Tcl thread support.
+
+### Port fixes needed by the fixture
+
+- **Tcl's bundled allocator** is enabled with `-DUSE_TCLALLOC=1`.  The guest
+  libc's simple first-fit free-list walk is not viable for the millions of
+  small Tcl/SQLite allocations in testfixture; with TclAlloc, select1
+  completes in 1.43e9 steps.  This is Tcl's supported allocator, not a
+  semantic change.
+- **reset_db bridge**: Tcl `file delete` is mirrored into the SQLite `nan16`
+  VFS via `nan16_sqlite_delete`, because the official tester deletes
+  `test.db` between test groups while SQLite and Tcl currently have separate
+  in-memory file tables.  The wrapper tries the exact Tcl path, basename and
+  `./basename` forms.
+- **Exit adapter**: the official `finish_test` calls `exit`; the guest's
+  libc `exit()` loops rather than terminating the cartridge.  A Tcl `exit`
+  wrapper records the status and raises a controlled error so the official
+  main returns; the wrapper maps it to the guest main result.
+- `sysconf`, `strftime`, `rewind`, `chown`/`fchmod` compatibility, SQLite
+  test globals (`sqlite3_current_time`, sync counters), `parse.h`/`opcodes.h`
+  generated from the amalgamation, and `sys/uio.h`/`memory.h` headers.
+
+Known scope limits for the next official files: Tcl `file` only mirrors
+deletes into the SQLite VFS; file-size/exists/hexio checks on `test.db` would
+still need a shared filesystem.  `exec`, sockets, dynamic loading and file
+event channels remain explicit errors/no-ops.  The entry point currently
+hardcodes `/sqlite/test/select1.test`; the 1,199-file sweep needs a guest
+control block or a single-process Tcl driver to avoid reloading the 85 MB
+cartridge per file.
+
+## Milestone 1 — tclsh on NaN16
 
 Goal: a `tcc0`-built, single-threaded `tclsh` cartridge that mounts an
 N16PACK1 guest VFS, runs `/test.tcl`, and prints an exact transcript.
@@ -204,7 +318,7 @@ procedures; it returns an empty attribute list rather than inventing one.
 - Huge trig arguments use Tcl 9's normal libm; the guest libm was separately
   differential-gated by `tools/nan16_libm_gate.sh`.
 
-## Next blockers for the official SQLite Tcl suite
+## Milestone 1 next blockers
 
 1. Build the SQLite `testfixture` guest (sqlite3.c + tclsqlite.c + test*.c)
    against this Tcl port and load `/sqlite/test/*.test` from the pack.

@@ -55,6 +55,7 @@ typedef unsigned long dev_t;
 typedef unsigned long nlink_t;
 typedef long blkcnt_t;
 typedef long blksize_t;
+typedef char *caddr_t;
 int getuid(void);
 int geteuid(void);
 int getgid(void);

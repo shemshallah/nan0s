@@ -15,6 +15,7 @@
 #include <locale.h>
 #include <utime.h>
 #include <signal.h>
+#include <stdio.h>
 
 char *strndup(const char *s, size_t n)
 {
@@ -144,3 +145,102 @@ int getuid(void) { return 0; }
 int geteuid(void) { return 0; }
 int getgid(void) { return 0; }
 int getegid(void) { return 0; }
+
+long
+sysconf(int name)
+{
+    (void)name;
+    return 1;
+}
+
+
+int
+chown(const char *path, unsigned int uid, unsigned int gid)
+{
+    (void)path; (void)uid; (void)gid;
+    errno = EOPNOTSUPP;
+    return -1;
+}
+
+
+int
+fchmod(int fd, unsigned int mode)
+{
+    (void)fd; (void)mode;
+    errno = EOPNOTSUPP;
+    return -1;
+}
+
+
+
+void
+rewind(FILE *stream)
+{
+    if (stream) {
+	fseek(stream, 0L, SEEK_SET);
+	clearerr(stream);
+    }
+}
+
+size_t
+strftime(char *s, size_t max, const char *format, const struct tm *tm)
+{
+    static const char *const wday[] = {
+	"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday",
+	"Friday", "Saturday"
+    };
+    static const char *const mon[] = {
+	"January", "February", "March", "April", "May", "June",
+	"July", "August", "September", "October", "November", "December"
+    };
+    size_t out = 0;
+    const char *p;
+
+#define PUTCHAR(c) do { if (out + 1 < max) s[out] = (char)(c); out++; } while (0)
+    for (p = format; *p; p++) {
+	char tmp[64];
+	int n = 0;
+	if (*p != '%') {
+	    PUTCHAR(*p);
+	    continue;
+	}
+	p++;
+	switch (*p) {
+	case 'Y': n = snprintf(tmp, sizeof(tmp), "%d", tm->tm_year + 1900); break;
+	case 'y': n = snprintf(tmp, sizeof(tmp), "%02d", (tm->tm_year + 1900) % 100); break;
+	case 'm': n = snprintf(tmp, sizeof(tmp), "%02d", tm->tm_mon + 1); break;
+	case 'd': n = snprintf(tmp, sizeof(tmp), "%02d", tm->tm_mday); break;
+	case 'e': n = snprintf(tmp, sizeof(tmp), "%2d", tm->tm_mday); break;
+	case 'H': n = snprintf(tmp, sizeof(tmp), "%02d", tm->tm_hour); break;
+	case 'M': n = snprintf(tmp, sizeof(tmp), "%02d", tm->tm_min); break;
+	case 'S': n = snprintf(tmp, sizeof(tmp), "%02d", tm->tm_sec); break;
+	case 'j': n = snprintf(tmp, sizeof(tmp), "%03d", tm->tm_yday + 1); break;
+	case 'w': n = snprintf(tmp, sizeof(tmp), "%d", tm->tm_wday); break;
+	case 'u': n = snprintf(tmp, sizeof(tmp), "%d", tm->tm_wday ? tm->tm_wday : 7); break;
+	case 'A': n = snprintf(tmp, sizeof(tmp), "%s", wday[(tm->tm_wday + 7) % 7]); break;
+	case 'a': n = snprintf(tmp, sizeof(tmp), "%.3s", wday[(tm->tm_wday + 7) % 7]); break;
+	case 'B': n = snprintf(tmp, sizeof(tmp), "%s", mon[(tm->tm_mon + 12) % 12]); break;
+	case 'b':
+	case 'h': n = snprintf(tmp, sizeof(tmp), "%.3s", mon[(tm->tm_mon + 12) % 12]); break;
+	case 'p': n = snprintf(tmp, sizeof(tmp), "%s", tm->tm_hour < 12 ? "AM" : "PM"); break;
+	case 'F': n = snprintf(tmp, sizeof(tmp), "%04d-%02d-%02d", tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday); break;
+	case 'T': n = snprintf(tmp, sizeof(tmp), "%02d:%02d:%02d", tm->tm_hour, tm->tm_min, tm->tm_sec); break;
+	case 'R': n = snprintf(tmp, sizeof(tmp), "%02d:%02d", tm->tm_hour, tm->tm_min); break;
+	case '%': tmp[0] = '%'; n = 1; break;
+	case 'n': tmp[0] = '\n'; n = 1; break;
+	case 't': tmp[0] = '\t'; n = 1; break;
+	case '\0': p--; continue;
+	default:
+	    PUTCHAR('%');
+	    PUTCHAR(*p);
+	    continue;
+	}
+	{
+	    int i;
+	    for (i = 0; i < n; i++) PUTCHAR(tmp[i]);
+	}
+    }
+#undef PUTCHAR
+    if (max) s[out < max ? out : max - 1] = 0;
+    return out;
+}
