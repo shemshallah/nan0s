@@ -252,6 +252,20 @@ JMP[LE] @ms_ystore
 ADD r1,r3,r0
 ms_ystore:
 ST r1,r0,@ms_y
+; Right mouse press picks the next overlapping window at the same pointer
+; coordinates. This works even when the underneath window is fully hidden.
+; Left click retains ordinary frontmost-window hit testing.
+LD r1,r0,@ms_buttons
+MOVI r2,2
+BOOL.8 r3,r1,r2
+LD r1,r0,@ms_prev
+BOOL.8 r4,r1,r2
+CMP r3,r0
+JMP[EQ] @ms_not_right
+CMP r4,r0
+JMP[NE] @ms_not_right
+CALL @ms_cycle_under_pointer
+ms_not_right:
 ; Left button make transitions start click/hit-test; release stops drag.
 LD r1,r0,@ms_buttons
 MOVI r2,1
@@ -301,6 +315,76 @@ SUB r14,r14,r13
 LD r15,r14,0
 RET
 
+; ms_cycle_under_pointer: right-click through the z-stack of
+; overlapping windows. Topmost is already selected; choose the next
+; matching window underneath and bring it forward. The taskbar remains
+; available for completely disjoint windows or a touch-only device.
+ms_cycle_under_pointer:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r1,r0,@sh_open
+LD r2,r0,@sh_modal
+BOOL.14 r3,r1,r2
+CMP r3,r0
+JMP[NE] @mcu_done
+LD r3,r0,@fb_h
+MOVI r4,#TASKH
+SUB r3,r3,r4
+LD r2,r0,@ms_y
+CMP r2,r3
+JMP[GE] @mcu_done
+LD r1,r0,@wm_zn
+ST r1,r0,@mcu_i
+ST r0,r0,@mcu_seen
+mcu_scan:
+LD r1,r0,@mcu_i
+CMP r1,r0
+JMP[EQ] @mcu_done
+SUB r1,r1,r13
+ST r1,r0,@mcu_i
+MOVI r2,#ZOL
+MOVHI r2,#ZOH
+ADD r2,r2,r1
+LD r1,r2,0
+ST r1,r0,@mcu_id
+CALL @wm_wbase
+LD r2,r0,@ms_x
+LD r3,r1,#W_X
+CMP r2,r3
+JMP[LT] @mcu_scan
+LD r4,r1,#W_W
+ADD r4,r4,r3
+CMP r2,r4
+JMP[GE] @mcu_scan
+LD r2,r0,@ms_y
+LD r3,r1,#W_Y
+CMP r2,r3
+JMP[LT] @mcu_scan
+LD r4,r1,#W_H
+ADD r4,r4,r3
+CMP r2,r4
+JMP[GE] @mcu_scan
+LD r3,r0,@mcu_seen
+CMP r3,r0
+JMP[EQ] @mcu_first
+LD r1,r0,@mcu_id
+CALL @wm_raise
+JMP @mcu_done
+mcu_first:
+MOVI r3,1
+ST r3,r0,@mcu_seen
+JMP @mcu_scan
+mcu_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+mcu_i:
+.word 0
+mcu_id:
+.word 0
+mcu_seen:
+.word 0
+
 ; Native mouse down: taskbar launcher, taskbar windows, modal/dialog,
 ; then back-to-front hit testing of overlapping window geometry.
 ms_down:
@@ -333,7 +417,7 @@ MOVI r2,140
 SUB r1,r1,r2
 MOVI r2,106
 DIV r1,r1,r2
-CALL @wm_activate_slot
+CALL @wm_taskbar_select
 JMP @ms_down_done
 ms_window_hit:
 LD r1,r0,@wm_zn
