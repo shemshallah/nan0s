@@ -177,12 +177,13 @@ fi
 
 # captured cart screen: run to the Baby key wait, then dump the private buffer
 "$CLI" --img "$T/guest.bin" --steps 100000000 \
-  --keys "$DBGKEYS,@1000000,l,o,a,d,SPACE,1,ENTER,@1000000,b,p,SPACE,2,0,0,9,ENTER,@1000000,r,u,n,ENTER,@1000000,s,c,r,e,e,n,ENTER,@1000000" \
+  --keys "$DBGKEYS,@1000000,l,o,a,d,SPACE,1,ENTER,@1000000,b,p,SPACE,2,0,0,9,ENTER,@1000000,r,u,n,ENTER,@1000000,s,c,r,e,e,n,ENTER,@4000000,d,@1000000,i,@1000000,s,@1000000,SPACE,@1000000,2,@500000,0,@500000,0,@500000,9,@500000,ENTER,@4000000" \
   --serial > "$T/screen" 2>/dev/null || true
 tr -d '\r' < "$T/screen" > "$T/screen.lf"
 if ! grep -qx 'BP=2009' "$T/screen.lf" ||
    ! grep -qx 'S=2 PC=2009' "$T/screen.lf" ||
-   ! grep -q 'MANCHESTER SMALL-SCALE EXPERIMENTAL MACHINE - THE BABY - 21 JUNE 1948' "$T/screen.lf"; then
+   ! grep -q 'MANCHESTER SMALL-SCALE EXPERIMENTAL MACHINE - THE BABY - 21 JUNE 1948' "$T/screen.lf" ||
+   ! grep -qx '2009 FFF8_12100000_F8FF KEY r1' "$T/screen.lf"; then
   echo "ndbg_gui: SCREEN FAIL"; cat "$T/screen"; exit 1
 fi
 
@@ -215,5 +216,5 @@ if cmp -s "$T/edit.lf" "$T/negative"; then
   echo "ndbg_gui: NEGATIVE FAIL (mutated transcript accepted)"
   exit 1
 fi
-echo "ndbg_gui: PASS (carts/load, break/log/mem, next/finish; screen/serial; setr/setm/goto; bp/wp tables; undo [n]/redo [n]; checkpoint/restore; setw/setc)"
+echo "ndbg_gui: PASS (carts/load, break/log/mem, next/finish; screen/serial/dis; setr/setm/goto; bp/wp tables; undo [n]/redo [n]; checkpoint/restore; setw/setc)"
 echo "ndbg_gui: NEGATIVE PASS (mutated transcript rejected)"

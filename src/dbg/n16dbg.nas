@@ -16,6 +16,10 @@ JMP @main
 .include "../tools/disasm.nas"
 .include "undo_stub.nas"
 
+dis_out:
+  PUTC r9
+  RET
+
 main:
   MOVI r13,1
   CALL @nd_reset

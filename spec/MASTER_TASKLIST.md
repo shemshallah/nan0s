@@ -308,6 +308,7 @@ Design: `spec/NANDBG.md`. Gates: `tools/ndbg.sh`, `tools/ndbg_diff.sh`,
       PC, condition, call depth, and two guest words per step; `undo [n]` CLI.
 - [x] Redo ring at 0x62000 with post-step registers/writes; `redo [n]` CLI.
 - [x] Cart `checkpoint`/`restore`: registers, PC, condition, call depth, 64K arena.
+- [x] Desktop `dis [addr]`: shared disassembler, guest-to-host mapping.
 - [ ] 8-word records, mirror-pair log, flight recorder.
 - [ ] NDP (NaN Debug Protocol) over serial/mailbox; symbol blob; poison fill.
 - [ ] Standalone `n16mon` boot monitor; self-debug (`n16dbg` under itself).

@@ -58,6 +58,7 @@ JMP @cart_entry
 .include "../lib/kbd.nas"
 .include "../lib/wm.nas"
 .include "../lib/ncc.nas"
+.include "../tools/disasm.nas"
 cart_entry:
 ST r15,r0,@g_ret
 MOVI r13,1
@@ -1040,7 +1041,7 @@ JMP[EQ] @tm_br
 MOVI r5,101
 CMP r4,r5
 JMP[EQ] @tm_exec
-MOVI r2,@s_unk
+MOVI r2,@s_guess_unk
 CALL @vc_puts
 JMP @tm_done
 tm_help:
@@ -1420,7 +1421,7 @@ s_ver:
 .str "NaN/0S GUI r26\npure NaN16 wm\n"
 s_wins:
 .str "WINDOWS "
-s_unk:
+s_guess_unk:
 .str "?\n"
 ; ====================== r26: TEXT HELPERS, SETTINGS (F5), NaNNet (F6), UTILITIES (F7) ======================
 ; All pure NaN16. Text goes through NaNGlyph (fb_text7 / fb_char7); strings are 4 chars per word, so a CPUID register IS a string word.
@@ -1791,6 +1792,11 @@ CALL @fs_prefix
 CMP r1,r0
 JMP[NE] @dd_finish
 LA r1,#FNB
+LA r2,@s_dbg_dis
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @dd_dis
+LA r1,#FNB
 LA r2,@s_dbg_mem
 CALL @fs_prefix
 CMP r1,r0
@@ -1955,6 +1961,9 @@ CALL @dbg_finish
 JMP @dd_done
 dd_mem:
 CALL @dbg_mem
+JMP @dd_done
+dd_dis:
+CALL @dbg_dis
 JMP @dd_done
 dd_log:
 CALL @dbg_log
@@ -2824,6 +2833,113 @@ dsc_c:
 dsc_h:
 .word 0
 dsc_v:
+.word 0
+
+; ---- desktop disassembly (8 words from PC or an address) ----
+dbg_dis:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @dbg_args_reset
+CALL @dbg_nexthex
+CMP r2,r0
+JMP[EQ] @dg_pc
+ST r1,r0,@dg_base
+JMP @dg_start
+dg_pc:
+ST r14,r0,@dbg_sp
+CALL #DBG_PC
+LD r14,r0,@dbg_sp
+ST r1,r0,@dg_base
+dg_start:
+MOVI r1,0
+ST r1,r0,@dg_i
+dg_loop:
+LD r1,r0,@dg_i
+MOVI r2,8
+CMP r1,r2
+JMP[GE] @dg_done
+LD r1,r0,@dg_base
+LD r2,r0,@dg_i
+ADD r1,r1,r2
+ST r1,r0,@dg_g
+ST r14,r0,@dbg_sp
+CALL #DBG_MAP
+LD r14,r0,@dbg_sp
+ST r1,r0,@dg_h
+LD r1,r0,@dg_h
+LD r2,r0,@dg_g
+CALL @dis_word_at
+LD r1,r0,@dg_i
+ADD r1,r1,r13
+ST r1,r0,@dg_i
+JMP @dg_loop
+dg_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+dg_base:
+.word 0
+dg_i:
+.word 0
+dg_g:
+.word 0
+dg_h:
+.word 0
+
+; route the shared disassembler to the debug window and COM1
+dis_out:
+ST r15,r0,@do_lnk
+ST r1,r0,@do_1
+ST r2,r0,@do_2
+ST r3,r0,@do_3
+ST r4,r0,@do_4
+ST r5,r0,@do_5
+ST r6,r0,@do_6
+ST r7,r0,@do_7
+ST r8,r0,@do_8
+ST r11,r0,@do_11
+ST r13,r0,@do_13
+ST r9,r0,@do_c
+LD r1,r0,@dk_id
+LD r2,r0,@do_c
+CALL @vc_putc
+LD r9,r0,@do_c
+PUTC r9
+LD r1,r0,@do_1
+LD r2,r0,@do_2
+LD r3,r0,@do_3
+LD r4,r0,@do_4
+LD r5,r0,@do_5
+LD r6,r0,@do_6
+LD r7,r0,@do_7
+LD r8,r0,@do_8
+LD r11,r0,@do_11
+LD r13,r0,@do_13
+LD r15,r0,@do_lnk
+RET
+do_1:
+.word 0
+do_2:
+.word 0
+do_3:
+.word 0
+do_4:
+.word 0
+do_5:
+.word 0
+do_6:
+.word 0
+do_7:
+.word 0
+do_8:
+.word 0
+do_11:
+.word 0
+do_13:
+.word 0
+do_c:
+.word 0
+do_lnk:
 .word 0
 
 ; ---- checkpoint: registers + the 64K cart arena ----
@@ -4437,7 +4553,7 @@ dt_col:
 
 ; debug strings and the 16 type tags
 s_dbg_banner:
-.str "\nNANDBG DEBUG CLI\ncarts load <id> step next finish run regs mem [addr] log hist\nstack types screen serial undo [n] redo [n] break bp bpts watch wp wpts setr setm setw setc goto\ncheckpoint restore reset help quit\n"
+.str "\nNANDBG DEBUG CLI\ncarts load <id> step next finish run regs mem [addr] dis [addr] log hist\nstack types screen serial undo [n] redo [n] break bp bpts watch wp wpts setr setm setw setc goto\ncheckpoint restore reset help quit\n"
 s_dbg_prompt:
 .str "> "
 s_dbg_help:
@@ -4454,6 +4570,8 @@ s_dbg_stack:
 .str "stack"
 s_dbg_types:
 .str "types"
+s_dbg_dis:
+.str "dis"
 s_dbg_mem:
 .str "mem"
 s_dbg_log:
@@ -4519,7 +4637,7 @@ s_dbg_quit:
 s_dbg_exit:
 .str "exit"
 s_dbg_helpfull:
-.str "carts load <id> step next finish run regs mem [addr] log hist stack types screen serial undo [n] redo [n] break bp bpts watch wp wpts setr setm setw setc goto checkpoint restore reset quit\n"
+.str "carts load <id> step next finish run regs mem [addr] dis [addr] log hist stack types screen serial undo [n] redo [n] break bp bpts watch wp wpts setr setm setw setc goto checkpoint restore reset quit\n"
 s_dbg_carts_cmd:
 .str "carts"
 s_dbg_carts:

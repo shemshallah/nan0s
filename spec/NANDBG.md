@@ -986,8 +986,8 @@ the store is never modified, so its seal remains valid. The demo target at
 8100 remains for `reset`.
 
 The second CLI accepts `carts load <id> step next finish run regs mem [addr]
-log hist stack types screen serial undo [n] redo [n] break bp bpts watch wp
-wpts setr setm setw setc goto checkpoint restore reset help quit`.
+log hist stack types screen serial dis [addr] undo [n] redo [n] break bp bpts
+watch wp wpts setr setm setw setc goto checkpoint restore reset help quit`.
 `break` is a fast single breakpoint at PC; `bp <hex>`/`wp <hex>` toggle table
 entries and `bpts`/`wpts` list them. `setr <n> <hex>`, `setm <addr> <hex>`, `setw <addr> <word> <class>`,
 `setc <addr> <class>` and `goto <hex>` are typed edits backed by ABI2
@@ -999,7 +999,9 @@ reverse order and re-exposes their undo records. Manual edits and new steps
 clear the redo history. `checkpoint` snapshots the 16 registers, PC, condition,
 call depth and the 64K cart arena; `restore` copies them back and clears the
 undo/redo history. Checkpoints are invalidated by `load`, `reset` and a new
-debug window. `screen` prints the captured 80x25 cart text screen. `serial` prints
+debug window. `dis [addr]` disassembles eight words from PC or an address using
+the shared `src/tools/disasm.nas`; guest addresses are mapped to host words
+through ABI2 `map`. `screen` prints the captured 80x25 cart text screen. `serial` prints
 the captured `PUTC` stream. It prints into its own window buffer and mirrors
 command lines and hex values to COM1 for headless gates. `tools/ndbg_gui.sh` builds a minimal
 image with the Baby cart, types `debug`, lists the catalog, loads cartridge 1,
@@ -1250,6 +1252,7 @@ cart seal valid.
 - [x] Bounded scalar undo ring (32 records, two writes each); `undo [n]`.
 - [x] Redo ring (32 records) with post-step state and write values; `redo [n]`.
 - [x] Cart checkpoint/restore: registers, PC, condition, call depth, 64K arena.
+- [x] Desktop `dis [addr]` using the shared disassembler and `map`.
 - [ ] Full-memory checkpoints and bulk-write checkpoints.
 - [ ] NDP over serial and mailbox; `HELLO/READ/WRITE/STEP/RUN/EVENT`.
 - [ ] Symbol blob from `nmk.awk -v LABELS`; source lines if the assembler
