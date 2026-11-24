@@ -991,10 +991,12 @@ ST_FUNC void gfunc_call(int nb_args)
         /* Variadic arguments go below the named ones.  The hidden pointer
            to the first variadic argument is pushed after them, so it sits
            at FP-1; the named arguments follow at FP..FP+paramwords-1. */
-        nan_op(0x03, 11, 14, 0);          /* r11 = first variadic word */
+        nan_op(0x03, 9, 14, 0);           /* r9 = first variadic word;
+                                             r11 is clobbered by a 16-bit
+                                             load in nan_push_arg() */
         for (i = nn; i < nb_args; i++)
             nan_push_arg(&vtop[-(nb_args - 1 - i)], &words);
-        nan_op(0x09, 11, 14, 0);          /* hidden varargs pointer */
+        nan_op(0x09, 9, 14, 0);           /* hidden varargs pointer */
         nan_op(0x29, 14, 14, 1);
         words++;
         for (i = 0; i < nn; i++)
