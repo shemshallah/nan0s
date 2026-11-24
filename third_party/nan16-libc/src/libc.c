@@ -481,7 +481,13 @@ int atexit(void (*fn)(void)) { (void)fn; return 0; }
 int system(const char *s) { (void)s; return 0; }
 
 /* ---------------------------------------------------------------- stdio/VFS */
-#define MAXFILES 2048
+/* VFS capacity is a compile-time directive, not a fixed array:
+   -DNAN16_VFS_INIT_CAP=N   initial pointer-table slots (default 16)
+   -DNAN16_VFS_MAXFILES=N   optional hard cap; omitted = grow without a cap
+   The table doubles on demand and supports arbitrary pack sizes. */
+#ifndef NAN16_VFS_INIT_CAP
+#define NAN16_VFS_INIT_CAP 16u
+#endif
 #define MAXSTREAMS 64
 #define FD_VFS_BASE 3
 #define VFS_NAME_MAX 128
@@ -491,7 +497,8 @@ typedef struct MemFile {
     unsigned size, cap, pos;
     int used, writable, owned;
 } MemFile;
-static MemFile files[MAXFILES];
+static MemFile *files;
+static unsigned vfs_cap, vfs_used;
 
 typedef struct NFile {
     int fd;       /* 3.. or -1 for stdout/stderr */
@@ -522,28 +529,54 @@ static void outcap(unsigned char **buf, unsigned *len, unsigned *cap, int c)
     (*buf)[(*len)++] = (unsigned char)c;
 }
 
+static int vfs_reserve(unsigned need)
+{
+    unsigned ncap;
+    MemFile *nf;
+    if (need <= vfs_cap) return 0;
+    ncap = vfs_cap ? vfs_cap : NAN16_VFS_INIT_CAP;
+    while (ncap < need) {
+        if (ncap > 0x7FFFFFFFu / 2u) return -1;
+        ncap *= 2;
+    }
+#ifdef NAN16_VFS_MAXFILES
+    if (ncap > (unsigned)NAN16_VFS_MAXFILES) ncap = (unsigned)NAN16_VFS_MAXFILES;
+    if (need > ncap) return -1;
+#endif
+    nf = (MemFile *)realloc(files, (size_t)ncap * sizeof(MemFile));
+    if (!nf) return -1;
+    memset(nf + vfs_cap, 0, (size_t)(ncap - vfs_cap) * sizeof(MemFile));
+    files = nf;
+    vfs_cap = ncap;
+    return 0;
+}
 static MemFile *mf_find(const char *name)
 {
-    int i;
-    for (i = 0; i < MAXFILES; i++)
+    unsigned i;
+    for (i = 0; i < vfs_cap; i++)
         if (files[i].used && !strcmp(files[i].name, name)) return &files[i];
     return 0;
 }
 static MemFile *mf_new(const char *name)
 {
-    int i;
-    for (i = 0; i < MAXFILES; i++) {
+    unsigned i, slot;
+    for (i = 0; i < vfs_cap; i++) {
         if (!files[i].used) {
-            files[i].used = 1;
-            strncpy(files[i].name, name, VFS_NAME_MAX - 1);
-            files[i].name[VFS_NAME_MAX - 1] = 0;
-            files[i].data = 0; files[i].size = files[i].cap = files[i].pos = 0;
-            files[i].writable = 1;
-            files[i].owned = 1;
-            return &files[i];
+            slot = i;
+            goto init;
         }
     }
-    return 0;
+    slot = vfs_cap;
+    if (vfs_reserve(slot + 1) < 0) return 0;
+init:
+    files[slot].used = 1;
+    strncpy(files[slot].name, name, VFS_NAME_MAX - 1);
+    files[slot].name[VFS_NAME_MAX - 1] = 0;
+    files[slot].data = 0; files[slot].size = files[slot].cap = files[slot].pos = 0;
+    files[slot].writable = 1;
+    files[slot].owned = 1;
+    vfs_used++;
+    return &files[slot];
 }
 int nan16_vfs_add(const char *name, const void *data, unsigned size)
 {
@@ -573,6 +606,57 @@ int nan16_vfs_add_ro(const char *name, const void *data, unsigned size)
     f->pos = 0; f->writable = 0; f->owned = 0;
     return 0;
 }
+/* Register every file in an N16PACK1 archive (see
+   src/tests/tcl_sqlite/PACK_FORMAT.md).  The pack is a byte stream in guest
+   memory; callers place it with tools/nan16_pack_image.py, which encodes four
+   bytes per NaN16 payload word.  All integers are little-endian. */
+static unsigned pk_u16(const unsigned char *p)
+{
+    return (unsigned)p[0] | ((unsigned)p[1] << 8);
+}
+static unsigned pk_u32(const unsigned char *p)
+{
+    return (unsigned)p[0] | ((unsigned)p[1] << 8)
+         | ((unsigned)p[2] << 16) | ((unsigned)p[3] << 24);
+}
+int nan16_vfs_add_pack(const void *pack, unsigned len)
+{
+    const unsigned char *p = (const unsigned char *)pack;
+    unsigned count, off, i;
+    if (len < 12 || memcmp(p, "N16PACK1", 8))
+        return -1;
+    count = pk_u32(p + 8);
+    /* Reserve once so 2,133-file (or larger) suites need few table growths.
+       Duplicate names reuse a slot, so this is an upper bound. */
+    if (count > 0x7FFFFFFFu - vfs_used || vfs_reserve(vfs_used + count) < 0)
+        return -1;
+    off = 12;
+    for (i = 0; i < count; i++) {
+        unsigned nl, flags, dl;
+        char name[VFS_NAME_MAX];
+        if (off + 8 > len)
+            return -1;
+        nl = pk_u16(p + off);
+        flags = pk_u16(p + off + 2);
+        dl = pk_u32(p + off + 4);
+        off += 8;
+        if (!nl || nl >= VFS_NAME_MAX || flags)
+            return -1;
+        if (off + nl + dl > len)
+            return -1;
+        memcpy(name, p + off, nl);
+        name[nl] = 0;
+        if (name[0] != '/')
+            return -1;
+        if (nan16_vfs_add_ro(name, p + off + nl, dl) < 0)
+            return -1;
+        off += nl + dl;
+    }
+    if (off != len)
+        return -1;
+    return (int)count;
+}
+unsigned nan16_vfs_count(void) { return vfs_used; }
 int nan16_vfs_get(const char *name, unsigned char **data, unsigned *size)
 {
     MemFile *f = mf_find(name);
@@ -591,21 +675,21 @@ int open(const char *name, int flags, ...)
         if (!f) return -1;
     }
     if (flags & O_TRUNC) { f->size = 0; f->pos = 0; }
-    for (i = 0; i < MAXFILES; i++)
-        if (&files[i] == f) { f->pos = 0; return i + FD_VFS_BASE; }
-    return -1;
+    (void)i;
+    f->pos = 0;
+    return (int)(f - files) + FD_VFS_BASE;
 }
 int creat(const char *name, int mode) { (void)mode; return open(name, O_CREAT | O_WRONLY | O_TRUNC); }
 int close(int fd)
 {
-    if (fd >= FD_VFS_BASE && fd < FD_VFS_BASE + MAXFILES) files[fd - FD_VFS_BASE].pos = 0;
+    if (fd >= FD_VFS_BASE && (unsigned)(fd - FD_VFS_BASE) < vfs_cap) files[fd - FD_VFS_BASE].pos = 0;
     return 0;
 }
 ssize_t read(int fd, void *buf, size_t n)
 {
     MemFile *f;
     unsigned avail;
-    if (fd < FD_VFS_BASE || fd >= FD_VFS_BASE + MAXFILES) return -1;
+    if (fd < FD_VFS_BASE || (unsigned)(fd - FD_VFS_BASE) >= vfs_cap) return -1;
     f = &files[fd - FD_VFS_BASE];
     if (!f->used) return -1;
     avail = f->size - f->pos;
@@ -622,9 +706,18 @@ ssize_t write(int fd, const void *buf, size_t n)
         for (i = 0; i < n; i++)
             if (fd == 1) outcap(&nan16_stdout_data, &nan16_stdout_len, &nan16_stdout_cap, ((const unsigned char *)buf)[i]);
             else outcap(&nan16_stderr_data, &nan16_stderr_len, &nan16_stderr_cap, ((const unsigned char *)buf)[i]);
+        /* Fixed terminal-client control block (guest byte addresses):
+           0x03EFF000 stdout pointer, +4 length, +8 stderr pointer, +12 length.
+           nan_cli --guest-stdout/--guest-stderr reads this without symbols. */
+        *(volatile unsigned *)(unsigned long)0x03EFF000u =
+            (unsigned)(unsigned long)nan16_stdout_data;
+        *(volatile unsigned *)(unsigned long)0x03EFF004u = nan16_stdout_len;
+        *(volatile unsigned *)(unsigned long)0x03EFF008u =
+            (unsigned)(unsigned long)nan16_stderr_data;
+        *(volatile unsigned *)(unsigned long)0x03EFF00Cu = nan16_stderr_len;
         return n;
     }
-    if (fd < FD_VFS_BASE || fd >= FD_VFS_BASE + MAXFILES) return -1;
+    if (fd < FD_VFS_BASE || (unsigned)(fd - FD_VFS_BASE) >= vfs_cap) return -1;
     f = &files[fd - FD_VFS_BASE];
     if (!f->used || !f->writable) return -1;
     if (f->pos + n > f->cap) {
@@ -645,7 +738,7 @@ off_t lseek(int fd, off_t off, int whence)
 {
     MemFile *f;
     long np;
-    if (fd < FD_VFS_BASE || fd >= FD_VFS_BASE + MAXFILES) return -1;
+    if (fd < FD_VFS_BASE || (unsigned)(fd - FD_VFS_BASE) >= vfs_cap) return -1;
     f = &files[fd - FD_VFS_BASE];
     if (!f->used) return -1;
     if (whence == SEEK_SET) np = off;
@@ -661,6 +754,7 @@ int unlink(const char *name)
     if (!f) return -1;
     if (f->data) free(f->data);
     f->used = 0;
+    if (vfs_used) vfs_used--;
     return 0;
 }
 int remove(const char *name) { return unlink(name); }
@@ -668,7 +762,7 @@ int rename(const char *a, const char *b)
 {
     MemFile *f = mf_find(a);
     if (!f) return -1;
-    strncpy(f->name, b, 63); f->name[63] = 0;
+    strncpy(f->name, b, VFS_NAME_MAX - 1); f->name[VFS_NAME_MAX - 1] = 0;
     return 0;
 }
 
@@ -773,8 +867,24 @@ static void oprintf(Out *o, const char *fmt, va_list ap)
         fmt++;
         if (*fmt == '-') { left = 1; fmt++; }
         if (*fmt == '0') { zero = 1; fmt++; }
-        while (isdigit((unsigned char)*fmt)) width = width * 10 + (*fmt++ - '0');
-        if (*fmt == '.') { fmt++; prec = 0; while (isdigit((unsigned char)*fmt)) prec = prec * 10 + (*fmt++ - '0'); }
+        if (*fmt == '*') {
+            width = va_arg(ap, int);
+            if (width < 0) { left = 1; width = -width; }
+            fmt++;
+        } else {
+            while (isdigit((unsigned char)*fmt)) width = width * 10 + (*fmt++ - '0');
+        }
+        if (*fmt == '.') {
+            fmt++;
+            if (*fmt == '*') {
+                prec = va_arg(ap, int);
+                if (prec < 0) prec = -1;   /* negative precision = omitted */
+                fmt++;
+            } else {
+                prec = 0;
+                while (isdigit((unsigned char)*fmt)) prec = prec * 10 + (*fmt++ - '0');
+            }
+        }
         while (*fmt == 'l') { lng++; fmt++; }
         if (*fmt == 'z') { lng = 2; fmt++; }
         if (*fmt == 'h') { fmt++; if (*fmt == 'h') fmt++; }
@@ -806,11 +916,12 @@ static void oprintf(Out *o, const char *fmt, va_list ap)
         case 'c': oc(o, va_arg(ap, int)); break;
         case 's': {
             const char *s = va_arg(ap, const char *);
-            int n = 0;
+            int n = 0, k;
             if (!s) s = "(null)";
             while (s[n] && (prec < 0 || n < prec)) n++;
-            if (!left) for (; n < width; width--) oc(o, ' ');
-            while (n--) oc(o, *s++);
+            if (!left) for (k = n; k < width; k++) oc(o, ' ');
+            for (k = 0; k < n; k++) oc(o, s[k]);
+            if (left) for (k = n; k < width; k++) oc(o, ' ');
             break;
         }
         case 'f': case 'e': case 'g': {
@@ -888,7 +999,7 @@ int stat(const char *name, struct stat *st)
 }
 int fstat(int fd, struct stat *st)
 {
-    if (fd < FD_VFS_BASE || fd >= FD_VFS_BASE + MAXFILES) return -1;
+    if (fd < FD_VFS_BASE || (unsigned)(fd - FD_VFS_BASE) >= vfs_cap) return -1;
     memset(st, 0, sizeof *st);
     st->st_size = files[fd - FD_VFS_BASE].size;
     st->st_mode = S_IFREG | 0644;
@@ -904,7 +1015,7 @@ char *realpath(const char *p, char *out) { if (out) { strcpy(out, p); return out
 void *mmap(void *a, size_t n, int p, int f, int fd, off_t o)
 {
     (void)a; (void)n; (void)p; (void)f; (void)o;
-    if (fd >= FD_VFS_BASE && fd < FD_VFS_BASE + MAXFILES && files[fd - FD_VFS_BASE].used)
+    if (fd >= FD_VFS_BASE && (unsigned)(fd - FD_VFS_BASE) < vfs_cap && files[fd - FD_VFS_BASE].used)
         return files[fd - FD_VFS_BASE].data;
     return (void *)-1;
 }
@@ -932,6 +1043,10 @@ void setbuf(FILE *fp, char *b) { (void)fp; (void)b; }
 /* ---------------------------------------------------------------- math */
 double ldexp(double x, int e)
 {
+    if (e > 1023) e = 1023;
+    if (e < -1074) e = -1074;
+    while (e >= 32) { x = x * 4294967296.0; e -= 32; }
+    while (e <= -32) { x = x * (1.0 / 4294967296.0); e += 32; }
     while (e > 0) { x = x * 2.0; e--; }
     while (e < 0) { x = x * 0.5; e++; }
     return x;

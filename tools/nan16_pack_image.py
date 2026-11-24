@@ -1,0 +1,162 @@
+#!/usr/bin/env python3
+"""nan16_pack_image.py - place an N16PACK1 archive in a flat NaN16 cartridge.
+
+N16PACK1 (see src/tests/tcl_sqlite/PACK_FORMAT.md) is a byte stream.  Guest C
+does not see host file bytes directly: NaN16 memory is 8-byte words whose
+32-bit payload is at bits 16..47, and guest byte address A reads payload byte
+(A & 3) of word (A >> 2).  This tool therefore packs four archive bytes into
+each 32-bit payload and writes nan_mkword(payload, 10) words.  The compiler
+image is zero-padded in *words* so the archive starts at the requested guest
+byte address; the archive is then appended.
+
+Layout checks reject an archive that would overlap the compiler image, the
+guest stack top, or the fixed output/heap boundary.  Nothing host-specific is
+stored in the image.
+
+Usage:
+  nan16_pack_image.py PACK --header GUEST_PACK.h [--encoded OUT.bin]
+      [--image COMPILER.bin --out IMAGE.bin]
+      [--base 0x01000000] [--limit 0x03000000] [--stack-top 0x00c00000]
+"""
+import argparse
+import os
+import sys
+
+MAGIC = b"N16PACK1"
+# nan16_int.h: NAN_HEADS[4] = {0x7FF1, 0xFFF1, 0x7FF8, 0xFFF8}
+NAN_HEADS = (0x7FF1, 0xFFF1, 0x7FF8, 0xFFF8)
+
+
+def nan_mkword(payload, n):
+    far = NAN_HEADS[n & 3]
+    near = NAN_HEADS[(n >> 2) & 3]
+    return ((far >> 8) | ((far & 0xFF) << 8)
+            | (payload << 16) | (near << 48))
+
+
+def encode(pack):
+    if len(pack) < 12 or pack[:8] != MAGIC:
+        sys.exit("nan16_pack_image: not an N16PACK1 archive")
+    words = (len(pack) + 3) // 4
+    out = bytearray(words * 8)
+    for i in range(words):
+        chunk = pack[i * 4:i * 4 + 4]
+        if len(chunk) < 4:
+            chunk = chunk + b"\0" * (4 - len(chunk))
+        payload = chunk[0] | (chunk[1] << 8) | (chunk[2] << 16) | (chunk[3] << 24)
+        w = nan_mkword(payload, 10)
+        out[i * 8:i * 8 + 8] = w.to_bytes(8, "little")
+    return bytes(out)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("pack")
+    ap.add_argument("--header", required=True)
+    ap.add_argument("--encoded")
+    ap.add_argument("--image")
+    ap.add_argument("--out")
+    ap.add_argument("--base", default="0x01000000")
+    ap.add_argument("--limit", default="0x03000000",
+                    help="first guest byte the packed archive must not reach")
+    ap.add_argument("--stack-top", default="0x00c00000",
+                    help="guest stack top (SP word 0x300000)")
+    ap.add_argument("--stack-floor", default="0x00800000",
+                    help="lowest guest byte reserved for the compiler image")
+    ap.add_argument("--heap-base", default="0x04000000")
+    ap.add_argument("--heap-end", default="0x0c000000",
+                    help="end of the default 128 MiB guest heap")
+    ap.add_argument("--max-image", type=int, default=128 * 1024 * 1024,
+                    help="host image file byte budget")
+    args = ap.parse_args()
+
+    base = int(args.base, 0)
+    limit = int(args.limit, 0)
+    stack_top = int(args.stack_top, 0)
+    stack_floor = int(args.stack_floor, 0)
+    heap_base = int(args.heap_base, 0)
+    heap_end = int(args.heap_end, 0)
+    pack = open(args.pack, "rb").read()
+    raw_len = len(pack)
+    words = (raw_len + 3) // 4
+    guest_span = words * 4          # four payload bytes per 8-byte word
+    encoded_len = words * 8         # host image bytes for those words
+    guest_end = base + guest_span
+    if base & 3:
+        sys.exit("nan16_pack_image: base must be 4-byte aligned")
+    if base < stack_top:
+        sys.exit("nan16_pack_image: base %#x overlaps stack below %#x"
+                 % (base, stack_top))
+    if base < 0x01000000:
+        sys.exit("nan16_pack_image: base %#x is in the reserved low region"
+                 % base)
+    # A pack may live below the first output copy, or above the heap.  It must
+    # never overlap the output copy, diagnostics, progress word or heap.
+    if base < limit:
+        if not (base >= 0x01000000 and limit <= 0x03000000):
+            sys.exit("nan16_pack_image: low pack %#x..%#x overlaps output map"
+                     % (base, guest_end))
+    if base >= heap_base and base < heap_end:
+        sys.exit("nan16_pack_image: pack base %#x is inside heap %#x..%#x"
+                 % (base, heap_base, heap_end))
+    if guest_end > limit:
+        sys.exit("nan16_pack_image: packed archive guest end %#x (raw %d, "
+                 "guest span %d) exceeds limit %#x"
+                 % (guest_end, raw_len, guest_span, limit))
+
+    encoded = encode(pack)
+    total_file = base * 2 + encoded_len
+    if total_file > args.max_image:
+        sys.exit("nan16_pack_image: image file %d bytes exceeds budget %d "
+                 "(padding %d + encoded pack %d)"
+                 % (total_file, args.max_image, base * 2, encoded_len))
+    if args.encoded:
+        with open(args.encoded, "wb") as f:
+            f.write(encoded)
+
+    with open(args.header, "w") as f:
+        f.write("/* generated by tools/nan16_pack_image.py; build input only */\n")
+        f.write("#ifndef NAN16_GUEST_PACK_H\n#define NAN16_GUEST_PACK_H\n")
+        f.write("#define GUEST_PACK_BASE %#xu\n" % base)
+        f.write("#define GUEST_PACK_LEN %uu\n" % raw_len)
+        f.write("#endif\n")
+
+    if args.image:
+        if not args.out:
+            sys.exit("nan16_pack_image: --image needs --out")
+        image = open(args.image, "rb").read()
+        # base is a guest byte address: word index base/4, file offset base*2.
+        pad_to = base * 2
+        if len(image) > pad_to:
+            sys.exit("nan16_pack_image: compiler image %d bytes exceeds %d-byte "
+                     "padding for base %#x" % (len(image), pad_to, base))
+        image_guest_end = (len(image) + 1) // 2
+        if image_guest_end > stack_floor:
+            sys.exit("nan16_pack_image: compiler image ends at guest %#x, "
+                     "over stack floor %#x"
+                     % (image_guest_end, stack_floor))
+        with open(args.out, "wb") as f:
+            f.write(image)
+            f.write(b"\0" * (pad_to - len(image)))
+            f.write(encoded)
+        # Decode the payload words back and compare every archive byte.  This
+        # catches the classic mistake of appending raw host bytes to a NaN16
+        # word image.
+        got = open(args.out, "rb").read()[pad_to:pad_to + len(encoded)]
+        decoded = bytearray()
+        for i in range(0, len(got), 8):
+            w = int.from_bytes(got[i:i + 8], "little")
+            payload = (w >> 16) & 0xFFFFFFFF
+            decoded += payload.to_bytes(4, "little")
+        if bytes(decoded[:len(pack)]) != pack:
+            sys.exit("nan16_pack_image: encoded archive does not read back")
+
+    print("nan16_pack_image: raw %d, guest span %d at %#x..%#x, encoded %d, "
+          "image file %d"
+          % (raw_len, guest_span, base, guest_end, encoded_len,
+             base * 2 + encoded_len))
+
+
+
+if __name__ == "__main__":
+    main()
