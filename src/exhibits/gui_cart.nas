@@ -1654,7 +1654,7 @@ RET
 tm_id:
 .word 0
 s_help:
-.str "h c v w b l m x t s n u f e q\nb browser l lattice m monitor x hex\nt term w count c clear v ver\ne C editor (.run/.demo)\ns settings n NaNNet u utils\nf files (nsh) q quit gui\nfull image: build nan0s\n"
+.str "NaN/0S NATIVE DESKTOP - PURE NaN16\nF1 app launcher; arrows/1-8/Enter select\nF2 move; Shift+F2 resize; arrows + Enter\nF3 enlarge/restore; F4 close dialog\nF5 settings; Shift+F5 cycle themes\nF6 NaNNet; F7 utilities; F8 minimize\nF9 tile; F10 snap left; F11 snap right\nF12 restore minimized; Ctrl+1-8 taskbar\nTab focus; Esc close focused window\nh help b browser l lattice m monitor x hex\nt terminal w windows c clear v version\ne raw-NaN16 C editor (.run/.demo)\nf files (nsh) q quit GUI\nfull image: build nan0s\n"
 s_ver:
 .str "NaN/0S GUI r26\npure NaN16 wm\n"
 s_wins:
