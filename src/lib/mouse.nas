@@ -42,6 +42,10 @@ ms_tick:
 .word 0
 ms_budget:
 .word 0
+ms_last_title_tick:
+.word 0
+ms_last_title_id:
+.word 0xFFFF
 
 ; Input busy (8042 status bit1) must clear before EACH command/data write.
 ; Never wait unbounded on a broken physical controller or v86 reset.
@@ -102,6 +106,9 @@ ST r0,r0,@ms_state
 ST r0,r0,@ms_buttons
 ST r0,r0,@ms_prev
 ST r0,r0,@ms_drag
+ST r0,r0,@ms_last_title_tick
+MOVI r1,0xFFFF
+ST r1,r0,@ms_last_title_id
 MOVI r1,512
 ST r1,r0,@ms_x
 MOVI r1,384
@@ -258,6 +265,30 @@ JMP[NE] @ms_move
 CALL @ms_down
 JMP @ms_changed
 ms_release:
+; Drop window at either desktop edge to snap it into that half. This is
+; a guest-native geometric decision, not the v86 viewport or browser CSS.
+LD r2,r0,@ms_drag
+MOVI r3,1
+CMP r2,r3
+JMP[NE] @ms_release_end
+LD r3,r0,@ms_x
+MOVI r4,24
+CMP r3,r4
+JMP[GE] @ms_snap_right_check
+LD r1,r0,@ms_id
+MOVI r2,0
+CALL @wm_snap
+JMP @ms_release_end
+ms_snap_right_check:
+LD r4,r0,@fb_w
+MOVI r5,24
+SUB r4,r4,r5
+CMP r3,r4
+JMP[LT] @ms_release_end
+LD r1,r0,@ms_id
+MOVI r2,1
+CALL @wm_snap
+ms_release_end:
 ST r0,r0,@ms_drag
 JMP @ms_changed
 ms_move:
@@ -376,6 +407,30 @@ LD r1,r0,@ms_id
 CALL @wm_minimize
 JMP @ms_down_done
 ms_hit_move:
+; Two title-bar clicks within 350 ticks on the same window toggle
+; maximize/restore. Normal single click begins move mode.
+TICK r2
+LD r3,r0,@ms_last_title_tick
+SUB r4,r2,r3
+MOVI r5,350
+CMP r4,r5
+JMP[GT] @ms_title_new
+LD r3,r0,@ms_last_title_id
+LD r4,r0,@ms_id
+CMP r3,r4
+JMP[NE] @ms_title_new
+ST r0,r0,@ms_last_title_tick
+MOVI r3,0xFFFF
+ST r3,r0,@ms_last_title_id
+LD r1,r0,@ms_id
+MOVI r2,0
+MOVI r3,0
+CALL @wm_enlarge
+JMP @ms_down_done
+ms_title_new:
+ST r2,r0,@ms_last_title_tick
+LD r3,r0,@ms_id
+ST r3,r0,@ms_last_title_id
 MOVI r1,1
 ST r1,r0,@ms_drag
 JMP @ms_down_done
