@@ -395,8 +395,8 @@ in the register words.
 
 The proof implements w0–w3; that is enough to show the type and the exact
 faulting word. `ndr.nas` now adds w4–w6 from the decoded `a`/`b`/`d`
-registers and writes the FNV-1a/32 seal in w7. The log ring still stores the
-four-word summary; the rich eight-word ring and mirror pair are next.
+registers and writes the FNV-1a/32 seal in w7. The log ring now stores sixteen
+eight-word NDRs at 0x31000; the mirrored twin pairs are next.
 
 ### 4.3 The mirror pair
 

@@ -6404,7 +6404,7 @@ BOOL.8 r3,r3,r4
 ST r3,r0,@tlg_s
 tlg_l:
 LD r3,r0,@tlg_s
-SHL r3,r3,2
+SHL r3,r3,3
 LD r1,r0,@tlg_ptr
 ADD r1,r1,r3
 LDN r4,r1,0

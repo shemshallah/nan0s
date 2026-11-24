@@ -88,8 +88,9 @@ The undo ring is 32 records at host word 0x30000, enabled by `dbg_begin` and
 `dbg_cart`; standalone core builds link `src/dbg/undo_stub.nas` instead. The
 same debug starts set `nd_iocap=1`, so cart `VPOKE`/display ops write to the
 private text buffer at 0x60000 and target `PUTC` at 0x61000 instead of the
-desktop/COM1. The undo/redo rings live at 0x30000/0x62000; checkpoints use a
-header at 0x90000, an arena copy at 0x91000, and a capture copy at 0xA1000. Next stages (80x25 pane
+desktop/COM1. The undo/redo rings live at 0x30000/0x62000 and the sixteen
+eight-word NDRs live at 0x31000; checkpoints use a header at 0x90000, an arena
+copy at 0x91000, and a capture copy at 0xA1000. Next stages (80x25 pane
 UI, NDR log/checkpoints, NDP) are in `spec/NANDBG.md`.
 
 Screenshot of the desktop terminal with `debug` open and `screen` showing the
