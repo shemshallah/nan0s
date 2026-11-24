@@ -30,7 +30,7 @@ The Silver Slate terminal now has a wired `debug` monitor:
 ```text
 > debug
 NANDBG TERMINAL MONITOR
-carts load <id> step next finish run regs log hist stack types break watch bpts wpts bp wp goto mem dis screen serial setr setm setw setc undo redo checkpoint restore reset pc quit
+carts load <id> step next finish run regs log hist stack types break watch bpts wpts bp wp goto mem [addr] dis [addr] screen serial setr setm setw setc undo [n] redo [n] checkpoint restore reset pc quit
 > carts
 1 Baby
 2 PUTC
@@ -122,7 +122,8 @@ and `finish` runs out of the current frame. `log` prints the newest typed
 records, `hist` the newest eight PCs, `stack` the shadow frames, and `types`
 the live 4x4 type matrix. `bp <hex>`/`wp <hex>` toggle table entries and
 print `BP=... +`/`-` or `W=... +`/`-`; `goto <hex>` moves the PC and invalidates
-the time-travel rings. The richer 80x25 pane front end remains in
+the time-travel rings. `mem [addr]` and `dis [addr]` accept an optional base,
+and `undo [n]`/`redo [n]` repeat a recorded scalar step. The richer 80x25 pane front end remains in
 `shemshallah/ndbg`; the terminal monitor now covers its command set.
 
 ## Keeping this copy updated from ndbg
