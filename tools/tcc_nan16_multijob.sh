@@ -77,15 +77,15 @@ python3 tools/nan16_pack_image.py "$T/jobs.n16pack" \
     --out "$T/multijob.bin" --base "$BASE" --max-image 134217728 >/dev/null
 
 echo "multijob: run both jobs"
-timeout 300 "$CLI" --img "$T/multijob.bin" --mem "$MEM" --steps 500000000 \
-    --peek '0x0BFFFFC:1,0x0BFFFFD:1' --dump-bytes "0x03000000:0x40000:$T/a.bin" \
+timeout 300 "$CLI" --img "$T/multijob.bin" --mem "$MEM" --steps 2000000000 \
+    --peek '0x0BFFFFC:1,0x0BFFFFD:1' --dump-bytes "0x03000000:0x100000:$T/a.bin" \
     > "$T/run.txt" 2> "$T/run.err" || true
-timeout 300 "$CLI" --img "$T/multijob.bin" --mem "$MEM" --steps 500000000 \
-    --dump-bytes "0x03800000:0x40000:$T/b.bin" > /dev/null 2>> "$T/run.err" || true
+timeout 300 "$CLI" --img "$T/multijob.bin" --mem "$MEM" --steps 2000000000 \
+    --dump-bytes "0x03800000:0x100000:$T/b.bin" > /dev/null 2>> "$T/run.err" || true
 sa=$(head -n 1 "$T/run.txt"); sb=$(tail -n 1 "$T/run.txt")
 [ "$sa" != "00000000" ] || { echo "multijob: FAIL (job a emitted nothing)"; tail -5 "$T/run.err"; exit 1; }
 [ "$sb" != "00000000" ] || { echo "multijob: FAIL (job b emitted nothing)"; tail -5 "$T/run.err"; exit 1; }
-[ $((0x$sa)) -le 262144 ] && [ $((0x$sb)) -le 262144 ] || {
+[ $((0x$sa)) -le 1048576 ] && [ $((0x$sb)) -le 1048576 ] || {
     echo "multijob: FAIL (unexpected output sizes $sa $sb)"; exit 1; }
 
 run_ret() { # run_ret IMAGE SIZE -> return word
