@@ -968,7 +968,7 @@ dbg_mem_get:
 dmg_lnk:
 .word 0
 dbg_log:
-  MOVI r1,@nd_log
+  LA r1,0x31000
   LD r2,r0,@nd_li
   RET
 

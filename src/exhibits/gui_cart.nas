@@ -4064,7 +4064,7 @@ BOOL.8 r3,r3,r4
 ST r3,r0,@lg_s
 lg_loop:
 LD r2,r0,@lg_s
-SHL r2,r2,2
+SHL r2,r2,3
 LD r1,r0,@lg_ptr
 ADD r1,r1,r2
 LDN r3,r1,0
