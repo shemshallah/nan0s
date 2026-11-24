@@ -34,6 +34,13 @@
     border-radius:5px; padding:11px 12px; font:inherit; }
   .typebar input:focus { outline:none; border-color:var(--cyan); }
   .typebar-row button { white-space:nowrap; }
+  /* In the phone keyboard overlay, F-keys must remain reachable while Gboard
+     is open. A horizontal rail avoids hiding the guest behind twelve rows. */
+  .function-keys-label { margin:4px 0 0; text-align:left; font-size:11px; color:var(--dim); }
+  .function-keys { display:flex; gap:5px; overflow-x:auto; overscroll-behavior-x:contain;
+    padding:4px 0 7px; scrollbar-width:thin; -webkit-overflow-scrolling:touch; }
+  .function-keys button { flex:0 0 auto; min-width:45px; min-height:38px; padding:6px 8px;
+    font-size:14px; font-weight:600; touch-action:manipulation; }
   /*
    * Android browsers scroll a focused INPUT toward the center of the reduced
    * viewport, obscuring the emulated display. Pin the existing IME text field
@@ -58,6 +65,7 @@
       box-shadow: 0 2px 12px #0009;
     }
     .typebar > label, .typebar > .hint { display: none; }
+    .function-keys-label { margin-top:5px; }
     .typebar input { font-size: 16px; padding: 8px 10px; min-height: 40px; }
     .typebar-row button { padding: 7px 10px; }
     /*
@@ -123,6 +131,22 @@
              placeholder="Tap to type into NaN/0S" aria-describedby="type-hint" disabled>
       <button type="button" id="clear-type" disabled title="Clear only this phone input field">Clear</button>
     </div>
+    <div class="function-keys-label">Guest F0–F12 · swipe the keys sideways for F8–F12 →</div>
+    <div class="function-keys" id="function-keys" role="group" aria-label="Guest NaN/0S function keys F0 through F12">
+      <button type="button" data-code="84" title="NaN/0S F0 opens raw-NaN16 terminal help" aria-label="NaN/0S F0 opens raw-NaN16 terminal help" disabled>F0</button>
+      <button type="button" data-code="59" title="PS/2 function key F1" aria-label="PS/2 function key F1" disabled>F1</button>
+      <button type="button" data-code="60" title="PS/2 function key F2" aria-label="PS/2 function key F2" disabled>F2</button>
+      <button type="button" data-code="61" title="PS/2 function key F3" aria-label="PS/2 function key F3" disabled>F3</button>
+      <button type="button" data-code="62" title="PS/2 function key F4" aria-label="PS/2 function key F4" disabled>F4</button>
+      <button type="button" data-code="63" title="PS/2 function key F5" aria-label="PS/2 function key F5" disabled>F5</button>
+      <button type="button" data-code="64" title="PS/2 function key F6" aria-label="PS/2 function key F6" disabled>F6</button>
+      <button type="button" data-code="65" title="PS/2 function key F7" aria-label="PS/2 function key F7" disabled>F7</button>
+      <button type="button" data-code="66" title="PS/2 function key F8" aria-label="PS/2 function key F8" disabled>F8</button>
+      <button type="button" data-code="67" title="PS/2 function key F9" aria-label="PS/2 function key F9" disabled>F9</button>
+      <button type="button" data-code="68" title="PS/2 function key F10" aria-label="PS/2 function key F10" disabled>F10</button>
+      <button type="button" data-code="87" title="PS/2 function key F11" aria-label="PS/2 function key F11" disabled>F11</button>
+      <button type="button" data-code="88" title="PS/2 function key F12" aria-label="PS/2 function key F12" disabled>F12</button>
+    </div>
     <p id="type-hint" class="hint">Text is sent into the guest as you type. Clear empties this field only; Enter is also available below.</p>
   </div>
   <div class="pad" id="pad">
@@ -186,6 +210,7 @@
   var guestWidth = 1024;
   var zoom = isTouchView ? 1.5 : 1;
   var padEl = document.getElementById("pad");
+  var functionKeysEl = document.getElementById("function-keys");
   var typeEl = document.getElementById("type");
   var clearTypeBtn = document.getElementById("clear-type");
   var emulator = null;
@@ -292,6 +317,8 @@
     clearTypeBtn.disabled = !on;
     var keys = padEl.querySelectorAll("button");
     for (var i = 0; i < keys.length; i++) keys[i].disabled = !on;
+    var fn = functionKeysEl.querySelectorAll("button");
+    for (var j = 0; j < fn.length; j++) fn[j].disabled = !on;
   }
 
   function status(text, isError) {
@@ -447,6 +474,19 @@
     sendKey(code, b.getAttribute("data-ext") === "1");
   });
 
+  // This rail is a virtual PS/2 keyboard, not a browser-level hotkey handler.
+  // Avoid stealing focus from the Android IME when a function button is tapped.
+  functionKeysEl.addEventListener("pointerdown", function (e) {
+    if (e.target && e.target.tagName === "BUTTON" && e.cancelable !== false) e.preventDefault();
+  }, { passive: false });
+  functionKeysEl.addEventListener("click", function (e) {
+    var b = e.target;
+    if (!b || b.tagName !== "BUTTON" || b.disabled) return;
+    var code = parseInt(b.getAttribute("data-code"), 10);
+    if (isNaN(code)) return;
+    sendKey(code, false);
+  });
+
   // Android/Gboard input bridge. keyboard_set_enabled(false) disables v86's PS/2
   // keyboard delivery, including injected text, so NEVER disable it while typing.
   // Instead stop browser key events at this INPUT and inject real Set-1 scan codes.
@@ -468,7 +508,9 @@
     ":":";","\"":"'","~":"`","<":",",">":".","?":"/"
   };
   var SPECIAL = { Enter:0x1c, Escape:0x01, Tab:0x0f, ArrowUp:0x48,
-    ArrowDown:0x50, ArrowLeft:0x4b, ArrowRight:0x4d };
+    ArrowDown:0x50, ArrowLeft:0x4b, ArrowRight:0x4d,
+    F0:0x54, F1:0x3b, F2:0x3c, F3:0x3d, F4:0x3e, F5:0x3f,
+    F6:0x40, F7:0x41, F8:0x42, F9:0x43, F10:0x44, F11:0x57, F12:0x58 };
   var mirrored = "";
 
   function appendStroke(codes, key, shifted) {
