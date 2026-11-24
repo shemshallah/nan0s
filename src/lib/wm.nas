@@ -49,7 +49,14 @@
 .equ C_YEL 14
 .equ C_CLOSE 4
 .equ C_ENL 2
-.equ C_SHADOW 17
+.equ C_SHADOW 21
+.equ C_SHADOW_NEAR 22
+.equ C_CHROME 23
+.equ C_CHROME_IDLE 24
+.equ C_CHROME_EDGE 25
+.equ C_CONTROL 26
+.equ C_CONTROL_CLOSE 27
+.equ C_DOCK 28
 .equ C_SURFACE 19
 .equ C_DIVIDER 8
 .equ C_ACCENT 11
@@ -59,6 +66,27 @@
 .equ WM_MIN 2
 ; ---- rect (clipped to the screen): r1=x r2=y r3=w r4=h r5=colour ; clobbers r1-r8 ----
 wm_rect:
+; Reject empty rectangles and clip signed origins before forming a VRAM address.
+CMP r3,r0
+RET[LE]
+CMP r4,r0
+RET[LE]
+SHR r6,r1,31
+CMP r6,r0
+JMP[EQ] @wr_left_ok
+ADD r3,r3,r1
+MOVI r1,0
+wr_left_ok:
+SHR r6,r2,31
+CMP r6,r0
+JMP[EQ] @wr_top_ok
+ADD r4,r4,r2
+MOVI r2,0
+wr_top_ok:
+CMP r3,r0
+RET[LE]
+CMP r4,r0
+RET[LE]
 LD r6,r0,@fb_w
 CMP r1,r6
 RET[GE]
@@ -75,6 +103,10 @@ CMP r7,r6
 JMP[LE] @wr_yok
 SUB r4,r6,r2
 wr_yok:
+CMP r3,r0
+RET[LE]
+CMP r4,r0
+RET[LE]
 LD r6,r0,@fb_w
 MUL r6,r2,r6
 ADD r6,r6,r1
@@ -86,6 +118,66 @@ LD r7,r0,@fb_w
 ADD r6,r6,r7
 SUB r4,r4,r13
 JMP @wr_loop
+; Rounded 3px corners, using three clipped spans; native palette rendering.
+wm_round:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,@rr_x
+ST r2,r0,@rr_y
+ST r3,r0,@rr_w
+ST r4,r0,@rr_h
+ST r5,r0,@rr_c
+MOVI r6,6
+CMP r3,r6
+JMP[LE] @rr_plain
+CMP r4,r6
+JMP[LE] @rr_plain
+; full-width middle
+MOVI r6,2
+ADD r2,r2,r6
+MOVI r6,4
+SUB r4,r4,r6
+CALL @wm_rect
+; inset one pixel, all except first/last row
+LD r1,r0,@rr_x
+ADD r1,r1,r13
+LD r2,r0,@rr_y
+ADD r2,r2,r13
+LD r3,r0,@rr_w
+MOVI r6,2
+SUB r3,r3,r6
+LD r4,r0,@rr_h
+SUB r4,r4,r6
+LD r5,r0,@rr_c
+CALL @wm_rect
+; inset three pixels at the top and bottom
+LD r1,r0,@rr_x
+MOVI r6,3
+ADD r1,r1,r6
+LD r2,r0,@rr_y
+LD r3,r0,@rr_w
+MOVI r6,6
+SUB r3,r3,r6
+LD r4,r0,@rr_h
+LD r5,r0,@rr_c
+CALL @wm_rect
+JMP @rr_done
+rr_plain:
+CALL @wm_rect
+rr_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+rr_x:
+.word 0
+rr_y:
+.word 0
+rr_w:
+.word 0
+rr_h:
+.word 0
+rr_c:
+.word 0
 ; ---- puthex: r1=x r2=y r3=value r4=ndigits r5=colour ; clobbers r1-r9 ----
 wm_puthex:
 ST r15,r14,0
@@ -579,7 +671,7 @@ ST r3,r0,@dw_foc
 LD r1,r0,@dw_id
 CALL @wm_wbase
 ST r1,r0,@dw_b
-; Three stepped shadow planes; wholly guest-native framebuffer rectangles.
+; Layered rounded depth; every pixel is guest-native.
 ; The existing rect routine clips at the screen edge.
 LD r1,r0,@dw_b
 LD r2,r1,#W_Y
@@ -590,7 +682,17 @@ LD r4,r1,#W_H
 LD r1,r1,#W_X
 ADD r1,r1,r6
 MOVI r5,#C_SHADOW
-CALL @wm_rect
+CALL @wm_round
+LD r1,r0,@dw_b
+LD r2,r1,#W_Y
+MOVI r6,3
+ADD r2,r2,r6
+LD r3,r1,#W_W
+LD r4,r1,#W_H
+LD r1,r1,#W_X
+ADD r1,r1,r6
+MOVI r5,#C_SHADOW_NEAR
+CALL @wm_round
 LD r1,r0,@dw_b
 LD r2,r1,#W_Y
 LD r3,r1,#W_W
@@ -603,7 +705,7 @@ JMP[EQ] @dw_bc
 MOVI r6,#C_FOC
 dw_bc:
 ADD r5,r6,r0
-CALL @wm_rect
+CALL @wm_round
 ; Inset modern surface panel: colored outline, no app-layout changes.
 LD r9,r0,@dw_b
 LD r1,r9,#W_X
@@ -615,26 +717,27 @@ SUB r3,r3,r13
 SUB r3,r3,r13
 MOVI r4,#TB
 LD r5,r0,@dw_foc
-MOVI r6,#C_TITLE_B
+MOVI r6,#C_CHROME_IDLE
 CMP r5,r0
 JMP[EQ] @dw_tc
-LD r6,r0,@wm_theme_title
+MOVI r6,#C_CHROME
 dw_tc:
 ADD r5,r6,r0
-CALL @wm_rect
+CALL @wm_round
 ; An active-window accent rail makes focus obvious under overlaps.
 LD r7,r0,@dw_foc
 CMP r7,r0
 JMP[EQ] @dw_noaccent
 LD r9,r0,@dw_b
 LD r1,r9,#W_X
-ADD r1,r1,r13
+MOVI r6,4
+ADD r1,r1,r6
 LD r2,r9,#W_Y
 ADD r2,r2,r13
 LD r3,r9,#W_W
-SUB r3,r3,r13
-SUB r3,r3,r13
-MOVI r4,2
+MOVI r6,8
+SUB r3,r3,r6
+MOVI r4,1
 LD r5,r0,@wm_theme_accent
 CALL @wm_rect
 dw_noaccent:
@@ -666,7 +769,7 @@ CALL @fb_text7
 ; are now distinguishable, so closing one cannot look like it returned.
 LD r9,r0,@dw_b
 LD r1,r9,#W_X
-MOVI r5,37
+MOVI r5,55
 ADD r1,r1,r5
 LD r2,r9,#W_Y
 MOVI r5,3
@@ -678,14 +781,21 @@ MOVI r4,#C_YEL
 CALL @fb_char7
 LD r9,r0,@dw_b
 LD r1,r9,#W_X
-MOVI r5,58
+MOVI r5,70
 ADD r1,r1,r5
 LD r2,r9,#W_Y
 MOVI r5,2
 ADD r2,r2,r5
 LD r3,r9,#W_TITLE
+LD r5,r9,#W_X
+LD r6,r9,#W_W
+ADD r5,r5,r6
+MOVI r6,49
+SUB r5,r5,r6
+ST r5,r0,@t7_clip
 MOVI r4,#C_TXT
 CALL @fb_text7
+ST r0,r0,@t7_clip
 LD r9,r0,@dw_b
 LD r1,r9,#W_X
 LD r3,r9,#W_W
@@ -697,8 +807,8 @@ MOVI r5,2
 ADD r2,r2,r5
 MOVI r3,13
 MOVI r4,13
-MOVI r5,#C_CLOSE
-CALL @wm_rect
+MOVI r5,#C_CONTROL_CLOSE
+CALL @wm_round
 LD r9,r0,@dw_b
 LD r1,r9,#W_X
 LD r3,r9,#W_W
@@ -722,8 +832,8 @@ MOVI r5,2
 ADD r2,r2,r5
 MOVI r3,13
 MOVI r4,13
-MOVI r5,#C_ENL
-CALL @wm_rect
+MOVI r5,#C_CONTROL
+CALL @wm_round
 LD r9,r0,@dw_b
 LD r1,r9,#W_X
 LD r3,r9,#W_W
@@ -749,8 +859,8 @@ MOVI r5,2
 ADD r2,r2,r5
 MOVI r3,13
 MOVI r4,13
-MOVI r5,#C_BLUR
-CALL @wm_rect
+MOVI r5,#C_CONTROL
+CALL @wm_round
 LD r9,r0,@dw_b
 LD r1,r9,#W_X
 LD r3,r9,#W_W
@@ -826,8 +936,13 @@ MOVI r3,@s_hint2
 da_hl:
 MOVI r1,64
 MOVI r2,2
+LD r5,r0,@fb_w
+MOVI r6,148
+SUB r5,r5,r6
+ST r5,r0,@t7_clip
 MOVI r4,#C_TXT
 CALL @fb_text7
+ST r0,r0,@t7_clip
 ST r0,r0,@da_i
 da_loop:
 LD r1,r0,@da_i
@@ -862,7 +977,7 @@ ST r2,r0,@wd_y
 MOVI r1,0
 LD r3,r0,@fb_w
 MOVI r4,#TASKH
-MOVI r5,#C_BAR
+MOVI r5,#C_DOCK
 CALL @wm_rect
 MOVI r1,4
 LD r2,r0,@wd_y
@@ -915,7 +1030,7 @@ MOVI r3,5
 ADD r2,r2,r3
 MOVI r3,100
 MOVI r4,20
-CALL @wm_rect
+CALL @wm_round
 ; Taskbar uses the exact same stable slot ID as the title bar.
 LD r1,r0,@wd_x
 MOVI r4,4
