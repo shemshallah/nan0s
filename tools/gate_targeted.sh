@@ -31,7 +31,7 @@ if [ -z "$FILES" ]; then
   exit 0
 fi
 
-COMPILER="ncc_abi_sizes ncc_abi_ll ncc_alloc ncc_heap ncc_aligned ncc_headers ncc_ppexpr ncc_torture ncc_donut_exact ncc_macro_text ncc_include ncc_libm_exact ncc_iso_c ncc_ctests ncc_dp4b"
+COMPILER="ncc_abi_sizes ncc_abi_ll ncc_alloc ncc_heap ncc_aligned ncc_headers ncc_ppexpr ncc_torture ncc_donut_exact ncc_macro_text ncc_include ncc_libm_exact ncc_iso_c nanthr_gate ncc_ctests ncc_dp4b"
 m=1
 while [ "$m" -le 62 ]; do
   [ -f "tools/ncc_m$m.sh" ] && COMPILER="$COMPILER ncc_m$m"
@@ -52,6 +52,8 @@ for f in $FILES; do
       add "tcc_nan16_enc" ;;
     third_party/sqlite/*|src/tests/sqlite/*|tools/tcc_sqlite.sh)
       add "tcc_sqlite" ;;
+    src/lib/nanthr.nas|src/tests/nanthr*|tools/nanthr_gate.sh|spec/THREADS.md)
+      add "nanthr_gate" ;;
     spec/*|third_party/*|*.md|build/*|aarch64/android/app/src/main/assets/*)
       ;;
     src/lib/ncc.nas|src/lib/ppexpr.nas|src/lib/mpp.nas|src/lib/wide*.nas|src/lib/vscanf.nas|src/lib/iso*.nas|src/lib/mathx.nas|src/prog/nasm0_tables.nas|src/tools/disasm.nas|src/tests/ctests/*|src/tests/ncc_*)

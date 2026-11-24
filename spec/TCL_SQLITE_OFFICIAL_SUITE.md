@@ -71,8 +71,8 @@ Status legend: **done**, **partial**, **planned**.
 | S1.5 | Port I/O/DEV boundary | partial (`0x3E-0x44`) | ATA, NIC, console, timer |
 | K1 | Memory regions, page-frame/buddy allocator | nalloc/nalloc64 done in NaN; region layer planned | per-process heaps |
 | K2 | Process table, lifecycle, spawn/wait/exit | planned | `fork`/`exec`, tests |
-| K3 | Thread table, scheduler, context switch | planned | Tcl threads, SQLite THREADSAFE=1 |
-| K4 | Mutex/cond/semaphore, TLS | planned (C11 stubs only) | pthread/Tcl |
+| K3 | Thread table, scheduler, context switch | partial: NaN TCB/scheduler/frame path gated on oracle (`spec/THREADS.md`); x86_64 S1 vector pending | Tcl threads, SQLite THREADSAFE=1 |
+| K4 | Mutex/cond/semaphore, TLS | partial: mutex/cond/TLS in `nanthr.nas`; semaphore/barrier and S1 wiring pending | pthread/Tcl |
 | K5 | Signals, alarm, timers, process groups | planned | Tcl `after`, SQLite crash tests |
 | K6 | NaNFS read/write, directories, rename/unlink/stat | read exists; write planned | Tcl `file`, SQLite temp DBs |
 | K7 | Console/terminal, stdin/stdout/stderr, tty | serial/text plane exists; POSIX tty planned | Tcl channels, test output |
