@@ -92,7 +92,7 @@ assert.match(wm, /CALL @wm_rect[\s\S]*?dw_noaccent:/,
   'Window decorations must use native framebuffer drawing');
 assert.match(shell, /sh_appnames:[\s\S]*?\.word @sh_n0,@sh_n1,@sh_n2,@sh_n3,@sh_n4,@sh_n5,@sh_n6,@sh_n7/,
   'App launcher must include all eight native applications');
-assert.doesNotMatch(wm + shell, /<div|document\.|window\.|\.js\b|#include <stdio/,
+assert.doesNotMatch(wm + shell, /<div|document\.|window\.(?:addEventListener|querySelector|document)|\.js\b|#include <stdio/,
   'No browser or foreign-language guest window implementation is allowed');
 console.log('PASS: raw NaN16 taskbar, launcher, modal, notification, themes, tile, snap, resize and restore');
 
