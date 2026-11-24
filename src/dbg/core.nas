@@ -8,7 +8,7 @@
 ;   nd_reset                 clear target registers/pc/flags/steps/shadow stack
 ;   nd_step                  execute one instruction; r1 = status
 ;   nd_run(max)              execute up to max more instructions; r1 = status
-;   nd_emit / nd_rec_print   4-word typed diagnostic record
+;   nd_emit / nd_rec_print   8-word typed diagnostic record (NDR)
 ;
 ; status: 0 OK, 1 HALT, 2 BREAK, 3 FAULT, 4 BUDGET, 5 WAIT_KEY
 ; cells: nd_gb (word base), nd_mask, nd_pc, nd_k, nd_brk
@@ -187,13 +187,14 @@ nd_emit:
   ADD r9,r9,r13
   LD r6,r0,@nd_nehi
   STW r6,r9,r1
-  ; append the 4-word record to the log ring
+  ; complete w4-w7, then append the 8-word NDR to the log ring
+  CALL @nd_ndr_finish
   LD r6,r0,@nd_li
-  SHL r7,r6,2
-  MOVI r8,@nd_log
+  SHL r7,r6,3
+  LA r8,0x31000
   ADD r7,r7,r8
   MOVI r8,@nd_rec
-  MOVI r5,4
+  MOVI r5,8
 nd_logcp:
   LDN r9,r8,0
   LD r1,r8,0
@@ -210,7 +211,6 @@ nd_logcp:
   LD r6,r0,@nd_seq
   ADD r6,r6,r13
   ST r6,r0,@nd_seq
-  CALL @nd_ndr_finish
   LD r15,r0,@nd_nelnk
   RET
 nd_nelnk:
@@ -1553,11 +1553,6 @@ nd_wi:
 .word 0
 nd_wpt:
 .word 0,0,0,0,0,0,0,0
-nd_log:
-.word 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-.word 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-.word 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-.word 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 nd_cd:
 .word 0
 nd_hi:
@@ -1652,3 +1647,5 @@ nd_ud:
 .word 0
 nd_ubase:
 .word 0
+
+.include "ndr.nas"

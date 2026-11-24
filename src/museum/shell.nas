@@ -968,7 +968,7 @@ dbg_mem_get:
 dmg_lnk:
 .word 0
 dbg_log:
-  MOVI r1,@nd_log
+  LA r1,0x31000
   LD r2,r0,@nd_li
   RET
 
@@ -1344,8 +1344,6 @@ dbg_map:
   CALL @nd_addr
   LD r15,r0,@nd_ealnk
   RET
-
-.include "../dbg/ndr_stub.nas"
 
 ; ---- paged cartridge catalog area (builder writes 16-word entries at 22000) ----
 .org 22000
