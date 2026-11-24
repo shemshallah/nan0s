@@ -978,6 +978,15 @@ int close(int fd)
     if (fd >= FD_VFS_BASE && (unsigned)(fd - FD_VFS_BASE) < vfs_cap) files[fd - FD_VFS_BASE].pos = 0;
     return 0;
 }
+int fsync(int fd)
+{
+    if (fd >= FD_VFS_BASE && (unsigned)(fd - FD_VFS_BASE) < vfs_cap &&
+        files[fd - FD_VFS_BASE].used) return 0;
+    errno = EBADF;
+    return -1;
+}
+int fdatasync(int fd) { return fsync(fd); }
+int sync(void) { return 0; }
 ssize_t read(int fd, void *buf, size_t n)
 {
     MemFile *f;
