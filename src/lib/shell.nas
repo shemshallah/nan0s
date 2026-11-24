@@ -127,13 +127,20 @@ ST r0,r0,@sh_open
 MOVI r1,1
 ST r1,r0,@wm_redraw
 LD r1,r0,@sh_sel
-; Settings, network and utilities remain single-instance.
+; The app grid is a launcher, not a "create another identical window"
+; control. Its Terminal tile focuses an existing live Terminal (or opens
+; one if all are closed). Explicit 't' in the terminal still creates new
+; instances when the user actually wants parallel terminals.
+CMP r1,r0
+JMP[EQ] @sh_launch_existing
+; Settings, network and utilities also remain single-instance.
 MOVI r2,4
 CMP r1,r2
 JMP[LT] @sh_launch_new
 MOVI r2,6
 CMP r1,r2
 JMP[GT] @sh_launch_new
+sh_launch_existing:
 CALL @gui_single
 JMP @sh_key_done
 sh_launch_new:
