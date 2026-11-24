@@ -77,7 +77,7 @@ else
     python3 tools/nan16_embed.py "$T/compiler_src.h" \
         compiler_libc="$T/libc.i" compiler_libtcc="$T/libtcc.i" \
         compiler_driver="$T/driver.i"
-    "$T/tcc0" -nostdlib -DHEAP_SIZE=134217728 -o "$T/selfcompile.bin" $INC -I"$T" \
+    "$T/tcc0" -nostdlib -DNAN16_HEAP_SIZE=134217728 -o "$T/selfcompile.bin" $INC -I"$T" \
         "$LIBC/src/libc.c" "$T/libtcc.i" "$LIBC/src/selfhost_compile_driver.c"
     rm -f "$T"/state*.nan1 "$T"/prog*.bin "$T"/size*.txt "$T"/self2.bin "$T"/self2.done
 fi
