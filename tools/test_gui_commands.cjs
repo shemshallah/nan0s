@@ -25,6 +25,18 @@ assert.match(init, /ST r1,r0,@br_id[\s\S]*?LD r1,r0,@br_id\s*\nCALL @term_fit/,
   'browser initializer must restore the actual window ID before term_fit');
 assert.doesNotMatch(init, /^PUTC r1\s*$/m, 'debug PUTC must not overwrite browser window ID');
 
+// F0 is a guest-specific NaN16 function key, not a standard PC key.
+const kbd = fs.readFileSync(path.join(__dirname, '../src/lib/kbd.nas'), 'utf8');
+const virtualRows = kbd.match(/^\.word 0,0,0,0,256,0,0,267,268,0,0,0,0,0,0,0$/gm) || [];
+assert.equal(virtualRows.length, 2,
+  'Both shifted and normal NaN16 keymaps must map Set-1 0x54 to F0 and preserve F11/F12');
+const f0route = block('gk_np:', 'gk_notf0:');
+assert.match(f0route, /MOVI r2,0x100\s*\nCMP r1,r2\s*\nJMP\[NE\] @gk_notf0\s*\nCALL @gk_help/,
+  'The desktop must dispatch the virtual F0 event 0x100');
+const f0help = block('gk_help:', 'gh_id:');
+assert.match(f0help, /CALL @term_cmd[\s\S]*CALL @term_draw/,
+  'F0 must display native terminal help inside the guest');
+
 const controls = block('term_key:', 'tk_id:');
 assert.match(controls, /MOVI r4,13\s*\nCMP r3,r4\s*\nJMP\[EQ\] @tk_enter/,
   'the key n by itself must remain ordinary printable text, not a command');
@@ -48,4 +60,4 @@ assert.match(build, /CALL @sb_build/, 'Only build nan0s launches native image bu
 assert.match(source, /fs_s_build_head:\s*\n\.str "build"\s*\nfs_s_build:\s*\n\.str "build nan0s"/,
   'The build family and full command must be declared independently');
 
-console.log('PASS: n -> NaNNet; b -> browser; build -> help; build nan0s -> exact raw NaN16 disk builder');
+console.log('PASS: F0 native help, F1-F12 mapping, n/b routing, build command help, disk builder');
