@@ -146,9 +146,32 @@ cp build/nan0s.img "$T/source.img"
   echo "mouse_button 0"
   sleep 0.9
   echo "screendump $T/after-right-cycle.ppm"
+  # F4 confirmation must be modal. Escape cancels and leaves windows
+  # untouched; a later Enter confirms. This also exercises the close API.
+  echo "sendkey f4"
+  sleep 0.8
+  echo "screendump $T/close-dialog.ppm"
+  echo "sendkey esc"
+  sleep 0.8
+  echo "screendump $T/close-canceled.ppm"
+  echo "sendkey f4"
+  sleep 0.35
+  echo "sendkey ret"
+  sleep 0.9
+  echo "screendump $T/close-confirmed.ppm"
+  # Closing the remaining terminal must preserve the native desktop. The
+  # guest's launcher remains usable after its last app window disappears.
+  echo "sendkey f4"
+  sleep 0.35
+  echo "sendkey ret"
+  sleep 0.9
+  echo "screendump $T/final-window-closed.ppm"
+  echo "sendkey f1"
+  sleep 0.9
+  echo "screendump $T/launcher-after-last-close.ppm"
   sleep 0.2
   echo quit
-) | timeout 90 qemu-system-i386 -m 128 -boot order=a \
+) | timeout 105 qemu-system-i386 -m 128 -boot order=a \
   -drive format=raw,if=floppy,file=build/nan0s.img \
   -drive format=raw,if=ide,file="$T/source.img" \
   -display none -serial "file:$T/serial.txt" -monitor stdio \
@@ -175,11 +198,12 @@ def read(name):
         data = stream.read()
     assert len(data) == 1024 * 768 * 3
     return data
-a,b,c,hover,clicked,app_hover,app_clicked,before_drag,after_drag,before_resize,after_resize,under_before,under_focus,refocus,minimized,restored,right_before,right_after=(read(n) for n in (
+a,b,c,hover,clicked,app_hover,app_clicked,before_drag,after_drag,before_resize,after_resize,under_before,under_focus,refocus,minimized,restored,right_before,right_after,dialog,canceled,confirmed,final_closed,launcher_after=(read(n) for n in (
     "initial","moved","returned","taskbar-hover","taskbar-click",
     "app-hover","app-click","before-drag","after-drag","before-resize","after-resize",
     "before-under-focus","terminal-focused","lattice-refocused",
-    "lattice-minimized","lattice-restored","before-right-cycle","after-right-cycle"))
+    "lattice-minimized","lattice-restored","before-right-cycle","after-right-cycle",
+    "close-dialog","close-canceled","close-confirmed","final-window-closed","launcher-after-last-close"))
 def changed(x,y,box):
     x0,y0,x1,y1=box
     count=0
@@ -220,5 +244,16 @@ assert back>2500, "Taskbar did not restore focus to the upper application"
 assert hidden>2500, "Clicking the active taskbar slot did not reveal the underlying window"
 assert unhidden>2500, "Clicking minimized slot did not restore the upper window"
 assert cycled>2500, "Right-click on overlapping window did not bring the lower window to front"
-print("PASS: native NaN16 PS/2 move, app launch, drag, resize, underlying-window taskbar selection and right-click cycling")
+dialog_change=changed(right_after,dialog,area)
+cancel_change=changed(dialog,canceled,area)
+close_change=changed(canceled,confirmed,area)
+last_change=changed(confirmed,final_closed,area)
+relaunch_change=changed(final_closed,launcher_after,(178,115,835,550))
+print(f"NaN16 close F4 dialog {dialog_change}; cancel {cancel_change}; confirm {close_change}; final close {last_change}; still-running launcher {relaunch_change}")
+assert dialog_change>1000, "F4 did not display a native modal dialog"
+assert cancel_change>1000, "Esc did not dismiss a native close dialog"
+assert close_change>2500, "Enter did not confirm native window closing"
+assert last_change>2500, "Final native window could not be closed"
+assert relaunch_change>10000, "Desktop did not survive final window closing and reopen its launcher"
+print("PASS: native NaN16 overlap selection, F4 close dialog, Esc cancel, Enter close and desktop relaunch")
 PY
