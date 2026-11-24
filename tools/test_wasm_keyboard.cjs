@@ -31,7 +31,21 @@ async function main() {
   ], 'All F0-F12 button labels must match PS/2 Set-1 codes');
 
   class Element {
-    constructor() { this.listeners = {}; this.value = ''; this.disabled = true; this.className = ''; this.textContent = ''; }
+    constructor() {
+      this.listeners = {}; this.value = ''; this.disabled = true;
+      this.className = ''; this.textContent = ''; this.attributes = {};
+      const names = new Set();
+      this.classList = {
+        add(...classes) { classes.forEach(cls => names.add(cls)); },
+        remove(...classes) { classes.forEach(cls => names.delete(cls)); },
+        contains(cls) { return names.has(cls); },
+        toggle(cls, force) {
+          const enable = force === undefined ? !names.has(cls) : !!force;
+          if (enable) names.add(cls); else names.delete(cls);
+          return enable;
+        },
+      };
+    }
     addEventListener(type, handler) { (this.listeners[type] ||= []).push(handler); }
     dispatch(type, props = {}) {
       const evt = {
@@ -44,19 +58,31 @@ async function main() {
       return evt;
     }
     focus(options) { this.lastFocusOptions = options; }
+    blur() { this.blurred = true; }
+    setAttribute(name, value) { this.attributes[name] = String(value); }
+    getAttribute(name) { return this.attributes[name] ?? null; }
     getBoundingClientRect() { return { left: 10, top: 20 }; }
     querySelectorAll() { return []; }
   }
   const elements = Object.fromEntries(
     ['type', 'clear-type', 'pad', 'status', 'screen_container', 'serial', 'restart', 'fullscreen',
      'zoom-out', 'zoom-in', 'zoom-fit', 'zoom-level', 'image-fingerprint', 'download-replica',
-     'function-keys']
+     'function-keys', 'fullscreen-stage', 'fullscreen-exitbar', 'exit-fullscreen',
+     'fullscreen-keyboard', 'fullscreen-zoom-out', 'fullscreen-zoom-fit', 'fullscreen-zoom-in']
       .map(id => [id, new Element()])
   );
   elements.screen_container.clientWidth = 360;
   elements['function-keys'].querySelectorAll = selector =>
     selector === 'button' ? functionButtons : [];
-  const document = { getElementById(id) { assert.ok(elements[id], 'Missing mock element ' + id); return elements[id]; } };
+  const docEvents = {};
+  let exitFullscreenCalls = 0;
+  const document = {
+    body: new Element(), fullscreenElement: null,
+    getElementById(id) { assert.ok(elements[id], 'Missing mock element ' + id); return elements[id]; },
+    addEventListener(type, fn) { (docEvents[type] ||= []).push(fn); },
+    exitFullscreen() { exitFullscreenCalls++; this.fullscreenElement = null; return Promise.resolve(); },
+    dispatch(type, e = {}) { for (const fn of docEvents[type] || []) fn(e); },
+  };
   const window = { matchMedia() { return { matches: true }; } };
   let emulator;
   class V86 {
@@ -97,6 +123,74 @@ async function main() {
   assert.equal(elements['zoom-in'].disabled, false);
   assert.equal(elements['zoom-out'].disabled, false);
   assert.equal(elements['zoom-fit'].disabled, false);
+  assert.equal(elements.fullscreen.disabled, false);
+
+  // Fullscreen must work even when Chrome on Android rejects the native
+  // Fullscreen API. The Exit button is in a separate, bottom toolbar.
+  const stage = elements['fullscreen-stage'];
+  const exit = elements['exit-fullscreen'];
+  const keyboard = elements['fullscreen-keyboard'];
+  assert.match(html, /#fullscreen-stage\.immersive[^]*?position:fixed/,
+    'Fullscreen needs an actual viewport-sized CSS fallback');
+  assert.match(html, /#fullscreen-stage\.immersive #fullscreen-exitbar/,
+    'Exit control must be inside the fullscreen element');
+  assert.match(html, /#exit-fullscreen[^]*?min-width:128px/,
+    'Exit touch target must be large and independently separated');
+  elements.fullscreen.dispatch('click');
+  assert.equal(stage.classList.contains('immersive'), true, 'Fullscreen must enter CSS immersive mode');
+  assert.equal(document.body.classList.contains('nan0s-immersive'), true);
+  assert.equal(elements.fullscreen.getAttribute('aria-expanded'), 'true');
+  keyboard.dispatch('click');
+  assert.equal(document.body.classList.contains('nan0s-keys-open'), true,
+    'Keyboard button must expose Android IME and F-key rail in fullscreen');
+  assert.equal(elements.type.lastFocusOptions?.preventScroll, true);
+  assert.equal(keyboard.getAttribute('aria-pressed'), 'true');
+  elements['fullscreen-zoom-in'].dispatch('click');
+  assert.deepEqual(emulator.scales.at(-1), [1.875, 1.875],
+    'Zoom controls must work in immersive mode');
+  elements['fullscreen-zoom-out'].dispatch('click');
+  assert.deepEqual(emulator.scales.at(-1), [1.5, 1.5],
+    'Zoom out must work in immersive mode');
+  exit.dispatch('click');
+  assert.equal(stage.classList.contains('immersive'), false,
+    'Exit must always close CSS fullscreen even without native API');
+  assert.equal(document.body.classList.contains('nan0s-keys-open'), false);
+  assert.equal(document.body.classList.contains('nan0s-immersive'), false);
+  assert.equal(elements.fullscreen.getAttribute('aria-expanded'), 'false');
+
+  // Real native full screen: the button enters the same stage that owns Exit.
+  let requests = 0;
+  stage.requestFullscreen = () => {
+    requests++;
+    document.fullscreenElement = stage;
+    return Promise.resolve();
+  };
+  elements.fullscreen.dispatch('click');
+  await Promise.resolve();
+  assert.equal(requests, 1, 'Native fullscreen should be attempted on user gesture');
+  assert.equal(stage.classList.contains('immersive'), true);
+  exit.dispatch('click');
+  assert.equal(exitFullscreenCalls, 1, 'Exit must leave browser native fullscreen too');
+  assert.equal(document.fullscreenElement, null);
+  assert.equal(stage.classList.contains('immersive'), false);
+
+  // Browser/system back leaves native fullscreen without pressing our button.
+  elements.fullscreen.dispatch('click');
+  await Promise.resolve();
+  document.fullscreenElement = null;
+  document.dispatch('fullscreenchange');
+  assert.equal(stage.classList.contains('immersive'), false,
+    'System back/exit must dismiss CSS immersive mode');
+  // Native fullscreen denied? CSS mode and Exit are still usable.
+  stage.requestFullscreen = () => Promise.reject(new Error('Android denied native fullscreen'));
+  elements.fullscreen.dispatch('click');
+  await Promise.resolve();
+  assert.equal(stage.classList.contains('immersive'), true,
+    'Fullscreen must work as CSS overlay if native fullscreen is unsupported');
+  exit.dispatch('click');
+  assert.equal(stage.classList.contains('immersive'), false,
+    'Exit must remain reliable after a denied native request');
+
   assert.ok(functionButtons.every(b => b.disabled === false),
     'All guest F0-F12 controls must activate when v86 is ready');
   // A tap emits a real make/break pair without fake text or host shortcuts.
@@ -237,6 +331,6 @@ async function main() {
   check('Clear never sends guest backspaces', emulator.codes, []);
   assert.equal(input.value, '');
 
-  console.log('PASS: Android IME, F0-F12 PS/2 scancodes, function rail, focus, pinch, and disk controls');
+  console.log('PASS: Android IME, F0-F12, pinch, functional fullscreen/exit, native API fallback and disk controls');
 }
 main().catch(err => { console.error(err); process.exitCode = 1; });
