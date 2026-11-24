@@ -419,16 +419,70 @@ void *bsearch(const void *key, const void *base, size_t n, size_t size,
     return 0;
 }
 
-static char *envp[] = { 0 };
+static char *env_store[64];
+char **environ = env_store;
+static int env_index(const char *name, size_t n)
+{
+    int i;
+    for (i = 0; environ[i]; i++)
+        if (!strncmp(environ[i], name, n) && environ[i][n] == '=')
+            return i;
+    return -1;
+}
 char *getenv(const char *name)
 {
-    unsigned i = 0;
-    (void)name;
-    while (envp[i]) {
-        if (!strncmp(envp[i], name, strlen(name)) && envp[i][strlen(name)] == '=')
-            return envp[i] + strlen(name) + 1;
-        i++;
+    int i = env_index(name, strlen(name));
+    return i < 0 ? 0 : environ[i] + strlen(name) + 1;
+}
+int setenv(const char *name, const char *value, int overwrite)
+{
+    char *s;
+    size_t n = strlen(name);
+    int i;
+    if (!name || !*name || strchr(name, '=')) { errno = EINVAL; return -1; }
+    i = env_index(name, n);
+    if (i >= 0 && !overwrite) return 0;
+    s = (char *)malloc(n + strlen(value) + 2);
+    if (!s) { errno = ENOMEM; return -1; }
+    memcpy(s, name, n);
+    s[n] = '=';
+    strcpy(s + n + 1, value);
+    if (i >= 0) { environ[i] = s; return 0; }
+    for (i = 0; environ[i]; i++) ;
+    if (i >= 63) { free(s); errno = ENOMEM; return -1; }
+    environ[i] = s;
+    environ[i + 1] = 0;
+    return 0;
+}
+int putenv(char *s)
+{
+    char *eq;
+    size_t n;
+    int i;
+    if (!s) { errno = EINVAL; return -1; }
+    eq = strchr(s, '=');
+    if (!eq) {
+        n = strlen(s);
+        i = env_index(s, n);
+        if (i >= 0) {
+            while (environ[i]) { environ[i] = environ[i + 1]; i++; }
+        }
+        return 0;
     }
+    n = (size_t)(eq - s);
+    i = env_index(s, n);
+    if (i >= 0) { environ[i] = s; return 0; }
+    for (i = 0; environ[i]; i++) ;
+    if (i >= 63) { errno = ENOMEM; return -1; }
+    environ[i] = s;
+    environ[i + 1] = 0;
+    return 0;
+}
+int unsetenv(const char *name)
+{
+    int i = env_index(name, strlen(name));
+    if (i < 0) return 0;
+    while (environ[i]) { environ[i] = environ[i + 1]; i++; }
     return 0;
 }
 

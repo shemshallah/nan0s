@@ -63,6 +63,16 @@ int main(void)
     printf("rmtmp=%d\n", rmdir("tmp"));
     printf("bad=%d\n", chdir("/nope"));
     getcwd(cwd, sizeof cwd); printf("final=%s\n", cwd);
+
+    printf("env0=%d\n", getenv("NAN16_X") == 0);
+    printf("set=%d\n", setenv("NAN16_X", "one", 1));
+    printf("get=%d:%s\n", getenv("NAN16_X") != 0, getenv("NAN16_X"));
+    r = setenv("NAN16_X", "two", 0);
+    printf("noover=%d:%s\n", r, getenv("NAN16_X"));
+    r = setenv("NAN16_X", "two", 1);
+    printf("over=%d:%s\n", r, getenv("NAN16_X"));
+    unsetenv("NAN16_X");
+    printf("unset=%d\n", getenv("NAN16_X") == 0);
     printf("PATHS PASS\n");
     return 0;
 }

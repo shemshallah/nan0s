@@ -66,6 +66,12 @@ up=/suite/a
 rmtmp=0
 bad=-1
 final=/suite/a
+env0=1
+set=0
+get=1:one
+noover=0:one
+over=0:two
+unset=1
 PATHS PASS
 EOF
 if ! diff -u "$T/expected" "$T/out.norm"; then

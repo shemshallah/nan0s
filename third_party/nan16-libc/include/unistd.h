@@ -10,6 +10,7 @@ typedef long off_t;
 #define X_OK 1
 #define W_OK 2
 #define R_OK 4
+extern char **environ;
 ssize_t read(int, void *, size_t);
 ssize_t write(int, const void *, size_t);
 int close(int);
