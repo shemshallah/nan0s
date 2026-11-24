@@ -98,6 +98,28 @@ Tcl_Sleep(
     nanosleep(&ts, NULL);
 }
 
+extern int (*nan16_digits_hook)(double, char *, int *);
+static int
+Nan16DoubleDigits(
+    double value,
+    char *digits,
+    int *exponent)
+{
+    int decpt, sign, i;
+    char *end, *s;
+
+    s = TclDoubleDigits(value, 17, 0, &decpt, &sign, &end);
+    if (s == NULL) {
+	return -1;
+    }
+    for (i = 0; i < 17; i++) {
+	digits[i] = s[i] ? s[i] : '0';
+    }
+    *exponent = decpt;
+    Tcl_Free(s);
+    return 0;
+}
+
 void
 TclpInitPlatform(void)
 {
@@ -105,6 +127,7 @@ TclpInitPlatform(void)
      * tclPlatform is statically TCL_PLATFORM_UNIX.  The guest has no
      * signals to arrange; fd 0/1/2 are emulated by the libc console.
      */
+    nan16_digits_hook = Nan16DoubleDigits;
 }
 
 void

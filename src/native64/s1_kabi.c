@@ -345,6 +345,28 @@ static void guest_write_u32(uint32_t byte_addr, uint32_t v) {
   if (wi >= MEM_WORDS) return;          /* e.g. --mem 64: no time block */
   MEM[wi] = mkword(v, 10);
 }
+static void guest_write_byte(uint32_t byte_addr, uint8_t v) {
+  uint32_t wi = byte_addr >> 2;
+  uint32_t shift = (byte_addr & 3u) * 8u;
+  uint32_t payload;
+  if (wi >= MEM_WORDS) return;
+  payload = (uint32_t)(MEM[wi] >> 16);
+  payload = (payload & ~(0xFFu << shift)) | ((uint32_t)v << shift);
+  MEM[wi] = mkword(payload, 10);
+}
+/* A runner may compile a script path into the kernel image.  The guest
+   control block is u32 length at 0x03EFF020 followed by the path bytes. */
+extern const uint32_t s1_script_len __attribute__((weak));
+extern const unsigned char s1_script_data[] __attribute__((weak));
+static void guest_install_script(void) {
+  uint32_t n;
+  if (&s1_script_len == 0) return;
+  n = s1_script_len;
+  if (n > 1024u) n = 1024u;
+  guest_write_u32(0x03EFF020u, n);
+  for (uint32_t i = 0; i < n; i++)
+    guest_write_byte(0x03EFF024u + i, s1_script_data[i]);
+}
 static void guest_publish_time(void) {
   uint32_t ms = (uint32_t)(s.steps / 1000u);
   guest_write_u32(0x03EFF010u, ms);
@@ -957,6 +979,7 @@ void s1_main(void) {
   s.r[14] = S1_GUEST_STACK;
   s.pc = 0;
   s.k = 0;
+  guest_install_script();
   guest_publish_time();
   dbg_puts("S1GUEST LOAD "); dbg_dec(words); dbg_puts(" WORDS\n");
   uint32_t rc = s1_run(S1_GUEST_STEPS);

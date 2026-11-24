@@ -17,8 +17,16 @@ CC=${HOST_CC:-cc}
 TT=third_party/tinycc
 LIBC=third_party/nan16-libc
 PORT=src/tests/tcl_sqlite/nan16
-STEPS=${TCL_NAN16_TESTFIXTURE_STEPS:-4000000000}
-MEM=${TCL_NAN16_TESTFIXTURE_MEM:-128}
+MEM=${TCL_NAN16_TESTFIXTURE_MEM:-256}
+TEST=${TCL_NAN16_TESTFIXTURE_TEST:-/sqlite/test/select1.test}
+if [ -n "${TCL_NAN16_TESTFIXTURE_STEPS:-}" ]; then
+    STEPS=$TCL_NAN16_TESTFIXTURE_STEPS
+else
+    case "$TEST" in
+	*veryquick*|*quick*|*all.test*) STEPS=60000000000 ;;
+	*) STEPS=4000000000 ;;
+    esac
+fi
 
 TCL_SRC=${TCL_SRC:-}
 SQLITE_SRC=${SQLITE_SRC:-}
@@ -128,29 +136,11 @@ ZL=$(for f in adler32 compress crc32 deflate infback inffast inflate \
 done)
 PORT_SRCS=$(ls "$PORT"/tclNan16*.c \
     | grep -v 'tclNan16AppInit.c' | grep -v 'tclNan16TestTclsh.c')
-TESTS="$SQLITE_SRC/src/test1.c $SQLITE_SRC/src/test2.c \
-	$SQLITE_SRC/src/test_config.c $SQLITE_SRC/src/test_md5.c \
-	$SQLITE_SRC/src/test_hexio.c $SQLITE_SRC/src/test_malloc.c \
-	$SQLITE_SRC/src/test_mutex.c $SQLITE_SRC/src/test_func.c \
-	$SQLITE_SRC/src/test_autoext.c $SQLITE_SRC/src/test_delete.c \
-	$SQLITE_SRC/src/test_pcache.c $SQLITE_SRC/src/test_vfs.c"
-EXT="$SQLITE_SRC/ext/misc/amatch.c $SQLITE_SRC/ext/misc/appendvfs.c \
-	$SQLITE_SRC/ext/misc/basexx.c $SQLITE_SRC/ext/misc/cksumvfs.c \
-	$SQLITE_SRC/ext/misc/closure.c $SQLITE_SRC/ext/misc/csv.c \
-	$SQLITE_SRC/ext/misc/decimal.c $SQLITE_SRC/ext/misc/diskused.c \
-	$SQLITE_SRC/ext/misc/eval.c $SQLITE_SRC/ext/misc/explain.c \
-	$SQLITE_SRC/ext/misc/fileio.c $SQLITE_SRC/ext/misc/fuzzer.c \
-	$SQLITE_SRC/ext/misc/ieee754.c $SQLITE_SRC/ext/misc/mmapwarm.c \
-	$SQLITE_SRC/ext/misc/nextchar.c $SQLITE_SRC/ext/misc/normalize.c \
-	$SQLITE_SRC/ext/misc/prefixes.c $SQLITE_SRC/ext/misc/qpvtab.c \
-	$SQLITE_SRC/ext/misc/randomjson.c $SQLITE_SRC/ext/misc/regexp.c \
-	$SQLITE_SRC/ext/misc/remember.c $SQLITE_SRC/ext/misc/series.c \
-	$SQLITE_SRC/ext/misc/spellfix.c $SQLITE_SRC/ext/misc/stmtrand.c \
-	$SQLITE_SRC/ext/misc/strdup.c $SQLITE_SRC/ext/misc/totype.c \
-	$SQLITE_SRC/ext/misc/unionvtab.c $SQLITE_SRC/ext/misc/wholenumber.c \
-	$SQLITE_SRC/ext/misc/zipfile.c"
+TESTS=$(sed -n '/^TESTSRC =/,/^$/p; /^TESTSRC +=/,/^$/p' "$SQLITE_SRC/main.mk" \
+    | grep -oE '\$\(TOP\)/[^ ]+\.c' \
+    | sed "s|\$(TOP)|$SQLITE_SRC|" | grep -v '/src/test_tclsh.c$')
 
-SQLFLAGS="-DSQLITE_OS_OTHER=1 -DSQLITE_THREADSAFE=0 -DSQLITE_TEMP_STORE=3 \
+SQLFLAGS="-DNAN16_HEAP_SIZE=134217728 -DNAN16_SQLITE_VFS_FILES=256 -DNAN16_SQLITE_VFS_NAME=256 -DSQLITE_OS_OTHER=1 -DSQLITE_THREADSAFE=0 -DSQLITE_TEMP_STORE=3 \
  -DSQLITE_OMIT_WAL -DSQLITE_OMIT_LOAD_EXTENSION -DSQLITE_OMIT_LOCALTIME \
  -DSQLITE_OMIT_DEPRECATED -DSQLITE_DQS=0 -DSQLITE_OMIT_SHARED_CACHE \
  -DSQLITE_MAX_MMAP_SIZE=0 -DNDEBUG \
@@ -177,8 +167,8 @@ echo "tcl_testfixture: compile fixture"
     -DUSE_TCLALLOC=1 \
     -DTCLSH_INIT_PROC=sqlite3TestInit -DTCLSH_MAIN=Sqlite3TestMain \
     $SQLFLAGS \
-    third_party/sqlite/sqlite3.c third_party/sqlite/nan16_vfs.c \
-    "$SQLITE_SRC/ext/qrf/qrf.c" $EXT "$SQLITE_SRC/src/tclsqlite.c" \
+    third_party/sqlite/sqlite3.c third_party/sqlite/nan16_vfs_libc.c \
+    "$SQLITE_SRC/ext/qrf/qrf.c" "$SQLITE_SRC/src/tclsqlite.c" \
     $TESTS "$PORT/tclNan16TestTclsh.c" $GEN $OO $TM $ZL $PORT_SRCS \
     "$TCL_SRC/libtommath/bn_cutoffs.c" "$LIBC/src/libc.c"
 
@@ -189,7 +179,7 @@ python3 tools/nan16_pack_image.py "$T/suite.n16pack" \
 
 echo "tcl_testfixture: run test/select1.test"
 "$RUNNER" --img "$T/testfixture.bin" --mem "$MEM" --steps "$STEPS" \
-    --guest-stdout "$T/stdout" --guest-stderr "$T/stderr" \
+    --guest-script "$TEST" --guest-stdout "$T/stdout" --guest-stderr "$T/stderr" \
     --peek '0x100:1' > "$T/peek" 2> "$T/run.err" || true
 
 SUMMARY=$(grep -E '^[0-9]+ errors out of [0-9]+ tests on ' "$T/stdout" | tail -1 || true)
@@ -207,6 +197,7 @@ MAIN=$(tail -n 1 "$T/peek" 2>/dev/null || true)
 STEPS_USED=$(sed -n 's/.*: \([0-9][0-9]*\) steps,.*/\1/p' "$T/run.err" | tail -1)
 SIZE=$(wc -c < "$T/testfixture.bin" | tr -d ' ')
 HASH=$(sha256sum "$T/testfixture.bin" | cut -d' ' -f1)
+echo "tcl_testfixture: test=$TEST"
 echo "tcl_testfixture: $SUMMARY"
 echo "tcl_testfixture: steps=$STEPS_USED memory=${MEM}MiB"
 SKIPWARN=$(grep -m1 'WARNING: Multi-threaded tests skipped' "$T/stdout" 2>/dev/null || true)
@@ -228,7 +219,7 @@ fi
 echo "tcl_testfixture: omitted test cases:"
 awk '/^Omitted test cases:/{f=1;next} f && /^\.  /{print}' "$T/stdout"
 if [ "$MODE" = oracle ]; then
-    echo "tcl_testfixture: ORACLE MATCH (select1.test: $TESTSRUN tests, 0 errors, x86_64 S1 acceptance pending)"
+    echo "tcl_testfixture: ORACLE MATCH ($TEST: $TESTSRUN tests, 0 errors, x86_64 S1 acceptance pending)"
 else
-    echo "tcl_testfixture: PASS (select1.test: $TESTSRUN tests, 0 errors)"
+    echo "tcl_testfixture: PASS ($TEST: $TESTSRUN tests, 0 errors)"
 fi

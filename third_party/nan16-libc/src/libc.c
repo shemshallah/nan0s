@@ -1382,10 +1382,16 @@ static void oprintf(Out *o, const char *fmt, va_list ap)
 {
     while (*fmt) {
         int width = 0, zero = 0, left = 0, lng = 0, prec = -1;
+        int plus = 0, space = 0;
         if (*fmt != '%') { oc(o, *fmt++); continue; }
         fmt++;
-        if (*fmt == '-') { left = 1; fmt++; }
-        if (*fmt == '0') { zero = 1; fmt++; }
+        for (;;) {
+            if (*fmt == '-') { left = 1; fmt++; }
+            else if (*fmt == '0') { zero = 1; fmt++; }
+            else if (*fmt == '+') { plus = 1; fmt++; }
+            else if (*fmt == ' ') { space = 1; fmt++; }
+            else break;
+        }
         if (*fmt == '*') {
             width = va_arg(ap, int);
             if (width < 0) { left = 1; width = -width; }
@@ -1412,7 +1418,11 @@ static void oprintf(Out *o, const char *fmt, va_list ap)
             long long v = lng ? va_arg(ap, long long) : (long long)va_arg(ap, int);
             unsigned long long u;
             if (v < 0) { oc(o, '-'); u = (unsigned long long)(-v); }
-            else u = (unsigned long long)v;
+            else {
+                if (plus) oc(o, '+');
+                else if (space) oc(o, ' ');
+                u = (unsigned long long)v;
+            }
             onum(o, u, 10, width, zero, 0);
             break;
         }

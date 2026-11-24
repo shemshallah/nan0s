@@ -2,7 +2,8 @@
 # tools/s1_runner.sh - x86_64 bare-metal S1 runner with the gate CLI.
 #
 #   --img FILE [--mem MB] [--steps N] [--serial]
-#   [--guest-stdout FILE] [--guest-stderr FILE] [--peek 'ADDR[:LEN],...']
+#   [--guest-script PATH] [--guest-stdout FILE] [--guest-stderr FILE]
+#   [--peek 'ADDR[:LEN],...']
 #
 # FILE may be nmk .nan text or a flat NaN16 word cartridge (8-byte words).
 # The guest runs on src/native64/s1_kabi.c -DS1_GUEST under QEMU x86_64 with
@@ -15,16 +16,17 @@ export LC_ALL=C
 ROOT=$(pwd)
 
 usage() {
-  echo "usage: $0 --img FILE [--mem MB] [--steps N] [--serial] [--guest-stdout FILE] [--guest-stderr FILE] [--peek 'ADDR[:LEN][,ADDR[:LEN]...]']" >&2
+  echo "usage: $0 --img FILE [--mem MB] [--steps N] [--serial] [--guest-script PATH] [--guest-stdout FILE] [--guest-stderr FILE] [--peek 'ADDR[:LEN][,ADDR[:LEN]...]']" >&2
   exit 2
 }
-IMG=""; MEM_MB=128; STEPS=50000000; SERIAL=0; GOUT=""; GERR=""; PEEK=""
+IMG=""; MEM_MB=128; STEPS=50000000; SERIAL=0; GOUT=""; GERR=""; PEEK=""; GSCRIPT=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --img) [ "$#" -ge 2 ] || usage; IMG=$2; shift 2 ;;
     --mem) [ "$#" -ge 2 ] || usage; MEM_MB=$2; shift 2 ;;
     --steps) [ "$#" -ge 2 ] || usage; STEPS=$2; shift 2 ;;
     --serial) SERIAL=1; shift ;;
+    --guest-script) [ "$#" -ge 2 ] || usage; GSCRIPT=$2; shift 2 ;;
     --guest-stdout) [ "$#" -ge 2 ] || usage; GOUT=$2; shift 2 ;;
     --guest-stderr) [ "$#" -ge 2 ] || usage; GERR=$2; shift 2 ;;
     --peek) [ "$#" -ge 2 ] || usage; PEEK=$2; shift 2 ;;
@@ -43,7 +45,7 @@ if [ -n "${S1_QEMU_MEM:-}" ]; then QMEM=$S1_QEMU_MEM
 elif [ "$MEM_MB" -le 128 ]; then QMEM=256
 else QMEM=$((MEM_MB * 2)); fi
 
-T="${TMPDIR:-/tmp}/s1_runner.$$"; mkdir -p "$T"; trap 'rm -rf "$T"' EXIT INT TERM
+T="${TMPDIR:-/tmp}/s1_runner.$$"; mkdir -p "$T"; trap 'if [ "${S1_KEEP:-0}" = 1 ]; then echo "s1_runner: kept $T" >&2; else rm -rf "$T"; fi' EXIT INT TERM
 
 # --mem MB follows nan_cli: MiB of guest C payload, power-of-two word count.
 want=$((MEM_MB * 1024 * 1024 / 4))
@@ -128,10 +130,26 @@ clang --target=x86_64-none-elf -std=gnu99 -O3 -Wall -Wextra -ffp-contract=off -f
   -DS1_GUEST -DS1_GUEST_MEM="$WORDS" -DS1_GUEST_STEPS="$STEPS" \
   -DS1_GUEST_ZERO_WORDS="$SAFE" $STACK_DEF \
   -c src/native64/s1_kabi.c -o "$T/s1.o"
+python3 - "$GSCRIPT" "$T/script.S" <<'PY'
+import sys
+path = sys.argv[1].encode("utf-8")
+with open(sys.argv[2], "w") as f:
+    f.write(".section .rodata\n")
+    f.write(".global s1_script_len\ns1_script_len: .long %d\n" % len(path))
+    f.write(".global s1_script_data\ns1_script_data:\n")
+    if path:
+        for i in range(0, len(path), 16):
+            f.write("  .byte " + ",".join(str(b) for b in path[i:i+16]) + "\n")
+    else:
+        f.write("  .byte 0\n")
+    f.write(".text\n")
+PY
+
+clang --target=x86_64-none-elf -c "$T/script.S" -o "$T/script.o"
 clang --target=x86_64-none-elf -c "$T/guest.S" -o "$T/guest.o"
 clang --target=x86_64-none-elf -c "$T/peek.S" -o "$T/peek.o"
 ld.lld -m elf_x86_64 -T src/native64/s1_kabi.ld -e _start \
-  -o "$T/s1.elf" "$T/boot.o" "$T/s1.o" "$T/guest.o" "$T/peek.o"
+  -o "$T/s1.elf" "$T/boot.o" "$T/s1.o" "$T/guest.o" "$T/script.o" "$T/peek.o"
 llvm-objcopy -O binary "$T/s1.elf" "$T/s1.bin"
 [ "$(wc -c < "$T/s1.bin")" -le 65536 ] || { echo "s1_runner: S1 image > 64 KiB" >&2; exit 1; }
 cat "$T/bootsec.bin" "$T/s1.bin" > "$T/image"
