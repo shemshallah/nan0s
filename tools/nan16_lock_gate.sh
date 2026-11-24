@@ -45,7 +45,7 @@ $CC -std=gnu99 -O2 -DTCC_TARGET_NAN16 -DONE_SOURCE -I"$TT" "$TT/tcc.c" \
 echo "nan16_lock: build guest"
 "$T/tcc0" -nostdlib -DGUEST -o "$T/lock.bin" \
     -I"$SQL" -I"$LIBC/include" -I"$TT/include" -I"$TT" \
-    -DSQLITE_OS_OTHER=1 -DSQLITE_THREADSAFE=0 -DSQLITE_OMIT_LOAD_EXTENSION \
+    -DSQLITE_TEST=1 -DSQLITE_OS_OTHER=1 -DSQLITE_THREADSAFE=0 -DSQLITE_OMIT_LOAD_EXTENSION \
     -DSQLITE_TEMP_STORE=3 -DSQLITE_OMIT_WAL -DSQLITE_OMIT_LOCALTIME \
     -DSQLITE_OMIT_DEPRECATED -DSQLITE_DQS=0 -DSQLITE_OMIT_SHARED_CACHE \
     -DSQLITE_MAX_MMAP_SIZE=0 -DNDEBUG \
@@ -59,7 +59,7 @@ echo "nan16_lock: run guest"
 [ "$(tail -n 1 "$T/peek" 2>/dev/null)" = "00000000" ] || {
     echo "nan16_lock: FAIL (guest main result)"; tail -5 "$T/run.err"; exit 1; }
 tr -d '\r' < "$T/out" > "$T/norm"
-for want in 'LOCK PASS' 'second_insert_rc=5' 'nodir_open_rc=14' 'readonly_insert_rc=8'; do
+for want in 'LOCK PASS' 'second_insert_rc=5' 'nodir_open_rc=14' 'readonly_insert_rc=8' 'lockrow main pending'; do
     grep -qx "$want" "$T/norm" || {
         echo "nan16_lock: FAIL (missing: $want)"; cat "$T/norm"; exit 1; }
 done
