@@ -6,6 +6,7 @@
 JMP @main
 .include "../dbg/core.nas"
 .include "../dbg/undo_stub.nas"
+.include "../dbg/ndr_stub.nas"
 
 main:
   MOVI r13,1

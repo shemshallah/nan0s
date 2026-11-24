@@ -1352,6 +1352,8 @@ dbg_map:
   LD r15,r0,@nd_ealnk
   RET
 
+.include "../dbg/ndr_stub.nas"
+
 ; ---- paged cartridge catalog area (builder writes 16-word entries at 22000) ----
 
 ; ---- paged cartridge catalog area (builder writes 16-word entries at 22000) ----
