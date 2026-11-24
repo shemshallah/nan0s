@@ -124,8 +124,8 @@ pal_tab:
 ; Silver Slate: six-bit DAC entries, all guest-native.
 .word 21,2,3,5
 .word 22,4,5,8
-.word 23,19,23,30
-.word 24,14,17,23
+.word 23,22,27,35
+.word 24,17,21,29
 .word 25,42,46,51
 .word 26,23,27,34
 .word 27,31,21,25

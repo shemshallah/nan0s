@@ -452,16 +452,20 @@ LD r2,r0,@ms_y
 CMP r2,r1
 JMP[LT] @ms_window_hit
 LD r1,r0,@ms_x
-MOVI r2,140
+MOVI r2,#TASK_X
 CMP r1,r2
 JMP[GE] @ms_taskslot
 CALL @sh_launcher
 JMP @ms_down_done
 ms_taskslot:
-MOVI r2,140
+MOVI r2,#TASK_X
 SUB r1,r1,r2
-MOVI r2,106
-DIV r1,r1,r2
+MOVI r2,#TASK_PITCH
+MODU r3,r1,r2
+MOVI r4,#TASK_WIDTH
+CMP r3,r4
+JMP[GE] @ms_down_done
+DIVU r1,r1,r2
 CALL @wm_taskbar_select
 JMP @ms_down_done
 ms_window_hit:

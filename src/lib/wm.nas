@@ -69,6 +69,10 @@
 .equ C_DOCK_EDGE 35
 .equ C_TITLE_LO 36
 .equ TASKH 29
+.equ TASK_X 144
+.equ TASK_PITCH 110
+.equ TASK_WIDTH 100
+.equ TASK_LABEL_MAX 10
 .equ WM_MIN 2
 .equ WM_CLOSE_X 24
 .equ WM_CTL_W 24
@@ -778,7 +782,8 @@ MOVI r6,#C_SILVER_HI
 dw_bc:
 ADD r5,r6,r0
 CALL @wm_round
-; One-pixel recessed inner bevel, then a slate body with two-pixel inset.
+; Silver outline then a continuous window-background inset. The title
+; begins at x+3,y+3: two native pixels of slate between silver and blue.
 LD r9,r0,@dw_b
 LD r1,r9,#W_X
 ADD r1,r1,r13
@@ -789,33 +794,20 @@ MOVI r6,2
 SUB r3,r3,r6
 LD r4,r9,#W_H
 SUB r4,r4,r6
-MOVI r5,#C_BEVEL_DARK
-CALL @wm_round
-LD r9,r0,@dw_b
-LD r1,r9,#W_X
-MOVI r6,2
-ADD r1,r1,r6
-LD r2,r9,#W_Y
-ADD r2,r2,r6
-LD r3,r9,#W_W
-MOVI r6,4
-SUB r3,r3,r6
-LD r4,r9,#W_H
-SUB r4,r4,r6
 MOVI r5,#C_BODY
 CALL @wm_round
 ; Rounded inset title cap. Focus is expressed through silver brightness,
 ; not a cyan or green rail. All app content uses the same slate surface.
 LD r9,r0,@dw_b
 LD r1,r9,#W_X
-MOVI r6,2
+MOVI r6,3
 ADD r1,r1,r6
 LD r2,r9,#W_Y
 ADD r2,r2,r6
 LD r3,r9,#W_W
-MOVI r6,4
+MOVI r6,6
 SUB r3,r3,r6
-MOVI r4,15
+MOVI r4,14
 LD r5,r0,@dw_foc
 MOVI r6,#C_CHROME_IDLE
 CMP r5,r0
@@ -827,13 +819,13 @@ CALL @wm_round
 ; Subtle bevel highlight follows the flat portion of the curved cap.
 LD r9,r0,@dw_b
 LD r1,r9,#W_X
-MOVI r6,7
+MOVI r6,8
 ADD r1,r1,r6
 LD r2,r9,#W_Y
-MOVI r6,2
+MOVI r6,3
 ADD r2,r2,r6
 LD r3,r9,#W_W
-MOVI r6,14
+MOVI r6,16
 SUB r3,r3,r6
 MOVI r4,1
 MOVI r5,#C_BEVEL_LIGHT
@@ -846,7 +838,7 @@ LD r1,r9,#W_X
 MOVI r5,8
 ADD r1,r1,r5
 LD r2,r9,#W_Y
-MOVI r5,3
+MOVI r5,4
 ADD r2,r2,r5
 LD r3,r0,@dw_id
 MOVI r5,49
@@ -858,7 +850,7 @@ LD r1,r9,#W_X
 MOVI r5,22
 ADD r1,r1,r5
 LD r2,r9,#W_Y
-MOVI r5,2
+MOVI r5,4
 ADD r2,r2,r5
 LD r3,r9,#W_TITLE
 LD r5,r9,#W_X
@@ -877,10 +869,10 @@ ADD r1,r1,r3
 MOVI r5,#WM_CLOSE_X
 SUB r1,r1,r5
 LD r2,r9,#W_Y
-MOVI r5,2
+MOVI r5,4
 ADD r2,r2,r5
-MOVI r3,21
-MOVI r4,13
+MOVI r3,18
+MOVI r4,12
 MOVI r5,#C_SILVER_LO
 CALL @wm_round
 LD r9,r0,@dw_b
@@ -891,20 +883,20 @@ MOVI r5,#WM_CLOSE_X
 SUB r1,r1,r5
 ADD r1,r1,r13
 LD r2,r9,#W_Y
-MOVI r5,3
+MOVI r5,5
 ADD r2,r2,r5
-MOVI r3,19
-MOVI r4,11
+MOVI r3,16
+MOVI r4,10
 MOVI r5,#C_CONTROL_CLOSE
 CALL @wm_round
 LD r9,r0,@dw_b
 LD r1,r9,#W_X
 LD r3,r9,#W_W
 ADD r1,r1,r3
-MOVI r5,17
+MOVI r5,19
 SUB r1,r1,r5
 LD r2,r9,#W_Y
-MOVI r5,3
+MOVI r5,4
 ADD r2,r2,r5
 MOVI r3,120
 MOVI r4,#C_TXT
@@ -916,10 +908,10 @@ ADD r1,r1,r3
 MOVI r5,#WM_MAX_X
 SUB r1,r1,r5
 LD r2,r9,#W_Y
-MOVI r5,2
+MOVI r5,4
 ADD r2,r2,r5
-MOVI r3,21
-MOVI r4,13
+MOVI r3,18
+MOVI r4,12
 MOVI r5,#C_SILVER_LO
 CALL @wm_round
 LD r9,r0,@dw_b
@@ -930,20 +922,20 @@ MOVI r5,#WM_MAX_X
 SUB r1,r1,r5
 ADD r1,r1,r13
 LD r2,r9,#W_Y
-MOVI r5,3
+MOVI r5,5
 ADD r2,r2,r5
-MOVI r3,19
-MOVI r4,11
+MOVI r3,16
+MOVI r4,10
 MOVI r5,#C_CONTROL
 CALL @wm_round
 LD r9,r0,@dw_b
 LD r1,r9,#W_X
 LD r3,r9,#W_W
 ADD r1,r1,r3
-MOVI r5,41
+MOVI r5,43
 SUB r1,r1,r5
 LD r2,r9,#W_Y
-MOVI r5,3
+MOVI r5,4
 ADD r2,r2,r5
 MOVI r3,43
 MOVI r4,#C_TXT
@@ -957,10 +949,10 @@ ADD r1,r1,r3
 MOVI r5,#WM_MIN_X
 SUB r1,r1,r5
 LD r2,r9,#W_Y
-MOVI r5,2
+MOVI r5,4
 ADD r2,r2,r5
-MOVI r3,21
-MOVI r4,13
+MOVI r3,18
+MOVI r4,12
 MOVI r5,#C_SILVER_LO
 CALL @wm_round
 LD r9,r0,@dw_b
@@ -971,20 +963,20 @@ MOVI r5,#WM_MIN_X
 SUB r1,r1,r5
 ADD r1,r1,r13
 LD r2,r9,#W_Y
-MOVI r5,3
+MOVI r5,5
 ADD r2,r2,r5
-MOVI r3,19
-MOVI r4,11
+MOVI r3,16
+MOVI r4,10
 MOVI r5,#C_CONTROL
 CALL @wm_round
 LD r9,r0,@dw_b
 LD r1,r9,#W_X
 LD r3,r9,#W_W
 ADD r1,r1,r3
-MOVI r5,65
+MOVI r5,67
 SUB r1,r1,r5
 LD r2,r9,#W_Y
-MOVI r5,3
+MOVI r5,4
 ADD r2,r2,r5
 MOVI r3,45
 MOVI r4,#C_TXT
@@ -1107,7 +1099,7 @@ MOVI r5,#C_DOCK
 CALL @wm_round
 MOVI r1,4
 LD r2,r0,@wd_y
-MOVI r3,5
+MOVI r3,9
 ADD r2,r2,r3
 MOVI r3,@s_dock
 MOVI r4,#C_YEL
@@ -1124,15 +1116,15 @@ LD r2,r1,#W_ALIVE
 CMP r2,r0
 JMP[EQ] @wd_next
 ST r1,r0,@wd_b
-; 106px slots begin after the NaN/0S launcher label.
+; Shared taskbar geometry: 100px buttons, 10px gaps, stable slot IDs.
 LD r6,r0,@wd_i
-MOVI r7,106
+MOVI r7,#TASK_PITCH
 MUL r6,r6,r7
-MOVI r7,140
+MOVI r7,#TASK_X
 ADD r6,r6,r7
 ST r6,r0,@wd_x
 LD r1,r0,@fb_w
-MOVI r2,100
+MOVI r2,#TASK_WIDTH
 ADD r2,r2,r6
 CMP r2,r1
 JMP[GT] @wd_done
@@ -1152,43 +1144,72 @@ MOVI r5,#C_FOC
 wd_frame:
 LD r1,r0,@wd_x
 LD r2,r0,@wd_y
-MOVI r3,5
+MOVI r3,4
 ADD r2,r2,r3
-MOVI r3,100
-MOVI r4,20
+MOVI r3,#TASK_WIDTH
+MOVI r4,21
 CALL @wm_round
 LD r1,r0,@wd_x
 ADD r1,r1,r13
 LD r2,r0,@wd_y
-MOVI r3,6
+MOVI r3,5
 ADD r2,r2,r3
-MOVI r3,98
-MOVI r4,18
+MOVI r3,#TASK_WIDTH
+MOVI r6,2
+SUB r3,r3,r6
+MOVI r4,19
 MOVI r5,#C_CHROME_IDLE
 CALL @wm_round
-; Taskbar uses the exact same stable slot ID as the title bar.
+; Center ID + space + title as one measured label (7px ink, 8px pitch).
+; Limit to ten title glyphs so even long names fit the 100px button.
+LD r1,r0,@wd_b
+LD r10,r1,#W_TITLE
+MOVI r11,0
+MOVI r12,0
+MOVI r8,0
+wd_measure:
+MOVI r7,#TASK_LABEL_MAX
+CMP r8,r7
+JMP[GE] @wd_measured
+CALL @fb_nextbyte
+CMP r6,r0
+JMP[EQ] @wd_measured
+MOVI r7,10
+CMP r6,r7
+JMP[EQ] @wd_measured
+ADD r8,r8,r13
+JMP @wd_measure
+wd_measured:
+ST r8,r0,@wd_len
+MOVI r7,2
+ADD r8,r8,r7
+SHL r8,r8,3
+SUB r8,r8,r13
+MOVI r7,#TASK_WIDTH
+SUB r7,r7,r8
+SHR r7,r7,1
 LD r1,r0,@wd_x
-MOVI r4,4
-ADD r1,r1,r4
+ADD r1,r1,r7
+ST r1,r0,@wd_label_x
 LD r2,r0,@wd_y
-MOVI r4,7
+MOVI r4,9
 ADD r2,r2,r4
 LD r3,r0,@wd_i
 MOVI r4,49
 ADD r3,r3,r4
-MOVI r4,#C_YEL
+MOVI r4,#C_CHROME_EDGE
 CALL @fb_char7
 LD r1,r0,@wd_b
 LD r3,r1,#W_TITLE
-LD r1,r0,@wd_x
-MOVI r4,14
+LD r1,r0,@wd_label_x
+MOVI r4,16
 ADD r1,r1,r4
 LD r2,r0,@wd_y
-MOVI r4,7
+MOVI r4,9
 ADD r2,r2,r4
-LD r5,r0,@wd_x
-MOVI r6,97
-ADD r5,r5,r6
+LD r5,r0,@wd_len
+SHL r5,r5,3
+ADD r5,r1,r5
 ST r5,r0,@t7_clip
 MOVI r4,#C_TXT
 CALL @fb_text7
@@ -1234,6 +1255,10 @@ RET
 wd_i:
 .word 0
 wd_x:
+.word 0
+wd_len:
+.word 0
+wd_label_x:
 .word 0
 wd_y:
 .word 0
