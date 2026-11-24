@@ -3,10 +3,10 @@
 ; mbstate_t is a 32-bit integer: 0 means no pending code unit, otherwise it
 ; holds a pending low surrogate (0xDC00..0xDFFF).
 
-.equ W_UC_A 61777
-.equ W_UC_B 61778
-.equ W_UC_C 61779
-.equ W_UC_D 61780
+.equ W_UC_A 64777
+.equ W_UC_B 64778
+.equ W_UC_C 64779
+.equ W_UC_D 64780
 .equ W_ISOFMT 3810000
 .equ W_ISONBUF 3830000
 
@@ -1347,10 +1347,10 @@ CALL @ni_pop
 JMP @nbi_atomic_flag_clr
 
 ; ---- fenv ----------------------------------------------------------
-.equ W_FENV_ROUND 61917
-.equ W_TSS_N 61919
+.equ W_FENV_ROUND 64917
+.equ W_TSS_N 64919
 .equ W_TSS_TAB 2500300
-.equ W_THRD_RESULT 61918
+.equ W_THRD_RESULT 64918
 nbi_fegetround:
 LD r1,r0,#W_FENV_ROUND
 CALL @ni_push

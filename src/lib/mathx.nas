@@ -1,9 +1,9 @@
 ; mathx.nas - inverse trig (atan/atan2/asin/acos) for ncc.
 
-.equ W_AT_SIGN 61880
-.equ W_AT_INV  61881
-.equ W_AT_X    61882
-.equ W_AT_Y    61883
+.equ W_AT_SIGN 64880
+.equ W_AT_INV  64881
+.equ W_AT_X    64882
+.equ W_AT_Y    64883
 
 ; ni_atan_poly: r1=|x|<=0.4143 -> r1=atan(x) by Taylor/Horner
 ni_atan_poly:

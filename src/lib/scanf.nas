@@ -3,24 +3,24 @@
 ; '*' suppression and field widths.  Streams use the stdio FILE layer.
 .equ CSBUF    11020600
 .equ CSBUFSZ  128
-.equ CS_FMT   61560
-.equ CS_ARG   61561
-.equ CS_CNT   61562
-.equ CS_MODE  61563
-.equ CS_SRC   61564
-.equ CS_PBF   61565
-.equ CS_PBC   61566
-.equ CS_W     61567
-.equ CS_SUP   61568
-.equ CS_TMP   61569
-.equ CS_SGN   61570
-.equ CS_DST   61571
-.equ CS_BASE  61572
-.equ CS_DIG   61573
-.equ CS_I     61574
-.equ CS_ENT   61575
-.equ CS_LEN   61577
-.equ CS_TMPH  61578
+.equ CS_FMT   64560
+.equ CS_ARG   64561
+.equ CS_CNT   64562
+.equ CS_MODE  64563
+.equ CS_SRC   64564
+.equ CS_PBF   64565
+.equ CS_PBC   64566
+.equ CS_W     64567
+.equ CS_SUP   64568
+.equ CS_TMP   64569
+.equ CS_SGN   64570
+.equ CS_DST   64571
+.equ CS_BASE  64572
+.equ CS_DIG   64573
+.equ CS_I     64574
+.equ CS_ENT   64575
+.equ CS_LEN   64577
+.equ CS_TMPH  64578
 .equ CS_FBUF  11020700
 
 ; cs_getc -> r1=char or -1

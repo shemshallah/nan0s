@@ -1,6 +1,6 @@
 ; strx.nas - extra string/stdlib helpers (raw NaN16).
 
-.equ W_TOKPTR 61670
+.equ W_TOKPTR 64670
 
 ; nbi_strspn(s,accept)
 nbi_strspn:

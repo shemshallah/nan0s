@@ -1,15 +1,15 @@
 ; libcx.nas - extra C library pieces (strftime, tmpfile/tmpnam, wide strings).
 
-.equ SF_OUT   61620
-.equ SF_MAX   61621
-.equ SF_USED  61622
-.equ SF_TM    61623
-.equ SF_FMT   61624
-.equ SF_OVF   61625
-.equ SF_VAL   61626
-.equ SF_DIG   61627
-.equ SF_CNT   61628
-.equ SF_PTR   61629
+.equ SF_OUT   64620
+.equ SF_MAX   64621
+.equ SF_USED  64622
+.equ SF_TM    64623
+.equ SF_FMT   64624
+.equ SF_OVF   64625
+.equ SF_VAL   64626
+.equ SF_DIG   64627
+.equ SF_CNT   64628
+.equ SF_PTR   64629
 
 ; sf_put: r1=char
 cx_sf_put:
@@ -372,7 +372,7 @@ cx_sf_pmstr:
 ncc_s_strftime:
 .str "strftime"
 
-.equ TMPN_CNT 61630
+.equ TMPN_CNT 64630
 
 nbi_tmpnam:
 ST r15,r14,0
