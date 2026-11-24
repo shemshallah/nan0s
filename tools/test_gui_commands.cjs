@@ -94,6 +94,43 @@ assert.match(shell, /sh_appnames:[\s\S]*?\.word @sh_n0,@sh_n1,@sh_n2,@sh_n3,@sh_
   'App launcher must include all eight native applications');
 assert.doesNotMatch(wm + shell, /<div|document\.|window\.(?:addEventListener|querySelector|document)|\.js\b|#include <stdio/,
   'No browser or foreign-language guest window implementation is allowed');
+// Mouse driver runs INSIDE the raw NaN16 guest: there is no DOM hit testing,
+// JavaScript window dragging, or host-generated guest pointer events.
+const mouse = fs.readFileSync(path.join(__dirname, '../src/lib/mouse.nas'), 'utf8');
+assert.match(source, /\.include "\.\.\/lib\/mouse\.nas"/,
+  'Full guest must link the native PS/2 AUX driver');
+assert.match(source, /CALL @sh_draw\s*\nCALL @ms_draw/,
+  'Guest cursor must be the final visual layer, above modal overlays');
+assert.match(source, /CALL @ms_poll\s*\nCALL @kbd_poll/,
+  'Guest must poll AUX data before keyboard scan codes');
+for (const name of [
+  'ms_write_ready:', 'ms_command:', 'ms_data:', 'ms_init:', 'ms_poll:',
+  'ms_update:', 'ms_down:', 'ms_drag_update:', 'ms_draw:',
+]) {
+  assert.ok(mouse.includes('\n' + name + '\n'),
+    'Native PS/2 driver missing entrypoint ' + name);
+}
+const init = mouse.slice(mouse.indexOf('ms_init:'), mouse.indexOf('; Non-blocking; budget'));
+assert.match(init, /0xA8[\s\S]*0xD4[\s\S]*0xF6[\s\S]*0xD4[\s\S]*0xF4/,
+  'Mouse startup must enable the AUX port then send defaults and stream enable');
+assert.match(mouse, /ms_write_wait:[\s\S]*INB r2,r1[\s\S]*BOOL\.8 r4,r2,r3[\s\S]*SUB r8,r8,r13/,
+  'PS/2 commands must wait for input-busy to clear with a bounded budget');
+assert.match(mouse, /MOVI r3,0x20[\s\S]*BOOL\.8 r4,r2,r3[\s\S]*JMP\[EQ\] @ms_poll_done/,
+  'Mouse poll must never read keyboard data as an AUX packet');
+assert.match(mouse, /CALL @ms_update\s*\nLD r10,r0,@ms_budget/,
+  'AUX packet processing must not starve the guest event loop');
+assert.match(mouse, /MOVI r2,0xC0[\s\S]*JMP\[NE\] @ms_update_done/,
+  'Mouse overflow bits must discard invalid movement packets');
+assert.match(mouse, /CALL @wm_raise/, 'Mouse click must focus overlapped windows');
+assert.match(mouse, /CALL @wm_activate_slot/, 'Taskbar clicks must activate windows');
+assert.match(mouse, /CALL @sh_click/, 'Native modal and launcher clicks must be dispatched');
+assert.match(mouse, /CALL @wm_minimize/, 'Native minimize button must be clickable');
+assert.match(mouse, /CALL @wm_enlarge/, 'Native maximize button must be clickable');
+assert.match(mouse, /ms_drag_resize:/, 'The bottom-right resize grip must be draggable');
+assert.doesNotMatch(mouse, /document\.|<div|window\.addEventListener|#include <stdio/,
+  'Native mouse logic must not be implemented in JS or C');
+console.log('PASS: raw NaN16 PS/2 AUX init, packet decoder, mouse hit testing, drag, resize, taskbar and modal');
+
 console.log('PASS: raw NaN16 taskbar, launcher, modal, notification, themes, tile, snap, resize and restore');
 
 console.log('PASS: F0 native help, F1-F12 mapping, n/b routing, build command help, disk builder');
