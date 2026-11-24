@@ -100,9 +100,9 @@ Status legend: **done**, **partial**, **planned**.
 | Q3 | Official harness capability detection/skips | native run works | testrunner |
 | Q4 | `test/*.test` corpus on guest filesystem | not vendored | 1,199 files |
 | C1 | tcc1 raw-source/VFS input compile (no host `.i`) | **done** (`tcc_nan16_rawcc`) | Tcl/SQLite on VM |
-| C1b | tcc1 builds its own libtcc from raw source via VFS | planned (image still uses host libtcc.i) | final bare-metal image |
-| C2 | tcc1 build of Tcl/testfixture | planned | final image |
-| C3 | tcc1==tcc2 fixpoint after C1/C2 | **done** at 2,529,728 bytes after C1 (SHA-256 `32c3b8e8...`); rerun after C2 | final proof |
+| C1b | tcc1 builds its own libtcc from raw source via VFS | **done** (`tcc_nan16_selfbuild`: R = 1,940,008 bytes, raw `test.c` -> 42) | final bare-metal image |
+| C2 | tcc1 build of Tcl/testfixture | planned (raw SQLite-on-R probe is the open blocker) | final image |
+| C3 | tcc1==tcc2 fixpoint after C1/C2 | **done** at 1,904,320 bytes after C1 (SHA-256 `3c4acd8e...`); rerun after C2 | final proof |
 | V1 | Deterministic gates for each layer | partial | CI |
 | V2 | Official result archive + exact counts | planned | proof |
 
@@ -209,7 +209,9 @@ Status legend: **done**, **partial**, **planned**.
       (`NAN16_VFS_INIT_CAP`, optional `NAN16_VFS_MAXFILES`), linear pack
       registration, 5,000-file capacity gate. The real 2,133-file suite is
       within the tested range; no host filesystem in the product path.
-      Remaining: run the actual suite archive through the loader on x86_64 S1.
+      `tools/tcc_nan16_vfs_pack.sh` also registers a real 2,133-file pack and
+      reads the last entry back. Remaining: run the actual suite archive
+      through the loader on x86_64 S1.
 - [ ] Full `testfixture` build with the official flags, THREADSAFE=1, all
       extensions and test hooks; guest VFS on NaNFS.
 - [ ] Port `tester.tcl` capability probes and the test runner; no host
