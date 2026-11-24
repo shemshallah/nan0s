@@ -1529,6 +1529,13 @@ int stat(const char *name, struct stat *st)
     st->st_nlink = f->isdir ? 2 : 1;
     return 0;
 }
+int lstat(const char *name, struct stat *st) { return stat(name, st); }
+int chmod(const char *name, mode_t mode) { (void)mode; return access(name, F_OK); }
+int utimes(const char *name, const struct timeval times[2])
+{
+    (void)times;
+    return access(name, F_OK);
+}
 int fstat(int fd, struct stat *st)
 {
     if (fd < FD_VFS_BASE || (unsigned)(fd - FD_VFS_BASE) >= vfs_cap) return -1;
@@ -1574,6 +1581,18 @@ int access(const char *p, int m)
     if (!f) return mf_isdir_name(abs) ? 0 : -1;
     if ((m & W_OK) && !f->writable) { errno = EACCES; return -1; }
     return 0;
+}
+ssize_t readlink(const char *path, char *buf, size_t n)
+{
+    (void)path; (void)buf; (void)n;
+    errno = EINVAL;
+    return -1;
+}
+int symlink(const char *target, const char *linkpath)
+{
+    (void)target; (void)linkpath;
+    errno = EPERM;
+    return -1;
 }
 int isatty(int fd) { (void)fd; return 0; }
 int getpid(void) { return 1; }
