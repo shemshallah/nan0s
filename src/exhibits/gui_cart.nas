@@ -91,9 +91,8 @@ g_nodraw:
 LD r1,r0,@g_quit
 CMP r1,r0
 JMP[NE] @g_exit
-LD r1,r0,@wm_zn
-CMP r1,r0
-JMP[EQ] @g_exit
+; Closing the final app must return to the guest desktop rather than
+; tearing down NaN/0S graphics. F1 and the taskbar can relaunch applications.
 CALL @ms_poll
 CALL @kbd_poll
 CALL @kbd_get
