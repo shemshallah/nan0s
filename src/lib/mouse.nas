@@ -40,6 +40,8 @@ ms_frame:
 .word 0
 ms_tick:
 .word 0
+ms_budget:
+.word 0
 
 ms_init:
 ST r15,r14,0
@@ -82,6 +84,7 @@ ms_poll_next:
 CMP r10,r0
 JMP[EQ] @ms_poll_done
 SUB r10,r10,r13
+ST r10,r0,@ms_budget
 MOVI r1,0x64
 INB r2,r1
 MOVI r3,1
@@ -124,6 +127,7 @@ ms_packet_end:
 ST r2,r0,@ms_p3
 ST r0,r0,@ms_state
 CALL @ms_update
+LD r10,r0,@ms_budget
 JMP @ms_poll_next
 ms_poll_done:
 SUB r14,r14,r13
@@ -161,8 +165,9 @@ ST r2,r0,@ms_dy
 LD r1,r0,@ms_x
 LD r2,r0,@ms_dx
 ADD r1,r1,r2
-CMP r1,r0
-JMP[GE] @ms_clamp_x
+SHR r4,r1,31
+CMP r4,r0
+JMP[EQ] @ms_clamp_x
 MOVI r1,0
 ms_clamp_x:
 LD r3,r0,@fb_w
@@ -175,8 +180,9 @@ ST r1,r0,@ms_x
 LD r1,r0,@ms_y
 LD r2,r0,@ms_dy
 SUB r1,r1,r2
-CMP r1,r0
-JMP[GE] @ms_clamp_y
+SHR r4,r1,31
+CMP r4,r0
+JMP[EQ] @ms_clamp_y
 MOVI r1,0
 ms_clamp_y:
 LD r3,r0,@fb_h
@@ -291,14 +297,14 @@ LD r2,r0,@ms_x
 LD r3,r1,#W_X
 SUB r2,r2,r3
 LD r4,r1,#W_W
-MOVI r5,17
+MOVI r5,16
 SUB r4,r4,r5
 CMP r2,r4
 JMP[LT] @ms_hit_max
 CALL @sh_dialog
 JMP @ms_down_done
 ms_hit_max:
-MOVI r5,34
+MOVI r5,15
 SUB r4,r4,r5
 CMP r2,r4
 JMP[LT] @ms_hit_min
@@ -364,8 +370,9 @@ JMP[EQ] @ms_drag_resize
 LD r2,r1,#W_X
 LD r3,r0,@ms_dx
 ADD r2,r2,r3
-CMP r2,r0
-JMP[GE] @ms_move_xok
+SHR r4,r2,31
+CMP r4,r0
+JMP[EQ] @ms_move_xok
 MOVI r2,0
 ms_move_xok:
 LD r3,r0,@fb_w
