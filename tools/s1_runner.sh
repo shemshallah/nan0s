@@ -36,7 +36,10 @@ done
 [ -n "$IMG" ] || usage
 [ -f "$IMG" ] || { echo "s1_runner: no such image: $IMG" >&2; exit 1; }
 case "$MEM_MB" in *[!0-9]*|"") echo "s1_runner: bad --mem" >&2; exit 2 ;; esac
-case "$STEPS" in *[!0-9]*|"") echo "s1_runner: bad --steps" >&2; exit 2 ;; esac
+case "$STEPS" in
+  unlimited|none) STEPS=18446744073709551615 ;;
+  *[!0-9]*|"") echo "s1_runner: bad --steps" >&2; exit 2 ;;
+esac
 [ "$MEM_MB" -eq 0 ] && MEM_MB=128
 [ "$STEPS" -eq 0 ] && STEPS=50000000
 GSCRIPT_LEN=0
