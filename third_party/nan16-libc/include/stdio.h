@@ -45,4 +45,5 @@ int vsnprintf(char *, size_t, const char *, va_list);
 int scanf(const char *, ...);
 int sscanf(const char *, const char *, ...);
 int fscanf(FILE *, const char *, ...);
+int vsscanf(const char *, const char *, va_list);
 #endif

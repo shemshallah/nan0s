@@ -56,10 +56,13 @@ static void heap_init(void)
 void *malloc(size_t n)
 {
     Block *b, *prev = 0;
-    unsigned need;
+    unsigned need, steps = 0;
     heap_init();
+    if (n > HEAP_SIZE - HDR_ALIGN) return 0;
     need = align_up((unsigned)n);
+    if (need < n) return 0;
     for (b = heap_head; b; prev = b, b = b->next) {
+        if (++steps > HEAP_SIZE / sizeof(Block)) return 0;
         if (b->free && b->size >= need) {
             if (b->size >= need + sizeof(Block) + HDR_ALIGN) {
                 Block *nb = (Block *)((unsigned char *)(b + 1) + need);
@@ -79,8 +82,14 @@ void *malloc(size_t n)
 void free(void *p)
 {
     Block *b, *n;
+    unsigned long addr;
     if (!p) return;
     b = (Block *)p - 1;
+    addr = (unsigned long)b;
+    if (addr < (unsigned long)HEAP_BASE ||
+        addr + sizeof(Block) > (unsigned long)HEAP_BASE + HEAP_SIZE)
+        return;
+    if (b->free) return;
     b->free = 1;
     for (n = heap_head; n; n = n->next) {
         if (n->free && n->next && n->next->free) {
@@ -92,11 +101,12 @@ void free(void *p)
 
 void *calloc(size_t n, size_t s)
 {
-    void *p = malloc(n * s);
+    void *p;
+    if (n && s > (size_t)-1 / n) return 0;
+    p = malloc(n * s);
     if (p) memset(p, 0, n * s);
     return p;
 }
-
 void *realloc(void *p, size_t n)
 {
     Block *b;
@@ -104,6 +114,7 @@ void *realloc(void *p, size_t n)
     unsigned old;
     if (!p) return malloc(n);
     if (!n) { free(p); return 0; }
+    if (n > HEAP_SIZE - HDR_ALIGN) return 0;
     b = (Block *)p - 1;
     old = b->size;
     if (old >= n) return p;
@@ -978,6 +989,15 @@ int close(int fd)
     if (fd >= FD_VFS_BASE && (unsigned)(fd - FD_VFS_BASE) < vfs_cap) files[fd - FD_VFS_BASE].pos = 0;
     return 0;
 }
+int fsync(int fd)
+{
+    if (fd >= FD_VFS_BASE && (unsigned)(fd - FD_VFS_BASE) < vfs_cap &&
+        files[fd - FD_VFS_BASE].used) return 0;
+    errno = EBADF;
+    return -1;
+}
+int fdatasync(int fd) { return fsync(fd); }
+int sync(void) { return 0; }
 ssize_t read(int fd, void *buf, size_t n)
 {
     MemFile *f;
@@ -1372,9 +1392,142 @@ int printf(const char *fmt, ...)
     va_start(ap, fmt); r = vout(stdout, fmt, ap); va_end(ap);
     return r;
 }
-int scanf(const char *fmt, ...) { (void)fmt; return 0; }
-int sscanf(const char *s, const char *fmt, ...) { (void)s; (void)fmt; return 0; }
-int fscanf(FILE *fp, const char *fmt, ...) { (void)fp; (void)fmt; return 0; }
+/* A compact scanf family: integer/hex/octal/string/char conversions with
+   width and length modifiers, enough for SQLite's test1.c and Tcl probes. */
+int vsscanf(const char *s, const char *fmt, va_list ap)
+{
+    const char *p = s;
+    int assigned = 0;
+    while (*fmt) {
+        int suppress = 0, width = 0, lng = 0, base = 10, any = 0, neg = 0;
+        unsigned long long v = 0;
+        char conv;
+        const char *start;
+        if (isspace((unsigned char)*fmt)) {
+            while (isspace((unsigned char)*fmt)) fmt++;
+            while (isspace((unsigned char)*p)) p++;
+            continue;
+        }
+        if (*fmt != '%') {
+            if (*p != *fmt) break;
+            p++; fmt++; continue;
+        }
+        fmt++;
+        if (*fmt == '*') { suppress = 1; fmt++; }
+        while (isdigit((unsigned char)*fmt)) width = width * 10 + (*fmt++ - '0');
+        if (*fmt == 'h') { fmt++; if (*fmt == 'h') fmt++; }
+        else if (*fmt == 'l') { lng = 1; fmt++; if (*fmt == 'l') { lng = 2; fmt++; } }
+        else if (*fmt == 'z' || *fmt == 'j' || *fmt == 't') { lng = 2; fmt++; }
+        conv = *fmt++;
+        if (conv == '%') {
+            if (*p != '%') break;
+            p++; continue;
+        }
+        if (conv == 'n') {
+            if (!suppress) {
+                if (lng == 0) *va_arg(ap, int *) = (int)(p - s);
+                else if (lng == 1) *va_arg(ap, long *) = (long)(p - s);
+                else *va_arg(ap, long long *) = (long long)(p - s);
+            }
+            continue;
+        }
+        if (conv != 'c' && conv != '[')
+            while (isspace((unsigned char)*p)) p++;
+        if (!*p) break;
+        if (conv == 's' || conv == 'c') {
+            char *d = suppress ? 0 : va_arg(ap, char *);
+            unsigned n = 0, lim = (unsigned)width;
+            if (conv == 'c') {
+                if (!lim) lim = 1;
+                while (n < lim && *p) { if (d) d[n] = *p; n++; p++; }
+                if (n < lim) break;
+            } else {
+                while (*p && !isspace((unsigned char)*p) && (!lim || n < lim)) {
+                    if (d) d[n] = *p;
+                    n++; p++;
+                }
+                if (!n) break;
+                if (d) d[n] = 0;
+            }
+            if (!suppress) assigned++;
+            continue;
+        }
+        if (conv == 'd' || conv == 'i' || conv == 'u' || conv == 'x'
+            || conv == 'X' || conv == 'o') {
+            start = p;
+            if (conv == 'i') base = 0;
+            else if (conv == 'x' || conv == 'X') base = 16;
+            else if (conv == 'o') base = 8;
+            if (base == 10 || base == 0) {
+                if (*p == '+' || *p == '-') {
+                    neg = (*p == '-'); p++;
+                    if (width) width--;
+                }
+            }
+            if (base == 16 && p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) {
+                p += 2;
+                if (width) width -= 2;
+            }
+            if (base == 0) {
+                if (*p == '0') { base = 8; }
+                else base = 10;
+            }
+            while (*p) {
+                int c = (unsigned char)*p, d, used = (int)(p - start);
+                if (c >= '0' && c <= '9') d = c - '0';
+                else if (c >= 'a' && c <= 'f') d = c - 'a' + 10;
+                else if (c >= 'A' && c <= 'F') d = c - 'A' + 10;
+                else break;
+                if (d >= base) break;
+                if (width && used >= width) break;
+                v = v * (unsigned)base + (unsigned)d;
+                any = 1; p++;
+            }
+            if (!any) { p = start; break; }
+            if (neg) v = (unsigned long long)(-(long long)v);
+            if (!suppress) {
+                if (lng == 0) *va_arg(ap, int *) = (int)v;
+                else if (lng == 1) *va_arg(ap, long *) = (long)v;
+                else *va_arg(ap, long long *) = (long long)v;
+                assigned++;
+            }
+            continue;
+        }
+        break;
+    }
+    return assigned;
+}
+int sscanf(const char *s, const char *fmt, ...)
+{
+    va_list ap;
+    int r;
+    va_start(ap, fmt);
+    r = vsscanf(s, fmt, ap);
+    va_end(ap);
+    return r;
+}
+int fscanf(FILE *fp, const char *fmt, ...)
+{
+    char line[1024];
+    va_list ap;
+    int r;
+    if (!fgets(line, sizeof line, fp)) return EOF;
+    va_start(ap, fmt);
+    r = vsscanf(line, fmt, ap);
+    va_end(ap);
+    return r;
+}
+int scanf(const char *fmt, ...)
+{
+    char line[1024];
+    va_list ap;
+    int r;
+    if (!fgets(line, sizeof line, stdin)) return EOF;
+    va_start(ap, fmt);
+    r = vsscanf(line, fmt, ap);
+    va_end(ap);
+    return r;
+}
 
 /* ---------------------------------------------------------------- system */
 int stat(const char *name, struct stat *st)
@@ -1395,6 +1548,13 @@ int stat(const char *name, struct stat *st)
     st->st_mode = f->isdir ? (S_IFDIR | 0755) : (S_IFREG | (f->writable ? 0644 : 0444));
     st->st_nlink = f->isdir ? 2 : 1;
     return 0;
+}
+int lstat(const char *name, struct stat *st) { return stat(name, st); }
+int chmod(const char *name, mode_t mode) { (void)mode; return access(name, F_OK); }
+int utimes(const char *name, const struct timeval times[2])
+{
+    (void)times;
+    return access(name, F_OK);
 }
 int fstat(int fd, struct stat *st)
 {
@@ -1441,6 +1601,18 @@ int access(const char *p, int m)
     if (!f) return mf_isdir_name(abs) ? 0 : -1;
     if ((m & W_OK) && !f->writable) { errno = EACCES; return -1; }
     return 0;
+}
+ssize_t readlink(const char *path, char *buf, size_t n)
+{
+    (void)path; (void)buf; (void)n;
+    errno = EINVAL;
+    return -1;
+}
+int symlink(const char *target, const char *linkpath)
+{
+    (void)target; (void)linkpath;
+    errno = EPERM;
+    return -1;
 }
 int isatty(int fd) { (void)fd; return 0; }
 int getpid(void) { return 1; }
