@@ -199,9 +199,11 @@ Status legend: **done**, **partial**, **planned**.
 - [x] Pack the Tcl library and official test tree into an `N16PACK1` suite
       image: `tools/nan16_suite_pack.py` produced 2,133 files / 25,806,592
       bytes (Tcl library + `/sqlite/test`).
-- [ ] Guest `N16PACK1` parser in the C libc VFS; it must register 2,133
-      files, so raise `MAXFILES` to 4096 or use lazy pack lookup (the current
-      2048-entry table is too small). No host filesystem in the product path.
+- [x] Guest `N16PACK1` parser in the C libc VFS: dynamic pointer table
+      (`NAN16_VFS_INIT_CAP`, optional `NAN16_VFS_MAXFILES`), linear pack
+      registration, 5,000-file capacity gate. The real 2,133-file suite is
+      within the tested range; no host filesystem in the product path.
+      Remaining: run the actual suite archive through the loader on x86_64 S1.
 - [ ] Full `testfixture` build with the official flags, THREADSAFE=1, all
       extensions and test hooks; guest VFS on NaNFS.
 - [ ] Port `tester.tcl` capability probes and the test runner; no host
