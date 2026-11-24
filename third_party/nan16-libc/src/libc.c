@@ -1378,10 +1378,159 @@ static void onum(Out *o, unsigned long long v, int base, int width, int zero, in
     for (i = n; i < width; i++) oc(o, zero ? '0' : ' ');
     while (n) oc(o, tmp[--n]);
 }
+int (*nan16_digits_hook)(double, char *, int *);
+static void nan16_digits(double m, char *d, int *e)
+{
+    int i;
+    unsigned long long v;
+    if (m != 0.0 && nan16_digits_hook) {
+        if (nan16_digits_hook(m, d, e) == 0) return;
+    }
+    if (m == 0.0) {
+        for (i = 0; i < 17; i++) d[i] = '0';
+        *e = 0;
+        return;
+    }
+    *e = 0;
+    while (m >= 10.0) { m /= 10.0; (*e)++; }
+    while (m < 1.0) { m *= 10.0; (*e)--; }
+    v = (unsigned long long)(m * 10000000000000000.0 + 0.5);
+    if (v >= 100000000000000000ULL) { v /= 10; (*e)++; }
+    for (i = 16; i >= 0; i--) { d[i] = (char)('0' + v % 10); v /= 10; }
+}
+static int nan16_round(char *d, int e, int ns)
+{
+    int i, up;
+    if (ns >= 17) return e;
+    if (ns <= 0) {
+        int carry = ns == 0 && d[0] >= '5';
+        for (i = 0; i < 17; i++) d[i] = '0';
+        if (carry) { d[0] = '1'; return e + 1; }
+        return e;
+    }
+    up = d[ns] >= '5';
+    for (i = ns; i < 17; i++) d[i] = '0';
+    if (up) {
+        i = ns - 1;
+        while (i >= 0 && d[i] == '9') { d[i] = '0'; i--; }
+        if (i >= 0) d[i]++;
+        else { d[0] = '1'; for (i = 1; i < 17; i++) d[i] = '0'; e++; }
+    }
+    return e;
+}
+static void nan16_body_f(Out *o, const char *d, int e, int p)
+{
+    int point = e + 1, j, idx;
+    if (point <= 0) {
+        oc(o, '0');
+        if (p > 0) {
+            oc(o, '.');
+            for (j = 1; j <= p; j++) {
+                idx = e + j;
+                oc(o, idx >= 0 && idx < 17 ? d[idx] : '0');
+            }
+        }
+        return;
+    }
+    for (j = point - 1; j >= 0; j--) {
+        idx = e - j;
+        oc(o, idx >= 0 && idx < 17 ? d[idx] : '0');
+    }
+    if (p > 0) {
+        oc(o, '.');
+        for (j = 1; j <= p; j++) {
+            idx = e + j;
+            oc(o, idx >= 0 && idx < 17 ? d[idx] : '0');
+        }
+    }
+}
+static void nan16_body_e(Out *o, const char *d, int e, int p)
+{
+    int i, ex = e < 0 ? -e : e;
+    char eb[8]; int n = 0;
+    oc(o, d[0]);
+    if (p > 0) {
+        oc(o, '.');
+        for (i = 1; i <= p; i++) oc(o, i < 17 ? d[i] : '0');
+    }
+    oc(o, 'e');
+    oc(o, e < 0 ? '-' : '+');
+    if (ex >= 100) { eb[n++] = (char)('0' + (ex / 100) % 10); }
+    eb[n++] = (char)('0' + (ex / 10) % 10);
+    eb[n++] = (char)('0' + ex % 10);
+    for (i = 0; i < n; i++) oc(o, eb[i]);
+}
+static void nan16_strip_g(char *s)
+{
+    char *dot = strchr(s, '.'), *ep = strchr(s, 'e'), *p;
+    if (!dot) return;
+    p = ep ? ep : s + strlen(s);
+    while (p > dot + 1 && p[-1] == '0') p--;
+    if (p == dot + 1) p = dot;
+    if (*p == 0) return;
+    memmove(p, ep ? ep : "", strlen(ep ? ep : "") + 1);
+}
+static void nan16_fmt_double(Out *o, double d, int conv, int prec, int plus,
+                             int space, int left, int width, int zero, int alt)
+{
+    char digits[17], body[512];
+    int e, p, i, ns, neg, pos = 0;
+    Out tmp;
+    neg = d < 0.0 || (d == 0.0 && 1.0 / d < 0.0);
+    if (d != d) { os(o, "nan"); return; }
+    if (isinf(d)) {
+        char sign = neg ? '-' : plus ? '+' : space ? ' ' : 0;
+        if (sign) oc(o, sign);
+        os(o, "inf");
+        return;
+    }
+    d = fabs(d);
+    nan16_digits(d, digits, &e);
+    tmp.buf = body; tmp.cap = sizeof body; tmp.len = 0;
+    if (conv == 'e') {
+        p = prec < 0 ? 6 : prec;
+        ns = p + 1; if (ns > 17) ns = 17;
+        e = nan16_round(digits, e, ns);
+        nan16_body_e(&tmp, digits, e, p);
+    } else if (conv == 'f') {
+        p = prec < 0 ? 6 : prec;
+        ns = e + 1 + p; if (ns > 17) ns = 17;
+        e = nan16_round(digits, e, ns);
+        nan16_body_f(&tmp, digits, e, p);
+    } else {
+        p = prec < 0 ? 6 : prec; if (p == 0) p = 1;
+        ns = p; if (ns > 17) ns = 17;
+        e = nan16_round(digits, e, ns);
+        if (e < -4 || e >= p) {
+            nan16_body_e(&tmp, digits, e, p - 1);
+            if (!alt) nan16_strip_g(body);
+        } else {
+            int fp = p - (e + 1);
+            if (fp < 0) fp = 0;
+            nan16_body_f(&tmp, digits, e, fp);
+            if (!alt) nan16_strip_g(body);
+        }
+    }
+    body[tmp.len < sizeof body ? tmp.len : sizeof body - 1] = 0;
+    {
+        char sign = neg ? '-' : plus ? '+' : space ? ' ' : 0;
+        int blen = (int)strlen(body) + (sign ? 1 : 0);
+        if (!left && zero) {
+            if (sign) oc(o, sign);
+            for (i = blen; i < width; i++) oc(o, '0');
+            os(o, body);
+        } else {
+            if (!left) for (i = blen; i < width; i++) oc(o, ' ');
+            if (sign) oc(o, sign);
+            os(o, body);
+            if (left) for (i = blen; i < width; i++) oc(o, ' ');
+        }
+    }
+}
 static void oprintf(Out *o, const char *fmt, va_list ap)
 {
     while (*fmt) {
-        int width = 0, zero = 0, left = 0, lng = 0, prec = -1;
+        int width = 0, zero = 0, left = 0, lng = 0, prec = -1, alt = 0;
         int plus = 0, space = 0;
         if (*fmt != '%') { oc(o, *fmt++); continue; }
         fmt++;
@@ -1390,6 +1539,7 @@ static void oprintf(Out *o, const char *fmt, va_list ap)
             else if (*fmt == '0') { zero = 1; fmt++; }
             else if (*fmt == '+') { plus = 1; fmt++; }
             else if (*fmt == ' ') { space = 1; fmt++; }
+            else if (*fmt == '#') { alt = 1; fmt++; }
             else break;
         }
         if (*fmt == '*') {
@@ -1455,15 +1605,8 @@ static void oprintf(Out *o, const char *fmt, va_list ap)
         }
         case 'f': case 'e': case 'g': {
             double d = va_arg(ap, double);
-            long long ip = (long long)d;
-            double frac = d - (double)ip;
-            int i;
-            if (frac < 0.0) frac = -frac;
-            if (ip < 0) { oc(o, '-'); ip = -ip; }
-            onum(o, (unsigned long long)ip, 10, 0, 0, 0);
-            oc(o, '.');
-            for (i = 0; i < 6; i++) { frac *= 10.0; }
-            onum(o, (unsigned long long)frac, 10, 6, 1, 0);
+            nan16_fmt_double(o, d, fmt[-1], prec, plus, space, left,
+                             width, zero, alt);
             break;
         }
         case '%': oc(o, '%'); break;
