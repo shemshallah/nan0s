@@ -95,9 +95,60 @@ cp build/nan0s.img "$T/source.img"
   echo "mouse_button 0"
   sleep 1.1
   echo "screendump $T/after-resize.ppm"
+  # Two windows now overlap. Select the original terminal through taskbar
+  # slot zero, then restore the Lattice (slot one) and click its focused
+  # taskbar button again to reveal the terminal without closing anything.
+  for shift in -100 -100 -100 -100; do
+    echo "mouse_move $shift 0"
+    sleep 0.13
+  done
+  for shift in 100 100 100; do
+    echo "mouse_move 0 $shift"
+    sleep 0.13
+  done
+  sleep 0.4
+  echo "screendump $T/before-under-focus.ppm"
+  echo "mouse_button 1"
+  sleep 0.25
+  echo "mouse_button 0"
+  sleep 0.9
+  echo "screendump $T/terminal-focused.ppm"
+  echo "mouse_move 106 0"
+  sleep 0.25
+  echo "mouse_button 1"
+  sleep 0.25
+  echo "mouse_button 0"
+  sleep 0.9
+  echo "screendump $T/lattice-refocused.ppm"
+  echo "mouse_button 1"
+  sleep 0.25
+  echo "mouse_button 0"
+  sleep 0.9
+  echo "screendump $T/lattice-minimized.ppm"
+  # Restore the same hidden lattice with another taskbar click.
+  echo "mouse_button 1"
+  sleep 0.25
+  echo "mouse_button 0"
+  sleep 0.9
+  echo "screendump $T/lattice-restored.ppm"
+  # A right click directly in the overlapping content selects the lower
+  # window even though the upper window completely covers that point.
+  echo "mouse_move -40 0"
+  sleep 0.2
+  for shift in -100 -100 -100 -100 -35; do
+    echo "mouse_move 0 $shift"
+    sleep 0.13
+  done
+  sleep 0.5
+  echo "screendump $T/before-right-cycle.ppm"
+  echo "mouse_button 2"
+  sleep 0.28
+  echo "mouse_button 0"
+  sleep 0.9
+  echo "screendump $T/after-right-cycle.ppm"
   sleep 0.2
   echo quit
-) | timeout 65 qemu-system-i386 -m 128 -boot order=a \
+) | timeout 90 qemu-system-i386 -m 128 -boot order=a \
   -drive format=raw,if=floppy,file=build/nan0s.img \
   -drive format=raw,if=ide,file="$T/source.img" \
   -display none -serial "file:$T/serial.txt" -monitor stdio \
@@ -124,9 +175,11 @@ def read(name):
         data = stream.read()
     assert len(data) == 1024 * 768 * 3
     return data
-a,b,c,hover,clicked,app_hover,app_clicked,before_drag,after_drag,before_resize,after_resize=(read(n) for n in (
+a,b,c,hover,clicked,app_hover,app_clicked,before_drag,after_drag,before_resize,after_resize,under_before,under_focus,refocus,minimized,restored,right_before,right_after=(read(n) for n in (
     "initial","moved","returned","taskbar-hover","taskbar-click",
-    "app-hover","app-click","before-drag","after-drag","before-resize","after-resize"))
+    "app-hover","app-click","before-drag","after-drag","before-resize","after-resize",
+    "before-under-focus","terminal-focused","lattice-refocused",
+    "lattice-minimized","lattice-restored","before-right-cycle","after-right-cycle"))
 def changed(x,y,box):
     x0,y0,x1,y1=box
     count=0
@@ -155,5 +208,17 @@ assert dragged>10000, "Native PS/2 title-bar drag did not move a window"
 resized=changed(before_resize,after_resize,(160,120,700,540))
 print(f"NaN16 window resize grip: {resized} changed framebuffer pixels")
 assert resized>1000, "Native PS/2 bottom-right resize grip did not resize the window"
-print("PASS: real PS/2 AUX movement, taskbar, app launch, title drag and frame resize")
+area=(65,56,640,525)
+below=changed(under_before,under_focus,area)
+back=changed(under_focus,refocus,area)
+hidden=changed(refocus,minimized,area)
+unhidden=changed(minimized,restored,area)
+cycled=changed(right_before,right_after,area)
+print(f"NaN16 overlapping-window selection: focus underlying {below}, focus upper {back}, hide upper {hidden}, restore {unhidden}, right-click cycle {cycled}")
+assert below>2500, "Taskbar did not raise the fully overlapped terminal window"
+assert back>2500, "Taskbar did not restore focus to the upper application"
+assert hidden>2500, "Clicking the active taskbar slot did not reveal the underlying window"
+assert unhidden>2500, "Clicking minimized slot did not restore the upper window"
+assert cycled>2500, "Right-click on overlapping window did not bring the lower window to front"
+print("PASS: native NaN16 PS/2 move, app launch, drag, resize, underlying-window taskbar selection and right-click cycling")
 PY
