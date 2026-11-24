@@ -963,7 +963,8 @@ and title area to `0x70000/0x72000` at cold boot, because a large cart loaded at
 8192 overwrites 22000/23600. The debugger reads the snapshot, not the live TOC.
 
 Entry today: the desktop terminal's `debug` command (`fs_dispatch` prefix in
-`gui_cart.nas`) opens a second terminal-shaped CLI of kind 8. It drives the
+`gui_cart.nas`) or the system utilities window's `[3] DEBUG` opens a second
+terminal-shaped CLI of kind 8. It drives the
 resident core at 6200. The ABI is fixed:
 
 ```
@@ -977,7 +978,7 @@ resident core at 6200. The ABI is fixed:
 5958 wp_toggle  5959 pc_set     5960 tbuf       5961 mem_geth
 5962 mem_seth  5963 usnap      5964 uinval     5965 udone
 5966 state_set 5967 state_get 5968 upop       5969 mem_geth_cls
-5970 ckpt_to   5971 ckpt_from
+5970 ckpt_to   5971 ckpt_from 5972 map
 ```
 
 `dbg_cart` copies a sealed TOC payload to `0x80000` and maps guest words
@@ -986,11 +987,12 @@ the store is never modified, so its seal remains valid. The demo target at
 8100 remains for `reset`.
 
 The second CLI accepts `carts load <id> step next finish run regs mem [addr]
-log hist stack types screen serial undo [n] redo [n] break bp bpts watch wp
-wpts setr setm goto checkpoint restore reset help quit`.
+log hist stack types screen serial dis [addr] undo [n] redo [n] break bp bpts
+watch wp wpts setr setm setw setc goto checkpoint restore reset help quit`.
 `break` is a fast single breakpoint at PC; `bp <hex>`/`wp <hex>` toggle table
-entries and `bpts`/`wpts` list them. `setr <n> <hex>`, `setm <addr> <hex>` and
-`goto <hex>` are typed edits backed by ABI2 `reg_set`, `mem_set` and `pc_set`.
+entries and `bpts`/`wpts` list them. `setr <n> <hex>`, `setm <addr> <hex>`, `setw <addr> <word> <class>`,
+`setc <addr> <class>` and `goto <hex>` are typed edits backed by ABI2
+`reg_set`, `mem_set`, `mem_seth`, `map` and `pc_set`.
 `undo [n]` rewinds one or `n` recorded scalar steps, restoring registers, PC,
 condition, shadow-call depth and up to two guest memory words per step; each
 restored PC is printed. `redo [n]` restores the saved post-step states in
@@ -998,7 +1000,9 @@ reverse order and re-exposes their undo records. Manual edits and new steps
 clear the redo history. `checkpoint` snapshots the 16 registers, PC, condition,
 call depth and the 64K cart arena; `restore` copies them back and clears the
 undo/redo history. Checkpoints are invalidated by `load`, `reset` and a new
-debug window. `screen` prints the captured 80x25 cart text screen. `serial` prints
+debug window. `dis [addr]` disassembles eight words from PC or an address using
+the shared `src/tools/disasm.nas`; guest addresses are mapped to host words
+through ABI2 `map`. `screen` prints the captured 80x25 cart text screen. `serial` prints
 the captured `PUTC` stream. It prints into its own window buffer and mirrors
 command lines and hex values to COM1 for headless gates. `tools/ndbg_gui.sh` builds a minimal
 image with the Baby cart, types `debug`, lists the catalog, loads cartridge 1,
@@ -1235,7 +1239,7 @@ The next acceptance step is every text cart, then the GUI and NCC output.
 - [x] Debug-pane vector I/O capture: `VPOKE`/`VPEEK` and display ops go to
       a private 25x80 text buffer; `screen` command.
 - [x] Serial capture: target `PUTC` goes to 0x61000; `serial` command.
-- [ ] System menu `[3] DEBUG`.
+- [x] System utilities `[3] DEBUG` entry opens the desktop debug CLI.
 
 **Acceptance:** debug the GUI cart; break on a window-manager routine; feed a
 scripted key; verify the monitor survives a target that writes to `0`, to the
@@ -1249,6 +1253,7 @@ cart seal valid.
 - [x] Bounded scalar undo ring (32 records, two writes each); `undo [n]`.
 - [x] Redo ring (32 records) with post-step state and write values; `redo [n]`.
 - [x] Cart checkpoint/restore: registers, PC, condition, call depth, 64K arena.
+- [x] Desktop `dis [addr]` using the shared disassembler and `map`.
 - [ ] Full-memory checkpoints and bulk-write checkpoints.
 - [ ] NDP over serial and mailbox; `HELLO/READ/WRITE/STEP/RUN/EVENT`.
 - [ ] Symbol blob from `nmk.awk -v LABELS`; source lines if the assembler

@@ -52,14 +52,18 @@ if ! grep -qx 'carts' "$T/out.lf" ||
 fi
 # typed edits in a fresh session
 "$CLI" --img "$T/guest.bin" --steps 80000000 \
-  --keys "$DBGKEYS,@1000000,l,o,a,d,SPACE,1,ENTER,@1000000,g,o,t,o,SPACE,2,0,0,1,ENTER,@1000000,s,e,t,r,SPACE,1,SPACE,4,2,ENTER,@1000000,g,o,t,o,SPACE,3,0,0,0,ENTER,@1000000,s,e,t,m,SPACE,3,0,0,0,SPACE,1,2,3,4,ENTER,@1000000,m,e,m,ENTER,@1000000" \
+  --keys "$DBGKEYS,@1000000,l,o,a,d,SPACE,1,ENTER,@1000000,g,o,t,o,SPACE,2,0,0,1,ENTER,@1000000,s,e,t,r,SPACE,1,SPACE,4,2,ENTER,@1000000,g,o,t,o,SPACE,3,0,0,0,ENTER,@1000000,s,e,t,m,SPACE,3,0,0,0,SPACE,1,2,3,4,ENTER,@1000000,m,e,m,ENTER,@1000000,s,e,t,w,SPACE,3,0,0,0,SPACE,5,6,7,8,SPACE,9,ENTER,@1000000,m,e,m,ENTER,@1000000,s,e,t,c,SPACE,3,0,0,0,SPACE,5,ENTER,@1000000,m,e,m,ENTER,@1000000" \
   --serial > "$T/edit" 2>/dev/null || true
 tr -d '\r' < "$T/edit" > "$T/edit.lf"
 if ! grep -qx 'PC=2001' "$T/edit.lf" ||
    ! grep -qx 'R1=00000042' "$T/edit.lf" ||
    ! grep -qx 'PC=3000' "$T/edit.lf" ||
    ! grep -qx 'M3000=00001234' "$T/edit.lf" ||
-   ! grep -qx 'M300000001234A' "$T/edit.lf"; then
+   ! grep -qx 'M300000001234A' "$T/edit.lf" ||
+   ! grep -qx 'W3000=00005678/9' "$T/edit.lf" ||
+   ! grep -qx 'M3000000056789' "$T/edit.lf" ||
+   ! grep -qx 'C3000=5' "$T/edit.lf" ||
+   ! grep -qx 'M3000000056785' "$T/edit.lf"; then
   echo "ndbg_gui: EDIT FAIL"; cat "$T/edit"; exit 1
 fi
 
@@ -144,6 +148,17 @@ if ! grep -qx 'NOCKPT' "$T/nockpt.lf"; then
   echo "ndbg_gui: NOCKPT FAIL"; cat "$T/nockpt"; exit 1
 fi
 
+# system utilities [3] DEBUG opens the same kind-8 CLI
+"$CLI" --img "$T/guest.bin" --steps 160000000 \
+  --keys "@20000000,u,ENTER,@4000000,3,@4000000,l,o,a,d,SPACE,1,ENTER,@2000000,s,t,e,p,ENTER,@4000000" \
+  --serial > "$T/menu" 2>/dev/null || true
+tr -d '\r' < "$T/menu" > "$T/menu.lf"
+if ! grep -qx 'load 1' "$T/menu.lf" ||
+   ! grep -qx 'S=0 PC=2000' "$T/menu.lf" ||
+   ! grep -qx 'S=0 PC=2001' "$T/menu.lf"; then
+  echo "ndbg_gui: SYSTEM MENU FAIL"; cat "$T/menu"; exit 1
+fi
+
 # captured cart serial: a tiny PUTC cart prints HELLO
 "$CLI" --img "$T/guest.bin" --steps 90000000 \
   --keys "$DBGKEYS,@1000000,c,a,r,t,s,ENTER,@1000000,l,o,a,d,SPACE,2,ENTER,@1000000,r,u,n,ENTER,@1000000,s,e,r,i,a,l,ENTER,@1000000" \
@@ -173,12 +188,13 @@ fi
 
 # captured cart screen: run to the Baby key wait, then dump the private buffer
 "$CLI" --img "$T/guest.bin" --steps 100000000 \
-  --keys "$DBGKEYS,@1000000,l,o,a,d,SPACE,1,ENTER,@1000000,b,p,SPACE,2,0,0,9,ENTER,@1000000,r,u,n,ENTER,@1000000,s,c,r,e,e,n,ENTER,@1000000" \
+  --keys "$DBGKEYS,@1000000,l,o,a,d,SPACE,1,ENTER,@1000000,b,p,SPACE,2,0,0,9,ENTER,@1000000,r,u,n,ENTER,@1000000,s,c,r,e,e,n,ENTER,@4000000,d,@1000000,i,@1000000,s,@1000000,SPACE,@1000000,2,@500000,0,@500000,0,@500000,9,@500000,ENTER,@4000000" \
   --serial > "$T/screen" 2>/dev/null || true
 tr -d '\r' < "$T/screen" > "$T/screen.lf"
 if ! grep -qx 'BP=2009' "$T/screen.lf" ||
    ! grep -qx 'S=2 PC=2009' "$T/screen.lf" ||
-   ! grep -q 'MANCHESTER SMALL-SCALE EXPERIMENTAL MACHINE - THE BABY - 21 JUNE 1948' "$T/screen.lf"; then
+   ! grep -q 'MANCHESTER SMALL-SCALE EXPERIMENTAL MACHINE - THE BABY - 21 JUNE 1948' "$T/screen.lf" ||
+   ! grep -qx '2009 FFF8_12100000_F8FF KEY r1' "$T/screen.lf"; then
   echo "ndbg_gui: SCREEN FAIL"; cat "$T/screen"; exit 1
 fi
 
@@ -211,5 +227,5 @@ if cmp -s "$T/edit.lf" "$T/negative"; then
   echo "ndbg_gui: NEGATIVE FAIL (mutated transcript accepted)"
   exit 1
 fi
-echo "ndbg_gui: PASS (carts/load, break/log/mem, next/finish; screen/serial; setr/setm/goto; bp/wp tables; undo [n]/redo [n]; checkpoint/restore)"
+echo "ndbg_gui: PASS (carts/load, break/log/mem, next/finish; screen/serial/dis; setr/setm/goto; bp/wp tables; undo [n]/redo [n]; checkpoint/restore; setw/setc; menu [3] DEBUG)"
 echo "ndbg_gui: NEGATIVE PASS (mutated transcript rejected)"

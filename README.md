@@ -28,6 +28,8 @@
 
 </div>
 
+**ndbg** — the NaN-native debugger in this repository. Design: [`spec/NANDBG.md`](spec/NANDBG.md) · Working guide: [`src/dbg/README.md`](src/dbg/README.md).
+
 <br/>
 
 <div align="center">

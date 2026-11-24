@@ -48,6 +48,7 @@
 .equ DBG_MEM_GETH_CLS 5969
 .equ DBG_CKPT_TO 5970
 .equ DBG_CKPT_FROM 5971
+.equ DBG_MAP 5972
 .equ TOC_SNAP 0x70000
 .org 8192
 JMP @cart_entry
@@ -57,6 +58,7 @@ JMP @cart_entry
 .include "../lib/kbd.nas"
 .include "../lib/wm.nas"
 .include "../lib/ncc.nas"
+.include "../tools/disasm.nas"
 cart_entry:
 ST r15,r0,@g_ret
 MOVI r13,1
@@ -300,7 +302,7 @@ kt:
 .word @hex_init,@hex_draw,@hex_key,@nop_k
 .word @st_init,@st_draw,@st_key,@st_tick
 .word @nn_init,@nn_draw,@nn_key,@nn_tick
-.word @ut_init,@ut_draw,@nop_k,@ut_tick
+.word @ut_init,@ut_draw,@ut_key,@ut_tick
 .word @br_init,@br_draw,@br_key,@nop_k
 .word @dbg_init,@term_draw,@dbg_key,@nop_k
 nop_k:
@@ -1039,7 +1041,7 @@ JMP[EQ] @tm_br
 MOVI r5,101
 CMP r4,r5
 JMP[EQ] @tm_exec
-MOVI r2,@s_unk
+MOVI r2,@s_guess_unk
 CALL @vc_puts
 JMP @tm_done
 tm_help:
@@ -1419,7 +1421,7 @@ s_ver:
 .str "NaN/0S GUI r26\npure NaN16 wm\n"
 s_wins:
 .str "WINDOWS "
-s_unk:
+s_guess_unk:
 .str "?\n"
 ; ====================== r26: TEXT HELPERS, SETTINGS (F5), NaNNet (F6), UTILITIES (F7) ======================
 ; All pure NaN16. Text goes through NaNGlyph (fb_text7 / fb_char7); strings are 4 chars per word, so a CPUID register IS a string word.
@@ -1790,6 +1792,11 @@ CALL @fs_prefix
 CMP r1,r0
 JMP[NE] @dd_finish
 LA r1,#FNB
+LA r2,@s_dbg_dis
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @dd_dis
+LA r1,#FNB
 LA r2,@s_dbg_mem
 CALL @fs_prefix
 CMP r1,r0
@@ -1799,6 +1806,16 @@ LA r2,@s_dbg_log
 CALL @fs_prefix
 CMP r1,r0
 JMP[NE] @dd_log
+LA r1,#FNB
+LA r2,@s_dbg_setw
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @dd_setw
+LA r1,#FNB
+LA r2,@s_dbg_setc
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @dd_setc
 LA r1,#FNB
 LA r2,@s_dbg_setr
 CALL @fs_prefix
@@ -1945,6 +1962,9 @@ JMP @dd_done
 dd_mem:
 CALL @dbg_mem
 JMP @dd_done
+dd_dis:
+CALL @dbg_dis
+JMP @dd_done
 dd_log:
 CALL @dbg_log
 JMP @dd_done
@@ -1954,6 +1974,14 @@ JMP @dd_done
 dd_setr:
 ST r0,r0,@rd_rd
 CALL @dbg_setr
+JMP @dd_done
+dd_setw:
+ST r0,r0,@rd_rd
+CALL @dbg_setw
+JMP @dd_done
+dd_setc:
+ST r0,r0,@rd_rd
+CALL @dbg_setc
 JMP @dd_done
 dd_setm:
 ST r0,r0,@rd_rd
@@ -2652,6 +2680,268 @@ arg_ptr:
 .word 0
 
 ; ---- undo one or more recorded scalar steps ----
+; ---- typed word and class setters ----
+dbg_setw:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @dbg_args_reset
+CALL @dbg_nexthex
+CMP r2,r0
+JMP[EQ] @dsw_bad
+ST r1,r0,@dsw_a
+CALL @dbg_nexthex
+CMP r2,r0
+JMP[EQ] @dsw_bad
+ST r1,r0,@dsw_v
+CALL @dbg_nexthex
+CMP r2,r0
+JMP[EQ] @dsw_bad
+ST r1,r0,@dsw_c
+MOVI r2,15
+CMP r1,r2
+JMP[GT] @dsw_bad
+ST r14,r0,@dbg_sp
+LD r1,r0,@dsw_a
+CALL #DBG_MAP
+LD r14,r0,@dbg_sp
+ST r1,r0,@dsw_h
+ST r14,r0,@dbg_sp
+LD r1,r0,@dsw_h
+LD r2,r0,@dsw_v
+LD r3,r0,@dsw_c
+CALL #DBG_MEM_SETH
+LD r14,r0,@dbg_sp
+ST r14,r0,@dbg_sp
+CALL #DBG_UINVAL
+LD r14,r0,@dbg_sp
+ST r0,r0,@rd_rd
+LD r1,r0,@dk_id
+MOVI r2,87
+CALL @vc_putc
+MOVI r1,87
+PUTC r1
+LD r1,r0,@dk_id
+LD r2,r0,@dsw_a
+MOVI r3,4
+CALL @dbg_puthex
+LD r1,r0,@dk_id
+MOVI r2,61
+CALL @vc_putc
+MOVI r1,61
+PUTC r1
+LD r1,r0,@dk_id
+LD r2,r0,@dsw_v
+MOVI r3,8
+CALL @dbg_puthex
+LD r1,r0,@dk_id
+MOVI r2,47
+CALL @vc_putc
+MOVI r1,47
+PUTC r1
+LD r1,r0,@dk_id
+LD r2,r0,@dsw_c
+MOVI r3,1
+CALL @dbg_puthex
+MOVI r1,10
+PUTC r1
+JMP @dsw_done
+dsw_bad:
+LD r1,r0,@dk_id
+MOVI r2,@s_dbg_badarg
+CALL @vc_puts
+dsw_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+dsw_a:
+.word 0
+dsw_v:
+.word 0
+dsw_c:
+.word 0
+dsw_h:
+.word 0
+
+dbg_setc:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @dbg_args_reset
+CALL @dbg_nexthex
+CMP r2,r0
+JMP[EQ] @dsc_bad
+ST r1,r0,@dsc_a
+CALL @dbg_nexthex
+CMP r2,r0
+JMP[EQ] @dsc_bad
+ST r1,r0,@dsc_c
+MOVI r2,15
+CMP r1,r2
+JMP[GT] @dsc_bad
+ST r14,r0,@dbg_sp
+LD r1,r0,@dsc_a
+CALL #DBG_MAP
+LD r14,r0,@dbg_sp
+ST r1,r0,@dsc_h
+ST r14,r0,@dbg_sp
+LD r1,r0,@dsc_h
+CALL #DBG_MEM_GETH
+LD r14,r0,@dbg_sp
+ST r1,r0,@dsc_v
+ST r14,r0,@dbg_sp
+LD r1,r0,@dsc_h
+LD r2,r0,@dsc_v
+LD r3,r0,@dsc_c
+CALL #DBG_MEM_SETH
+LD r14,r0,@dbg_sp
+ST r14,r0,@dbg_sp
+CALL #DBG_UINVAL
+LD r14,r0,@dbg_sp
+ST r0,r0,@rd_rd
+LD r1,r0,@dk_id
+MOVI r2,67
+CALL @vc_putc
+MOVI r1,67
+PUTC r1
+LD r1,r0,@dk_id
+LD r2,r0,@dsc_a
+MOVI r3,4
+CALL @dbg_puthex
+LD r1,r0,@dk_id
+MOVI r2,61
+CALL @vc_putc
+MOVI r1,61
+PUTC r1
+LD r1,r0,@dk_id
+LD r2,r0,@dsc_c
+MOVI r3,1
+CALL @dbg_puthex
+MOVI r1,10
+PUTC r1
+JMP @dsc_done
+dsc_bad:
+LD r1,r0,@dk_id
+MOVI r2,@s_dbg_badarg
+CALL @vc_puts
+dsc_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+dsc_a:
+.word 0
+dsc_c:
+.word 0
+dsc_h:
+.word 0
+dsc_v:
+.word 0
+
+; ---- desktop disassembly (8 words from PC or an address) ----
+dbg_dis:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @dbg_args_reset
+CALL @dbg_nexthex
+CMP r2,r0
+JMP[EQ] @dg_pc
+ST r1,r0,@dg_base
+JMP @dg_start
+dg_pc:
+ST r14,r0,@dbg_sp
+CALL #DBG_PC
+LD r14,r0,@dbg_sp
+ST r1,r0,@dg_base
+dg_start:
+MOVI r1,0
+ST r1,r0,@dg_i
+dg_loop:
+LD r1,r0,@dg_i
+MOVI r2,8
+CMP r1,r2
+JMP[GE] @dg_done
+LD r1,r0,@dg_base
+LD r2,r0,@dg_i
+ADD r1,r1,r2
+ST r1,r0,@dg_g
+ST r14,r0,@dbg_sp
+CALL #DBG_MAP
+LD r14,r0,@dbg_sp
+ST r1,r0,@dg_h
+LD r1,r0,@dg_h
+LD r2,r0,@dg_g
+CALL @dis_word_at
+LD r1,r0,@dg_i
+ADD r1,r1,r13
+ST r1,r0,@dg_i
+JMP @dg_loop
+dg_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+dg_base:
+.word 0
+dg_i:
+.word 0
+dg_g:
+.word 0
+dg_h:
+.word 0
+
+; route the shared disassembler to the debug window and COM1
+dis_out:
+ST r15,r0,@do_lnk
+ST r1,r0,@do_1
+ST r2,r0,@do_2
+ST r3,r0,@do_3
+ST r4,r0,@do_4
+ST r5,r0,@do_5
+ST r6,r0,@do_6
+ST r7,r0,@do_7
+ST r8,r0,@do_8
+ST r11,r0,@do_11
+ST r13,r0,@do_13
+ST r9,r0,@do_c
+LD r1,r0,@dk_id
+LD r2,r0,@do_c
+CALL @vc_putc
+LD r9,r0,@do_c
+PUTC r9
+LD r1,r0,@do_1
+LD r2,r0,@do_2
+LD r3,r0,@do_3
+LD r4,r0,@do_4
+LD r5,r0,@do_5
+LD r6,r0,@do_6
+LD r7,r0,@do_7
+LD r8,r0,@do_8
+LD r11,r0,@do_11
+LD r13,r0,@do_13
+LD r15,r0,@do_lnk
+RET
+do_1:
+.word 0
+do_2:
+.word 0
+do_3:
+.word 0
+do_4:
+.word 0
+do_5:
+.word 0
+do_6:
+.word 0
+do_7:
+.word 0
+do_8:
+.word 0
+do_11:
+.word 0
+do_13:
+.word 0
+do_c:
+.word 0
+do_lnk:
+.word 0
+
 ; ---- checkpoint: registers + the 64K cart arena ----
 dbg_checkpoint:
 ST r15,r14,0
@@ -4263,7 +4553,7 @@ dt_col:
 
 ; debug strings and the 16 type tags
 s_dbg_banner:
-.str "\nNANDBG DEBUG CLI\ncarts load <id> step next finish run regs mem [addr] log hist\nstack types screen serial undo [n] redo [n] break bp bpts watch wp wpts setr setm goto\ncheckpoint restore reset help quit\n"
+.str "\nNANDBG DEBUG CLI\ncarts load <id> step next finish run regs mem [addr] dis [addr] log hist\nstack types screen serial undo [n] redo [n] break bp bpts watch wp wpts setr setm setw setc goto\ncheckpoint restore reset help quit\n"
 s_dbg_prompt:
 .str "> "
 s_dbg_help:
@@ -4280,6 +4570,8 @@ s_dbg_stack:
 .str "stack"
 s_dbg_types:
 .str "types"
+s_dbg_dis:
+.str "dis"
 s_dbg_mem:
 .str "mem"
 s_dbg_log:
@@ -4310,6 +4602,10 @@ s_dbg_screen:
 .str "screen"
 s_dbg_setr:
 .str "setr"
+s_dbg_setw:
+.str "setw"
+s_dbg_setc:
+.str "setc"
 s_dbg_setm:
 .str "setm"
 s_dbg_goto:
@@ -4341,7 +4637,7 @@ s_dbg_quit:
 s_dbg_exit:
 .str "exit"
 s_dbg_helpfull:
-.str "carts load <id> step next finish run regs mem [addr] log hist stack types screen serial undo [n] redo [n] break bp bpts watch wp wpts setr setm goto checkpoint restore reset quit\n"
+.str "carts load <id> step next finish run regs mem [addr] dis [addr] log hist stack types screen serial undo [n] redo [n] break bp bpts watch wp wpts setr setm setw setc goto checkpoint restore reset quit\n"
 s_dbg_carts_cmd:
 .str "carts"
 s_dbg_carts:
@@ -5558,6 +5854,25 @@ RET
 ; CPUID registers are stored as words: EBX,EDX,ECX of leaf 0 ARE the vendor string (4 chars per word), leaves 0x80000002-4 are the brand string.
 ; TSC low is also shown through its mirror: a class-6 word, BSWAPM, payload = the byte-reversed (big-endian face) value.
 .equ IDBUF 0x50000
+ut_key:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,@uk_id
+ST r3,r0,@uk_k
+MOVI r4,51
+CMP r3,r4
+JMP[NE] @uk_done
+MOVI r1,#DBG_KIND
+CALL @gui_open_new
+uk_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+uk_id:
+.word 0
+uk_k:
+.word 0
+
 ut_init:
 ST r15,r14,0
 ADD r14,r14,r13
@@ -6240,6 +6555,11 @@ LD r1,r0,@ud_i
 ADD r1,r1,r13
 ST r1,r0,@ud_i
 JMP @ud_pl
+MOVI r1,0
+MOVI r2,16
+MOVI r3,@s_udbg
+MOVI r4,#C_YEL
+CALL @tx_s
 ud_done:
 SUB r14,r14,r13
 LD r15,r14,0
@@ -6292,6 +6612,8 @@ ut_an:
 .word @s_ua0,@s_ua1,@s_ua2,@s_ua3
 s_u0:
 .str "SYSTEM UTILITIES"
+s_udbg:
+.str "[3] DEBUG"
 s_ucpu:
 .str "CPU"
 s_unm:
