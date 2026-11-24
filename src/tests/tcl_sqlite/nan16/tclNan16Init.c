@@ -108,12 +108,12 @@ Nan16DoubleDigits(
     int decpt, sign, i;
     char *end, *s;
 
-    s = TclDoubleDigits(value, 17, 0, &decpt, &sign, &end);
+    s = TclDoubleDigits(value, -1, TCL_DD_SHORTEST, &decpt, &sign, &end);
     if (s == NULL) {
 	return -1;
     }
     for (i = 0; i < 17; i++) {
-	digits[i] = s[i] ? s[i] : '0';
+	digits[i] = (s + i < end) ? s[i] : '0';
     }
     *exponent = decpt;
     Tcl_Free(s);
