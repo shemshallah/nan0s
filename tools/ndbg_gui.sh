@@ -17,7 +17,8 @@ DBGKEYS='@20000000,d,@300000,e,@300000,b,@300000,u,@300000,g,@300000,ENTER'
 awk -f tools/nmk.awk -v CMD=emit src/museum/museum.nas > "$T/museum.nan" 2>"$T/m.err" || { cat "$T/m.err"; exit 1; }
 awk -f tools/nmk.awk -v CMD=emit src/exhibits/gui_cart.nas > "$T/gui.nan" 2>"$T/g.err" || { cat "$T/g.err"; exit 1; }
 awk -f tools/nmk.awk -v CMD=emit src/tests/ndbg_putc_cart.nas > "$T/putc.nan" 2>"$T/p.err" || { cat "$T/p.err"; exit 1; }
-printf 'boot:%s/gui.nan\n1:%s/src/nan/baby_cart.nan:1948:1:1:Baby\n2:%s/putc.nan:2026:2:1:PUTC\n' "$T" "$PWD" "$T" > "$T/carts.txt"
+awk -f tools/nmk.awk -v CMD=emit src/tests/ndbg_call_cart.nas > "$T/call.nan" 2>"$T/ca.err" || { cat "$T/ca.err"; exit 1; }
+printf 'boot:%s/gui.nan\n1:%s/src/nan/baby_cart.nan:1948:1:1:Baby\n2:%s/putc.nan:2026:2:1:PUTC\n3:%s/call.nan:2026:3:1:Call\n' "$T" "$PWD" "$T" "$T" > "$T/carts.txt"
 gawk -f tools/mkimg.awk \
   -v GOLD=x86/native/nan16_x86.nan \
   -v GUEST="$T/museum.nan" \
@@ -222,10 +223,20 @@ if [ "$mem_first" = "$mem_last" ] || [ "$mem_last" != 'M201C00000000A' ]; then
   echo "ndbg_gui: MEMORY UNDO FAIL ($mem_first -> $mem_last)"; exit 1
 fi
 
+# non-empty shadow stack: step into a CALL and display the frame
+"$CLI" --img "$T/guest.bin" --steps 80000000 \
+  --keys "$DBGKEYS,@1000000,l,o,a,d,SPACE,3,ENTER,@1000000,s,t,e,p,ENTER,@1000000,s,t,e,p,ENTER,@1000000,s,t,e,p,ENTER,@1000000,s,t,a,c,k,ENTER,@1000000" \
+  --serial > "$T/stack" 2>/dev/null || true
+tr -d '\r' < "$T/stack" > "$T/stack.lf"
+if ! grep -qx 'S=0 PC=2005' "$T/stack.lf" ||
+   ! grep -qx '12003' "$T/stack.lf"; then
+  echo "ndbg_gui: STACK FAIL"; cat "$T/stack"; exit 1
+fi
+
 sed 's/M3000=00001234/M3000=00001235/' "$T/edit.lf" > "$T/negative"
 if cmp -s "$T/edit.lf" "$T/negative"; then
   echo "ndbg_gui: NEGATIVE FAIL (mutated transcript accepted)"
   exit 1
 fi
-echo "ndbg_gui: PASS (carts/load, break/log/mem, next/finish; screen/serial/dis; setr/setm/goto; bp/wp tables; undo [n]/redo [n]; checkpoint/restore; setw/setc; menu [3] DEBUG)"
+echo "ndbg_gui: PASS (carts/load, break/log/mem, next/finish; screen/serial/dis; setr/setm/goto; bp/wp tables; stack; undo [n]/redo [n]; checkpoint/restore; setw/setc; menu [3] DEBUG)"
 echo "ndbg_gui: NEGATIVE PASS (mutated transcript rejected)"

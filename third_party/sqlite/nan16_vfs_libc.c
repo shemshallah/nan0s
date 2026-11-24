@@ -138,7 +138,11 @@ static int l_truncate(sqlite3_file *pFile, sqlite3_int64 size)
 static int l_sync(sqlite3_file *pFile, int flags)
 {
     NanLFile *f = (NanLFile *)pFile;
-    (void)flags;
+#ifdef SQLITE_TEST
+    extern int sqlite3_sync_count, sqlite3_fullsync_count;
+    if (flags & SQLITE_SYNC_FULL) sqlite3_fullsync_count++;
+    sqlite3_sync_count++;
+#endif
     return f->fd >= 0 && fsync(f->fd) == 0 ? SQLITE_OK : SQLITE_IOERR_FSYNC;
 }
 static int l_filesize(sqlite3_file *pFile, sqlite3_int64 *pSize)

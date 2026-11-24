@@ -210,6 +210,7 @@ nd_logcp:
   LD r6,r0,@nd_seq
   ADD r6,r6,r13
   ST r6,r0,@nd_seq
+  CALL @nd_ndr_finish
   LD r15,r0,@nd_nelnk
   RET
 nd_nelnk:

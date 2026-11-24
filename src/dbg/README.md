@@ -8,8 +8,10 @@ The NaN-native debug system. Design and rationale: `spec/NANDBG.md`.
 |---|---|
 | `ndbg.nas` | first proof: 16 diagnostic types, records, subset step core, breakpoint, gate/bad-op records |
 | `core.nas` | reusable full `0x00–0x5F` step core: typed traps, shadow call stack, non-blocking KEY, DP4B, vectors, scalar undo hooks |
-| `n16dbg.nas` | serial monitor: step, run, breakpoint, goto, watch, history, stack, types, registers, disassembly, dump |
+| `n16dbg.nas` | serial monitor: step, run, breakpoint, goto, watch, history, stack, types, registers, disassembly, dump, NDR |
 | `undo_stub.nas` | no-op recording hooks for standalone core builds |
+| `ndr.nas` | NDR w4-w6 operands and FNV-1a/32 seal in w7 |
+| `ndr_stub.nas` | no-op NDR completion for tests that inspect only w0-w3 |
 | `../tests/ndbg_core_test.nas` | reset/run/step on a small target |
 | `../tests/ndbg_diff_body.nas` | deterministic target: integer, float, memory, calls, DP4B, vectors |
 | `../tests/ndbg_diff_native.nas` / `ndbg_diff_debug.nas` | the same target natively and through `core.nas` |
@@ -18,6 +20,7 @@ The NaN-native debug system. Design and rationale: `spec/NANDBG.md`.
 | `../exhibits/gui_cart.nas` | terminal `debug` command + kind-8 second CLI + `carts`/`load` + `next`/`finish` + `mem [addr]`/`dis [addr]`/`log`/`hist`/`stack`/`types`/`bpts`/`wpts`/`bp`/`wp`/`goto` + `screen`/`serial` + `undo [n]`/`redo [n]`/`checkpoint`/`restore` + `setw`/`setc` + `dis` |
 | `../tests/ndbg_guard_test.nas` | write-window fault and before-write watchpoint |
 | `../tests/ndbg_putc_cart.nas` | tiny PUTC cartridge for the serial-capture gate |
+| `../tests/ndbg_ndr_test.nas` | NDR operands and seal over a deliberately bad word |
 
 ## Run
 
@@ -74,16 +77,19 @@ PC or a chosen address, the captured 80x25 cart text buffer, and the captured
 memory word, and the PC; `setw` and `setc` write a word and/or class nibble.
 `undo [n]` rewinds one or `n` recorded scalar steps,
 including the guest words they wrote. `redo [n]` restores the saved post-step
-states and write values; new steps and edits clear the redo ring. `checkpoint`
-saves registers, PC, condition, call depth and the 64K cart arena; `restore`
-reloads them and clears the time-travel history.
+states and write values; new steps and edits clear the redo ring. The serial
+monitor's `n` command prints the eight-word NDR (header, site, payload, class,
+a/b/d, FNV seal). `checkpoint`
+saves registers, PC, condition, call depth, the 64K cart arena, and the captured
+screen/serial window; `restore` reloads them and clears the time-travel
+history.
 
 The undo ring is 32 records at host word 0x30000, enabled by `dbg_begin` and
 `dbg_cart`; standalone core builds link `src/dbg/undo_stub.nas` instead. The
 same debug starts set `nd_iocap=1`, so cart `VPOKE`/display ops write to the
 private text buffer at 0x60000 and target `PUTC` at 0x61000 instead of the
-desktop/COM1. The undo/redo rings live at 0x30000/0x62000; checkpoints use a header at
-0x90000 and an arena copy at 0x91000. Next stages (80x25 pane
+desktop/COM1. The undo/redo rings live at 0x30000/0x62000; checkpoints use a
+header at 0x90000, an arena copy at 0x91000, and a capture copy at 0xA1000. Next stages (80x25 pane
 UI, NDR log/checkpoints, NDP) are in `spec/NANDBG.md`.
 
 Screenshot of the desktop terminal with `debug` open and `screen` showing the

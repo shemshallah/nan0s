@@ -29,6 +29,11 @@ asm src/tests/ndbg_core_test.nas "$T/core.nan"
 "$CLI" --img "$T/core.nan" --steps 2000000 --serial > "$T/core.out" 2>"$T/core.err" || true
 grep -qx 'CORE PASS' "$T/core.out" || { echo "ndbg_diff: CORE FAIL"; cat "$T/core.out" "$T/core.err"; exit 1; }
 
+# --- 1a. NDR operands and FNV seal -------------------------------------------
+asm src/tests/ndbg_ndr_test.nas "$T/ndr.nan"
+"$CLI" --img "$T/ndr.nan" --steps 2000000 --serial > "$T/ndr.out" 2>"$T/ndr.err" || true
+grep -qx 'NDR PASS' "$T/ndr.out" || { echo "ndbg_diff: NDR FAIL"; cat "$T/ndr.out" "$T/ndr.err"; exit 1; }
+
 # --- 1b. a real museum cartridge under the core ------------------------------
 asm src/tests/ndbg_cart_test.nas "$T/cart.nan"
 "$CLI" --img "$T/cart.nan" --steps 50000000 --serial > "$T/cart.out" 2>"$T/cart.err" || true
@@ -84,5 +89,5 @@ if cmp -s "$T/debug.out" "$T/negative"; then
   exit 1
 fi
 
-echo "ndbg_diff: PASS (core reset/run, real cart to KEY, guard/watch, native == stepped, golden transcript, vectors)"
+echo "ndbg_diff: PASS (core reset/run, NDR operands/seal, real cart to KEY, guard/watch, native == stepped, golden transcript, vectors)"
 echo "ndbg_diff: NEGATIVE PASS (mutated transcript rejected)"
