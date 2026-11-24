@@ -20,7 +20,7 @@ gawk -f tools/mkimg.awk \
   -v OUTB="$T/boot.bin" -v OUTG="$T/guest.bin" 2>"$T/mk.err" || { cat "$T/mk.err"; exit 1; }
 
 "$CLI" --img "$T/guest.bin" --steps 100000000 \
-  --keys "@20000000,d,e,b,u,g,ENTER,@2000000,c,a,r,t,s,ENTER,@2000000,l,o,a,d,SPACE,1,ENTER,@2000000,s,t,e,p,ENTER,@2000000,d,i,s,ENTER,@2000000,r,e,g,s,ENTER,@2000000,b,r,e,a,k,ENTER,@2000000,w,a,t,c,h,ENTER,@2000000,b,p,t,s,ENTER,@2000000,w,p,t,s,ENTER,@2000000,m,e,m,ENTER,@2000000,r,u,n,ENTER,@2000000,q,u,i,t,ENTER,@4000000" \
+  --keys "@20000000,d,e,b,u,g,ENTER,@2000000,c,a,r,t,s,ENTER,@2000000,l,o,a,d,SPACE,1,ENTER,@2000000,s,t,e,p,ENTER,@2000000,d,i,s,ENTER,@2000000,r,e,g,s,ENTER,@2000000,s,e,t,r,SPACE,1,SPACE,4,2,ENTER,@2000000,s,e,t,m,SPACE,3,0,0,0,SPACE,1,2,3,4,ENTER,@2000000,s,e,t,w,SPACE,3,0,0,0,SPACE,5,6,7,8,SPACE,9,ENTER,@2000000,s,e,t,c,SPACE,3,0,0,0,SPACE,5,ENTER,@2000000,b,r,e,a,k,ENTER,@2000000,w,a,t,c,h,ENTER,@2000000,b,p,t,s,ENTER,@2000000,w,p,t,s,ENTER,@2000000,m,e,m,ENTER,@2000000,r,u,n,ENTER,@2000000,q,u,i,t,ENTER,@4000000" \
   --serial > "$T/out" 2>"$T/err" || true
 tr -d '\r' < "$T/out" > "$T/out.lf"
 if ! grep -qx 'carts' "$T/out.lf" ||
@@ -33,6 +33,10 @@ if ! grep -qx 'carts' "$T/out.lf" ||
    ! grep -qx '2001 FFF8_01D00001_F8FF MOVI r13,1' "$T/out.lf" ||
    ! grep -qx 'regs' "$T/out.lf" ||
    ! grep -qx 'R0=00000000 R1=00000000 R2=00000000 R3=00000000 ' "$T/out.lf" ||
+   ! grep -qx 'R1=00000042' "$T/out.lf" ||
+   ! grep -qx 'M3000=00001234' "$T/out.lf" ||
+   ! grep -qx 'W3000=00005678/9' "$T/out.lf" ||
+   ! grep -qx 'C3000=5' "$T/out.lf" ||
    ! grep -qx 'break' "$T/out.lf" ||
    ! grep -qx 'BP=2001' "$T/out.lf" ||
    ! grep -qx 'W=2001' "$T/out.lf" ||
@@ -93,5 +97,5 @@ sed 's/BP=2001/BP=2002/'    "$T/out.lf" > "$T/negative"
 if cmp -s "$T/out.lf" "$T/negative"; then
   echo "ndbg_term: NEGATIVE FAIL"; exit 1
 fi
-echo "ndbg_term: PASS (terminal debug: carts/load, step/dis/regs/break/watch/bpts/wpts/mem/run; screen/serial; undo/multi-redo/checkpoint/restore, exact)"
+echo "ndbg_term: PASS (terminal debug: carts/load, step/dis/regs/break/watch/bpts/wpts/mem/run; screen/serial; setr/setm/setw/setc; undo/multi-redo/checkpoint/restore, exact)"
 echo "ndbg_term: NEGATIVE PASS (mutated transcript rejected)"

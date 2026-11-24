@@ -35,6 +35,7 @@
 .equ DBG_PC_SET 5959
 .equ DBG_MEM_SETH 5962
 .equ DBG_REG_SET 5953
+.equ DBG_MEM_SET 5954
 .equ DBG_CKPT_FROM 5971
 .equ DBG_CKPT_TO 5970
 .equ DBG_STATE_GET 5967
@@ -5909,6 +5910,340 @@ LD r15,r14,0
 RET
 
 
+; ---- typed argument parser and setters ----
+tdbg_args_reset:
+  MOVI r13,1
+  LA r1,#FNB
+  MOVI r4,64
+dar_l:
+  LDB r2,r1,0
+  CMP r2,r0
+  JMP[EQ] @dar_e
+  MOVI r3,32
+  CMP r2,r3
+  JMP[EQ] @dar_sp
+  ADD r1,r1,r13
+  SUB r4,r4,r13
+  CMP r4,r0
+  JMP[GT] @dar_l
+  JMP @dar_e
+dar_sp:
+  ADD r1,r1,r13
+  SUB r4,r4,r13
+dar_s2:
+  CMP r4,r0
+  JMP[LE] @dar_e
+  LDB r2,r1,0
+  MOVI r3,32
+  CMP r2,r3
+  JMP[NE] @dar_e
+  ADD r1,r1,r13
+  SUB r4,r4,r13
+  JMP @dar_s2
+dar_e:
+  ST r1,r0,@arg_ptr
+  RET
+
+tdbg_nexthex:
+  LD r1,r0,@arg_ptr
+dnh_s:
+  LDB r2,r1,0
+  MOVI r3,32
+  CMP r2,r3
+  JMP[NE] @dnh_go
+  ADD r1,r1,r13
+  JMP @dnh_s
+dnh_go:
+  MOVI r4,0
+  MOVI r8,0
+dnh_l:
+  LDB r2,r1,0
+  CMP r2,r0
+  JMP[EQ] @dnh_d
+  MOVI r3,48
+  CMP r2,r3
+  JMP[LT] @dnh_a
+  MOVI r3,57
+  CMP r2,r3
+  JMP[GT] @dnh_a
+  MOVI r3,48
+  SUB r2,r2,r3
+  JMP @dnh_dig
+dnh_a:
+  MOVI r3,65
+  CMP r2,r3
+  JMP[LT] @dnh_lo
+  MOVI r3,70
+  CMP r2,r3
+  JMP[GT] @dnh_lo
+  MOVI r3,55
+  SUB r2,r2,r3
+  JMP @dnh_dig
+dnh_lo:
+  MOVI r3,97
+  CMP r2,r3
+  JMP[LT] @dnh_d
+  MOVI r3,102
+  CMP r2,r3
+  JMP[GT] @dnh_d
+  MOVI r3,87
+  SUB r2,r2,r3
+dnh_dig:
+  SHL r4,r4,4
+  BOOL.14 r4,r4,r2
+  ADD r8,r8,r13
+  MOVI r3,8
+  CMP r8,r3
+  JMP[GE] @dnh_d
+  ADD r1,r1,r13
+  JMP @dnh_l
+dnh_d:
+  ST r1,r0,@arg_ptr
+  CMP r8,r0
+  MOVI[NE] r2,1
+  MOVI[EQ] r2,0
+  ADD r1,r4,r0
+  RET
+arg_ptr:
+.word 0
+
+tdbg_inval:
+  ST r15,r14,0
+  ADD r14,r14,r13
+  ST r14,r0,@dbg_sp
+  CALL #DBG_UINVAL
+  LD r14,r0,@dbg_sp
+  ST r0,r0,@rd_ri
+  ST r0,r0,@rd_rd
+  SUB r14,r14,r13
+  LD r15,r14,0
+  RET
+
+tdbg_setr:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @tdbg_args_reset
+CALL @tdbg_nexthex
+CMP r2,r0
+JMP[EQ] @tsr_bad
+MOVI r3,16
+CMP r1,r3
+JMP[GE] @tsr_bad
+ST r1,r0,@tsr_i
+CALL @tdbg_nexthex
+CMP r2,r0
+JMP[EQ] @tsr_bad
+ST r1,r0,@tsr_v
+ST r14,r0,@dbg_sp
+LD r1,r0,@tsr_i
+LD r2,r0,@tsr_v
+CALL #DBG_REG_SET
+LD r14,r0,@dbg_sp
+CALL @tdbg_inval
+MOVI r2,82
+CALL @tdbg_ch
+LD r1,r0,@dk_id
+LD r2,r0,@tsr_i
+MOVI r3,1
+CALL @dbg_puthex
+MOVI r2,61
+CALL @tdbg_ch
+LD r1,r0,@dk_id
+LD r2,r0,@tsr_v
+MOVI r3,8
+CALL @dbg_puthex
+MOVI r2,10
+CALL @tdbg_ch
+JMP @tsr_done
+tsr_bad:
+MOVI r2,@s_tdbg_badarg
+CALL @tdbg_str
+tsr_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+tsr_i:
+.word 0
+tsr_v:
+.word 0
+
+tdbg_setm:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @tdbg_args_reset
+CALL @tdbg_nexthex
+CMP r2,r0
+JMP[EQ] @tsm_bad
+ST r1,r0,@tsm_a
+CALL @tdbg_nexthex
+CMP r2,r0
+JMP[EQ] @tsm_bad
+ST r1,r0,@tsm_v
+ST r14,r0,@dbg_sp
+LD r1,r0,@tsm_a
+LD r2,r0,@tsm_v
+CALL #DBG_MEM_SET
+LD r14,r0,@dbg_sp
+CALL @tdbg_inval
+MOVI r2,77
+CALL @tdbg_ch
+LD r1,r0,@dk_id
+LD r2,r0,@tsm_a
+MOVI r3,4
+CALL @dbg_puthex
+MOVI r2,61
+CALL @tdbg_ch
+LD r1,r0,@dk_id
+LD r2,r0,@tsm_v
+MOVI r3,8
+CALL @dbg_puthex
+MOVI r2,10
+CALL @tdbg_ch
+JMP @tsm_done
+tsm_bad:
+MOVI r2,@s_tdbg_badarg
+CALL @tdbg_str
+tsm_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+tsm_a:
+.word 0
+tsm_v:
+.word 0
+
+tdbg_setw:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @tdbg_args_reset
+CALL @tdbg_nexthex
+CMP r2,r0
+JMP[EQ] @tsw_bad
+ST r1,r0,@tsw_a
+CALL @tdbg_nexthex
+CMP r2,r0
+JMP[EQ] @tsw_bad
+ST r1,r0,@tsw_v
+CALL @tdbg_nexthex
+CMP r2,r0
+JMP[EQ] @tsw_bad
+ST r1,r0,@tsw_c
+MOVI r2,15
+CMP r1,r2
+JMP[GT] @tsw_bad
+ST r14,r0,@dbg_sp
+LD r1,r0,@tsw_a
+CALL #DBG_MAP
+LD r14,r0,@dbg_sp
+ST r1,r0,@tsw_h
+ST r14,r0,@dbg_sp
+LD r1,r0,@tsw_h
+LD r2,r0,@tsw_v
+LD r3,r0,@tsw_c
+CALL #DBG_MEM_SETH
+LD r14,r0,@dbg_sp
+CALL @tdbg_inval
+MOVI r2,87
+CALL @tdbg_ch
+LD r1,r0,@dk_id
+LD r2,r0,@tsw_a
+MOVI r3,4
+CALL @dbg_puthex
+MOVI r2,61
+CALL @tdbg_ch
+LD r1,r0,@dk_id
+LD r2,r0,@tsw_v
+MOVI r3,8
+CALL @dbg_puthex
+MOVI r2,47
+CALL @tdbg_ch
+LD r1,r0,@dk_id
+LD r2,r0,@tsw_c
+MOVI r3,1
+CALL @dbg_puthex
+MOVI r2,10
+CALL @tdbg_ch
+JMP @tsw_done
+tsw_bad:
+MOVI r2,@s_tdbg_badarg
+CALL @tdbg_str
+tsw_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+tsw_a:
+.word 0
+tsw_v:
+.word 0
+tsw_c:
+.word 0
+tsw_h:
+.word 0
+
+tdbg_setc:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @tdbg_args_reset
+CALL @tdbg_nexthex
+CMP r2,r0
+JMP[EQ] @tsc_bad
+ST r1,r0,@tsc_a
+CALL @tdbg_nexthex
+CMP r2,r0
+JMP[EQ] @tsc_bad
+ST r1,r0,@tsc_c
+MOVI r2,15
+CMP r1,r2
+JMP[GT] @tsc_bad
+ST r14,r0,@dbg_sp
+LD r1,r0,@tsc_a
+CALL #DBG_MAP
+LD r14,r0,@dbg_sp
+ST r1,r0,@tsc_h
+ST r14,r0,@dbg_sp
+LD r1,r0,@tsc_h
+CALL #DBG_MEM_GETH
+LD r14,r0,@dbg_sp
+ST r1,r0,@tsc_v
+ST r14,r0,@dbg_sp
+LD r1,r0,@tsc_h
+LD r2,r0,@tsc_v
+LD r3,r0,@tsc_c
+CALL #DBG_MEM_SETH
+LD r14,r0,@dbg_sp
+CALL @tdbg_inval
+MOVI r2,67
+CALL @tdbg_ch
+LD r1,r0,@dk_id
+LD r2,r0,@tsc_a
+MOVI r3,4
+CALL @dbg_puthex
+MOVI r2,61
+CALL @tdbg_ch
+LD r1,r0,@dk_id
+LD r2,r0,@tsc_c
+MOVI r3,1
+CALL @dbg_puthex
+MOVI r2,10
+CALL @tdbg_ch
+JMP @tsc_done
+tsc_bad:
+MOVI r2,@s_tdbg_badarg
+CALL @tdbg_str
+tsc_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+tsc_a:
+.word 0
+tsc_c:
+.word 0
+tsc_h:
+.word 0
+tsc_v:
+.word 0
+
+
 ; ---- exact redo: save the post-step state before undo rewinds ----
 tdbg_redo_save:
 ST r15,r14,0
@@ -6349,6 +6684,18 @@ SUB r14,r14,r13
 LD r15,r14,0
 RET
 
+tdbg_setr_cmd:
+CALL @tdbg_setr
+JMP @tdbg_done
+tdbg_setm_cmd:
+CALL @tdbg_setm
+JMP @tdbg_done
+tdbg_setw_cmd:
+CALL @tdbg_setw
+JMP @tdbg_done
+tdbg_setc_cmd:
+CALL @tdbg_setc
+JMP @tdbg_done
 tdbg_dis:
 CALL @dbg_dis
 JMP @tdbg_done
@@ -6669,6 +7016,26 @@ LA r2,@s_tdbg_serial
 CALL @fs_prefix
 CMP r1,r0
 JMP[NE] @tdbg_serial_cmd
+LA r1,#FNB
+LA r2,@s_tdbg_setr
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @tdbg_setr_cmd
+LA r1,#FNB
+LA r2,@s_tdbg_setm
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @tdbg_setm_cmd
+LA r1,#FNB
+LA r2,@s_tdbg_setw
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @tdbg_setw_cmd
+LA r1,#FNB
+LA r2,@s_tdbg_setc
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @tdbg_setc_cmd
 LA r1,#FNB
 LA r2,@s_tdbg_redo
 CALL @fs_prefix
@@ -7116,11 +7483,11 @@ s_dbg_loaded:
 s_dbg_nocart:
 .str "no cart\n"
 s_tdbg_banner:
-.str "NANDBG TERMINAL MONITOR\ncarts load <id> step run regs break watch bpts wpts mem dis screen serial undo redo checkpoint restore reset pc quit\n"
+.str "NANDBG TERMINAL MONITOR\ncarts load <id> step run regs break watch bpts wpts mem dis screen serial undo redo setr setm setw setc checkpoint restore reset pc quit\n"
 s_tdbg_prompt:
 .str "> "
 s_tdbg_help:
-.str "carts load <id> step run regs break watch bpts wpts mem dis screen serial undo redo checkpoint restore reset pc quit"
+.str "carts load <id> step run regs break watch bpts wpts mem dis screen serial undo redo setr setm setw setc checkpoint restore reset pc quit"
 s_tdbg_carts:
 .str "carts"
 s_tdbg_load:
@@ -7147,6 +7514,16 @@ s_tdbg_wpts:
 .str "wpts"
 s_tdbg_reset:
 .str "reset"
+s_tdbg_setr:
+.str "setr"
+s_tdbg_setm:
+.str "setm"
+s_tdbg_setw:
+.str "setw"
+s_tdbg_setc:
+.str "setc"
+s_tdbg_badarg:
+.str "bad argument\n"
 s_tdbg_redo:
 .str "redo"
 s_tdbg_noredo:

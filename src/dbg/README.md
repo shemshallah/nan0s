@@ -1,7 +1,7 @@
 > **NaN/0S integration:** this directory ships with NaN/0S. `tools/ndbg.sh`,
 > `ndbg_diff.sh`, `ndbg_mon.sh`, and `ndbg_img.sh` are the integrated gates.
 > The Silver Slate terminal now wires a basic `debug` monitor with sealed-cart
-`carts`/`load`, `mem`, `dis`, captured `screen`/`serial`, `watch`, multi-level undo/redo,
+`carts`/`load`, `mem`, `dis`, captured `screen`/`serial`, `watch`, typed `setr`/`setm`/`setw`/`setc`, multi-level undo/redo,
 checkpoint/restore, and breakpoint/watchpoint tables; the richer pane
 > front end lives in `shemshallah/ndbg`. Use `tools/ndbg_sync.sh` to refresh this component.
 
