@@ -22,6 +22,7 @@ JMP @cart_entry
 .include "../lib/ncc.nas"
 .include "../lib/bootbuild.nas"
 .include "../lib/shell.nas"
+.include "../lib/mouse.nas"
 cart_entry:
 ST r15,r0,@g_ret
 MOVI r13,1
@@ -35,6 +36,7 @@ CALL @fb_init_mode
 CALL @kbd_init
 CALL @wm_init
 CALL @sh_init
+CALL @ms_init
 CALL @nfs_format
 LA r1,@fs_hello_path
 SHL r1,r1,2
@@ -84,6 +86,7 @@ ST r0,r0,@wm_redraw
 CALL @wm_draw_all
 CALL @g_bar
 CALL @sh_draw
+CALL @ms_draw
 g_nodraw:
 LD r1,r0,@g_quit
 CMP r1,r0
@@ -91,6 +94,7 @@ JMP[NE] @g_exit
 LD r1,r0,@wm_zn
 CMP r1,r0
 JMP[EQ] @g_exit
+CALL @ms_poll
 CALL @kbd_poll
 CALL @kbd_get
 SHR r2,r1,16
