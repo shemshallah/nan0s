@@ -298,6 +298,24 @@ LD r1,r0,@g_key
 CALL @sh_handle
 JMP @gk_ret
 gk_regular:
+; Ctrl+1..8 activates the matching guest taskbar slot. Normal numbers
+; continue through to the terminal unchanged.
+LD r1,r0,@g_mods
+MOVI r2,2
+BOOL.8 r1,r1,r2
+CMP r1,r0
+JMP[EQ] @gk_not_ctrlslot
+LD r1,r0,@g_key
+MOVI r2,49
+CMP r1,r2
+JMP[LT] @gk_not_ctrlslot
+MOVI r3,56
+CMP r1,r3
+JMP[GT] @gk_not_ctrlslot
+SUB r1,r1,r2
+CALL @wm_activate_slot
+JMP @gk_ret
+gk_not_ctrlslot:
 LD r1,r0,@g_key
 LD r2,r0,@st_pend
 CMP r2,r0
