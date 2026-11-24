@@ -18,5 +18,6 @@ extern int errno;
 #define EPIPE 32
 #define ERANGE 34
 #define ENAMETOOLONG 36
+#define ELOOP 40
 #define ENOTEMPTY 39
 #endif

@@ -15,7 +15,7 @@ The NaN-native debug system. Design and rationale: `spec/NANDBG.md`.
 | `../tests/ndbg_diff_native.nas` / `ndbg_diff_debug.nas` | the same target natively and through `core.nas` |
 | `../tests/ndbg_cart_test.nas` | a real museum cartridge (Baby) run under the core to `KEY` |
 | `../museum/shell.nas` | resident ABI1 5800, ABI2 5950, core 6200, demo target 8100, undo ring 0x30000 |
-| `../exhibits/gui_cart.nas` | terminal `debug` command + kind-8 second CLI + `carts`/`load` + `next`/`finish` + `mem`/`log`/`bpts`/`wpts` + `screen`/`serial` + `undo`/`redo`/`checkpoint`/`restore` + `setw`/`setc` + `dis` |
+| `../exhibits/gui_cart.nas` | terminal `debug` command + kind-8 second CLI + `carts`/`load` + `next`/`finish` + `mem [addr]`/`dis [addr]`/`log`/`hist`/`stack`/`types`/`bpts`/`wpts`/`bp`/`wp`/`goto` + `screen`/`serial` + `undo [n]`/`redo [n]`/`checkpoint`/`restore` + `setw`/`setc` + `dis` |
 | `../tests/ndbg_guard_test.nas` | write-window fault and before-write watchpoint |
 | `../tests/ndbg_putc_cart.nas` | tiny PUTC cartridge for the serial-capture gate |
 
@@ -65,23 +65,26 @@ utilities window's `[3] DEBUG` entry opens the same CLI. `carts` lists the
 catalog; `load <id>` copies a sealed cart into the debug arena at `0x80000` and
 maps guest 8192 onto it. `reset` returns to the built-in demo target at 8100. `next` steps over a call;
 `finish` runs until the current shadow frame returns. `break`, `bpts`, `watch`,
-`wpts`, `log`, `mem [addr]`, `dis [addr]`, `screen` and `serial` cover breakpoints,
-watchpoints, the last four typed records, eight words at PC or a chosen
-address, the captured 80x25 cart text buffer, and the captured `PUTC` stream. `bp <hex>` and `wp <hex>` toggle table entries.
+`wpts`, `log`, `hist`, `stack`, `types`, `mem [addr]`, `dis [addr]`, `screen`
+and `serial` cover breakpoints, watchpoints, the last four typed records, the
+newest eight PCs, the shadow frames, the live 4x4 type matrix, eight words at
+PC or a chosen address, the captured 80x25 cart text buffer, and the captured
+`PUTC` stream. `bp <hex>` and `wp <hex>` toggle table entries.
 `setr <n> <hex>`, `setm <addr> <hex>` and `goto <hex>` write a register, a
 memory word, and the PC; `setw` and `setc` write a word and/or class nibble.
 `undo [n]` rewinds one or `n` recorded scalar steps,
 including the guest words they wrote. `redo [n]` restores the saved post-step
 states and write values; new steps and edits clear the redo ring. `checkpoint`
-saves registers, PC, condition, call depth and the 64K cart arena; `restore`
-reloads them and clears the time-travel history.
+saves registers, PC, condition, call depth, the 64K cart arena, and the captured
+screen/serial window; `restore` reloads them and clears the time-travel
+history.
 
 The undo ring is 32 records at host word 0x30000, enabled by `dbg_begin` and
 `dbg_cart`; standalone core builds link `src/dbg/undo_stub.nas` instead. The
 same debug starts set `nd_iocap=1`, so cart `VPOKE`/display ops write to the
 private text buffer at 0x60000 and target `PUTC` at 0x61000 instead of the
-desktop/COM1. The undo/redo rings live at 0x30000/0x62000; checkpoints use a header at
-0x90000 and an arena copy at 0x91000. Next stages (80x25 pane
+desktop/COM1. The undo/redo rings live at 0x30000/0x62000; checkpoints use a
+header at 0x90000, an arena copy at 0x91000, and a capture copy at 0xA1000. Next stages (80x25 pane
 UI, NDR log/checkpoints, NDP) are in `spec/NANDBG.md`.
 
 Screenshot of the desktop terminal with `debug` open and `screen` showing the
@@ -93,6 +96,6 @@ This suite is shipped as a component of `shemshallah/nan0s`. Refresh that
 checkout with `sh tools/ndbg_sync.sh /path/to/ndbg` from the nan0s tree. The
 standalone gates (`ndbg`, `ndbg_diff`, `ndbg_mon`, `ndbg_img`) are integrated
 there together with the Silver Slate terminal monitor: sealed-cart
-`carts`/`load`, `mem`, `dis`, captured `screen`/`serial`, typed setters,
-multi-level undo/redo, and checkpoint/restore. The richer pane remains in this
+`carts`/`load`, `mem [addr]`, `dis [addr]`, captured `screen`/`serial`, typed
+setters, multi-level `undo [n]`/`redo [n]`, and checkpoint/restore. The richer pane remains in this
 repository.

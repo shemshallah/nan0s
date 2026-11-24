@@ -4447,7 +4447,7 @@ CMP r1,r2
 JMP[LE] @dst_n
 ADD r1,r2,r0
 dst_n:
-ST r1,r0,@dst_n
+ST r1,r0,@dst_cnt
 dst_loop:
 LD r1,r0,@dst_d
 SUB r1,r1,r13
@@ -4461,9 +4461,9 @@ CALL @dbg_puthex
 LD r1,r0,@dk_id
 MOVI r2,32
 CALL @vc_putc
-LD r1,r0,@dst_n
+LD r1,r0,@dst_cnt
 SUB r1,r1,r13
-ST r1,r0,@dst_n
+ST r1,r0,@dst_cnt
 CMP r1,r0
 JMP[NE] @dst_loop
 JMP @dst_nl
@@ -4484,7 +4484,7 @@ dst_ptr:
 .word 0
 dst_d:
 .word 0
-dst_n:
+dst_cnt:
 .word 0
 
 ; ---- live 4x4 type matrix ----
