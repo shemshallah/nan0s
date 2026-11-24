@@ -308,9 +308,11 @@ sh tools/ndbg_img.sh   # bare-metal QEMU monitor boot
 ```
 
 The Silver Slate terminal now has a wired `debug` monitor with `carts`,
-`load <id>`, `step`, `run`, `regs`, `break`, `watch`, `bpts`, `wpts`, `mem`, `dis`, `screen`, `serial`, multi-level `undo`/`redo`, `checkpoint`, `restore`, `reset`, `pc`,
-and `quit`; `tools/ndbg_term.sh` gates it. The richer
-pane CLI is maintained in `shemshallah/ndbg` and will be attached to the same
+`load <id>`, `step`, `next`, `finish`, `run`, `regs`, `log`, `hist`, `stack`,
+`types`, `break`, `watch`, `bpts`, `wpts`, `mem`, `dis`, `screen`, `serial`,
+`setr`, `setm`, `setw`, `setc`, multi-level `undo`/`redo`, `checkpoint`,
+`restore`, `reset`, `pc`, and `quit`; `tools/ndbg_term.sh` gates it. The richer
+full-screen pane front end is maintained in `shemshallah/ndbg` over the same
 resident ABI. `tools/ndbg_sync.sh` refreshes the vendored component from an ndbg
 checkout.
 

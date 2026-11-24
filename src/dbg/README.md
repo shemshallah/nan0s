@@ -1,9 +1,11 @@
 > **NaN/0S integration:** this directory ships with NaN/0S. `tools/ndbg.sh`,
 > `ndbg_diff.sh`, `ndbg_mon.sh`, and `ndbg_img.sh` are the integrated gates.
-> The Silver Slate terminal now wires a basic `debug` monitor with sealed-cart
-`carts`/`load`, `mem`, `dis`, captured `screen`/`serial`, `watch`, typed `setr`/`setm`/`setw`/`setc`, multi-level undo/redo,
-checkpoint/restore, and breakpoint/watchpoint tables; the richer pane
-> front end lives in `shemshallah/ndbg`. Use `tools/ndbg_sync.sh` to refresh this component.
+> The Silver Slate terminal now wires a `debug` monitor with sealed-cart
+`carts`/`load`, `step`/`next`/`finish`, `mem`/`dis`, `log`/`hist`/`stack`/
+`types`, captured `screen`/`serial`, `watch`, typed
+`setr`/`setm`/`setw`/`setc`, multi-level undo/redo, checkpoint/restore, and
+breakpoint/watchpoint tables; the richer full-screen pane front end also lives
+in `shemshallah/ndbg`. Use `tools/ndbg_sync.sh` to refresh this component.
 
 # src/dbg — NANDBG
 
@@ -22,9 +24,11 @@ The NaN-native debug system. Design and rationale: `spec/NANDBG.md`.
 | `../tests/ndbg_diff_native.nas` / `ndbg_diff_debug.nas` | the same target natively and through `core.nas` |
 | `../tests/ndbg_cart_test.nas` | a real museum cartridge (Baby) run under the core to `KEY` |
 | `../museum/shell.nas` | resident ABI1 5800, ABI2 5950, core 6200, demo target 8100, undo ring 0x30000 |
-| `../exhibits/gui_cart.nas` | terminal `debug` command + kind-8 second CLI + `carts`/`load` + `next`/`finish` + `mem`/`log`/`bpts`/`wpts` + `screen`/`serial` + `undo`/`redo`/`checkpoint`/`restore` + `setw`/`setc` + `dis` |
+| `../exhibits/gui_cart.nas` | terminal `debug` command + kind-8 second CLI + `carts`/`load` + `next`/`finish` + `mem`/`log`/`hist`/`stack`/`types`/`bpts`/`wpts` + `screen`/`serial` + `undo`/`redo`/`checkpoint`/`restore` + `setw`/`setc` + `dis` |
 | `../tests/ndbg_guard_test.nas` | write-window fault and before-write watchpoint |
 | `../tests/ndbg_putc_cart.nas` | tiny PUTC cartridge for the serial-capture gate |
+| `../tests/ndbg_badop_cart.nas` | illegal-op cartridge for the terminal typed-record gate |
+| `../tests/ndbg_call_cart.nas` | CALL/RET cartridge for terminal `next`/`finish` |
 
 ## Run
 

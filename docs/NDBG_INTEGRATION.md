@@ -30,33 +30,55 @@ The Silver Slate terminal now has a wired `debug` monitor:
 ```text
 > debug
 NANDBG TERMINAL MONITOR
-carts load <id> step run regs break watch bpts wpts mem dis screen serial setr setm setw setc undo redo checkpoint restore reset pc quit
+carts load <id> step next finish run regs log hist stack types break watch bpts wpts mem dis screen serial setr setm setw setc undo redo checkpoint restore reset pc quit
 > carts
 1 Baby
+2 PUTC
+3 BadOp
+4 Call
 > load 1
 loaded
 S=0 PC=2000
 > step
-S=0 PC=1FA5
+S=0 PC=2001
+> next
+S=0 PC=2002
+> finish
+S=5 PC=2009
+> screen
+ NaN/0S  MANCHESTER SMALL-SCALE EXPERIMENTAL MACHINE - THE BABY - 21 JUNE 1948
+...
+> log
+no log
+> hist
+HIST 0000 0000 0000 0000 0000 0000 2000 2001
+> stack
+STACK 0: empty
+> types
+TYPES FC:00 FM:00 FD:00 FS:00
+TYPES PC:00 PM:00 PD:00 PS:00
+TYPES WC:00 WM:00 WD:00 WS:00
+TYPES DC:00 DM:00 DD:00 DS:00
+> reset
+S=0 PC=2000
 > regs
 R0=00000000 ...
 > break
-BP=1FA5
+BP=2000
+> step
+S=0 PC=2001
 > watch
-W=1FA5
+W=2001
 > bpts
 BP=1:
-2001
+2000
 > wpts
 W=1:
 2001
 > mem
-M2000...
+M2001...
 > dis
 2001 FFF8_01D00001_F8FF MOVI r13,1
-...
-> screen
- NaN/0S  MANCHESTER SMALL-SCALE EXPERIMENTAL MACHINE - THE BABY - 21 JUNE 1948
 ...
 > setr 1 42
 R1=00000042
@@ -66,31 +88,40 @@ M3000=00001234
 W3000=00005678/9
 > setc 3000 5
 C3000=5
+> reset
+S=0 PC=2000
+> step
+S=0 PC=2001
+> step
+S=0 PC=2002
 > undo
 S=0 PC=2001
 > redo
 S=0 PC=2002
 > redo
-S=0 PC=0004
-> redo
 NOREDO
 > checkpoint
 CKPT=1
+> step
+S=0 PC=0004
 > restore
-S=0 PC=2001
+S=0 PC=2002
+> load 2
+loaded
+S=0 PC=2000
+> run
+S=1 PC=2012
 > serial
 HELLO
-> run
-!DIC@02001FA5 ...
-S=2 PC=1FA5
 > quit
 ```
 
 `tools/ndbg_term.sh` gates the path, including the sealed-cart catalog and
-`load <id>`. The richer pane CLI (memory, captured screen/serial, undo/redo,
-checkpoints) remains in `shemshallah/ndbg`; the resident ABI and core are
-already shipped here so those commands can be attached without changing the
-debugger.
+`load <id>`. `next` and `finish` use the resident shadow stack: `next` steps over a CALL
+and `finish` runs out of the current frame. `log` prints the newest typed
+records, `hist` the newest eight PCs, `stack` the shadow frames, and `types`
+the live 4x4 type matrix. The richer 80x25 pane front end remains in
+`shemshallah/ndbg`; the terminal monitor now covers its command set.
 
 ## Keeping this copy updated from ndbg
 

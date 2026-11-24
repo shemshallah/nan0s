@@ -21,6 +21,9 @@
 .equ DBG_REG 5804
 .equ DBG_PC 5805
 .equ DBG_STATUS 5806
+.equ DBG_COUNTS 5809
+.equ DBG_STACK 5808
+.equ DBG_HIST 5807
 .equ DBG_BREAK 5810
 .equ DBG_WP_LIST 5957
 .equ DBG_WP_TOGGLE 5958
@@ -28,6 +31,7 @@
 .equ DBG_BP_TOGGLE 5956
 .equ DBG_MEM_CLS 5952
 .equ DBG_MEM 5950
+.equ DBG_LOG 5951
 .equ DBG_WATCH 5811
 .equ DBG_CART 5813
 .equ DBG_MAP 5972
@@ -6244,6 +6248,396 @@ tsc_v:
 .word 0
 
 
+; ---- next: step over calls until depth returns ----
+tdbg_next:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r14,r0,@dbg_sp
+CALL #DBG_STACK
+LD r14,r0,@dbg_sp
+ST r2,r0,@tnx_d
+MOVI r1,0
+ST r1,r0,@tnx_n
+tnx_l:
+LD r1,r0,@tnx_n
+LA r2,1000000
+CMP r1,r2
+JMP[GE] @tnx_e
+ADDI r1,r1,1
+ST r1,r0,@tnx_n
+ST r14,r0,@dbg_sp
+CALL #DBG_STEP
+LD r14,r0,@dbg_sp
+CMP r1,r0
+JMP[NE] @tnx_e
+ST r14,r0,@dbg_sp
+CALL #DBG_STACK
+LD r14,r0,@dbg_sp
+LD r1,r0,@tnx_d
+CMP r2,r1
+JMP[LE] @tnx_e
+JMP @tnx_l
+tnx_e:
+ST r0,r0,@rd_ri
+ST r0,r0,@rd_rd
+CALL @dbg_state
+SUB r14,r14,r13
+LD r15,r14,0
+JMP @tdbg_done
+tnx_d:
+.word 0
+tnx_n:
+.word 0
+
+; ---- finish: step out of the current shadow frame ----
+tdbg_finish:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r14,r0,@dbg_sp
+CALL #DBG_STACK
+LD r14,r0,@dbg_sp
+ST r2,r0,@tfin_d
+CMP r2,r0
+JMP[NE] @tfin_l0
+ST r14,r0,@dbg_sp
+LA r1,1000000
+CALL #DBG_RUN
+LD r14,r0,@dbg_sp
+JMP @tfin_e
+tfin_l0:
+MOVI r1,0
+ST r1,r0,@tfin_n
+tfin_l:
+LD r1,r0,@tfin_n
+LA r2,1000000
+CMP r1,r2
+JMP[GE] @tfin_e
+ADDI r1,r1,1
+ST r1,r0,@tfin_n
+ST r14,r0,@dbg_sp
+CALL #DBG_STEP
+LD r14,r0,@dbg_sp
+CMP r1,r0
+JMP[NE] @tfin_e
+ST r14,r0,@dbg_sp
+CALL #DBG_STACK
+LD r14,r0,@dbg_sp
+LD r1,r0,@tfin_d
+CMP r2,r1
+JMP[LT] @tfin_e
+JMP @tfin_l
+tfin_e:
+ST r0,r0,@rd_ri
+ST r0,r0,@rd_rd
+CALL @dbg_state
+SUB r14,r14,r13
+LD r15,r14,0
+JMP @tdbg_done
+tfin_d:
+.word 0
+tfin_n:
+.word 0
+
+; ---- log: newest four typed records ----
+tdbg_log:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r14,r0,@dbg_sp
+CALL #DBG_LOG
+LD r14,r0,@dbg_sp
+ST r1,r0,@tlg_ptr
+ST r2,r0,@tlg_i
+CMP r2,r0
+JMP[NE] @tlg_have
+MOVI r2,@s_tdbg_nolog
+CALL @tdbg_str
+JMP @tlg_done
+tlg_have:
+MOVI r3,4
+CMP r2,r3
+JMP[LE] @tlg_cnt
+MOVI r3,4
+tlg_cnt:
+ST r3,r0,@tlg_n
+SUB r3,r2,r3
+MOVI r4,15
+BOOL.8 r3,r3,r4
+ST r3,r0,@tlg_s
+tlg_l:
+LD r3,r0,@tlg_s
+SHL r3,r3,2
+LD r1,r0,@tlg_ptr
+ADD r1,r1,r3
+LDN r4,r1,0
+ST r4,r0,@tlg_t
+LD r4,r1,0
+SHR r4,r4,24
+ST r4,r0,@tlg_c
+LD r4,r1,1
+LA r5,0xFFFFFF
+BOOL.8 r4,r4,r5
+ST r4,r0,@tlg_site
+MOVI r2,68
+CALL @tdbg_ch
+LD r1,r0,@tk_id
+LD r2,r0,@tlg_t
+MOVI r3,1
+CALL @dbg_puthex
+MOVI r2,58
+CALL @tdbg_ch
+LD r1,r0,@tk_id
+LD r2,r0,@tlg_c
+MOVI r3,2
+CALL @dbg_puthex
+MOVI r2,58
+CALL @tdbg_ch
+LD r1,r0,@tk_id
+LD r2,r0,@tlg_site
+MOVI r3,6
+CALL @dbg_puthex
+MOVI r2,10
+CALL @tdbg_ch
+LD r1,r0,@tlg_s
+ADD r1,r1,r13
+MOVI r2,15
+BOOL.8 r1,r1,r2
+ST r1,r0,@tlg_s
+LD r1,r0,@tlg_n
+SUB r1,r1,r13
+ST r1,r0,@tlg_n
+CMP r1,r0
+JMP[NE] @tlg_l
+tlg_done:
+SUB r14,r14,r13
+LD r15,r14,0
+JMP @tdbg_done
+tlg_ptr:
+.word 0
+tlg_i:
+.word 0
+tlg_s:
+.word 0
+tlg_n:
+.word 0
+tlg_t:
+.word 0
+tlg_c:
+.word 0
+tlg_site:
+.word 0
+
+; ---- hist: newest eight program counters ----
+tdbg_hist:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r14,r0,@dbg_sp
+CALL #DBG_HIST
+LD r14,r0,@dbg_sp
+ST r1,r0,@thi_ptr
+ST r2,r0,@thi_hi
+MOVI r2,@s_tdbg_histp
+CALL @tdbg_str
+LD r3,r0,@thi_hi
+MOVI r4,8
+SUB r3,r3,r4
+MOVI r4,63
+BOOL.8 r3,r3,r4
+ST r3,r0,@thi_s
+MOVI r1,0
+ST r1,r0,@thi_n
+thi_l:
+LD r3,r0,@thi_s
+LD r1,r0,@thi_ptr
+ADD r1,r1,r3
+LD r2,r1,0
+LD r1,r0,@tk_id
+MOVI r3,4
+CALL @dbg_puthex
+MOVI r2,32
+CALL @tdbg_ch
+LD r1,r0,@thi_s
+ADD r1,r1,r13
+MOVI r2,63
+BOOL.8 r1,r1,r2
+ST r1,r0,@thi_s
+LD r1,r0,@thi_n
+ADD r1,r1,r13
+ST r1,r0,@thi_n
+MOVI r2,8
+CMP r1,r2
+JMP[LT] @thi_l
+MOVI r2,10
+CALL @tdbg_ch
+SUB r14,r14,r13
+LD r15,r14,0
+JMP @tdbg_done
+thi_ptr:
+.word 0
+thi_hi:
+.word 0
+thi_s:
+.word 0
+thi_n:
+.word 0
+
+; ---- stack: shadow call frames, newest first ----
+tdbg_stack:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r14,r0,@dbg_sp
+CALL #DBG_STACK
+LD r14,r0,@dbg_sp
+ST r1,r0,@tstk_ptr
+ST r2,r0,@tstk_d
+MOVI r2,@s_tdbg_stackp
+CALL @tdbg_str
+LD r1,r0,@tk_id
+LD r2,r0,@tstk_d
+MOVI r3,1
+CALL @dbg_puthex
+MOVI r2,58
+CALL @tdbg_ch
+MOVI r2,32
+CALL @tdbg_ch
+LD r1,r0,@tstk_d
+CMP r1,r0
+JMP[EQ] @tstk_empty
+MOVI r2,8
+CMP r1,r2
+JMP[LE] @tstk_n
+ADD r1,r2,r0
+tstk_n:
+ST r1,r0,@tstk_n
+tstk_l:
+LD r1,r0,@tstk_d
+SUB r1,r1,r13
+ST r1,r0,@tstk_d
+LD r2,r0,@tstk_ptr
+ADD r2,r2,r1
+LD r2,r2,0
+LD r1,r0,@tk_id
+MOVI r3,4
+CALL @dbg_puthex
+MOVI r2,32
+CALL @tdbg_ch
+LD r1,r0,@tstk_n
+SUB r1,r1,r13
+ST r1,r0,@tstk_n
+CMP r1,r0
+JMP[NE] @tstk_l
+MOVI r2,10
+CALL @tdbg_ch
+JMP @tstk_done
+tstk_empty:
+MOVI r2,@s_tdbg_empty
+CALL @tdbg_str
+tstk_done:
+SUB r14,r14,r13
+LD r15,r14,0
+JMP @tdbg_done
+tstk_ptr:
+.word 0
+tstk_d:
+.word 0
+tstk_n:
+.word 0
+
+; ---- types: live 4x4 type matrix ----
+tdbg_types:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r14,r0,@dbg_sp
+CALL #DBG_COUNTS
+LD r14,r0,@dbg_sp
+ST r1,r0,@tty_ptr
+MOVI r1,0
+ST r1,r0,@tty_i
+MOVI r1,0
+ST r1,r0,@tty_c
+tty_row:
+MOVI r2,@s_tdbg_typesp
+CALL @tdbg_str
+MOVI r1,0
+ST r1,r0,@tty_c
+tty_col:
+LD r3,r0,@tty_i
+MOVI r2,@tty_names
+ADD r2,r2,r3
+LD r2,r2,0
+CALL @tdbg_str
+MOVI r2,58
+CALL @tdbg_ch
+LD r3,r0,@tty_i
+LD r2,r0,@tty_ptr
+ADD r2,r2,r3
+LD r2,r2,0
+LD r1,r0,@tk_id
+MOVI r3,2
+CALL @dbg_puthex
+MOVI r2,32
+CALL @tdbg_ch
+LD r1,r0,@tty_i
+ADD r1,r1,r13
+ST r1,r0,@tty_i
+LD r1,r0,@tty_c
+ADD r1,r1,r13
+ST r1,r0,@tty_c
+MOVI r2,4
+CMP r1,r2
+JMP[LT] @tty_col
+MOVI r2,10
+CALL @tdbg_ch
+LD r1,r0,@tty_i
+MOVI r2,16
+CMP r1,r2
+JMP[LT] @tty_row
+SUB r14,r14,r13
+LD r15,r14,0
+JMP @tdbg_done
+tty_ptr:
+.word 0
+tty_i:
+.word 0
+tty_c:
+.word 0
+
+tty_names:
+.word @ttn0,@ttn1,@ttn2,@ttn3,@ttn4,@ttn5,@ttn6,@ttn7
+.word @ttn8,@ttn9,@ttn10,@ttn11,@ttn12,@ttn13,@ttn14,@ttn15
+ttn0:
+.str "FC"
+ttn1:
+.str "FM"
+ttn2:
+.str "FD"
+ttn3:
+.str "FS"
+ttn4:
+.str "PC"
+ttn5:
+.str "PM"
+ttn6:
+.str "PD"
+ttn7:
+.str "PS"
+ttn8:
+.str "WC"
+ttn9:
+.str "WM"
+ttn10:
+.str "WD"
+ttn11:
+.str "WS"
+ttn12:
+.str "DC"
+ttn13:
+.str "DM"
+ttn14:
+.str "DD"
+ttn15:
+.str "DS"
+
+
 ; ---- exact redo: save the post-step state before undo rewinds ----
 tdbg_redo_save:
 ST r15,r14,0
@@ -6962,6 +7356,16 @@ CALL @fs_prefix
 CMP r1,r0
 JMP[NE] @tdbg_run
 LA r1,#FNB
+LA r2,@s_tdbg_next
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @tdbg_next
+LA r1,#FNB
+LA r2,@s_tdbg_finish
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @tdbg_finish
+LA r1,#FNB
 LA r2,@s_tdbg_regs
 CALL @fs_prefix
 CMP r1,r0
@@ -7016,6 +7420,26 @@ LA r2,@s_tdbg_serial
 CALL @fs_prefix
 CMP r1,r0
 JMP[NE] @tdbg_serial_cmd
+LA r1,#FNB
+LA r2,@s_tdbg_log
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @tdbg_log
+LA r1,#FNB
+LA r2,@s_tdbg_hist
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @tdbg_hist
+LA r1,#FNB
+LA r2,@s_tdbg_stack
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @tdbg_stack
+LA r1,#FNB
+LA r2,@s_tdbg_types
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @tdbg_types
 LA r1,#FNB
 LA r2,@s_tdbg_setr
 CALL @fs_prefix
@@ -7483,11 +7907,11 @@ s_dbg_loaded:
 s_dbg_nocart:
 .str "no cart\n"
 s_tdbg_banner:
-.str "NANDBG TERMINAL MONITOR\ncarts load <id> step run regs break watch bpts wpts mem dis screen serial undo redo setr setm setw setc checkpoint restore reset pc quit\n"
+.str "NANDBG TERMINAL MONITOR\ncarts load <id> step next finish run regs break watch bpts wpts mem dis screen serial log hist stack types undo redo setr setm setw setc checkpoint restore reset pc quit\n"
 s_tdbg_prompt:
 .str "> "
 s_tdbg_help:
-.str "carts load <id> step run regs break watch bpts wpts mem dis screen serial undo redo setr setm setw setc checkpoint restore reset pc quit"
+.str "carts load <id> step next finish run regs break watch bpts wpts mem dis screen serial log hist stack types undo redo setr setm setw setc checkpoint restore reset pc quit"
 s_tdbg_carts:
 .str "carts"
 s_tdbg_load:
@@ -7514,6 +7938,28 @@ s_tdbg_wpts:
 .str "wpts"
 s_tdbg_reset:
 .str "reset"
+s_tdbg_next:
+.str "next"
+s_tdbg_finish:
+.str "finish"
+s_tdbg_log:
+.str "log"
+s_tdbg_hist:
+.str "hist"
+s_tdbg_stack:
+.str "stack"
+s_tdbg_types:
+.str "types"
+s_tdbg_nolog:
+.str "no log\n"
+s_tdbg_histp:
+.str "HIST "
+s_tdbg_stackp:
+.str "STACK "
+s_tdbg_typesp:
+.str "TYPES "
+s_tdbg_empty:
+.str "empty\n"
 s_tdbg_setr:
 .str "setr"
 s_tdbg_setm:

@@ -12,7 +12,9 @@ CLI=aarch64/android/nan_cli
 awk -f tools/nmk.awk -v CMD=emit src/museum/museum.nas > "$T/museum.nan" 2>"$T/m.err" || { cat "$T/m.err"; exit 1; }
 awk -f tools/nmk.awk -v CMD=emit src/exhibits/gui_cart.nas > "$T/gui.nan" 2>"$T/g.err" || { cat "$T/g.err"; exit 1; }
 awk -f tools/nmk.awk -v CMD=emit src/tests/ndbg_putc_cart.nas > "$T/putc.nan" 2>"$T/p.err" || { cat "$T/p.err"; exit 1; }
-printf 'boot:%s/gui.nan\n1:%s/src/nan/baby_cart.nan:1948:1:1:Baby\n2:%s/putc.nan:2026:2:1:PUTC\n' "$T" "$PWD" "$T" > "$T/carts.txt"
+awk -f tools/nmk.awk -v CMD=emit src/tests/ndbg_badop_cart.nas > "$T/badop.nan" 2>"$T/bo.err" || { cat "$T/bo.err"; exit 1; }
+awk -f tools/nmk.awk -v CMD=emit src/tests/ndbg_call_cart.nas > "$T/call.nan" 2>"$T/ca.err" || { cat "$T/ca.err"; exit 1; }
+printf 'boot:%s/gui.nan\n1:%s/src/nan/baby_cart.nan:1948:1:1:Baby\n2:%s/putc.nan:2026:2:1:PUTC\n3:%s/badop.nan:2026:3:1:BadOp\n4:%s/call.nan:2026:4:1:Call\n' "$T" "$PWD" "$T" "$T" "$T" > "$T/carts.txt"
 gawk -f tools/mkimg.awk \
   -v GOLD=x86/native/nan16_x86.nan \
   -v GUEST="$T/museum.nan" \
@@ -48,6 +50,54 @@ if ! grep -qx 'carts' "$T/out.lf" ||
    ! grep -qx 'q' "$T/out.lf"; then
   echo "ndbg_term: FAIL"; cat "$T/out"; exit 1
 fi
+# next/finish and the rich panes: step over a CALL, step out of a frame,
+# then log/hist/stack/types on the demo target.
+"$CLI" --img "$T/guest.bin" --steps 120000000 \
+  --keys "@20000000,d,e,b,u,g,ENTER,@2000000,l,o,a,d,SPACE,4,ENTER,@2000000,s,t,e,p,ENTER,@2000000,s,t,e,p,ENTER,@2000000,n,e,x,t,ENTER,@2000000,r,e,g,s,ENTER,@3000000,q,u,i,t,ENTER,@3000000" \
+  --serial > "$T/nx" 2>/dev/null || true
+tr -d '\r' < "$T/nx" > "$T/nx.lf"
+if ! grep -qx 'S=0 PC=2001' "$T/nx.lf" ||
+   ! grep -qx 'S=0 PC=2002' "$T/nx.lf" ||
+   ! grep -qx 'S=0 PC=2003' "$T/nx.lf" ||
+   ! grep -qx 'R0=00000000 R1=00000000 R2=00000055 R3=00000000 ' "$T/nx.lf"; then
+  echo "ndbg_term: NEXT FAIL"; cat "$T/nx"; exit 1
+fi
+
+"$CLI" --img "$T/guest.bin" --steps 120000000 \
+  --keys "@20000000,d,e,b,u,g,ENTER,@2000000,l,o,a,d,SPACE,4,ENTER,@2000000,s,t,e,p,ENTER,@2000000,s,t,e,p,ENTER,@2000000,s,t,e,p,ENTER,@2000000,f,i,n,i,s,h,ENTER,@3000000,q,u,i,t,ENTER,@3000000" \
+  --serial > "$T/fin" 2>/dev/null || true
+tr -d '\r' < "$T/fin" > "$T/fin.lf"
+if ! grep -qx 'S=0 PC=2005' "$T/fin.lf" ||
+   ! grep -qx 'S=0 PC=2003' "$T/fin.lf"; then
+  echo "ndbg_term: FINISH FAIL"; cat "$T/fin"; exit 1
+fi
+
+"$CLI" --img "$T/guest.bin" --steps 130000000 \
+  --keys "@20000000,d,e,b,u,g,ENTER,@2000000,l,o,a,d,SPACE,1,ENTER,@2000000,s,t,e,p,ENTER,@2000000,n,e,x,t,ENTER,@2000000,l,o,g,ENTER,@2000000,h,i,s,t,ENTER,@2000000,s,t,a,c,k,ENTER,@2000000,t,y,p,e,s,ENTER,@2000000,f,i,n,i,s,h,ENTER,@4000000,q,u,i,t,ENTER,@3000000" \
+  --serial > "$T/rich" 2>/dev/null || true
+tr -d '\r' < "$T/rich" > "$T/rich.lf"
+if ! grep -qx 'no log' "$T/rich.lf" ||
+   ! grep -qx 'HIST 0000 0000 0000 0000 0000 0000 2000 2001 ' "$T/rich.lf" ||
+   ! grep -qx 'STACK 0: empty' "$T/rich.lf" ||
+   ! grep -qx 'TYPES FC:00 FM:00 FD:00 FS:00 ' "$T/rich.lf" ||
+   ! grep -qx 'TYPES PC:00 PM:00 PD:00 PS:00 ' "$T/rich.lf" ||
+   ! grep -qx 'TYPES WC:00 WM:00 WD:00 WS:00 ' "$T/rich.lf" ||
+   ! grep -qx 'TYPES DC:00 DM:00 DD:00 DS:00 ' "$T/rich.lf" ||
+   ! grep -qx 'S=5 PC=2009' "$T/rich.lf"; then
+  echo "ndbg_term: RICH FAIL"; cat "$T/rich"; exit 1
+fi
+
+# a real bad-op trap must appear in the log as a typed record
+"$CLI" --img "$T/guest.bin" --steps 120000000 \
+  --keys "@20000000,d,e,b,u,g,ENTER,@2000000,l,o,a,d,SPACE,3,ENTER,@2000000,r,u,n,ENTER,@5000000,l,o,g,ENTER,@3000000,q,u,i,t,ENTER,@3000000" \
+  --serial > "$T/blog" 2>/dev/null || true
+tr -d '\r' < "$T/blog" > "$T/blog.lf"
+if ! grep -qx '!DFC@20002003 W=0000000F7F000000' "$T/blog.lf" ||
+   ! grep -qx 'S=3 PC=2003' "$T/blog.lf" ||
+   ! grep -qx 'D0:20:002003' "$T/blog.lf"; then
+  echo "ndbg_term: LOG FAIL"; cat "$T/blog"; exit 1
+fi
+
 # captured display: run Baby to the key wait and dump the text buffer
 "$CLI" --img "$T/guest.bin" --steps 160000000 \
   --keys "@20000000,d,e,b,u,g,ENTER,@2000000,l,o,a,d,SPACE,1,ENTER,@2000000,r,u,n,ENTER,@4000000,s,c,r,e,e,n,ENTER,@4000000,q,u,i,t,ENTER,@3000000" \
@@ -97,5 +147,5 @@ sed 's/BP=2001/BP=2002/'    "$T/out.lf" > "$T/negative"
 if cmp -s "$T/out.lf" "$T/negative"; then
   echo "ndbg_term: NEGATIVE FAIL"; exit 1
 fi
-echo "ndbg_term: PASS (terminal debug: carts/load, step/dis/regs/break/watch/bpts/wpts/mem/run; screen/serial; setr/setm/setw/setc; undo/multi-redo/checkpoint/restore, exact)"
+echo "ndbg_term: PASS (terminal debug: carts/load, step/dis/regs/break/watch/bpts/wpts/mem/run; screen/serial; setr/setm/setw/setc; next/finish; log/hist/stack/types; undo/multi-redo/checkpoint/restore, exact)"
 echo "ndbg_term: NEGATIVE PASS (mutated transcript rejected)"
