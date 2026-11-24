@@ -92,6 +92,10 @@ jobs:
               echo "A newer NaN16 source is on main; this obsolete image must not publish."
               exit 0
             fi
+            # build.sh also regenerates ancillary tracked files that are not
+            # published by this job. Discard ONLY those uncommitted scratch
+            # changes in the disposable CI checkout before a safe rebase.
+            git reset --hard HEAD
             if ! git rebase origin/main; then
               git rebase --abort || true
               echo "Generated image could not safely rebase; skipping obsolete publisher."
