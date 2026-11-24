@@ -17,10 +17,18 @@
     "    if (n < d) return want_rem ? n : 0;\n" \
     "    if ((d >> 32) == 0) {\n" \
     "        u32 dh = (u32)(n >> 32), dl = (u32)n, dv = (u32)d;\n" \
-    "        u32 qh = dh / dv, rh = dh % dv;\n" \
-    "        u64 rr = ((u64)rh << 32) | dl;\n" \
-    "        u32 ql = (u32)(rr / dv);\n" \
-    "        if (want_rem) return (u64)((u32)(rr % dv));\n" \
+    "        u32 qh, rh, ql = 0;\n" \
+    "        u64 rr;\n" \
+    "        if (dh == 0) {\n" \
+    "            if (want_rem) return (u64)(dl % dv);\n" \
+    "            return (u64)(dl / dv);\n" \
+    "        }\n" \
+    "        qh = dh / dv; rh = dh % dv; rr = rh;\n" \
+    "        for (i = 0; i < 32; i++) {\n" \
+    "            rr = (rr << 1) | (dl >> 31); dl <<= 1;\n" \
+    "            if (rr >= dv) { rr -= dv; ql |= 1U << (31 - i); }\n" \
+    "        }\n" \
+    "        if (want_rem) return rr;\n" \
     "        return ((u64)qh << 32) | ql;\n" \
     "    }\n" \
     "    dd = d;\n" \
