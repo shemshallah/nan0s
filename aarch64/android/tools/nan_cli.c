@@ -10,7 +10,9 @@
 #include <time.h>
 
 static volatile sig_atomic_t stop_requested;
+static volatile sig_atomic_t dump_requested;
 static void request_stop(int sig) { (void)sig; stop_requested = 1; }
+static void request_dump(int sig) { (void)sig; dump_requested = 1; }
 static double monotonic_seconds(void) {
   struct timespec ts;
   clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -202,6 +204,7 @@ int main(int argc, char **argv) {
   double next_checkpoint = monotonic_seconds() + (checkpoint_every > 0 ? checkpoint_every : 0);
   signal(SIGINT, request_stop);
   signal(SIGTERM, request_stop);
+  signal(SIGUSR1, request_dump);
 #define PUBLISH_TIME() do { \
     uint32_t ms_ = (uint32_t)(nan_steps(v) / per_ms); \
     uint64_t st_ = nan_steps(v); \
@@ -217,6 +220,11 @@ int main(int argc, char **argv) {
     uint32_t slice = left > 100000 ? 100000 : (uint32_t)left;
     rc = nan_run(v, slice); drain(v, serial);
     if (rc == NAN_HALTED) break;
+    if (dump_requested) {
+      dump_guest_console(v, 0x03EFF000u, guest_stdout);
+      dump_guest_console(v, 0x03EFF008u, guest_stderr);
+      dump_requested = 0;
+    }
     if (stop_requested) { interrupted = 1; break; }
     if (checkpoint && checkpoint_every > 0 && monotonic_seconds() >= next_checkpoint) {
       if (write_state_file(v, checkpoint) == 0)
