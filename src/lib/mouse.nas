@@ -223,6 +223,23 @@ MOVI r3,256
 SUB r2,r2,r3
 ms_ypos:
 ST r2,r0,@ms_dy
+JMP @ms_apply
+; Absolute touchscreen packet: r1=x, r2=y, r3=button mask.
+; Convert to the identical native PS/2 pointer/hit-test path. The transport
+; does not know about windows, z-order, close buttons or application state.
+ms_touch:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r4,r0,@ms_buttons
+ST r4,r0,@ms_prev
+ST r3,r0,@ms_buttons
+LD r4,r0,@ms_x
+SUB r1,r1,r4
+ST r1,r0,@ms_dx
+LD r4,r0,@ms_y
+SUB r2,r4,r2
+ST r2,r0,@ms_dy
+ms_apply:
 ; Nothing changed: do not touch the framebuffer or dispatch a second click.
 LD r3,r0,@ms_dx
 BOOL.14 r3,r3,r2
@@ -414,6 +431,7 @@ mcu_seen:
 ms_down:
 ST r15,r14,0
 ADD r14,r14,r13
+ST r0,r0,@ms_drag
 LD r1,r0,@sh_open
 LD r2,r0,@sh_modal
 BOOL.14 r3,r1,r2
@@ -431,7 +449,7 @@ LD r2,r0,@ms_y
 CMP r2,r1
 JMP[LT] @ms_window_hit
 LD r1,r0,@ms_x
-MOVI r2,130
+MOVI r2,140
 CMP r1,r2
 JMP[GE] @ms_taskslot
 CALL @sh_launcher
@@ -495,7 +513,7 @@ LD r2,r0,@ms_x
 LD r3,r1,#W_X
 SUB r2,r2,r3
 LD r4,r1,#W_W
-MOVI r5,16
+MOVI r5,#WM_CLOSE_X
 SUB r4,r4,r5
 CMP r2,r4
 JMP[LT] @ms_hit_max
@@ -504,22 +522,28 @@ JMP[LT] @ms_hit_max
 LD r1,r0,@ms_id
 CALL @wm_close
 ST r0,r0,@ms_drag
+MOVI r1,0xFFFF
+ST r1,r0,@ms_last_title_id
 JMP @ms_down_done
 ms_hit_max:
-MOVI r5,15
+MOVI r5,#WM_CTL_W
 SUB r4,r4,r5
 CMP r2,r4
 JMP[LT] @ms_hit_min
+MOVI r1,0xFFFF
+ST r1,r0,@ms_last_title_id
 LD r1,r0,@ms_id
 MOVI r2,0
 MOVI r3,0
 CALL @wm_enlarge
 JMP @ms_down_done
 ms_hit_min:
-MOVI r5,17
+MOVI r5,#WM_CTL_W
 SUB r4,r4,r5
 CMP r2,r4
 JMP[LT] @ms_hit_move
+MOVI r1,0xFFFF
+ST r1,r0,@ms_last_title_id
 LD r1,r0,@ms_id
 CALL @wm_minimize
 JMP @ms_down_done
