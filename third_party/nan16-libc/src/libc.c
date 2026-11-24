@@ -1568,7 +1568,11 @@ static void oprintf(Out *o, const char *fmt, va_list ap)
             long long v = lng ? va_arg(ap, long long) : (long long)va_arg(ap, int);
             unsigned long long u;
             if (v < 0) { oc(o, '-'); u = (unsigned long long)(-v); }
-            else u = (unsigned long long)v;
+            else {
+                if (plus) oc(o, '+');
+                else if (space) oc(o, ' ');
+                u = (unsigned long long)v;
+            }
             onum(o, u, 10, width, zero, 0);
             break;
         }

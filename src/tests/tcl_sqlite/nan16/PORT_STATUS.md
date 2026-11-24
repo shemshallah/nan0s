@@ -1,5 +1,89 @@
 # Tcl 9.0.3 on NaN16 — port status
 
+## Milestone 3 — guest script control block and veryquick
+
+Status: **veryquick runs the full official TESTSRC set, but is not green yet.**
+The first real failure is floating-point text formatting in the guest libc,
+not a missing test module or missing command.
+
+### Guest script control block
+
+- Guest byte `0x03EFF020`: u32 script-path length (little-endian).
+- Guest byte `0x03EFF024`: script-path bytes (no NUL required).
+- `nan_cli --guest-script PATH` writes the block before starting the guest.
+- `tools/s1_runner.sh --guest-script PATH` compiles the path into the S1
+  kernel image and writes the same block into guest memory before boot.
+- `tclNan16TestEntry.c` reads the block as `argv[1]`; an empty/invalid block
+  defaults to `/sqlite/test/select1.test`.  The block is separate from the
+  stdout/stderr control words at `0x03EFF000`.
+
+### Shared file namespace and memory
+
+- The fixture now compiles `third_party/sqlite/nan16_vfs_libc.c` instead of
+  the private in-memory `nan16_vfs.c`.  Tcl `file` commands, `hexio_*` and
+  SQLite all see the same `test.db`.
+- Guest memory: 256 MiB; libc heap: 128 MiB (`-DNAN16_HEAP_SIZE=134217728`);
+  N16PACK1 pack at `0x01000000`.
+- The fixture compiles the complete official `TESTSRC` list from
+  `main.mk` (test1..test9, autoext, backup, bestindex, blob, btree, config,
+  delete, demovfs, devsym, fs, func, hexio, init, intarray, journal, malloc,
+  md5, multiplex, mutex, onefile, osinst, pcache, quota, rtree, schema,
+  superlock, syscall, tclvar, thread, vdbecov, vfs, window, wsd, fts3_term,
+  fts3_test, session, recover, intck, rbu, expert, fts5 tcl/test sources,
+  rtree test) plus the official static extensions.  No empty initializer
+  stubs remain.
+
+### veryquick result (C-core oracle)
+
+```
+guest-script: /sqlite/test/veryquick.test
+steps:        47,047,413,335
+memory:       256 MiB, heap 128 MiB
+harness:      1000 errors out of 3977 tests on  NaN16 32-bit
+failed tests: atof1-1.* only (1000 failures)
+omitted:      0
+main result:  1 (harness exit status)
+cartridge:    85,167,616 bytes
+sha256:       2fd68c8919285750dc416adeb8b6921022879212ae140b82c998d5dd5d888438
+slowest file: alterdropcol.test, 7,967,500 ms as reported by the harness clock
+```
+
+First real failure:
+
+```
+! atof1-1.1.1 expected: [1]
+! atof1-1.1.1 got:      [0]
+  real2hex: 41814625810b4b73 vs 41814625810bd4
+```
+
+Root cause: the guest libc `snprintf` implements `%e` with only six
+fractional digits.  Tcl's `format %.32e` therefore produces a rounded text
+value, SQLite parses that text to a different IEEE-754 double, and the
+SQLite-vs-Tcl comparison fails.  The same limitation affects `%f`/`%g`
+formatting and is the next required port fix (accurate float-to-decimal
+conversion, likely using Tcl's `TclDoubleDigits` or SQLite's FpDecode
+algorithm).  This is not a test-module or VFS failure.
+
+The official multi-thread warning remains: `Multi-threaded tests skipped:
+Linked against a non-threadsafe Tcl build`; Tcl/SQLite are still
+`TCL_THREADS=0` / `SQLITE_THREADSAFE=0`.
+
+### Formatter follow-up (not yet green)
+
+Main added an accurate float formatter plus the `nan16_digits_hook` backed by
+`TclDoubleDigits`, and fast 64/32-bit division.  After merging those changes:
+
+- `format %e 1.5` in a tclsh cartridge consumes the entire 3B-step budget
+  before printing the result; a mapped build puts the last PC next to
+  `StrictInt64Conversion` in Tcl's `TclDoubleDigits` path.  The hook is
+  therefore still far too slow for `format %.32e`.
+- `atof1.test` with a 40B-step budget still does not reach the harness
+  summary (step budget exhausted at PC 3,011,787, again in the
+  `TclDoubleDigits`/`StrictInt64Conversion` path).
+- Therefore the first real veryquick failure remains the atof1 floating
+  conversion; veryquick has not been rerun to a green summary after the
+  formatter merge.
+
 ## Milestone 2 — official SQLite 3.54.1 testfixture
 
 Status: **test/select1.test passes the official tester harness on both the

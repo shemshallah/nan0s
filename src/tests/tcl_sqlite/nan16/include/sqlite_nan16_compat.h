@@ -6,6 +6,7 @@
 #ifndef _SC_NPROCESSORS_ONLN
 #define _SC_NPROCESSORS_ONLN 84
 #endif
+double atof(const char *s);
 long sysconf(int name);
 size_t strftime(char *s, size_t max, const char *format, const struct tm *tm);
 #include <stdio.h>

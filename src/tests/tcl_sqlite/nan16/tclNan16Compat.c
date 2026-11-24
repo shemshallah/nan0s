@@ -17,6 +17,8 @@
 #include <signal.h>
 #include <stdio.h>
 
+double atof(const char *s) { return strtod(s, 0); }
+
 char *strndup(const char *s, size_t n)
 {
     size_t len = 0;
