@@ -665,6 +665,7 @@ typedef struct MemFile {
     char name[VFS_NAME_MAX];
     unsigned char *data;
     unsigned size, cap, pos;
+    unsigned mode;
     int used, writable, owned, isdir, islink;
 } MemFile;
 static MemFile *files;
@@ -749,6 +750,7 @@ init:
     files[slot].owned = 1;
     files[slot].isdir = 0;
     files[slot].islink = 0;
+    files[slot].mode = 0644;
     vfs_used++;
     return &files[slot];
 }
@@ -768,6 +770,7 @@ static int mf_put_ro(unsigned slot, const char *name, const void *data,
     files[slot].owned = 0;
     files[slot].isdir = 0;
     files[slot].islink = 0;
+    files[slot].mode = 0444;
     vfs_used++;
     return 0;
 }
@@ -785,7 +788,7 @@ int nan16_vfs_add(const char *name, const void *data, unsigned size)
     memcpy(f->data, data, size);
     f->size = f->cap = size;
     f->pos = 0; f->writable = 0; f->owned = 1;
-    f->isdir = 0; f->islink = 0;
+    f->isdir = 0; f->islink = 0; f->mode = 0444;
     return 0;
 }
 
@@ -804,7 +807,7 @@ int nan16_vfs_add_ro(const char *name, const void *data, unsigned size)
     f->data = (unsigned char *)(void *)data;
     f->size = f->cap = size;
     f->pos = 0; f->writable = 0; f->owned = 0;
-    f->isdir = 0; f->islink = 0;
+    f->isdir = 0; f->islink = 0; f->mode = 0444;
     return 0;
 }
 /* Register every file in an N16PACK1 archive (see
@@ -1192,7 +1195,10 @@ int open(const char *name, int flags, ...)
     } else {
         if (f->isdir) { errno = EISDIR; return -1; }
         if ((flags & O_CREAT) && (flags & O_EXCL)) { errno = EEXIST; return -1; }
-        if ((flags & (O_WRONLY | O_RDWR)) && !f->writable) {
+        if ((flags & (O_WRONLY | O_RDWR)) && (!f->writable || !(f->mode & 0222))) {
+            errno = EACCES; return -1;
+        }
+        if (!(flags & (O_WRONLY | O_RDWR)) && !(f->mode & 0444)) {
             errno = EACCES; return -1;
         }
     }
@@ -1912,7 +1918,8 @@ int stat(const char *name, struct stat *st)
     }
     memset(st, 0, sizeof *st);
     st->st_size = f->isdir ? 0 : (long)f->size;
-    st->st_mode = f->isdir ? (S_IFDIR | 0755) : (S_IFREG | (f->writable ? 0644 : 0444));
+    st->st_mode = f->isdir ? (S_IFDIR | (f->mode & 0777))
+                           : (S_IFREG | (f->mode & 0777));
     st->st_nlink = f->isdir ? 2 : 1;
     return 0;
 }
@@ -1937,12 +1944,23 @@ int lstat(const char *name, struct stat *st)
         return 0;
     }
     st->st_size = f->isdir ? 0 : (long)f->size;
-    st->st_mode = f->isdir ? (S_IFDIR | 0755)
-                           : (S_IFREG | (f->writable ? 0644 : 0444));
+    st->st_mode = f->isdir ? (S_IFDIR | (f->mode & 0777))
+                           : (S_IFREG | (f->mode & 0777));
     st->st_nlink = f->isdir ? 2 : 1;
     return 0;
 }
-int chmod(const char *name, mode_t mode) { (void)mode; return access(name, F_OK); }
+int chmod(const char *name, mode_t mode)
+{
+    char abs[VFS_NAME_MAX];
+    MemFile *f;
+    if (vfs_resolve(name, abs) < 0) return -1;
+    f = mf_find(abs);
+    if (!f) { errno = ENOENT; return -1; }
+    if (!f->owned) { errno = EPERM; return -1; }
+    f->mode = (unsigned)mode & 0777;
+    f->writable = (f->mode & 0222) != 0;
+    return 0;
+}
 int utimes(const char *name, const struct timeval times[2])
 {
     (void)times;
@@ -1954,7 +1972,8 @@ int fstat(int fd, struct stat *st)
     memset(st, 0, sizeof *st);
     st->st_size = files[fd - FD_VFS_BASE].size;
     st->st_mode = files[fd - FD_VFS_BASE].isdir
-        ? (S_IFDIR | 0755) : (S_IFREG | 0644);
+        ? (S_IFDIR | (files[fd - FD_VFS_BASE].mode & 0777))
+        : (S_IFREG | (files[fd - FD_VFS_BASE].mode & 0777));
     return 0;
 }
 int mkdir(const char *name, mode_t mode)
@@ -1968,6 +1987,7 @@ int mkdir(const char *name, mode_t mode)
     if (!f) { errno = ENOSPC; return -1; }
     f->isdir = 1;
     f->writable = 0;
+    f->mode = 0755;
     return 0;
 }
 char *getcwd(char *buf, size_t n)
@@ -1995,7 +2015,8 @@ int access(const char *p, int m)
         errno = ENOENT;
         return -1;
     }
-    if ((m & W_OK) && !f->writable) { errno = EACCES; return -1; }
+    if ((m & R_OK) && !(f->mode & 0444)) { errno = EACCES; return -1; }
+    if ((m & W_OK) && (!f->writable || !(f->mode & 0222))) { errno = EACCES; return -1; }
     /* The guest VFS has no executable files.  Tcl's "file executable" and
        test_binary_name() use this to skip CLI/shell tests explicitly. */
     if ((m & X_OK) && !f->isdir) { errno = EACCES; return -1; }
@@ -2036,6 +2057,7 @@ int symlink(const char *target, const char *linkpath)
     memcpy(f->data, target, f->size + 1);
     f->writable = 0;
     f->islink = 1;
+    f->mode = 0777;
     return 0;
 }
 int isatty(int fd) { (void)fd; return 0; }
