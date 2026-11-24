@@ -4,7 +4,8 @@
 ; Keys (kbd.nas, 1024x768): TAB focus | F2 MOVE mode (arrows move, ENTER leaves) | F3 enlarge/restore | ESC close.
 ; Terminal commands (first letter): h c v w l m x t s(settings) n(nannet) u(utils) f(files) e(run C demo) q.
 ; e compiles and runs a C program with the raw-NaN16 ncc front end (src/lib/ncc.nas) inside this terminal.
-; F0 Help (virtual PS/2), F5 Settings, F6 NaNNet, F7 System utilities.
+; F0 Help, F1 launcher, F2 move, F3 maximize, F4 toast, F5 Settings,
+; F6 NaNNet, F7 utilities, F8 minimize, F9 tile, F10/F11 snap, F12 restore.
 ; Window manager: src/lib/wm.nas. Framebuffer: fb.nas. Text: NaNGlyph 8x13 cells (fbtext.nas+font7.nas). Keys: kbd.nas. No native GUI code.
 .equ SLOT 8192
 .equ PERIOD 100
@@ -105,6 +106,7 @@ CMP r3,r4
 JMP[LT] @g_loop
 ST r1,r0,@g_last
 CALL @g_ticks
+CALL @wm_notice_tick
 CALL @g_bar
 JMP @g_loop
 g_exit:
@@ -285,6 +287,68 @@ JMP[NE] @gk_notf0
 CALL @gk_help
 JMP @gk_ret
 gk_notf0:
+; F1 app launcher: new raw NaN16 terminal. F4 native notification.
+MOVI r2,0x101
+CMP r1,r2
+JMP[NE] @gk_notf1
+MOVI r1,0
+CALL @gui_open_new
+JMP @gk_ret
+gk_notf1:
+MOVI r2,0x104
+CMP r1,r2
+JMP[NE] @gk_notf4
+MOVI r1,25
+CALL @wm_notice
+JMP @gk_ret
+gk_notf4:
+; F8 minimizes focused window (unless it is the final visible window).
+MOVI r2,0x108
+CMP r1,r2
+JMP[NE] @gk_notf8
+CALL @wm_top
+MOVI r2,0xFFFF
+CMP r1,r2
+JMP[EQ] @gk_ret
+CALL @wm_minimize
+JMP @gk_ret
+gk_notf8:
+; F9 tiles all visible windows in a guest-managed two-column grid.
+MOVI r2,0x109
+CMP r1,r2
+JMP[NE] @gk_notf9
+CALL @wm_tile
+JMP @gk_ret
+gk_notf9:
+; F10/F11 snap focused window left/right. F12 restores minimized slot.
+MOVI r2,0x10A
+CMP r1,r2
+JMP[NE] @gk_notf10
+CALL @wm_top
+MOVI r2,0xFFFF
+CMP r1,r2
+JMP[EQ] @gk_ret
+MOVI r2,0
+CALL @wm_snap
+JMP @gk_ret
+gk_notf10:
+MOVI r2,0x10B
+CMP r1,r2
+JMP[NE] @gk_notf11
+CALL @wm_top
+MOVI r2,0xFFFF
+CMP r1,r2
+JMP[EQ] @gk_ret
+MOVI r2,1
+CALL @wm_snap
+JMP @gk_ret
+gk_notf11:
+MOVI r2,0x10C
+CMP r1,r2
+JMP[NE] @gk_notf12
+CALL @wm_restore_minimized
+JMP @gk_ret
+gk_notf12:
 MOVI r2,0x105
 CMP r1,r2
 JMP[NE] @gk_n5
