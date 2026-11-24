@@ -154,6 +154,19 @@ static int l_lock(sqlite3_file *pFile, int lock)
     NanLFile *f = (NanLFile *)pFile;
     if (lock < SQLITE_LOCK_SHARED || lock > SQLITE_LOCK_EXCLUSIVE)
         return SQLITE_OK;
+    if (lock == SQLITE_LOCK_EXCLUSIVE) {
+        /* Match unixLock(): take the pending byte before attempting the
+           exclusive shared-byte lock.  If another connection still holds
+           SHARED, leave this handle in PENDING after returning BUSY; that is
+           the state PRAGMA lock_status reports. */
+        if (f->lock < SQLITE_LOCK_PENDING) {
+            if (lock_conflict(f, SQLITE_LOCK_PENDING)) return SQLITE_BUSY;
+            if (lock_set(f, SQLITE_LOCK_PENDING) != SQLITE_OK)
+                return SQLITE_IOERR;
+        }
+        if (lock_conflict(f, SQLITE_LOCK_EXCLUSIVE)) return SQLITE_BUSY;
+        return lock_set(f, SQLITE_LOCK_EXCLUSIVE);
+    }
     if (lock_conflict(f, lock)) return SQLITE_BUSY;
     return lock_set(f, lock);
 }
