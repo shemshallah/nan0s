@@ -63,6 +63,8 @@ S=0 PC=2001
 > redo
 S=0 PC=2002
 > redo
+S=0 PC=0004
+> redo
 NOREDO
 > checkpoint
 CKPT=1

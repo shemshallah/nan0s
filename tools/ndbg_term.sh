@@ -77,9 +77,21 @@ if ! grep -qx 'CKPT=1' "$T/time.lf" ||
   echo "ndbg_term: TIME FAIL"; cat "$T/time"; exit 1
 fi
 
-sed 's/BP=2001/BP=2002/'   "$T/out.lf" > "$T/negative"
+# multi-level redo: three steps, two undos, two redos
+"$CLI" --img "$T/guest.bin" --steps 140000000 \
+  --keys "@20000000,d,e,b,u,g,ENTER,@2000000,l,o,a,d,SPACE,1,ENTER,@2000000,s,t,e,p,ENTER,@2000000,s,t,e,p,ENTER,@2000000,s,t,e,p,ENTER,@2000000,u,n,d,o,ENTER,@2000000,u,n,d,o,ENTER,@2000000,r,e,d,o,ENTER,@2000000,r,e,d,o,ENTER,@2000000,r,e,d,o,ENTER,@3000000,q,u,i,t,ENTER,@3000000" \
+  --serial > "$T/redo" 2>/dev/null || true
+tr -d '\r' < "$T/redo" > "$T/redo.lf"
+if ! grep -qx 'S=0 PC=0004' "$T/redo.lf" ||
+   ! grep -qx 'S=0 PC=2002' "$T/redo.lf" ||
+   ! grep -qx 'S=0 PC=2001' "$T/redo.lf" ||
+   ! grep -qx 'NOREDO' "$T/redo.lf"; then
+  echo "ndbg_term: REDO FAIL"; cat "$T/redo"; exit 1
+fi
+
+sed 's/BP=2001/BP=2002/'    "$T/out.lf" > "$T/negative"
 if cmp -s "$T/out.lf" "$T/negative"; then
   echo "ndbg_term: NEGATIVE FAIL"; exit 1
 fi
-echo "ndbg_term: PASS (terminal debug: carts/load, step/dis/regs/break/watch/bpts/wpts/mem/run; screen/serial; undo/redo/checkpoint/restore, exact)"
+echo "ndbg_term: PASS (terminal debug: carts/load, step/dis/regs/break/watch/bpts/wpts/mem/run; screen/serial; undo/multi-redo/checkpoint/restore, exact)"
 echo "ndbg_term: NEGATIVE PASS (mutated transcript rejected)"

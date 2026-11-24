@@ -5329,7 +5329,8 @@ wp_i:
 .word 0
 
 tdbg_reset:
-ST r0,r0,@rd_valid
+ST r0,r0,@rd_ri
+ST r0,r0,@rd_rd
 ST r14,r0,@dbg_sp
 CALL #DBG_BEGIN
 LD r14,r0,@dbg_sp
@@ -5733,7 +5734,8 @@ du_c:
 
 ; ---- checkpoint and restore (registers + arena) ----
 tdbg_ckpt:
-ST r0,r0,@rd_valid
+ST r0,r0,@rd_ri
+ST r0,r0,@rd_rd
 ST r14,r0,@dbg_sp
 LA r1,0x90000
 ST r1,r0,@ck_hdr
@@ -5817,7 +5819,8 @@ ck_cd:
 .word 0
 
 tdbg_restore:
-ST r0,r0,@rd_valid
+ST r0,r0,@rd_ri
+ST r0,r0,@rd_rd
 ST r14,r0,@dbg_sp
 LA r1,0x90000
 ST r1,r0,@ck_hdr
@@ -5910,7 +5913,10 @@ RET
 tdbg_redo_save:
 ST r15,r14,0
 ADD r14,r14,r13
-LA r1,0x62000
+LD r1,r0,@rd_ri
+SHL r1,r1,5
+LA r2,0x62000
+ADD r1,r1,r2
 ST r1,r0,@rd_base
 MOVI r1,0
 ST r1,r0,@rs_i
@@ -6038,8 +6044,18 @@ ADD r1,r1,r13
 ST r1,r0,@rs_i
 JMP @rs_wl
 rs_wd:
-MOVI r1,1
-ST r1,r0,@rd_valid
+LD r1,r0,@rd_ri
+ADD r1,r1,r13
+MOVI r2,31
+BOOL.8 r1,r1,r2
+ST r1,r0,@rd_ri
+LD r1,r0,@rd_rd
+MOVI r2,32
+CMP r1,r2
+JMP[GE] @rs_done
+ADD r1,r1,r13
+ST r1,r0,@rd_rd
+rs_done:
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -6064,10 +6080,16 @@ rs_ep:
 
 ; ---- restore the saved post-step state ----
 tdbg_redo:
-LD r1,r0,@rd_valid
+LD r1,r0,@rd_rd
 CMP r1,r0
 JMP[EQ] @rdo_none
-LA r1,0x62000
+LD r1,r0,@rd_ri
+SUB r1,r1,r13
+MOVI r2,31
+BOOL.8 r1,r1,r2
+SHL r1,r1,5
+LA r2,0x62000
+ADD r1,r1,r2
 ST r1,r0,@rd_base
 MOVI r1,0
 ST r1,r0,@rd_i
@@ -6168,7 +6190,14 @@ rdo_wd:
 ST r14,r0,@dbg_sp
 CALL #DBG_UPOP
 LD r14,r0,@dbg_sp
-ST r0,r0,@rd_valid
+LD r1,r0,@rd_ri
+SUB r1,r1,r13
+MOVI r2,31
+BOOL.8 r1,r1,r2
+ST r1,r0,@rd_ri
+LD r1,r0,@rd_rd
+SUB r1,r1,r13
+ST r1,r0,@rd_rd
 CALL @dbg_state
 JMP @tdbg_done
 rdo_none:
@@ -6194,6 +6223,10 @@ rd_ha:
 rd_c:
 .word 0
 rd_valid:
+.word 0
+rd_ri:
+.word 0
+rd_rd:
 .word 0
 
 
@@ -6331,13 +6364,15 @@ CALL @dbg_carts
 JMP @tdbg_done
 
 tdbg_load:
-ST r0,r0,@rd_valid
+ST r0,r0,@rd_ri
+ST r0,r0,@rd_rd
 CALL @dbg_load
 CALL @tdbg_ckpt_clear
 JMP @tdbg_done
 
 tdbg_step:
-ST r0,r0,@rd_valid
+ST r0,r0,@rd_ri
+ST r0,r0,@rd_rd
 ST r14,r0,@dbg_sp
 CALL #DBG_STEP
 LD r14,r0,@dbg_sp
@@ -6345,7 +6380,8 @@ CALL @dbg_state
 JMP @tdbg_done
 
 tdbg_run:
-ST r0,r0,@rd_valid
+ST r0,r0,@rd_ri
+ST r0,r0,@rd_rd
 ST r14,r0,@dbg_sp
 LA r1,1000000
 CALL #DBG_RUN
