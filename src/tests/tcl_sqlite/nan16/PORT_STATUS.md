@@ -96,6 +96,9 @@ fixture with the complete TESTSRC set also keeps select1 green: 199 tests,
 Veryquick must still be rerun to a final summary with a budget above ~150B
 because it includes all 40,006 atof1 cases; the previous 47B/3,977-test run
 was aborted by the old formatter failures, not by a missing module.
+`format %e 1.5` produces `1.500000e+00` in about 107M steps.  A
+180B-step veryquick run reached its step limit without a summary;
+the complete aggregate needs more (atof1 alone is 92.18B steps).
 
 ## Milestone 2 — official SQLite 3.54.1 testfixture
 
