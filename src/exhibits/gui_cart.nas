@@ -6546,7 +6546,7 @@ CMP r1,r2
 JMP[LE] @tstk_n
 ADD r1,r2,r0
 tstk_n:
-ST r1,r0,@tstk_n
+ST r1,r0,@tstk_cnt
 tstk_l:
 LD r1,r0,@tstk_d
 SUB r1,r1,r13
@@ -6559,9 +6559,9 @@ MOVI r3,4
 CALL @dbg_puthex
 MOVI r2,32
 CALL @tdbg_ch
-LD r1,r0,@tstk_n
+LD r1,r0,@tstk_cnt
 SUB r1,r1,r13
-ST r1,r0,@tstk_n
+ST r1,r0,@tstk_cnt
 CMP r1,r0
 JMP[NE] @tstk_l
 MOVI r2,10
@@ -6578,7 +6578,7 @@ tstk_ptr:
 .word 0
 tstk_d:
 .word 0
-tstk_n:
+tstk_cnt:
 .word 0
 
 ; ---- types: live 4x4 type matrix ----

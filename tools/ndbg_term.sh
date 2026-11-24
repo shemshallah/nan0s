@@ -64,10 +64,11 @@ if ! grep -qx 'S=0 PC=2001' "$T/nx.lf" ||
 fi
 
 "$CLI" --img "$T/guest.bin" --steps 120000000 \
-  --keys "@20000000,d,e,b,u,g,ENTER,@2000000,l,o,a,d,SPACE,4,ENTER,@2000000,s,t,e,p,ENTER,@2000000,s,t,e,p,ENTER,@2000000,s,t,e,p,ENTER,@2000000,f,i,n,i,s,h,ENTER,@3000000,q,u,i,t,ENTER,@3000000" \
+  --keys "@20000000,d,e,b,u,g,ENTER,@2000000,l,o,a,d,SPACE,4,ENTER,@2000000,s,t,e,p,ENTER,@2000000,s,t,e,p,ENTER,@2000000,s,t,e,p,ENTER,@2000000,s,t,a,c,k,ENTER,@2000000,f,i,n,i,s,h,ENTER,@3000000,q,u,i,t,ENTER,@3000000" \
   --serial > "$T/fin" 2>/dev/null || true
 tr -d '\r' < "$T/fin" > "$T/fin.lf"
 if ! grep -qx 'S=0 PC=2005' "$T/fin.lf" ||
+   ! grep -qx 'STACK 1: 2003 ' "$T/fin.lf" ||
    ! grep -qx 'S=0 PC=2003' "$T/fin.lf"; then
   echo "ndbg_term: FINISH FAIL"; cat "$T/fin"; exit 1
 fi
@@ -89,12 +90,13 @@ fi
 
 # a real bad-op trap must appear in the log as a typed record
 "$CLI" --img "$T/guest.bin" --steps 120000000 \
-  --keys "@20000000,d,e,b,u,g,ENTER,@2000000,l,o,a,d,SPACE,3,ENTER,@2000000,r,u,n,ENTER,@5000000,l,o,g,ENTER,@3000000,q,u,i,t,ENTER,@3000000" \
+  --keys "@20000000,d,e,b,u,g,ENTER,@2000000,l,o,a,d,SPACE,3,ENTER,@2000000,r,u,n,ENTER,@5000000,l,o,g,ENTER,@2000000,t,y,p,e,s,ENTER,@3000000,q,u,i,t,ENTER,@3000000" \
   --serial > "$T/blog" 2>/dev/null || true
 tr -d '\r' < "$T/blog" > "$T/blog.lf"
 if ! grep -qx '!DFC@20002003 W=0000000F7F000000' "$T/blog.lf" ||
    ! grep -qx 'S=3 PC=2003' "$T/blog.lf" ||
-   ! grep -qx 'D0:20:002003' "$T/blog.lf"; then
+   ! grep -qx 'D0:20:002003' "$T/blog.lf" ||
+   ! grep -qx 'TYPES FC:01 FM:00 FD:00 FS:00 ' "$T/blog.lf"; then
   echo "ndbg_term: LOG FAIL"; cat "$T/blog"; exit 1
 fi
 
