@@ -155,8 +155,17 @@ int main(int argc, char **argv) {
   if (disk) { int fd = open(disk, O_RDWR); struct stat st; if (fd < 0 || fstat(fd, &st)) { perror(disk); return 1; } nan_attach_disk_fd(v, fd, (size_t)st.st_size); }
   char *kcopy = keys ? strdup(keys) : NULL; char *save = NULL; char *tok = kcopy ? strtok_r(kcopy, ",", &save) : NULL;
   uint64_t pause_until = 0; int rc = NAN_BUDGET;
+#define PUBLISH_TIME() do { \
+    uint32_t ms_ = (uint32_t)(nan_steps(v) / per_ms); \
+    uint64_t st_ = nan_steps(v); \
+    uint32_t lo_ = (uint32_t)st_, hi_ = (uint32_t)(st_ >> 32); \
+    nan_write_bytes(v, 0x03EFF010u, (const uint8_t *)&ms_, 4); \
+    nan_write_bytes(v, 0x03EFF014u, (const uint8_t *)&lo_, 4); \
+    nan_write_bytes(v, 0x03EFF018u, (const uint8_t *)&hi_, 4); \
+  } while (0)
   while (nan_steps(v) < steps) {
     nan_set_time_ms(v, (uint32_t)(nan_steps(v) / per_ms));
+    PUBLISH_TIME();
     uint64_t left = steps - nan_steps(v); uint32_t slice = left > 100000 ? 100000 : (uint32_t)left;
     rc = nan_run(v, slice); drain(v, serial);
     if (rc == NAN_HALTED) break;

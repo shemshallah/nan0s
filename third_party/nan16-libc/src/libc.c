@@ -1234,11 +1234,95 @@ void *mmap(void *a, size_t n, int p, int f, int fd, off_t o)
     return (void *)-1;
 }
 int munmap(void *a, size_t n) { (void)a; (void)n; return 0; }
-int gettimeofday(struct timeval *tv, void *tz) { (void)tz; if (tv) { tv->tv_sec = 0; tv->tv_usec = 0; } return 0; }
-time_t time(time_t *t) { if (t) *t = 0; return 0; }
-clock_t clock(void) { return 0; }
-struct tm *localtime(const time_t *t) { (void)t; return 0; }
-struct tm *gmtime(const time_t *t) { (void)t; return 0; }
+/* The runner publishes monotonic time and executed steps at guest byte
+   0x03EFF010 (ms, steps low, steps high).  The x86_64/S1 kernel must publish
+   the same block. */
+static unsigned nan16_now_ms(void)
+{
+    return *(volatile unsigned *)0x03EFF010u;
+}
+static long days_from_civil(int y, unsigned m, unsigned d)
+{
+    long era, yoe, doy, doe;
+    y -= m <= 2;
+    era = (y >= 0 ? y : y - 399) / 400;
+    yoe = y - era * 400;
+    doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1;
+    doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    return era * 146097 + doe - 719468;
+}
+static void civil_from_days(long z, int *yy, int *mm, int *dd)
+{
+    long era;
+    unsigned doe, yoe, doy, mp, d, m;
+    int y;
+    z += 719468;
+    era = (z >= 0 ? z : z - 146096) / 146097;
+    doe = (unsigned)(z - era * 146097);
+    yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    y = (int)(yoe + era * 400);
+    doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    mp = (5 * doy + 2) / 153;
+    d = doy - (153 * mp + 2) / 5 + 1;
+    m = mp + (mp < 10 ? 3 : (unsigned)-9);
+    y += (m <= 2);
+    *yy = y; *mm = (int)m; *dd = (int)d;
+}
+static struct tm *tm_from_time(time_t t)
+{
+    static struct tm out;
+    long days = (long)(t / 86400);
+    long rem = (long)(t % 86400);
+    int y, m, d;
+    if (rem < 0) { rem += 86400; days--; }
+    civil_from_days(days, &y, &m, &d);
+    out.tm_sec = (int)(rem % 60);
+    out.tm_min = (int)((rem / 60) % 60);
+    out.tm_hour = (int)(rem / 3600);
+    out.tm_mday = d;
+    out.tm_mon = m - 1;
+    out.tm_year = y - 1900;
+    out.tm_wday = (int)((days + 4) % 7);
+    if (out.tm_wday < 0) out.tm_wday += 7;
+    out.tm_yday = (int)(days - days_from_civil(y, 1, 1));
+    out.tm_isdst = 0;
+    return &out;
+}
+int gettimeofday(struct timeval *tv, void *tz)
+{
+    unsigned ms = nan16_now_ms();
+    (void)tz;
+    if (tv) { tv->tv_sec = (long)(ms / 1000u); tv->tv_usec = (long)(ms % 1000u) * 1000L; }
+    return 0;
+}
+time_t time(time_t *t)
+{
+    time_t s = (time_t)(nan16_now_ms() / 1000u);
+    if (t) *t = s;
+    return s;
+}
+clock_t clock(void) { return (clock_t)(nan16_now_ms() * 1000u); }
+int clock_gettime(clockid_t id, struct timespec *ts)
+{
+    unsigned ms = nan16_now_ms();
+    (void)id;
+    if (!ts) { errno = EINVAL; return -1; }
+    ts->tv_sec = (long)(ms / 1000u);
+    ts->tv_nsec = (long)(ms % 1000u) * 1000000L;
+    return 0;
+}
+int nanosleep(const struct timespec *req, struct timespec *rem)
+{
+    unsigned target, now;
+    if (!req) { errno = EINVAL; return -1; }
+    target = nan16_now_ms() + (unsigned)(req->tv_sec * 1000L + req->tv_nsec / 1000000L)
+           + (req->tv_nsec % 1000000L ? 1u : 0u);
+    do { now = nan16_now_ms(); } while (now < target);
+    if (rem) { rem->tv_sec = 0; rem->tv_nsec = 0; }
+    return 0;
+}
+struct tm *localtime(const time_t *t) { return tm_from_time(t ? *t : time(0)); }
+struct tm *gmtime(const time_t *t) { return tm_from_time(t ? *t : time(0)); }
 int setjmp(jmp_buf b) { (void)b; return 0; }
 void longjmp(jmp_buf b, int v) { (void)b; (void)v; exit(1); }
 int sem_init(sem_t *s, int p, unsigned v) { (void)p; s->v = v; return 0; }
