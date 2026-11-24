@@ -4,7 +4,6 @@
 JMP @main
 .include "../dbg/core.nas"
 .include "../dbg/undo_stub.nas"
-.include "../dbg/ndr.nas"
 
 main:
   MOVI r13,1
@@ -48,6 +47,33 @@ main:
   LD r1,r1,0
   CMP r1,r0
   JMP[EQ] @fail
+  ; the 8-word ring must hold the same operands and seal
+  LA r1,0x31000
+  ADDI r1,r1,4
+  LD r1,r1,0
+  MOVI r2,0x11
+  CMP r1,r2
+  JMP[NE] @fail
+  LA r1,0x31000
+  ADDI r1,r1,5
+  LD r1,r1,0
+  MOVI r2,0x66
+  CMP r1,r2
+  JMP[NE] @fail
+  LA r1,0x31000
+  ADDI r1,r1,6
+  LD r1,r1,0
+  MOVI r2,0x22
+  CMP r1,r2
+  JMP[NE] @fail
+  MOVI r1,@nd_rec
+  ADDI r1,r1,7
+  LD r2,r1,0
+  LA r1,0x31000
+  ADDI r1,r1,7
+  LD r1,r1,0
+  CMP r1,r2
+  JMP[NE] @fail
   MOVI r1,@s_ok
   CALL @nd_puts
   HALT
