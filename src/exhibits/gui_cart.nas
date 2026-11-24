@@ -4,7 +4,7 @@
 ; Keys (kbd.nas, 1024x768): TAB focus | F2 MOVE mode (arrows move, ENTER leaves) | F3 enlarge/restore | ESC close.
 ; Terminal commands (first letter): h c v w l m x t s(settings) n(nannet) u(utils) f(files) e(run C demo) q.
 ; e compiles and runs a C program with the raw-NaN16 ncc front end (src/lib/ncc.nas) inside this terminal.
-; F0 Help, F1 launcher, F2 move, F3 maximize, F4 toast, F5 Settings,
+; F0 Help, F1 app grid, F2 move, F3 maximize, F4 dialog, F5 Settings,
 ; F6 NaNNet, F7 utilities, F8 minimize, F9 tile, F10/F11 snap, F12 restore.
 ; Window manager: src/lib/wm.nas. Framebuffer: fb.nas. Text: NaNGlyph 8x13 cells (fbtext.nas+font7.nas). Keys: kbd.nas. No native GUI code.
 .equ SLOT 8192
@@ -21,6 +21,7 @@ JMP @cart_entry
 .include "../lib/wm.nas"
 .include "../lib/ncc.nas"
 .include "../lib/bootbuild.nas"
+.include "../lib/shell.nas"
 cart_entry:
 ST r15,r0,@g_ret
 MOVI r13,1
@@ -33,6 +34,7 @@ ADD r1,r1,r2
 CALL @fb_init_mode
 CALL @kbd_init
 CALL @wm_init
+CALL @sh_init
 CALL @nfs_format
 LA r1,@fs_hello_path
 SHL r1,r1,2
@@ -81,6 +83,7 @@ JMP[EQ] @g_nodraw
 ST r0,r0,@wm_redraw
 CALL @wm_draw_all
 CALL @g_bar
+CALL @sh_draw
 g_nodraw:
 LD r1,r0,@g_quit
 CMP r1,r0
@@ -272,6 +275,16 @@ RET
 g_onkey:
 ST r15,r14,0
 ADD r14,r14,r13
+; Modal launcher/confirmation dialog gets first refusal on every key.
+LD r1,r0,@sh_open
+LD r2,r0,@sh_modal
+BOOL.14 r3,r1,r2
+CMP r3,r0
+JMP[EQ] @gk_regular
+LD r1,r0,@g_key
+CALL @sh_handle
+JMP @gk_ret
+gk_regular:
 LD r1,r0,@g_key
 LD r2,r0,@st_pend
 CMP r2,r0
@@ -287,19 +300,17 @@ JMP[NE] @gk_notf0
 CALL @gk_help
 JMP @gk_ret
 gk_notf0:
-; F1 app launcher: new raw NaN16 terminal. F4 native notification.
+; F1 native app grid; F4 native modal confirmation dialog.
 MOVI r2,0x101
 CMP r1,r2
 JMP[NE] @gk_notf1
-MOVI r1,0
-CALL @gui_open_new
+CALL @sh_launcher
 JMP @gk_ret
 gk_notf1:
 MOVI r2,0x104
 CMP r1,r2
 JMP[NE] @gk_notf4
-MOVI r1,25
-CALL @wm_notice
+CALL @sh_dialog
 JMP @gk_ret
 gk_notf4:
 ; F8 minimizes focused window (unless it is the final visible window).
