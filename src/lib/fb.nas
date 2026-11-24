@@ -121,6 +121,15 @@ pal_tab:
 .word 18,6,5,13
 .word 19,30,30,40
 .word 20,12,5,4
+; Native desktop chrome: layered slate shadows, surfaces and muted controls.
+.word 21,3,3,7
+.word 22,5,5,10
+.word 23,14,19,29
+.word 24,10,13,20
+.word 25,25,31,42
+.word 26,22,27,37
+.word 27,43,15,21
+.word 28,8,10,17
 .word 0xFFFF
 fbi_ret:
 .word 0
