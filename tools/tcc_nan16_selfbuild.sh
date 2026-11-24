@@ -130,7 +130,7 @@ job test test.bin 0x02fffff0 0x03000000
   include /usr/include
   include /usr/lib/tcc/include
   define GUEST=1
-  define HEAP_SIZE=67108864
+  define NAN16_HEAP_SIZE=67108864
   source /work/libc/libc.c
   source /work/job/test.c
   runtime 1
@@ -151,7 +151,7 @@ job sqlite sqlite.bin 0x02fffff4 0x03800000
   define SQLITE_OMIT_SHARED_CACHE=1
   define SQLITE_MAX_MMAP_SIZE=0
   define NDEBUG=1
-  define HEAP_SIZE=134217728
+  define NAN16_HEAP_SIZE=134217728
   source /work/sqlite/sqlite3.c
   source /work/sqlite/nan16_vfs.c
   source /work/job/probe.c
@@ -185,7 +185,7 @@ job selfbuild R.bin 0x02fffff0 0x03000000
   define CONFIG_TCC_STATIC=1
   define CONFIG_TCC_BACKTRACE=0
   define NAN16_EXIT_DIAG=1
-  define HEAP_SIZE=134217728
+  define NAN16_HEAP_SIZE=134217728
   source /work/libc/libc.c
   source /work/tcc/libtcc.c
   source /work/src/guest_build_driver.c
