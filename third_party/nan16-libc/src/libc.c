@@ -56,10 +56,13 @@ static void heap_init(void)
 void *malloc(size_t n)
 {
     Block *b, *prev = 0;
-    unsigned need;
+    unsigned need, steps = 0;
     heap_init();
+    if (n > HEAP_SIZE - HDR_ALIGN) return 0;
     need = align_up((unsigned)n);
+    if (need < n) return 0;
     for (b = heap_head; b; prev = b, b = b->next) {
+        if (++steps > HEAP_SIZE / sizeof(Block)) return 0;
         if (b->free && b->size >= need) {
             if (b->size >= need + sizeof(Block) + HDR_ALIGN) {
                 Block *nb = (Block *)((unsigned char *)(b + 1) + need);
@@ -79,8 +82,14 @@ void *malloc(size_t n)
 void free(void *p)
 {
     Block *b, *n;
+    unsigned long addr;
     if (!p) return;
     b = (Block *)p - 1;
+    addr = (unsigned long)b;
+    if (addr < (unsigned long)HEAP_BASE ||
+        addr + sizeof(Block) > (unsigned long)HEAP_BASE + HEAP_SIZE)
+        return;
+    if (b->free) return;
     b->free = 1;
     for (n = heap_head; n; n = n->next) {
         if (n->free && n->next && n->next->free) {
@@ -92,11 +101,12 @@ void free(void *p)
 
 void *calloc(size_t n, size_t s)
 {
-    void *p = malloc(n * s);
+    void *p;
+    if (n && s > (size_t)-1 / n) return 0;
+    p = malloc(n * s);
     if (p) memset(p, 0, n * s);
     return p;
 }
-
 void *realloc(void *p, size_t n)
 {
     Block *b;
@@ -104,6 +114,7 @@ void *realloc(void *p, size_t n)
     unsigned old;
     if (!p) return malloc(n);
     if (!n) { free(p); return 0; }
+    if (n > HEAP_SIZE - HDR_ALIGN) return 0;
     b = (Block *)p - 1;
     old = b->size;
     if (old >= n) return p;
@@ -978,6 +989,15 @@ int close(int fd)
     if (fd >= FD_VFS_BASE && (unsigned)(fd - FD_VFS_BASE) < vfs_cap) files[fd - FD_VFS_BASE].pos = 0;
     return 0;
 }
+int fsync(int fd)
+{
+    if (fd >= FD_VFS_BASE && (unsigned)(fd - FD_VFS_BASE) < vfs_cap &&
+        files[fd - FD_VFS_BASE].used) return 0;
+    errno = EBADF;
+    return -1;
+}
+int fdatasync(int fd) { return fsync(fd); }
+int sync(void) { return 0; }
 ssize_t read(int fd, void *buf, size_t n)
 {
     MemFile *f;
