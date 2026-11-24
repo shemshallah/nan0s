@@ -25,6 +25,7 @@
 .equ DBG_STACK 5808
 .equ DBG_HIST 5807
 .equ DBG_BREAK 5810
+.equ DBG_REC 5812
 .equ DBG_WP_LIST 5957
 .equ DBG_WP_TOGGLE 5958
 .equ DBG_BP_LIST 5955
@@ -6465,6 +6466,57 @@ tlg_c:
 tlg_site:
 .word 0
 
+; ---- ndr: the latest eight-word record ----
+tdbg_ndr:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r14,r0,@dbg_sp
+CALL #DBG_REC
+LD r14,r0,@dbg_sp
+ST r1,r0,@tnr_base
+MOVI r2,78
+CALL @tdbg_ch
+MOVI r2,68
+CALL @tdbg_ch
+MOVI r2,82
+CALL @tdbg_ch
+MOVI r2,32
+CALL @tdbg_ch
+MOVI r1,0
+ST r1,r0,@tnr_i
+tnr_l:
+LD r8,r0,@tnr_base
+LD r1,r0,@tnr_i
+ADD r8,r8,r1
+ST r14,r0,@dbg_sp
+ADD r1,r8,r0
+CALL #DBG_MEM_GETH
+LD r14,r0,@dbg_sp
+ST r1,r0,@tnr_v
+LD r1,r0,@tk_id
+LD r2,r0,@tnr_v
+MOVI r3,8
+CALL @dbg_puthex
+MOVI r2,32
+CALL @tdbg_ch
+LD r1,r0,@tnr_i
+ADD r1,r1,r13
+ST r1,r0,@tnr_i
+MOVI r2,8
+CMP r1,r2
+JMP[LT] @tnr_l
+MOVI r2,10
+CALL @tdbg_ch
+SUB r14,r14,r13
+LD r15,r14,0
+JMP @tdbg_done
+tnr_base:
+.word 0
+tnr_i:
+.word 0
+tnr_v:
+.word 0
+
 ; ---- hist: newest eight program counters ----
 tdbg_hist:
 ST r15,r14,0
@@ -7611,6 +7663,11 @@ CALL @fs_prefix
 CMP r1,r0
 JMP[NE] @tdbg_serial_cmd
 LA r1,#FNB
+LA r2,@s_tdbg_ndr
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @tdbg_ndr
+LA r1,#FNB
 LA r2,@s_tdbg_log
 CALL @fs_prefix
 CMP r1,r0
@@ -8107,11 +8164,11 @@ s_dbg_loaded:
 s_dbg_nocart:
 .str "no cart\n"
 s_tdbg_banner:
-.str "NANDBG TERMINAL MONITOR\ncarts load <id> step next finish run regs break watch bpts wpts mem [addr] dis [addr] screen serial log hist stack types goto bp wp undo [n] redo [n] setr setm setw setc checkpoint restore reset pc quit\n"
+.str "NANDBG TERMINAL MONITOR\ncarts load <id> step next finish run regs break watch bpts wpts mem [addr] dis [addr] screen serial log ndr hist stack types goto bp wp undo [n] redo [n] setr setm setw setc checkpoint restore reset pc quit\n"
 s_tdbg_prompt:
 .str "> "
 s_tdbg_help:
-.str "carts load <id> step next finish run regs break watch bpts wpts mem [addr] dis [addr] screen serial log hist stack types goto bp wp undo [n] redo [n] setr setm setw setc checkpoint restore reset pc quit"
+.str "carts load <id> step next finish run regs break watch bpts wpts mem [addr] dis [addr] screen serial log ndr hist stack types goto bp wp undo [n] redo [n] setr setm setw setc checkpoint restore reset pc quit"
 s_tdbg_carts:
 .str "carts"
 s_tdbg_load:
@@ -8142,6 +8199,8 @@ s_tdbg_next:
 .str "next"
 s_tdbg_finish:
 .str "finish"
+s_tdbg_ndr:
+.str "ndr"
 s_tdbg_log:
 .str "log"
 s_tdbg_hist:

@@ -989,7 +989,7 @@ the store is never modified, so its seal remains valid. The demo target at
 8100 remains for `reset`.
 
 The second CLI accepts `carts load <id> step next finish run regs mem [addr]
-log hist stack types screen serial dis [addr] undo [n] redo [n] break bp bpts
+log ndr hist stack types screen serial dis [addr] undo [n] redo [n] break bp bpts
 watch wp wpts setr setm setw setc goto checkpoint restore reset help quit`.
 `break` is a fast single breakpoint at PC; `bp <hex>`/`wp <hex>` toggle table
 entries and `bpts`/`wpts` list them. `setr <n> <hex>`, `setm <addr> <hex>`, `setw <addr> <word> <class>`,
