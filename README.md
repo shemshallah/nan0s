@@ -30,7 +30,7 @@
 
 **ndbg** — the NaN-native debugger in this repository. Design: [`spec/NANDBG.md`](spec/NANDBG.md) · Working guide: [`src/dbg/README.md`](src/dbg/README.md).
 
-This suite is also vendored into [`shemshallah/nan0s`](https://github.com/shemshallah/nan0s); that tree now includes a basic Silver Slate terminal `debug` monitor (`carts`, `load <id>`, `step`, `run`, `regs`, `break`, `watch`, `bpts`, `wpts`, `mem`, `dis`, `reset`, `pc`, `quit`) gated by `tools/ndbg_term.sh`. Refresh the standalone component with `tools/ndbg_sync.sh` from the nan0s checkout.
+This suite is also vendored into [`shemshallah/nan0s`](https://github.com/shemshallah/nan0s); that tree now includes a basic Silver Slate terminal `debug` monitor (`carts`, `load <id>`, `step`, `run`, `regs`, `break`, `watch`, `bpts`, `wpts`, `mem`, `dis`, `screen`, `serial`, multi-level `undo`/`redo`, `checkpoint`, `restore`, `reset`, `pc`, `quit`) gated by `tools/ndbg_term.sh`. Refresh the standalone component with `tools/ndbg_sync.sh` from the nan0s checkout.
 
 <br/>
 
