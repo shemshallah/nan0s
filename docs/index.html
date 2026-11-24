@@ -42,6 +42,11 @@
     background:#101027; border-top:1px solid #343464;
   }
   #fullscreen-exitbar .fullscreen-tools { display:flex; gap:5px; flex:0 1 auto; min-width:0; }
+  #exit-fullscreen-keyboard { display:none; }
+  body.nan0s-immersive.nan0s-keys-open #exit-fullscreen-keyboard {
+    display:block; min-height:50px; width:100%; margin:0 0 8px;
+    border:2px solid #9fa8ff; background:#282047; font-weight:700;
+  }
   #fullscreen-exitbar button { min-height:48px; min-width:40px; padding:9px 10px; touch-action:manipulation; }
   #exit-fullscreen {
     margin-left:auto; flex:0 0 auto; min-width:128px !important;
@@ -157,19 +162,8 @@
       </div>
       <button type="button" id="exit-fullscreen" aria-label="Exit NaN/0S full-screen display">Exit full screen</button>
     </div>
-  </div>
-  <div class="controls">
-    <button id="restart" disabled>Restart</button>
-    <button id="fullscreen" type="button" disabled aria-label="Enter NaN/0S full-screen display">Full screen</button>
-    <button id="zoom-out" type="button" disabled aria-label="Zoom out guest screen">−</button>
-    <span id="zoom-level" class="hint">100%</span>
-    <button id="zoom-in" type="button" disabled aria-label="Zoom in guest screen">+</button>
-    <button id="zoom-fit" type="button" disabled>Fit</button>
-    <button id="download-replica" type="button" disabled title="Enabled after build nan0s verifies the full secondary IDE disk">Download rebuilt .img</button>
-    <span class="hint" id="image-fingerprint" aria-live="polite" title="SHA-256 of the exact guest image fetched by this browser">guest disk: loading…</span>
-    <span class="hint"><b>Two-finger pinch zooms NaN/0S; one finger pans.</b> Type <b>build</b> + Enter for command help, or <b>build nan0s</b> + Enter to replicate the entire bootable disk onto an independent IDE slave. The guest verifies every sector, then enables the image download. · boots the complete guest (floppy + primary IDE) to the desktop with one terminal · <b>q</b> quits the GUI → museum menu (<b>1–8</b>, <b>ESC</b> back) · tap the keys below or the text bar to type</span>
-  </div>
-  <div class="typebar">
+    <div class="typebar">
+      <button type="button" id="exit-fullscreen-keyboard" aria-label="Exit full-screen NaN/0S while keyboard is open">Exit full screen</button>
     <label for="type" class="hint">Phone keyboard → NaN/0S PS/2 keyboard</label>
     <div class="typebar-row">
       <input id="type" type="text" inputmode="text" enterkeyhint="enter" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"
@@ -193,6 +187,18 @@
       <button type="button" data-code="88" title="PS/2 function key F12" aria-label="PS/2 function key F12" disabled>F12</button>
     </div>
     <p id="type-hint" class="hint">Text is sent into the guest as you type. Clear empties this field only; Enter is also available below.</p>
+  </div>
+  </div>
+  <div class="controls">
+    <button id="restart" disabled>Restart</button>
+    <button id="fullscreen" type="button" disabled aria-label="Enter NaN/0S full-screen display">Full screen</button>
+    <button id="zoom-out" type="button" disabled aria-label="Zoom out guest screen">−</button>
+    <span id="zoom-level" class="hint">100%</span>
+    <button id="zoom-in" type="button" disabled aria-label="Zoom in guest screen">+</button>
+    <button id="zoom-fit" type="button" disabled>Fit</button>
+    <button id="download-replica" type="button" disabled title="Enabled after build nan0s verifies the full secondary IDE disk">Download rebuilt .img</button>
+    <span class="hint" id="image-fingerprint" aria-live="polite" title="SHA-256 of the exact guest image fetched by this browser">guest disk: loading…</span>
+    <span class="hint"><b>Two-finger pinch zooms NaN/0S; one finger pans.</b> Type <b>build</b> + Enter for command help, or <b>build nan0s</b> + Enter to replicate the entire bootable disk onto an independent IDE slave. The guest verifies every sector, then enables the image download. · boots the complete guest (floppy + primary IDE) to the desktop with one terminal · <b>q</b> quits the GUI → museum menu (<b>1–8</b>, <b>ESC</b> back) · tap the keys below or the text bar to type</span>
   </div>
   <div class="pad" id="pad">
     <button type="button" data-code="1" disabled>Esc</button>
@@ -247,6 +253,7 @@
   var fsBtn = document.getElementById("fullscreen");
   var stageEl = document.getElementById("fullscreen-stage");
   var exitFsBtn = document.getElementById("exit-fullscreen");
+  var keyboardExitFsBtn = document.getElementById("exit-fullscreen-keyboard");
   var fsKeysBtn = document.getElementById("fullscreen-keyboard");
   var fsZoomOutBtn = document.getElementById("fullscreen-zoom-out");
   var fsZoomFitBtn = document.getElementById("fullscreen-zoom-fit");
@@ -496,7 +503,9 @@
   // entire stage instead, and ALWAYS enter a CSS immersive fallback first:
   // Android browsers sometimes reject Fullscreen API requests outright.
   var nativeFsActive = false;
+  var fullscreenSerial = 0;
   function enterFullscreen() {
+    var serial = ++fullscreenSerial;
     if (!emulator) return;
     stageEl.classList.add("immersive");
     document.body.classList.add("nan0s-immersive");
@@ -508,9 +517,11 @@
       try {
         var promise = stageEl.requestFullscreen();
         if (promise && typeof promise.then === "function") {
-          promise.then(function () { nativeFsActive = true; }, function () {
+          promise.then(function () {
+            if (serial === fullscreenSerial && stageEl.classList.contains("immersive")) nativeFsActive = true;
+          }, function () {
             // CSS fallback remains interactive if the native API is denied.
-            nativeFsActive = false;
+            if (serial === fullscreenSerial) nativeFsActive = false;
           });
         }
       } catch (ignored) {
@@ -519,6 +530,7 @@
     }
   }
   function exitFullscreen() {
+    ++fullscreenSerial;
     stageEl.classList.remove("immersive");
     document.body.classList.remove("nan0s-immersive");
     document.body.classList.remove("nan0s-keys-open");
@@ -535,6 +547,7 @@
   }
   fsBtn.addEventListener("click", enterFullscreen);
   exitFsBtn.addEventListener("click", exitFullscreen);
+  keyboardExitFsBtn.addEventListener("click", exitFullscreen);
   // v86's global mouse adapter should never intercept these host controls.
   var fsBar = document.getElementById("fullscreen-exitbar");
   fsBar.addEventListener("touchstart", function (e) { e.stopPropagation(); }, { passive:true });
