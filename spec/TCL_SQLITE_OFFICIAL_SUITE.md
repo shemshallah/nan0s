@@ -214,6 +214,29 @@ Status legend: **done**, **partial**, **planned**.
       workarounds.
 - [ ] Re-run the native reference on the same tree for differential results.
 
+### P4 source manifest (SQLite 3.54.1)
+
+Official `main.mk` builds `testfixture` from:
+
+- the `sqlite3.c` amalgamation (our vendored copy) or, with
+  `USE_AMALGAMATION=0`, `TESTSRC2` (core src + fts3/session/fts5 sources);
+- `src/tclsqlite.c` (the build's `tclsqlite-ex.c`);
+- `TESTSRC`: 44 `src/test*.c` files plus `ext/{fts3,session,recover,intck,rbu}`
+  test sources and the statically linked extensions in `TESTSRC`
+  (`ext/expert`, `ext/misc/*`, `ext/fts5/fts5_tcl.c`, `ext/rtree`);
+- official `TESTFIXTURE_FLAGS`: `-DSQLITE_NO_SYNC=1`,
+  `SQLITE_DEFAULT_PAGE_SIZE=1024`, `SQLITE_ENABLE_STMTVTAB`,
+  `SQLITE_ENABLE_DBPAGE_VTAB`, `SQLITE_ENABLE_BYTECODE_VTAB`,
+  `SQLITE_ENABLE_CARRAY`, `SQLITE_ENABLE_PERCENTILE`,
+  `SQLITE_CKSUMVFS_STATIC`, `SQLITE_STATIC_RANDOMJSON`,
+  `SQLITE_STRICT_SUBTYPE=1`, and the configured `THREADSAFE` value.
+
+Our SQLite slice is currently `THREADSAFE=0`; the official fixture needs
+`THREADSAFE=1` once the Tcl thread package and NaN thread ABI are wired. The
+fixture must be built by tcc1 from guest sources for the final image; a tcc0
+build is the first differential step. `testfixture` starts with
+`/sqlite/test/veryquick.test` and `TCL_LIBRARY=/usr/lib/tcl9.0`.
+
 ### P5 — tcc1 bare metal (final)
 
 - [x] Guest VFS for raw input sources/headers: `tcc_nan16_rawcc` compiles
