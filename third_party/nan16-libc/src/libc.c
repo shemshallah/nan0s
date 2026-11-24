@@ -63,6 +63,11 @@ void *malloc(size_t n)
     if (need < n) return 0;
     for (b = heap_head; b; prev = b, b = b->next) {
         if (++steps > HEAP_SIZE / sizeof(Block)) return 0;
+        if (b->next &&
+            ((unsigned long)b->next < (unsigned long)HEAP_BASE ||
+             (unsigned long)b->next + sizeof(Block) >
+                 (unsigned long)HEAP_BASE + HEAP_SIZE))
+            return 0;
         if (b->free && b->size >= need) {
             if (b->size >= need + sizeof(Block) + HDR_ALIGN) {
                 Block *nb = (Block *)((unsigned char *)(b + 1) + need);
@@ -88,6 +93,14 @@ void free(void *p)
     addr = (unsigned long)b;
     if (addr < (unsigned long)HEAP_BASE ||
         addr + sizeof(Block) > (unsigned long)HEAP_BASE + HEAP_SIZE)
+        return;
+    if (addr & (HDR_ALIGN - 1)) return;
+    if (b->size & (HDR_ALIGN - 1)) return;
+    if (b->size > HEAP_SIZE) return;
+    if (b->next &&
+        ((unsigned long)b->next < (unsigned long)HEAP_BASE ||
+         (unsigned long)b->next + sizeof(Block) >
+             (unsigned long)HEAP_BASE + HEAP_SIZE))
         return;
     if (b->free) return;
     b->free = 1;
