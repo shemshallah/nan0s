@@ -148,12 +148,13 @@ MOVI r2,13
 CMP r1,r2
 JMP[NE] @sh_key_done
 ST r0,r0,@sh_modal
-; A single visible window is protected: the desktop cannot be blanked.
-LD r2,r0,@wm_zn
-MOVI r3,2
-CMP r2,r3
-JMP[LT] @sh_notice
+; The final window is closable: the desktop, taskbar and launcher remain.
+; Capture the requested focused window and use the ordinary native close
+; primitive. The shell does not silently keep a last window alive.
 CALL @wm_top
+MOVI r2,0xFFFF
+CMP r1,r2
+JMP[EQ] @sh_notice
 CALL @wm_close
 sh_notice:
 MOVI r1,20
