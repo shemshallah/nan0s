@@ -25,6 +25,26 @@ then count entries:
 - The archive is ROM-backed in the cartridge or loaded as a sealed suite
   image. The guest never sees host paths.
 
+## Guest VFS capacity
+
+Capacity is not a fixed array. The libc file table starts as a pointer table
+and doubles on demand:
+
+| directive | meaning |
+| --- | --- |
+| `-DNAN16_VFS_INIT_CAP=N` | initial slots (default 16) |
+| `-DNAN16_VFS_MAXFILES=N` | optional hard cap; omitted means unbounded growth |
+
+`nan16_vfs_add_pack` reserves `vfs_used + count` slots once, then appends each
+entry directly, so registering a 2,133-file suite (or much larger archives) is
+linear rather than quadratic. `tools/nan16_vfs_capacity_gate.sh` registers a
+synthetic 5,000-file pack with `INIT_CAP=2` and checks that a build with
+`MAXFILES=4096` rejects it without changing the table.
+
+Because the loader appends without deduplication, names in one archive must be
+unique, as required above. Runtime `nan16_vfs_add_ro`/`nan16_vfs_add` still
+look up an existing name and update that entry.
+
 Default mapping for the official suite:
 
 | host tree | guest prefix |
