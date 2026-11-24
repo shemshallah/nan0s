@@ -26,7 +26,7 @@ static void add(const char *name, const char *data)
 
 int main(void)
 {
-    char cwd[128], abs[128], buf[8];
+    char cwd[128], abs[128], buf[64];
     struct stat st;
     int fd, r;
 
@@ -101,6 +101,13 @@ int main(void)
     r = fd >= 0 ? (int)read(fd, buf, 4) : -1;
     if (fd >= 0) close(fd);
     printf("append=%d:%d\n", r, r == 2 && !memcmp(buf, "ab", 2));
+
+    r = snprintf(buf, sizeof buf, "[%.*s][%*s]", -1, "abc", 5, "x");
+    printf("star1=%d:%s\n", r, buf);
+    r = snprintf(buf, sizeof buf, "[%*.*s]", -4, 2, "abcdef");
+    printf("star2=%d:%s\n", r, buf);
+    r = snprintf(buf, sizeof buf, "%.*s", -3, "abcdef");
+    printf("star3=%d:%s\n", r, buf);
     printf("PATHS PASS\n");
     return 0;
 }

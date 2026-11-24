@@ -1256,8 +1256,24 @@ static void oprintf(Out *o, const char *fmt, va_list ap)
         fmt++;
         if (*fmt == '-') { left = 1; fmt++; }
         if (*fmt == '0') { zero = 1; fmt++; }
-        while (isdigit((unsigned char)*fmt)) width = width * 10 + (*fmt++ - '0');
-        if (*fmt == '.') { fmt++; prec = 0; while (isdigit((unsigned char)*fmt)) prec = prec * 10 + (*fmt++ - '0'); }
+        if (*fmt == '*') {
+            width = va_arg(ap, int);
+            if (width < 0) { left = 1; width = -width; }
+            fmt++;
+        } else {
+            while (isdigit((unsigned char)*fmt)) width = width * 10 + (*fmt++ - '0');
+        }
+        if (*fmt == '.') {
+            fmt++;
+            if (*fmt == '*') {
+                prec = va_arg(ap, int);
+                if (prec < 0) prec = -1;   /* negative precision = omitted */
+                fmt++;
+            } else {
+                prec = 0;
+                while (isdigit((unsigned char)*fmt)) prec = prec * 10 + (*fmt++ - '0');
+            }
+        }
         while (*fmt == 'l') { lng++; fmt++; }
         if (*fmt == 'z') { lng = 2; fmt++; }
         if (*fmt == 'h') { fmt++; if (*fmt == 'h') fmt++; }
@@ -1289,11 +1305,12 @@ static void oprintf(Out *o, const char *fmt, va_list ap)
         case 'c': oc(o, va_arg(ap, int)); break;
         case 's': {
             const char *s = va_arg(ap, const char *);
-            int n = 0;
+            int n = 0, k;
             if (!s) s = "(null)";
             while (s[n] && (prec < 0 || n < prec)) n++;
-            if (!left) for (; n < width; width--) oc(o, ' ');
-            while (n--) oc(o, *s++);
+            if (!left) for (k = n; k < width; k++) oc(o, ' ');
+            for (k = 0; k < n; k++) oc(o, s[k]);
+            if (left) for (k = n; k < width; k++) oc(o, ' ');
             break;
         }
         case 'f': case 'e': case 'g': {
@@ -1551,6 +1568,10 @@ void setbuf(FILE *fp, char *b) { (void)fp; (void)b; }
 /* ---------------------------------------------------------------- math */
 double ldexp(double x, int e)
 {
+    if (e > 1023) e = 1023;
+    if (e < -1074) e = -1074;
+    while (e >= 32) { x = x * 4294967296.0; e -= 32; }
+    while (e <= -32) { x = x * (1.0 / 4294967296.0); e += 32; }
     while (e > 0) { x = x * 2.0; e--; }
     while (e < 0) { x = x * 0.5; e++; }
     return x;

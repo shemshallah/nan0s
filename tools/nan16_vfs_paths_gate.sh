@@ -79,6 +79,9 @@ trunc3=0:5
 trunc4=5:1:1
 ro-open=-1
 append=2:1
+star1=12:[abc][    x]
+star2=6:[ab  ]
+star3=6:abcdef
 PATHS PASS
 EOF
 if ! diff -u "$T/expected" "$T/out.norm"; then
