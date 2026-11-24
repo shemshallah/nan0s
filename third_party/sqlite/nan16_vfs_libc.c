@@ -54,6 +54,10 @@ static int lock_conflict(NanLFile *f, int level)
             if (e->level >= SQLITE_LOCK_PENDING) return 1;
         } else if (level == SQLITE_LOCK_RESERVED) {
             if (e->level >= SQLITE_LOCK_RESERVED) return 1;
+        } else if (level == SQLITE_LOCK_PENDING) {
+            /* PENDING is the separate pending byte: existing SHARED readers
+               do not conflict; it only blocks new SHARED locks. */
+            if (e->level >= SQLITE_LOCK_PENDING) return 1;
         } else {
             if (e->level >= SQLITE_LOCK_SHARED) return 1;
         }
