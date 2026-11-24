@@ -25,6 +25,8 @@ cp build/nan0s.img "$T/hda.img"
   echo "mouse_button 0"
   sleep 0.9
   echo "screendump $T/closed.ppm"
+  sleep 5
+  echo "screendump $T/still-closed.ppm"
   echo "sendkey f1"
   sleep 1.0
   echo "screendump $T/relaunch.ppm"
@@ -53,8 +55,8 @@ def read(name):
         pixels=f.read()
     assert len(pixels)==1024*768*3
     return pixels
-opened, hovered, closed, relaunched=(read(x) for x in
-    ('open','hover','closed','relaunch'))
+opened, hovered, closed, still_closed, relaunched=(read(x) for x in
+    ('open','hover','closed','still-closed','relaunch'))
 def differences(a,b,region):
     x0,y0,x1,y1=region
     return sum(a[(y*1024+x)*3:(y*1024+x)*3+3] !=
@@ -62,10 +64,15 @@ def differences(a,b,region):
                for y in range(y0,y1) for x in range(x0,x1))
 rect=(50,30,630,420)
 removed=differences(hovered,closed,rect)
-reopened=differences(closed,relaunched,(170,110,850,560))
+idle=differences(closed,still_closed,rect)
+reopened=differences(still_closed,relaunched,(170,110,850,560))
 print(f'Native X close: {removed} window pixels changed')
+print(f'After 5 seconds closed: {idle} window pixels changed')
 print(f'Guest launcher survives final close: {reopened} pixels changed')
 assert removed>12000, 'Native X button did not close the last terminal window'
+# No window may reappear after the button is released; the only changing
+# pixels in the window region should be the animated guest mouse cursor.
+assert idle<300, 'Closed window revived or re-rendered itself without an open event'
 assert reopened>10000, 'Guest desktop/launcher did not survive closing final window'
 print('PASS: pure NaN16 title-bar X closes last window; F1 launcher remains functional')
 PY
