@@ -90,12 +90,13 @@ fi
 
 # a real bad-op trap must appear in the log as a typed record
 "$CLI" --img "$T/guest.bin" --steps 120000000 \
-  --keys "@20000000,d,e,b,u,g,ENTER,@2000000,l,o,a,d,SPACE,3,ENTER,@2000000,r,u,n,ENTER,@5000000,l,o,g,ENTER,@2000000,t,y,p,e,s,ENTER,@3000000,q,u,i,t,ENTER,@3000000" \
+  --keys "@20000000,d,e,b,u,g,ENTER,@2000000,l,o,a,d,SPACE,3,ENTER,@2000000,r,u,n,ENTER,@5000000,l,o,g,ENTER,@2000000,n,d,r,ENTER,@2000000,t,y,p,e,s,ENTER,@3000000,q,u,i,t,ENTER,@3000000" \
   --serial > "$T/blog" 2>/dev/null || true
 tr -d '\r' < "$T/blog" > "$T/blog.lf"
 if ! grep -qx '!DFC@20002003 W=0000000F7F000000' "$T/blog.lf" ||
    ! grep -qx 'S=3 PC=2003' "$T/blog.lf" ||
    ! grep -qx 'D0:20:002003' "$T/blog.lf" ||
+   ! grep -qx 'NDR 20000000 00002003 7F000000 0000000F 00000000 00000000 00000000 47997CA3 ' "$T/blog.lf" ||
    ! grep -qx 'TYPES FC:01 FM:00 FD:00 FS:00 ' "$T/blog.lf"; then
   echo "ndbg_term: LOG FAIL"; cat "$T/blog"; exit 1
 fi
@@ -194,5 +195,5 @@ sed 's/BP=2001/BP=2002/'    "$T/out.lf" > "$T/negative"
 if cmp -s "$T/out.lf" "$T/negative"; then
   echo "ndbg_term: NEGATIVE FAIL"; exit 1
 fi
-echo "ndbg_term: PASS (terminal debug: carts/load, step/dis/regs/break/watch/bpts/wpts/mem/run; screen/serial; setr/setm/setw/setc; next/finish; log/hist/stack/types; bp/wp/goto; checkpoint capture; mem/dis/undo/redo args; undo/multi-redo/checkpoint/restore, exact)"
+echo "ndbg_term: PASS (terminal debug: carts/load, step/dis/regs/break/watch/bpts/wpts/mem/run; screen/serial; setr/setm/setw/setc; next/finish; log/ndr/hist/stack/types; bp/wp/goto; checkpoint capture; mem/dis/undo/redo args; undo/multi-redo/checkpoint/restore, exact)"
 echo "ndbg_term: NEGATIVE PASS (mutated transcript rejected)"
