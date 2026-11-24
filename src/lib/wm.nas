@@ -624,6 +624,20 @@ ADD r2,r2,r5
 MOVI r3,@s_nan0s
 MOVI r4,#C_YEL
 CALL @fb_text7
+; Display a stable slot number before the title. Two Terminal windows
+; are now distinguishable, so closing one cannot look like it returned.
+LD r9,r0,@dw_b
+LD r1,r9,#W_X
+MOVI r5,37
+ADD r1,r1,r5
+LD r2,r9,#W_Y
+MOVI r5,3
+ADD r2,r2,r5
+LD r3,r0,@dw_id
+MOVI r5,49
+ADD r3,r3,r5
+MOVI r4,#C_YEL
+CALL @fb_char7
 LD r9,r0,@dw_b
 LD r1,r9,#W_X
 MOVI r5,58
@@ -864,10 +878,22 @@ ADD r2,r2,r3
 MOVI r3,100
 MOVI r4,20
 CALL @wm_rect
+; Taskbar uses the exact same stable slot ID as the title bar.
+LD r1,r0,@wd_x
+MOVI r4,4
+ADD r1,r1,r4
+LD r2,r0,@wd_y
+MOVI r4,7
+ADD r2,r2,r4
+LD r3,r0,@wd_i
+MOVI r4,49
+ADD r3,r3,r4
+MOVI r4,#C_YEL
+CALL @fb_char7
 LD r1,r0,@wd_b
 LD r3,r1,#W_TITLE
 LD r1,r0,@wd_x
-MOVI r4,5
+MOVI r4,14
 ADD r1,r1,r4
 LD r2,r0,@wd_y
 MOVI r4,7
