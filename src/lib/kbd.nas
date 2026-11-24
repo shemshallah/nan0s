@@ -20,6 +20,8 @@ ST r0,r0,@kb_al
 ST r0,r0,@kb_cp
 ST r0,r0,@kb_h
 ST r0,r0,@kb_t
+ST r0,r0,@kb_touch_hook
+ST r0,r0,@kb_touch_count
 RET
 kbd_mods:
 LD r1,r0,@kb_cp
@@ -56,6 +58,54 @@ kp_loop:
 KEYQ r2
 CMP r2,r0
 JMP[EQ] @kp_done
+; Optional virtual touchscreen transport: E0 7F + seven nibble bytes 60..6F.
+; Only a cartridge registering kb_touch_hook enables this native decoder.
+LD r3,r0,@kb_touch_hook
+CMP r3,r0
+JMP[EQ] @kp_normal
+LD r4,r0,@kb_touch_count
+CMP r4,r0
+JMP[EQ] @kp_touch_start
+MOVI r3,0x60
+CMP r2,r3
+JMP[LT] @kp_touch_abort
+MOVI r5,0x6F
+CMP r2,r5
+JMP[GT] @kp_touch_abort
+SUB r2,r2,r3
+LD r5,r0,@kb_touch_word
+SHL r5,r5,4
+ADD r5,r5,r2
+ST r5,r0,@kb_touch_word
+SUB r4,r4,r13
+ST r4,r0,@kb_touch_count
+CMP r4,r0
+JMP[NE] @kp_loop
+MOVI r6,0xFFF
+BOOL.8 r1,r5,r6
+SHR r2,r5,12
+BOOL.8 r2,r2,r6
+SHR r3,r5,24
+MOVI r6,7
+BOOL.8 r3,r3,r6
+LD r6,r0,@kb_touch_hook
+CALLR r6
+JMP @kp_loop
+kp_touch_abort:
+ST r0,r0,@kb_touch_count
+kp_touch_start:
+LD r3,r0,@kb_e0
+CMP r3,r0
+JMP[EQ] @kp_normal
+MOVI r3,0x7F
+CMP r2,r3
+JMP[NE] @kp_normal
+ST r0,r0,@kb_e0
+ST r0,r0,@kb_touch_word
+MOVI r3,7
+ST r3,r0,@kb_touch_count
+JMP @kp_loop
+kp_normal:
 MOVI r3,0xE0
 CMP r2,r3
 JMP[NE] @kp_n1
@@ -181,6 +231,12 @@ kp_done:
 SUB r14,r14,r13
 LD r15,r14,0
 RET
+kb_touch_hook:
+.word 0
+kb_touch_count:
+.word 0
+kb_touch_word:
+.word 0
 kb_e0:
 .word 0
 kb_sh:
