@@ -2,8 +2,9 @@
 > monitor, tests, and gates are integrated. The Silver Slate terminal now wires
 > a `debug` monitor (`carts`, `load <id>`, `step`/`next`/`finish`, `run`,
 > `regs`, `log`/`hist`/`stack`/`types`, `break`, `watch`, `bpts`, `wpts`,
-> `mem`, `dis`, `screen`, `serial`, `setr`/`setm`/`setw`/`setc`, multi-level
-> `undo`/`redo`, `checkpoint`, `restore`, `reset`, `pc`, `quit`); the richer
+> `mem [addr]`, `dis [addr]`, `screen`, `serial`, `setr`/`setm`/`setw`/`setc`,
+> multi-level `undo [n]`/`redo [n]`, `checkpoint`, `restore`, `reset`, `pc`,
+> `quit`); the richer
 > full-screen pane front end also remains in `shemshallah/ndbg`.
 
 # NANDBG — a NaN-native bare-metal debug system

@@ -113,6 +113,23 @@ if ! grep -qx 'BP=2001 +' "$T/bpwp.lf" ||
   echo "ndbg_term: BPWP FAIL"; cat "$T/bpwp"; exit 1
 fi
 
+# optional arguments: undo/redo counts, mem/dis base addresses
+"$CLI" --img "$T/guest.bin" --steps 140000000 \
+  --keys "@20000000,d,e,b,u,g,ENTER,@2000000,l,o,a,d,SPACE,1,ENTER,@2000000,s,t,e,p,ENTER,@2000000,s,t,e,p,ENTER,@2000000,s,t,e,p,ENTER,@2000000,u,n,d,o,SPACE,2,ENTER,@2000000,r,e,d,o,SPACE,2,ENTER,@2000000,m,e,m,SPACE,3,0,0,0,ENTER,@2000000,d,i,s,SPACE,2,0,0,1,ENTER,@3000000,q,u,i,t,ENTER,@3000000" \
+  --serial > "$T/args" 2>/dev/null || true
+tr -d '\r' < "$T/args" > "$T/args.lf"
+if ! grep -qx 'undo 2' "$T/args.lf" ||
+   ! grep -qx 'redo 2' "$T/args.lf" ||
+   ! grep -qx 'S=0 PC=2002' "$T/args.lf" ||
+   ! grep -qx 'S=0 PC=2001' "$T/args.lf" ||
+   ! grep -qx 'S=0 PC=0004' "$T/args.lf" ||
+   ! grep -qx 'M300000000000F' "$T/args.lf" ||
+   ! grep -qx 'M300700000000F' "$T/args.lf" ||
+   ! grep -qx '2001 FFF8_01D00001_F8FF MOVI r13,1' "$T/args.lf" ||
+   ! grep -qx '2002 FFF8_0B000004_F8FF CALL 4' "$T/args.lf"; then
+  echo "ndbg_term: ARGS FAIL"; cat "$T/args"; exit 1
+fi
+
 # captured display: run Baby to the key wait and dump the text buffer
 "$CLI" --img "$T/guest.bin" --steps 160000000 \
   --keys "@20000000,d,e,b,u,g,ENTER,@2000000,l,o,a,d,SPACE,1,ENTER,@2000000,r,u,n,ENTER,@4000000,s,c,r,e,e,n,ENTER,@4000000,q,u,i,t,ENTER,@3000000" \
@@ -162,5 +179,5 @@ sed 's/BP=2001/BP=2002/'    "$T/out.lf" > "$T/negative"
 if cmp -s "$T/out.lf" "$T/negative"; then
   echo "ndbg_term: NEGATIVE FAIL"; exit 1
 fi
-echo "ndbg_term: PASS (terminal debug: carts/load, step/dis/regs/break/watch/bpts/wpts/mem/run; screen/serial; setr/setm/setw/setc; next/finish; log/hist/stack/types; bp/wp/goto; undo/multi-redo/checkpoint/restore, exact)"
+echo "ndbg_term: PASS (terminal debug: carts/load, step/dis/regs/break/watch/bpts/wpts/mem/run; screen/serial; setr/setm/setw/setc; next/finish; log/hist/stack/types; bp/wp/goto; mem/dis/undo/redo args; undo/multi-redo/checkpoint/restore, exact)"
 echo "ndbg_term: NEGATIVE PASS (mutated transcript rejected)"

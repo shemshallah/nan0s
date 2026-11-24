@@ -5152,10 +5152,18 @@ RET
 
 ; ---- memory, watchpoints, breakpoint tables, reset ----
 tdbg_mem:
+CALL @tdbg_args_reset
+CALL @tdbg_nexthex
+CMP r2,r0
+JMP[EQ] @mem_pc
+ST r1,r0,@mem_base
+JMP @mem_go
+mem_pc:
 ST r14,r0,@dbg_sp
 CALL #DBG_PC
 LD r14,r0,@dbg_sp
 ST r1,r0,@mem_base
+mem_go:
 MOVI r1,0
 ST r1,r0,@mem_i
 mem_l:
@@ -5349,8 +5357,16 @@ dbg_dis:
 ST r15,r14,0
 ADD r14,r14,r13
 ST r14,r0,@dbg_sp
+LD r1,r0,@dis_set
+CMP r1,r0
+JMP[EQ] @dg_pc
+LD r1,r0,@dis_addr
+ST r0,r0,@dis_set
+JMP @dg_have
+dg_pc:
 CALL #DBG_PC
 LD r14,r0,@dbg_sp
+dg_have:
 ST r1,r0,@dg_base
 MOVI r1,0
 ST r1,r0,@dg_i
@@ -5379,6 +5395,10 @@ SUB r14,r14,r13
 LD r15,r14,0
 RET
 dg_base:
+.word 0
+dis_set:
+.word 0
+dis_addr:
 .word 0
 dg_i:
 .word 0
@@ -5591,6 +5611,18 @@ ts_ch:
 
 ; ---- undo one recorded scalar step ----
 tdbg_undo:
+CALL @tdbg_args_reset
+CALL @tdbg_nexthex
+CMP r2,r0
+JMP[EQ] @du_one
+CMP r1,r0
+JMP[EQ] @du_one
+SUB r1,r1,r13
+ST r1,r0,@du_rep
+JMP @du_begin
+du_one:
+ST r0,r0,@du_rep
+du_begin:
 ST r14,r0,@dbg_sp
 CALL #DBG_USNAP
 LD r14,r0,@dbg_sp
@@ -5707,11 +5739,18 @@ ST r14,r0,@dbg_sp
 CALL #DBG_UDONE
 LD r14,r0,@dbg_sp
 CALL @dbg_state
-JMP @tdbg_done
+LD r1,r0,@du_rep
+CMP r1,r0
+JMP[EQ] @tdbg_done
+SUB r1,r1,r13
+ST r1,r0,@du_rep
+JMP @du_begin
 du_none:
 MOVI r2,@s_tdbg_noundo
 CALL @tdbg_str
 JMP @tdbg_done
+du_rep:
+.word 0
 du_idx:
 .word 0
 du_dep:
@@ -6925,6 +6964,18 @@ rs_ep:
 
 ; ---- restore the saved post-step state ----
 tdbg_redo:
+CALL @tdbg_args_reset
+CALL @tdbg_nexthex
+CMP r2,r0
+JMP[EQ] @rd_one
+CMP r1,r0
+JMP[EQ] @rd_one
+SUB r1,r1,r13
+ST r1,r0,@rd_rep
+JMP @rdo_begin
+rd_one:
+ST r0,r0,@rd_rep
+rdo_begin:
 LD r1,r0,@rd_rd
 CMP r1,r0
 JMP[EQ] @rdo_none
@@ -7044,11 +7095,18 @@ LD r1,r0,@rd_rd
 SUB r1,r1,r13
 ST r1,r0,@rd_rd
 CALL @dbg_state
-JMP @tdbg_done
+LD r1,r0,@rd_rep
+CMP r1,r0
+JMP[EQ] @tdbg_done
+SUB r1,r1,r13
+ST r1,r0,@rd_rep
+JMP @rdo_begin
 rdo_none:
 MOVI r2,@s_tdbg_noredo
 CALL @tdbg_str
 JMP @tdbg_done
+rd_rep:
+.word 0
 rd_i:
 .word 0
 rd_v:
@@ -7207,6 +7265,17 @@ tdbg_setc_cmd:
 CALL @tdbg_setc
 JMP @tdbg_done
 tdbg_dis:
+CALL @tdbg_args_reset
+CALL @tdbg_nexthex
+CMP r2,r0
+JMP[EQ] @tdis_pc
+ST r1,r0,@dis_addr
+MOVI r1,1
+ST r1,r0,@dis_set
+JMP @tdis_go
+tdis_pc:
+ST r0,r0,@dis_set
+tdis_go:
 CALL @dbg_dis
 JMP @tdbg_done
 tdbg_screen_cmd:
@@ -8038,11 +8107,11 @@ s_dbg_loaded:
 s_dbg_nocart:
 .str "no cart\n"
 s_tdbg_banner:
-.str "NANDBG TERMINAL MONITOR\ncarts load <id> step next finish run regs break watch bpts wpts mem dis screen serial log hist stack types goto bp wp undo redo setr setm setw setc checkpoint restore reset pc quit\n"
+.str "NANDBG TERMINAL MONITOR\ncarts load <id> step next finish run regs break watch bpts wpts mem [addr] dis [addr] screen serial log hist stack types goto bp wp undo [n] redo [n] setr setm setw setc checkpoint restore reset pc quit\n"
 s_tdbg_prompt:
 .str "> "
 s_tdbg_help:
-.str "carts load <id> step next finish run regs break watch bpts wpts mem dis screen serial log hist stack types goto bp wp undo redo setr setm setw setc checkpoint restore reset pc quit"
+.str "carts load <id> step next finish run regs break watch bpts wpts mem [addr] dis [addr] screen serial log hist stack types goto bp wp undo [n] redo [n] setr setm setw setc checkpoint restore reset pc quit"
 s_tdbg_carts:
 .str "carts"
 s_tdbg_load:
