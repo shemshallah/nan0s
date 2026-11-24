@@ -10,14 +10,32 @@
     "\n" \
     "u64 __nan16_udivmod(u64 n, u64 d, int want_rem)\n" \
     "{\n" \
-    "    u64 q = 0, r = 0, bit = 1ULL << 63;\n" \
-    "    int i;\n" \
+    "    u64 q = 0, r = n, dd;\n" \
+    "    int i, s = 0;\n" \
     "    if (d == 0) return 0;\n" \
-    "    for (i = 0; i < 64; i++) {\n" \
-    "        r = r << 1;\n" \
-    "        if (n & bit) r = r | 1;\n" \
-    "        if (r >= d) { r = r - d; q = q | bit; }\n" \
-    "        bit = bit >> 1;\n" \
+    "    if (d == 1) return want_rem ? 0 : n;\n" \
+    "    if (n < d) return want_rem ? n : 0;\n" \
+    "    if ((d >> 32) == 0) {\n" \
+    "        u32 dh = (u32)(n >> 32), dl = (u32)n, dv = (u32)d;\n" \
+    "        u32 qh, rh, ql = 0;\n" \
+    "        u64 rr;\n" \
+    "        if (dh == 0) {\n" \
+    "            if (want_rem) return (u64)(dl % dv);\n" \
+    "            return (u64)(dl / dv);\n" \
+    "        }\n" \
+    "        qh = dh / dv; rh = dh % dv; rr = rh;\n" \
+    "        for (i = 0; i < 32; i++) {\n" \
+    "            rr = (rr << 1) | (dl >> 31); dl <<= 1;\n" \
+    "            if (rr >= dv) { rr -= dv; ql |= 1U << (31 - i); }\n" \
+    "        }\n" \
+    "        if (want_rem) return rr;\n" \
+    "        return ((u64)qh << 32) | ql;\n" \
+    "    }\n" \
+    "    dd = d;\n" \
+    "    while ((dd & (1ULL << 63)) == 0) { dd <<= 1; s++; }\n" \
+    "    for (i = 0; i <= s; i++) {\n" \
+    "        if (r >= dd) { r -= dd; q |= 1ULL << (s - i); }\n" \
+    "        dd >>= 1;\n" \
     "    }\n" \
     "    return want_rem ? r : q;\n" \
     "}\n" \
