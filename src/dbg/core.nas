@@ -8,7 +8,7 @@
 ;   nd_reset                 clear target registers/pc/flags/steps/shadow stack
 ;   nd_step                  execute one instruction; r1 = status
 ;   nd_run(max)              execute up to max more instructions; r1 = status
-;   nd_emit / nd_rec_print   4-word typed diagnostic record
+;   nd_emit / nd_rec_print   8-word typed diagnostic record (NDR)
 ;
 ; status: 0 OK, 1 HALT, 2 BREAK, 3 FAULT, 4 BUDGET, 5 WAIT_KEY
 ; cells: nd_gb (word base), nd_mask, nd_pc, nd_k, nd_brk
@@ -1647,3 +1647,5 @@ nd_ud:
 .word 0
 nd_ubase:
 .word 0
+
+.include "ndr.nas"
