@@ -993,6 +993,43 @@ RET
 wm_min_id:
 .word 0
 
+; wm_taskbar_select: r1 is a stable window slot. A click on another
+; taskbar window raises it; a click on the already-focused window hides that
+; window and exposes the one directly underneath. No window is closed.
+; Clicking the last visible app is a no-op, keeping the desktop usable.
+wm_taskbar_select:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,@wts_id
+MOVI r2,#MAXW
+CMP r1,r2
+JMP[GE] @wts_done
+CALL @wm_wbase
+LD r2,r1,#W_ALIVE
+CMP r2,r0
+JMP[EQ] @wts_done
+LD r1,r0,@wts_id
+CALL @wm_top
+LD r2,r0,@wts_id
+CMP r1,r2
+JMP[NE] @wts_raise
+LD r3,r0,@wm_zn
+MOVI r4,2
+CMP r3,r4
+JMP[LT] @wts_done
+ADD r1,r2,r0
+CALL @wm_minimize
+JMP @wts_done
+wts_raise:
+LD r1,r0,@wts_id
+CALL @wm_activate_slot
+wts_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+wts_id:
+.word 0
+
 ; wm_activate_slot: r1=0..7 stable taskbar slot, restore if minimized,
 ; then raise and focus. Use Ctrl+1..8 so window switching never relies on mouse.
 wm_activate_slot:
