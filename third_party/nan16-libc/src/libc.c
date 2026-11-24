@@ -622,6 +622,15 @@ ssize_t write(int fd, const void *buf, size_t n)
         for (i = 0; i < n; i++)
             if (fd == 1) outcap(&nan16_stdout_data, &nan16_stdout_len, &nan16_stdout_cap, ((const unsigned char *)buf)[i]);
             else outcap(&nan16_stderr_data, &nan16_stderr_len, &nan16_stderr_cap, ((const unsigned char *)buf)[i]);
+        /* Fixed terminal-client control block (guest byte addresses):
+           0x03EFF000 stdout pointer, +4 length, +8 stderr pointer, +12 length.
+           nan_cli --guest-stdout/--guest-stderr reads this without symbols. */
+        *(volatile unsigned *)(unsigned long)0x03EFF000u =
+            (unsigned)(unsigned long)nan16_stdout_data;
+        *(volatile unsigned *)(unsigned long)0x03EFF004u = nan16_stdout_len;
+        *(volatile unsigned *)(unsigned long)0x03EFF008u =
+            (unsigned)(unsigned long)nan16_stderr_data;
+        *(volatile unsigned *)(unsigned long)0x03EFF00Cu = nan16_stderr_len;
         return n;
     }
     if (fd < FD_VFS_BASE || fd >= FD_VFS_BASE + MAXFILES) return -1;

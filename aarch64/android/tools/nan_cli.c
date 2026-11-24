@@ -56,8 +56,29 @@ static uint32_t words_for_mb(unsigned long mb) {
   while ((unsigned long long)p < want && p < 0x10000000u) p <<= 1;
   return p;
 }
+/* Guest console control block written by the NaN16 libc:
+   0x03EFF000 stdout ptr, +4 len, +8 stderr ptr, +12 len. */
+static void dump_guest_console(nan_vm *v, uint32_t ctl, const char *path)
+{
+  uint32_t ptr, len;
+  uint8_t *buf;
+  FILE *f;
+  if (!path) return;
+  ptr = (uint32_t)(nan_word(v, ctl >> 2) >> 16);
+  len = (uint32_t)(nan_word(v, (ctl + 4) >> 2) >> 16);
+  if (!ptr || !len || len > (64u << 20)) return;
+  buf = (uint8_t *)malloc(len);
+  if (!buf) return;
+  if (nan_read_bytes(v, ptr, buf, len) == 0) {
+    f = fopen(path, "wb");
+    if (f) { fwrite(buf, 1, len, f); fclose(f); }
+    else perror(path);
+  }
+  free(buf);
+}
+
 int main(int argc, char **argv) {
-  const char *vga = NULL, *img = NULL, *keys = NULL, *ppm = NULL, *disk = NULL, *peek = NULL, *dump_bytes = NULL, *state_out = NULL, *corpus = NULL, *candidate_out = NULL; uint64_t steps = 50000000ull, per_ms = 1000;
+  const char *vga = NULL, *img = NULL, *keys = NULL, *ppm = NULL, *disk = NULL, *peek = NULL, *dump_bytes = NULL, *state_out = NULL, *corpus = NULL, *candidate_out = NULL, *guest_stdout = NULL, *guest_stderr = NULL; uint64_t steps = 50000000ull, per_ms = 1000;
   unsigned long mem_mb = 0;
   int train_mode = 0;
   int dump_text = 0, serial = 0, trim = 1;
@@ -74,12 +95,14 @@ int main(int argc, char **argv) {
     else if (!strcmp(argv[i], "--disk") && i + 1 < argc) disk = argv[++i];
     else if (!strcmp(argv[i], "--peek") && i + 1 < argc) peek = argv[++i];
     else if (!strcmp(argv[i], "--dump-bytes") && i + 1 < argc) dump_bytes = argv[++i];
+    else if (!strcmp(argv[i], "--guest-stdout") && i + 1 < argc) guest_stdout = argv[++i];
+    else if (!strcmp(argv[i], "--guest-stderr") && i + 1 < argc) guest_stderr = argv[++i];
     else if (!strcmp(argv[i], "--state-out") && i + 1 < argc) state_out = argv[++i];
     else if (!strcmp(argv[i], "--clock") && i + 1 < argc) { const char *c = argv[++i]; if (!strncmp(c, "steps:", 6)) per_ms = strtoull(c + 6, 0, 0); }
     else if (!strcmp(argv[i], "--dump-text")) dump_text = 1;
     else if (!strcmp(argv[i], "--no-trim")) trim = 0;
     else if (!strcmp(argv[i], "--serial")) serial = 1;
-    else { fprintf(stderr, "usage: nan_cli [--img f] [--mem MB] [--nannet-train [corpus.txt]] [--candidate-out state.nan1] [--state-out state.nan1] [--steps N] [--keys \"1,ESC,~,@5000000\"] [--serial] [--dump-text] [--dump-ppm f] [--peek ADDR[:LEN]] [--dump-bytes ADDR:LEN:FILE] [--disk f] [--clock steps:N]\n"); return 2; }
+    else { fprintf(stderr, "usage: nan_cli [--img f] [--mem MB] [--nannet-train [corpus.txt]] [--candidate-out state.nan1] [--state-out state.nan1] [--steps N] [--keys \"1,ESC,~,@5000000\"] [--serial] [--dump-text] [--dump-ppm f] [--peek ADDR[:LEN]] [--dump-bytes ADDR:LEN:FILE [--guest-stdout FILE] [--guest-stderr FILE]] [--disk f] [--clock steps:N]\n"); return 2; }
   }
   if (!img && !train_mode) { fprintf(stderr, "need --img or --nannet-train\n"); return 2; }
   size_t len = 0;
@@ -157,7 +180,9 @@ int main(int argc, char **argv) {
     }
     free(spec);
   }
-  if (dump_bytes) { /* --dump-bytes ADDR:LEN:FILE: copy guest payload bytes */
+  dump_guest_console(v, 0x03EFF000u, guest_stdout);
+  dump_guest_console(v, 0x03EFF008u, guest_stderr);
+  if (dump_bytes) { /* --dump-bytes ADDR:LEN:FILE [--guest-stdout FILE] [--guest-stderr FILE]: copy guest payload bytes */
     char *spec = strdup(dump_bytes), *sv = NULL;
     char *a = strtok_r(spec, ":", &sv), *n = strtok_r(NULL, ":", &sv), *fn = strtok_r(NULL, ":", &sv);
     if (a && n && fn) {

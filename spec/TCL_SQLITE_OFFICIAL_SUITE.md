@@ -180,6 +180,8 @@ Status legend: **done**, **partial**, **planned**.
 - [ ] Thread package backed by the NaN thread ABI.
 - [ ] Dynamic loader adapter for `load`.
 - [ ] Library scripts on the guest VFS; `tclsh` runs script files and `-c`.
+- [x] Guest console capture: fixed stdout/stderr control block at
+      `0x03EFF000`, `nan_cli --guest-stdout/--guest-stderr`, exact console gate.
 - [ ] Tcl's own test suite subset first; then thread/socket/load tests.
 - [ ] Tcl build by tcc0, then by tcc1 on the VM.
 

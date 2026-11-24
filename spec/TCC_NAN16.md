@@ -169,6 +169,23 @@ compiler, libc, VFS and linker.  The fixpoint completes within the
 4,000,000,000-step gate budget.  SQLite 3.54.1 also runs on the VM; the
 verified-chain gate remains scoped in its own section below.
 
+## Guest console capture
+
+The guest libc publishes its captured console buffers at a fixed guest
+control block so any terminal client can retrieve them without host symbols:
+
+| guest byte | contents |
+| --- | --- |
+| `0x03EFF000` | stdout buffer pointer (word payload) |
+| `0x03EFF004` | stdout length in bytes |
+| `0x03EFF008` | stderr buffer pointer |
+| `0x03EFF00C` | stderr length |
+
+`nan_cli` exposes this as `--guest-stdout FILE` and `--guest-stderr FILE`.
+`tools/nan16_console_gate.sh` verifies `printf`/`fprintf` output exactly; it
+uses the portable C core only as an oracle and accepts an x86_64 runner via
+`NAN16_CONSOLE_RUNNER`.
+
 ## Port shape
 
 TCC is a small retargetable C compiler. The port reuses:
