@@ -73,6 +73,9 @@ async function main() {
       .map(id => [id, new Element()])
   );
   elements.screen_container.clientWidth = 360;
+  elements.screen_container.querySelector = selector => selector === 'canvas' ? ({
+    width:1024, height:768, getBoundingClientRect:()=>({left:10,top:20,width:512,height:384})
+  }) : null;
   elements['function-keys'].querySelectorAll = selector =>
     selector === 'button' ? functionButtons : [];
   const docEvents = {};
@@ -238,7 +241,24 @@ async function main() {
   const first = [{ clientX: 110, clientY: 120 }, { clientX: 210, clientY: 120 }];
   const expanded = [{ clientX: 95, clientY: 120 }, { clientX: 245, clientY: 120 }];
   const single = screen.dispatch('touchstart', { touches: [first[0]], cancelable: true });
-  assert.equal(single.defaultPrevented, false, 'One-finger pan must not be intercepted');
+  assert.equal(single.defaultPrevented, true, 'Single finger belongs to the guest touchscreen');
+  assert.equal(single.propagationStopped, true, 'Native touch packet must not duplicate as a v86 mouse event');
+  function touchFrames() {
+    const bytes = emulator.codes.splice(0);
+    assert.equal(bytes.length % 9, 0, 'Touch frame length');
+    const result = [];
+    for(let i=0;i<bytes.length;i+=9) {
+      assert.deepEqual(bytes.slice(i,i+2), [0xE0,0x7F]);
+      let word=0;
+      for(const nibble of bytes.slice(i+2,i+9)) {
+        assert.ok(nibble>=0x60 && nibble<=0x6F);
+        word=(word<<4)|(nibble&15);
+      }
+      result.push([word&4095,(word>>>12)&4095,(word>>>24)&7]);
+    }
+    return result;
+  }
+  assert.deepEqual(touchFrames(), [[200,200,0]], 'Absolute hover uses the actual scaled canvas geometry');
   const pinchStart = screen.dispatch('touchstart', { touches: first, cancelable: true });
   assert.equal(pinchStart.defaultPrevented, true, 'Two-finger start blocks page zoom');
   assert.equal(pinchStart.propagationStopped, true, 'Pinch must not become v86 mouse input');
@@ -262,11 +282,18 @@ async function main() {
   assert.equal(screen.scrollTop, 80, 'Stale RAF callback must not undo the newest pinch Y');
   screen.dispatch('touchend', { touches: [first[0]] });
   const oneMove = screen.dispatch('touchmove', { touches: [first[0]], cancelable: true });
-  assert.equal(oneMove.defaultPrevented, false, 'Single-finger panning remains native');
-  assert.equal(oneMove.propagationStopped, true,
-    'Screen must stop v86 global touch adapter from cancelling native scrolling');
+  assert.equal(oneMove.defaultPrevented, true, 'Pinch remainder must not create an accidental click');
+  assert.equal(oneMove.propagationStopped, true, 'Pinch remainder stays isolated');
   screen.dispatch('touchcancel', { touches: [] });
-  assert.ok(!emulator.codes.length, 'Screen pinch must not inject keyboard input');
+  assert.ok(!emulator.codes.length, 'Pinch must not inject guest touch or keyboard events');
+  screen.dispatch('touchstart', {touches:[first[0]],cancelable:true});
+  screen.dispatch('touchend', {touches:[],changedTouches:[first[0]],cancelable:true});
+  assert.deepEqual(touchFrames(), [[200,200,0],[200,200,1],[200,200,0]], 'Tap produces one native press/release');
+  const drag = {clientX:150,clientY:145};
+  screen.dispatch('touchstart',{touches:[first[0]],cancelable:true});
+  screen.dispatch('touchmove',{touches:[drag],cancelable:true});
+  screen.dispatch('touchend',{touches:[],changedTouches:[drag],cancelable:true});
+  assert.deepEqual(touchFrames(),[[200,200,0],[200,200,1],[280,250,1],[280,250,0]], 'Drag preserves native press origin and releases exactly once');
 
   elements['zoom-out'].dispatch('click');
   assert.deepEqual(emulator.scales.at(-1), [1.2, 1.2], 'Zoom out must scale the guest');
