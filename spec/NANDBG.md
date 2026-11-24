@@ -1,6 +1,7 @@
 > **Shipping note:** this copy is vendored into NaN/0S. The standalone core,
-> monitor, tests, and gates are integrated; the desktop pane front end is
-> maintained in `shemshallah/ndbg` and its Silver Slate port is pending.
+> monitor, tests, and gates are integrated. The Silver Slate terminal now wires
+> a basic `debug` monitor (`step`, `run`, `regs`, `break`, `pc`, `quit`); the
+> richer pane front end remains in `shemshallah/ndbg`.
 
 # NANDBG — a NaN-native bare-metal debug system
 
