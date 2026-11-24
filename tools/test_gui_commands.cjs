@@ -110,8 +110,8 @@ for (const name of [
   assert.ok(mouse.includes('\n' + name + '\n'),
     'Native PS/2 driver missing entrypoint ' + name);
 }
-const init = mouse.slice(mouse.indexOf('ms_init:'), mouse.indexOf('; Non-blocking; budget'));
-assert.match(init, /0xA8[\s\S]*0xD4[\s\S]*0xF6[\s\S]*0xD4[\s\S]*0xF4/,
+const mouseInit = mouse.slice(mouse.indexOf('ms_init:'), mouse.indexOf('; Non-blocking; budget'));
+assert.match(mouseInit, /0xA8[\s\S]*0xD4[\s\S]*0xF6[\s\S]*0xD4[\s\S]*0xF4/,
   'Mouse startup must enable the AUX port then send defaults and stream enable');
 assert.match(mouse, /ms_write_wait:[\s\S]*INB r2,r1[\s\S]*BOOL\.8 r4,r2,r3[\s\S]*SUB r8,r8,r13/,
   'PS/2 commands must wait for input-busy to clear with a bounded budget');
