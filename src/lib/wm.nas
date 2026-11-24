@@ -687,6 +687,23 @@ CALL @fb_char7
 LD r1,r0,@dw_id
 MOVI r2,1
 CALL @wm_kcall
+; Corner resize grip: Shift+F2 then arrow keys changes geometry. Drawn
+; after app contents, in the frame, so the affordance remains visible.
+LD r9,r0,@dw_b
+LD r1,r9,#W_X
+LD r3,r9,#W_W
+ADD r1,r1,r3
+MOVI r5,12
+SUB r1,r1,r5
+LD r2,r9,#W_Y
+LD r4,r9,#W_H
+ADD r2,r2,r4
+MOVI r5,7
+SUB r2,r2,r5
+MOVI r3,8
+MOVI r4,2
+LD r5,r0,@wm_theme_accent
+CALL @wm_rect
 SUB r14,r14,r13
 LD r15,r14,0
 RET
