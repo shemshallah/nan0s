@@ -25,6 +25,15 @@ ADD r5,r5,r3
 ST r5,r0,@f7_tab
 MOVI r6,0
 f7_row:
+; Bound every row before calculating the linear framebuffer address.
+LD r9,r0,@f7_y
+ADD r9,r9,r6
+SHR r10,r9,31
+CMP r10,r0
+JMP[NE] @f7_nextrow
+LD r10,r0,@fb_h
+CMP r9,r10
+JMP[GE] @f7_done
 MOVI r7,11
 CMP r6,r7
 JMP[GE] @f7_done
@@ -40,15 +49,27 @@ MUL r9,r9,r10
 LD r10,r0,@f7_x
 ADD r9,r9,r10
 MOVI r11,64
+LD r10,r0,@f7_x
+ST r10,r0,@f7_colx
 f7_col:
 CMP r11,r0
 JMP[EQ] @f7_nextrow
+LD r10,r0,@f7_colx
+SHR r12,r10,31
+CMP r12,r0
+JMP[NE] @f7_skip
+LD r12,r0,@fb_w
+CMP r10,r12
+JMP[GE] @f7_nextrow
 BOOL.8 r12,r8,r11
 CMP r12,r0
 JMP[EQ] @f7_skip
 LD r4,r0,@f7_c
 VPOKE r4,r9
 f7_skip:
+LD r10,r0,@f7_colx
+ADD r10,r10,r13
+ST r10,r0,@f7_colx
 ADD r9,r9,r13
 SHR r11,r11,1
 JMP @f7_col
@@ -57,6 +78,8 @@ ADD r6,r6,r13
 JMP @f7_row
 f7_done:
 RET
+f7_colx:
+.word 0
 f7_x:
 .word 0
 f7_y:
