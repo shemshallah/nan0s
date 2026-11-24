@@ -91,6 +91,7 @@ CMP r1,r0
 JMP[NE] @g_compose
 ST r0,r0,@ms_cursor_saved
 CALL @wm_draw_all
+ST r13,r0,@gb_force
 CALL @g_bar
 CALL @sh_draw
 CALL @ms_draw
@@ -101,6 +102,7 @@ CALL @wm_draw_all
 CALL @sh_draw
 ST r0,r0,@fb_mark_suppress
 CALL @g_structural_damage
+ST r13,r0,@gb_force
 CALL @g_bar
 CALL @g_present
 g_nodraw:
@@ -174,9 +176,23 @@ LD r1,r0,@fb_w
 MOVI r2,144
 SUB r1,r1,r2
 ST r1,r0,@gb_x
-MOVI r2,1
-MOVI r3,40
-MOVI r4,15
+LD r2,r0,@g_move
+LD r3,r0,@g_resize
+SHL r3,r3,1
+BOOL.14 r2,r2,r3
+LD r3,r0,@gb_prev
+CMP r2,r3
+JMP[NE] @gb_mode_dirty
+LD r3,r0,@gb_force
+CMP r3,r0
+JMP[EQ] @gb_clock
+gb_mode_dirty:
+ST r2,r0,@gb_prev
+ST r0,r0,@gb_force
+LD r1,r0,@gb_x
+MOVI r2,2
+MOVI r3,48
+MOVI r4,11
 MOVI r5,#C_BAR
 CALL @wm_rect
 LD r1,r0,@g_move
@@ -194,11 +210,11 @@ MOVI r4,#C_YEL
 CALL @fb_text7
 gb_clock:
 LD r1,r0,@gb_x
-MOVI r2,46
+MOVI r2,70
 ADD r1,r1,r2
-MOVI r2,1
-MOVI r3,96
-MOVI r4,15
+MOVI r2,2
+MOVI r3,64
+MOVI r4,11
 MOVI r5,#C_BAR
 CALL @wm_rect
 TICK r3
@@ -213,6 +229,10 @@ SUB r14,r14,r13
 LD r15,r14,0
 RET
 gb_x:
+.word 0
+gb_prev:
+.word 0xFFFF
+gb_force:
 .word 0
 s_move:
 .str "MOVE"
@@ -2128,26 +2148,7 @@ MOVI r2,13
 MOVI r3,@s_keep
 MOVI r4,#C_YEL
 CALL @tx_s
-TICK r5
-LD r6,r0,@st_t0
-SUB r5,r5,r6
-MOVI r6,1000
-DIVU r5,r5,r6
-MOVI r6,10
-MOVI r3,0
-CMP r5,r6
-JMP[GE] @sd_z
-SUB r3,r6,r5
-sd_z:
-MOVI r1,0
-MOVI r2,14
-MOVI r4,#C_GRN
-CALL @tx_d
-CALL @tx_end
-MOVI r2,14
-MOVI r3,@s_secs
-MOVI r4,#C_GRN
-CALL @tx_s
+CALL @st_count_draw
 sd_done:
 SUB r14,r14,r13
 LD r15,r14,0
@@ -2459,7 +2460,7 @@ CALL @wm_covered
 CMP r1,r0
 JMP[NE] @stt_full
 LD r1,r0,@stt_id
-CALL @st_draw
+CALL @st_count_refresh
 JMP @stt_ret
 stt_full:
 ; Covered countdown retains state until exposure.
@@ -2595,52 +2596,7 @@ MOVI r2,3
 MOVI r3,@s_n2
 MOVI r4,#C_CY
 CALL @tx_s
-LD r5,r0,@nd_wb
-LD r6,r5,#W_A3
-MOVI r7,@nn_ls
-ADD r7,r7,r6
-LD r3,r7,0
-MOVI r1,72
-MOVI r2,3
-MOVI r4,#C_TXT
-MOVI r8,2
-CMP r6,r8
-JMP[LT] @nd_sc
-MOVI r4,#C_YEL
-nd_sc:
-CALL @tx_s
-LD r5,r0,@nd_wb
-LD r6,r5,#W_A3
-CMP r6,r13
-JMP[NE] @nd_rows
-LD r5,r0,@nd_wb
-LD r6,r5,#W_A4
-TICK r7
-SUB r7,r7,r6
-MOVI r6,250
-DIVU r7,r7,r6
-MOVI r6,3
-BOOL.8 r7,r7,r6
-ADD r7,r7,r13
-ST r7,r0,@nd_dots
-ST r0,r0,@nd_i
-nd_dl:
-LD r1,r0,@nd_i
-LD r2,r0,@nd_dots
-CMP r1,r2
-JMP[GE] @nd_rows
-MOVI r2,8
-MUL r1,r1,r2
-MOVI r2,128
-ADD r1,r1,r2
-MOVI r2,3
-MOVI r3,46
-MOVI r4,#C_TXT
-CALL @tx_c
-LD r1,r0,@nd_i
-ADD r1,r1,r13
-ST r1,r0,@nd_i
-JMP @nd_dl
+CALL @nn_status_draw
 nd_rows:
 ST r0,r0,@nd_i
 nd_rl:
@@ -2816,7 +2772,7 @@ CALL @wm_covered
 CMP r1,r0
 JMP[NE] @nt_ret
 LD r1,r0,@nt_id
-CALL @nn_draw
+CALL @nn_status_refresh
 nt_ret:
 SUB r14,r14,r13
 LD r15,r14,0
@@ -5699,6 +5655,7 @@ ST r0,r0,@fb_scene_offset
 ST r0,r0,@fb_mark_suppress
 ST r0,r0,@fb_dirty
 ST r0,r0,@gs_ready
+ST r13,r0,@gb_force
 ST r0,r0,@ms_cursor_saved
 ST r0,r0,@ms_cursor_target
 LD r1,r0,@fb_w
@@ -6009,3 +5966,138 @@ gs_shell:
 .word 0
 gs_modal:
 .word 0
+
+; Settings countdown only: preserve the rest of the window on each second.
+st_count_draw:
+ST r15,r14,0
+ADD r14,r14,r13
+TICK r5
+LD r6,r0,@st_t0
+SUB r5,r5,r6
+MOVI r6,1000
+DIVU r5,r5,r6
+MOVI r6,10
+MOVI r3,0
+CMP r5,r6
+JMP[GE] @sd_z
+SUB r3,r6,r5
+sd_z:
+MOVI r1,0
+MOVI r2,14
+MOVI r4,#C_GRN
+CALL @tx_d
+CALL @tx_end
+MOVI r2,14
+MOVI r3,@s_secs
+MOVI r4,#C_GRN
+CALL @tx_s
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+st_count_refresh:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,@stc_id
+CALL @wm_wbase
+LD r2,r1,#W_W
+MOVI r3,248
+CMP r2,r3
+JMP[LT] @stc_ret
+LD r2,r1,#W_H
+MOVI r3,220
+CMP r2,r3
+JMP[LT] @stc_ret
+LD r1,r0,@stc_id
+CALL @tx_org
+MOVI r1,0
+MOVI r2,14
+MOVI r3,232
+CALL @ut_clear_field
+CALL @st_count_draw
+stc_ret:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+stc_id:
+.word 0
+
+; Network probe status painter shared by initial drawing and timer refresh.
+nn_status_draw:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r5,r0,@nd_wb
+LD r6,r5,#W_A3
+MOVI r7,@nn_ls
+ADD r7,r7,r6
+LD r3,r7,0
+MOVI r1,72
+MOVI r2,3
+MOVI r4,#C_TXT
+MOVI r8,2
+CMP r6,r8
+JMP[LT] @nd_sc
+MOVI r4,#C_YEL
+nd_sc:
+CALL @tx_s
+LD r5,r0,@nd_wb
+LD r6,r5,#W_A3
+CMP r6,r13
+JMP[NE] @nns_ret
+LD r5,r0,@nd_wb
+LD r6,r5,#W_A4
+TICK r7
+SUB r7,r7,r6
+MOVI r6,250
+DIVU r7,r7,r6
+MOVI r6,3
+BOOL.8 r7,r7,r6
+ADD r7,r7,r13
+ST r7,r0,@nd_dots
+ST r0,r0,@nd_i
+nd_dl:
+LD r1,r0,@nd_i
+LD r2,r0,@nd_dots
+CMP r1,r2
+JMP[GE] @nns_ret
+MOVI r2,8
+MUL r1,r1,r2
+MOVI r2,128
+ADD r1,r1,r2
+MOVI r2,3
+MOVI r3,46
+MOVI r4,#C_TXT
+CALL @tx_c
+LD r1,r0,@nd_i
+ADD r1,r1,r13
+ST r1,r0,@nd_i
+JMP @nd_dl
+
+nns_ret:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+nn_status_refresh:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,@nd_id
+CALL @wm_wbase
+ST r1,r0,@nd_wb
+LD r2,r1,#W_W
+MOVI r3,368
+CMP r2,r3
+JMP[LT] @nsr_ret
+LD r2,r1,#W_H
+MOVI r3,76
+CMP r2,r3
+JMP[LT] @nsr_ret
+LD r1,r0,@nd_id
+CALL @tx_org
+MOVI r1,72
+MOVI r2,3
+MOVI r3,288
+CALL @ut_clear_field
+CALL @nn_status_draw
+nsr_ret:
+SUB r14,r14,r13
+LD r15,r14,0
+RET

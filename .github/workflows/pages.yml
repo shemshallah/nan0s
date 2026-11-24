@@ -22,7 +22,7 @@ concurrency:
 jobs:
   verify:
     name: Build and boot-test full NaN/0S
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout current system sources
         uses: actions/checkout@v4

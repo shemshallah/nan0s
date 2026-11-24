@@ -94,6 +94,50 @@ const fs = require('node:fs');
     await page.waitForTimeout(1600);
     assert.deepEqual(await region(245,63,275,57),staticArea,'Utility timer must preserve static labels');
     assert.ok(diff(live,await region(275,127,300,25))>0,'Utility timer must update live numeric fields');
+    // Watch the actual framebuffer at browser animation-frame cadence.
+    // The native cursor must remain visible across live-value updates and
+    // wallpaper/title pixels must not flash while the timer is running.
+    await tapGuest(500,127);
+    const temporal=await canvas.evaluate(c=>new Promise((resolve,reject)=>{
+      const ctx=c.getContext('2d',{willReadFrequently:true});
+      const rect=(x,y,w,h)=>ctx.getImageData(x,y,w,h).data;
+      const staticRef=rect(245,63,275,57);
+      const wallpaperRef=rect(880,550,80,60);
+      const same=(a,b)=>a.length===b.length && a.every((v,i)=>v===b[i]);
+      const patch=rect(496,123,21,21);
+      const rgb=(p,x,y)=>{const i=(y*21+x)*4;return [p[i],p[i+1],p[i+2]];};
+      const bright=v=>v.every(x=>x>200);
+      const dark=v=>v.every(x=>x<45);
+      let anchor=null;
+      for(let y=1;y<=7&&!anchor;y++)for(let x=1;x<=7&&!anchor;x++){
+        if(bright(rgb(patch,x+2,y+4))&&bright(rgb(patch,x+3,y+5))&&
+           bright(rgb(patch,x+3,y+10))&&dark(rgb(patch,x,y+4))&&
+           dark(rgb(patch,x+4,y+4))&&dark(rgb(patch,x+4,y+10)))anchor=[x,y];
+      }
+      if(!anchor){reject(new Error('Could not locate native cursor over utility field'));return;}
+      const points=[];
+      for(let y=0;y<13;y++)for(let x=0;x<11;x++){
+        if((y<9&&x<=y)||(y>=9&&x>=2&&x<=4))points.push([x,y]);
+      }
+      const signature=p=>points.flatMap(([x,y])=>rgb(p,anchor[0]+x,anchor[1]+y));
+      const initial=signature(patch);
+      let frames=0,cursorFlashes=0,staticFlashes=0,wallpaperFlashes=0;
+      const started=performance.now();
+      function frame(){
+        frames++;
+        if(!same(signature(rect(496,123,21,21)),initial))cursorFlashes++;
+        if(!same(rect(245,63,275,57),staticRef))staticFlashes++;
+        if(!same(rect(880,550,80,60),wallpaperRef))wallpaperFlashes++;
+        if(performance.now()-started<1800)requestAnimationFrame(frame);
+        else resolve({frames,cursorFlashes,staticFlashes,wallpaperFlashes});
+      }
+      requestAnimationFrame(frame);
+    }));
+    console.log('Temporal framebuffer evidence:',JSON.stringify(temporal));
+    assert.ok(temporal.frames>=20,'Temporal gate must sample multiple browser frames');
+    assert.equal(temporal.cursorFlashes,0,'Native cursor flickered over changing values');
+    assert.equal(temporal.staticFlashes,0,'Static utility pixels flashed during timer updates');
+    assert.equal(temporal.wallpaperFlashes,0,'Unrelated wallpaper flashed during timer updates');
     await page.screenshot({path:'browser-evidence/phone-utilities.png',fullPage:true});
         assert.deepEqual(errors,[],'Unexpected browser runtime error');
     console.log('PASS: real Chromium/v86 WASM mobile boot, fit, stable IME tap, native F1 open/dismiss');
