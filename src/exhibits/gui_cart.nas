@@ -22,6 +22,8 @@
 .equ DBG_PC 5805
 .equ DBG_STATUS 5806
 .equ DBG_BREAK 5810
+.equ DBG_CART 5813
+.equ TOC_SNAP 0x70000
 .org 8192
 JMP @cart_entry
 .include "../lib/fb.nas"
@@ -4955,6 +4957,175 @@ MOVI r1,0
 RET
 
 ; fs_dispatch: command line in FNB -> r1=1 handled
+; ---- catalog list and sealed-cart load ----
+dbg_carts:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r1,r0,@dk_id
+MOVI r2,@s_dbg_carts
+CALL @vc_puts
+LA r1,#TOC_SNAP
+ST r1,r0,@dc_ptr
+MOVI r1,0
+ST r1,r0,@dc_n
+dc_loop:
+LD r8,r0,@dc_ptr
+LD r1,r8,0
+CMP r1,r0
+JMP[EQ] @dc_done
+LD r2,r8,7
+MOVI r3,1
+BOOL.8 r2,r2,r3
+CMP r2,r0
+JMP[NE] @dc_skip
+LD r1,r8,0
+ST r1,r0,@dc_id
+LD r1,r0,@dk_id
+LD r2,r0,@dc_id
+MOVI r3,1
+CALL @dbg_puthex
+LD r1,r0,@dk_id
+MOVI r2,32
+CALL @vc_putc
+LD r2,r8,3
+LD r1,r0,@dk_id
+CALL @vc_puts
+LD r1,r0,@dk_id
+MOVI r2,10
+CALL @vc_putc
+MOVI r1,10
+PUTC r1
+dc_skip:
+LD r1,r0,@dc_ptr
+ADDI r1,r1,16
+ST r1,r0,@dc_ptr
+LD r1,r0,@dc_n
+ADD r1,r1,r13
+ST r1,r0,@dc_n
+MOVI r2,87
+CMP r1,r2
+JMP[LT] @dc_loop
+dc_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+dc_ptr:
+.word 0
+dc_n:
+.word 0
+dc_id:
+.word 0
+
+dbg_load:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @dbg_argnum
+CMP r2,r0
+JMP[EQ] @dl_bad
+ST r1,r0,@dl_id
+LA r1,#TOC_SNAP
+ST r1,r0,@dl_ptr
+dl_loop:
+LD r8,r0,@dl_ptr
+LD r1,r8,0
+CMP r1,r0
+JMP[EQ] @dl_bad
+LD r2,r8,7
+MOVI r3,1
+BOOL.8 r2,r2,r3
+CMP r2,r0
+JMP[NE] @dl_skip
+LD r2,r0,@dl_id
+CMP r1,r2
+JMP[EQ] @dl_found
+dl_skip:
+LD r1,r0,@dl_ptr
+ADDI r1,r1,16
+ST r1,r0,@dl_ptr
+JMP @dl_loop
+dl_found:
+ST r14,r0,@dbg_sp
+LD r1,r0,@dl_ptr
+CALL #DBG_CART
+LD r14,r0,@dbg_sp
+ST r1,r0,@dl_rc
+CMP r1,r0
+JMP[EQ] @dl_bad
+LD r1,r0,@dk_id
+MOVI r2,@s_dbg_loaded
+CALL @vc_puts
+CALL @dbg_state
+JMP @dl_done
+dl_bad:
+LD r1,r0,@dk_id
+MOVI r2,@s_dbg_nocart
+CALL @vc_puts
+dl_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+dl_ptr:
+.word 0
+dl_id:
+.word 0
+dl_rc:
+.word 0
+
+dbg_argnum:
+ST r15,r14,0
+ADD r14,r14,r13
+LA r1,#FNB
+da_skip:
+LDB r2,r1,0
+CMP r2,r0
+JMP[EQ] @da_bad
+MOVI r3,32
+CMP r2,r3
+JMP[EQ] @da_sp
+ADD r1,r1,r13
+JMP @da_skip
+da_sp:
+ADD r1,r1,r13
+LDB r2,r1,0
+CMP r2,r0
+JMP[EQ] @da_bad
+MOVI r3,32
+CMP r2,r3
+JMP[EQ] @da_sp
+MOVI r4,0
+MOVI r5,0
+da_digit:
+LDB r2,r1,0
+CMP r2,r0
+JMP[EQ] @da_done
+MOVI r3,48
+CMP r2,r3
+JMP[LT] @da_done
+MOVI r3,57
+CMP r2,r3
+JMP[GT] @da_done
+MOVI r3,48
+SUB r2,r2,r3
+MOVI r3,10
+MUL r4,r4,r3
+ADD r4,r4,r2
+MOVI r5,1
+ADD r1,r1,r13
+JMP @da_digit
+da_done:
+ADD r1,r4,r0
+ADD r2,r5,r0
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+da_bad:
+MOVI r1,0
+MOVI r2,0
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+
 ; ---- NANDBG terminal monitor (resident ABI, minimal first pane) ----
 dbg_echo:
 ST r15,r14,0
@@ -5073,6 +5244,14 @@ CALL @tdbg_ch
 SUB r14,r14,r13
 LD r15,r14,0
 RET
+
+tdbg_carts:
+CALL @dbg_carts
+JMP @tdbg_done
+
+tdbg_load:
+CALL @dbg_load
+JMP @tdbg_done
 
 tdbg_step:
 ST r14,r0,@dbg_sp
@@ -5203,6 +5382,9 @@ tdbg_c:
 .word 0
 tdc:
 .word 0
+dk_id:
+.word 0
+.word 0
 dbg_sp:
 .word 0
 dbg_mode:
@@ -5287,6 +5469,8 @@ JMP @fs_disp_d
 fs_d_debug:
 MOVI r1,1
 ST r1,r0,@dbg_mode
+LD r1,r0,@tk_id
+ST r1,r0,@dk_id
 ST r14,r0,@dbg_sp
 CALL #DBG_BEGIN
 LD r14,r0,@dbg_sp
@@ -5324,6 +5508,16 @@ LA r2,@s_tdbg_break
 CALL @fs_prefix
 CMP r1,r0
 JMP[NE] @tdbg_break
+LA r1,#FNB
+LA r2,@s_tdbg_carts
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @tdbg_carts
+LA r1,#FNB
+LA r2,@s_tdbg_load
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @tdbg_load
 LA r1,#FNB
 LA r2,@s_tdbg_pc
 CALL @fs_prefix
@@ -5739,12 +5933,22 @@ fs_s_build_help_serial:
 .str "NANBUILD HELP\n"
 fs_s_cc:
 .str "cc "
+s_dbg_carts:
+.str "CARTS\n"
+s_dbg_loaded:
+.str "loaded\n"
+s_dbg_nocart:
+.str "no cart\n"
 s_tdbg_banner:
-.str "NANDBG TERMINAL MONITOR\nstep run regs break pc quit\n"
+.str "NANDBG TERMINAL MONITOR\ncarts load <id> step run regs break pc quit\n"
 s_tdbg_prompt:
 .str "> "
 s_tdbg_help:
-.str "step run regs break pc quit"
+.str "carts load <id> step run regs break pc quit"
+s_tdbg_carts:
+.str "carts"
+s_tdbg_load:
+.str "load"
 s_tdbg_step:
 .str "step"
 s_tdbg_run:

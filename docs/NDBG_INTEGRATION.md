@@ -30,7 +30,12 @@ The Silver Slate terminal now has a wired `debug` monitor:
 ```text
 > debug
 NANDBG TERMINAL MONITOR
-step run regs break pc quit
+carts load <id> step run regs break pc quit
+> carts
+1 Baby
+> load 1
+loaded
+S=0 PC=2000
 > step
 S=0 PC=1FA5
 > regs
@@ -43,10 +48,11 @@ S=2 PC=1FA5
 > quit
 ```
 
-`tools/ndbg_term.sh` gates the path. The richer pane CLI (carts/load, memory,
-captured screen/serial, undo/redo, checkpoints) remains in
-`shemshallah/ndbg`; the resident ABI and core are already shipped here so those
-commands can be attached without changing the debugger.
+`tools/ndbg_term.sh` gates the path, including the sealed-cart catalog and
+`load <id>`. The richer pane CLI (memory, captured screen/serial, undo/redo,
+checkpoints) remains in `shemshallah/ndbg`; the resident ABI and core are
+already shipped here so those commands can be attached without changing the
+debugger.
 
 ## Keeping this copy updated from ndbg
 
