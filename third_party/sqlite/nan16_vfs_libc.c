@@ -21,8 +21,75 @@ typedef struct NanLFile {
     sqlite3_file base;
     int fd;
     int del;
+    int readonly;
+    int lock;               /* current SQLITE_LOCK_* for this handle */
     char path[128];
 } NanLFile;
+
+/* SQLite's unix VFS detects same-process lock conflicts because POSIX locks
+ * are process-wide.  The guest has no fcntl locks, so keep the same state
+ * explicitly: one entry per open handle and path. */
+typedef struct NanLock {
+    struct NanLock *next;
+    NanLFile *file;
+    char path[128];
+    int level;
+} NanLock;
+static NanLock *nan_locks;
+
+static NanLock *lock_entry(NanLFile *f)
+{
+    NanLock *e;
+    for (e = nan_locks; e; e = e->next)
+        if (e->file == f) return e;
+    return 0;
+}
+static int lock_conflict(NanLFile *f, int level)
+{
+    NanLock *e;
+    for (e = nan_locks; e; e = e->next) {
+        if (e->file == f || e->level == SQLITE_LOCK_NONE) continue;
+        if (strcmp(e->path, f->path)) continue;
+        if (level == SQLITE_LOCK_SHARED) {
+            if (e->level >= SQLITE_LOCK_PENDING) return 1;
+        } else if (level == SQLITE_LOCK_RESERVED) {
+            if (e->level >= SQLITE_LOCK_RESERVED) return 1;
+        } else if (level == SQLITE_LOCK_PENDING) {
+            /* PENDING is the separate pending byte: existing SHARED readers
+               do not conflict; it only blocks new SHARED locks. */
+            if (e->level >= SQLITE_LOCK_PENDING) return 1;
+        } else {
+            if (e->level >= SQLITE_LOCK_SHARED) return 1;
+        }
+    }
+    return 0;
+}
+static int lock_set(NanLFile *f, int level)
+{
+    NanLock *e = lock_entry(f);
+    if (level == SQLITE_LOCK_NONE) {
+        if (e) {
+            NanLock **pp;
+            for (pp = &nan_locks; *pp; pp = &(*pp)->next)
+                if (*pp == e) { *pp = e->next; break; }
+            free(e);
+        }
+        f->lock = SQLITE_LOCK_NONE;
+        return SQLITE_OK;
+    }
+    if (!e) {
+        e = (NanLock *)malloc(sizeof *e);
+        if (!e) return SQLITE_IOERR;
+        memset(e, 0, sizeof *e);
+        e->file = f;
+        strncpy(e->path, f->path, sizeof e->path - 1);
+        e->next = nan_locks;
+        nan_locks = e;
+    }
+    e->level = level;
+    f->lock = level;
+    return SQLITE_OK;
+}
 
 static unsigned int temp_seq;
 static unsigned int rand_state = 0x12345678u;
@@ -30,6 +97,7 @@ static unsigned int rand_state = 0x12345678u;
 static int l_close(sqlite3_file *pFile)
 {
     NanLFile *f = (NanLFile *)pFile;
+    lock_set(f, SQLITE_LOCK_NONE);
     if (f->del && f->path[0]) unlink(f->path);
     if (f->fd >= 0) close(f->fd);
     f->fd = -1;
@@ -55,6 +123,7 @@ static int l_write(sqlite3_file *pFile, const void *buf, int amt, sqlite3_int64 
     NanLFile *f = (NanLFile *)pFile;
     int r;
     if (f->fd < 0) return SQLITE_IOERR_WRITE;
+    if (f->readonly) return SQLITE_READONLY;
     if (lseek(f->fd, (off_t)off, SEEK_SET) < 0) return SQLITE_IOERR_WRITE;
     r = (int)write(f->fd, buf, (size_t)amt);
     return r == amt ? SQLITE_OK : SQLITE_IOERR_WRITE;
@@ -62,6 +131,7 @@ static int l_write(sqlite3_file *pFile, const void *buf, int amt, sqlite3_int64 
 static int l_truncate(sqlite3_file *pFile, sqlite3_int64 size)
 {
     NanLFile *f = (NanLFile *)pFile;
+    if (f->readonly) return SQLITE_READONLY;
     return f->fd >= 0 && ftruncate(f->fd, (off_t)size) == 0
         ? SQLITE_OK : SQLITE_IOERR_TRUNCATE;
 }
@@ -81,24 +151,49 @@ static int l_filesize(sqlite3_file *pFile, sqlite3_int64 *pSize)
 }
 static int l_lock(sqlite3_file *pFile, int lock)
 {
-    (void)pFile; (void)lock;
-    return SQLITE_OK;
+    NanLFile *f = (NanLFile *)pFile;
+    if (lock < SQLITE_LOCK_SHARED || lock > SQLITE_LOCK_EXCLUSIVE)
+        return SQLITE_OK;
+    if (lock == SQLITE_LOCK_EXCLUSIVE) {
+        /* Match unixLock(): take the pending byte before attempting the
+           exclusive shared-byte lock.  If another connection still holds
+           SHARED, leave this handle in PENDING after returning BUSY; that is
+           the state PRAGMA lock_status reports. */
+        if (f->lock < SQLITE_LOCK_PENDING) {
+            if (lock_conflict(f, SQLITE_LOCK_PENDING)) return SQLITE_BUSY;
+            if (lock_set(f, SQLITE_LOCK_PENDING) != SQLITE_OK)
+                return SQLITE_IOERR;
+        }
+        if (lock_conflict(f, SQLITE_LOCK_EXCLUSIVE)) return SQLITE_BUSY;
+        return lock_set(f, SQLITE_LOCK_EXCLUSIVE);
+    }
+    if (lock_conflict(f, lock)) return SQLITE_BUSY;
+    return lock_set(f, lock);
 }
 static int l_unlock(sqlite3_file *pFile, int lock)
 {
-    (void)pFile; (void)lock;
-    return SQLITE_OK;
+    NanLFile *f = (NanLFile *)pFile;
+    if (lock < SQLITE_LOCK_SHARED) lock = SQLITE_LOCK_NONE;
+    return lock_set(f, lock);
 }
 static int l_checkreserved(sqlite3_file *pFile, int *pRes)
 {
-    (void)pFile;
+    NanLFile *f = (NanLFile *)pFile;
+    NanLock *e;
     *pRes = 0;
+    for (e = nan_locks; e; e = e->next) {
+        if (e->file == f || e->level < SQLITE_LOCK_RESERVED) continue;
+        if (!strcmp(e->path, f->path)) { *pRes = 1; break; }
+    }
     return SQLITE_OK;
 }
 static int l_filecontrol(sqlite3_file *pFile, int op, void *arg)
 {
     NanLFile *f = (NanLFile *)pFile;
     switch (op) {
+    case SQLITE_FCNTL_LOCKSTATE:
+        *(int *)arg = f->lock;
+        return SQLITE_OK;
     case SQLITE_FCNTL_SIZE_HINT: {
         sqlite3_int64 n = *(sqlite3_int64 *)arg;
         if (f->fd >= 0) ftruncate(f->fd, (off_t)n);
@@ -137,6 +232,8 @@ static int l_open(sqlite3_vfs *pVfs, const char *name, sqlite3_file *pFile,
     (void)pVfs;
     f->fd = -1;
     f->del = 0;
+    f->readonly = !(flags & (SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE));
+    f->lock = SQLITE_LOCK_NONE;
     f->path[0] = 0;
     if (!name) {
         snprintf(tmp, sizeof tmp, "/.nan_tmp_%u", ++temp_seq);
