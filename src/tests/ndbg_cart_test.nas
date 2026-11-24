@@ -59,4 +59,3 @@ s_bad:
 .org 40000
 .include "../dbg/core.nas"
 .include "../dbg/undo_stub.nas"
-.include "../dbg/ndr_stub.nas"
