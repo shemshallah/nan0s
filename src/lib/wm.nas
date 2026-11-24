@@ -936,6 +936,143 @@ SUB r14,r14,r13
 LD r15,r14,0
 RET
 
+; wm_snap: r1=id r2=0 left / 1 right; full 50% tiling.
+; Uses the same guest-managed geometry as wm_enlarge; does not alter app data.
+wm_snap:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,@ws_id
+ST r2,r0,@ws_side
+CALL @wm_wbase
+LD r4,r1,#W_FLAGS
+MOVI r5,1
+BOOL.8 r6,r4,r5
+CMP r6,r0
+JMP[EQ] @ws_normal
+LD r5,r1,#W_SX
+ST r5,r1,#W_X
+LD r5,r1,#W_SY
+ST r5,r1,#W_Y
+LD r5,r1,#W_SW
+ST r5,r1,#W_W
+LD r5,r1,#W_SH
+ST r5,r1,#W_H
+ST r0,r1,#W_FLAGS
+ws_normal:
+LD r4,r0,@fb_w
+SHR r4,r4,1
+MOVI r5,6
+SUB r4,r4,r5
+ST r4,r1,#W_W
+LD r5,r0,@ws_side
+CMP r5,r0
+JMP[EQ] @ws_left
+LD r5,r0,@fb_w
+SHR r5,r5,1
+MOVI r6,3
+ADD r5,r5,r6
+JMP @ws_x
+ws_left:
+MOVI r5,3
+ws_x:
+ST r5,r1,#W_X
+MOVI r5,#TOPH
+MOVI r6,4
+ADD r5,r5,r6
+ST r5,r1,#W_Y
+LD r5,r0,@fb_h
+MOVI r6,#TASKH
+SUB r5,r5,r6
+MOVI r6,#TOPH
+SUB r5,r5,r6
+MOVI r6,8
+SUB r5,r5,r6
+ST r5,r1,#W_H
+MOVI r1,1
+ST r1,r0,@wm_redraw
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+ws_id:
+.word 0
+ws_side:
+.word 0
+
+; wm_tile: arrange all non-minimized, visible windows in a 2-column grid.
+wm_tile:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r0,r0,@wt_i
+wt_loop:
+LD r2,r0,@wt_i
+LD r3,r0,@wm_zn
+CMP r2,r3
+JMP[GE] @wt_done
+MOVI r4,#ZOL
+MOVHI r4,#ZOH
+ADD r4,r4,r2
+LD r1,r4,0
+CALL @wm_wbase
+LD r2,r0,@wt_i
+MOVI r3,1
+BOOL.8 r4,r2,r3
+LD r5,r0,@fb_w
+SHR r5,r5,1
+MUL r4,r4,r5
+MOVI r6,4
+ADD r4,r4,r6
+ST r4,r1,#W_X
+LD r2,r0,@wt_i
+SHR r2,r2,1
+LD r5,r0,@fb_h
+MOVI r6,54
+SUB r5,r5,r6
+SHR r5,r5,2
+MUL r2,r2,r5
+MOVI r6,#TOPH
+ADD r2,r2,r6
+MOVI r6,4
+ADD r2,r2,r6
+ST r2,r1,#W_Y
+LD r5,r0,@fb_w
+SHR r5,r5,1
+MOVI r6,8
+SUB r5,r5,r6
+ST r5,r1,#W_W
+LD r5,r0,@fb_h
+MOVI r6,54
+SUB r5,r5,r6
+SHR r5,r5,2
+MOVI r6,4
+SUB r5,r5,r6
+ST r5,r1,#W_H
+ST r0,r1,#W_FLAGS
+LD r2,r0,@wt_i
+ADD r2,r2,r13
+ST r2,r0,@wt_i
+JMP @wt_loop
+wt_done:
+MOVI r1,1
+ST r1,r0,@wm_redraw
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+wt_i:
+.word 0
+
+; Periodic self-expiring toast; only invalidate when its lifetime ends.
+wm_notice_tick:
+LD r1,r0,@wm_notice_ticks
+CMP r1,r0
+RET[EQ]
+SUB r1,r1,r13
+ST r1,r0,@wm_notice_ticks
+CMP r1,r0
+RET[NE]
+MOVI r1,1
+ST r1,r0,@wm_redraw
+RET
+
 da_i:
 .word 0
 s_hint:
