@@ -836,7 +836,7 @@ SUB r4,r2,r13
 ST r4,r1,#W_A2
 tf_k:
 LD r2,r1,#W_H
-MOVI r3,20
+MOVI r3,24
 SUB r2,r2,r3
 MOVI r3,13
 DIVU r2,r2,r3
@@ -855,7 +855,7 @@ tf_d:
 SUB r14,r14,r13
 LD r15,r14,0
 RET
-; ---- g_clr: r1=id. Clear the body (x+2,y+18,w-4,h-20) to C_BODY ----
+; ---- g_clr: r1=id. Clear body (x+2,y+18,w-4,h-24), preserving rounded bottom edge ----
 g_clr:
 ST r15,r14,0
 ADD r14,r14,r13
@@ -870,7 +870,7 @@ MOVI r5,18
 ADD r2,r2,r5
 MOVI r5,4
 SUB r3,r3,r5
-MOVI r5,20
+MOVI r5,24
 SUB r4,r4,r5
 MOVI r5,#C_BODY
 CALL @wm_rect
@@ -3913,7 +3913,7 @@ MOVI r3,4
 SUB r2,r2,r3
 ST r2,r0,@ls_bw
 LD r3,r1,#W_H
-MOVI r4,20
+MOVI r4,24
 SUB r3,r3,r4
 ST r3,r0,@ls_bh
 LD r6,r1,#W_X
@@ -4595,7 +4595,7 @@ ADD r2,r3,r0
 hg_b:
 ST r2,r0,@hd_cols
 LD r2,r1,#W_H
-MOVI r3,20
+MOVI r3,24
 SUB r2,r2,r3
 MOVI r3,13
 DIVU r2,r2,r3

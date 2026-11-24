@@ -5,7 +5,7 @@
 ; Each window owns an 8192-word private buffer at 0x40000 + id*8192 (up to 128 cols x 64 rows of cells).
 ; Kind table @kt: 4 words per kind = init, draw, key, tick (code addresses, called by CALLR).
 ;   init(r1=id)  draw(r1=id) body redraw  key(r1=id,r3=key)  tick(r1=id)
-; Geometry: border 1px, title bar 15px at y+1, body origin (x+2, y+18), body size (w-4, h-20).
+; Geometry: silver bevel, title cap, body origin (x+2,y+18), safe body size (w-4,h-24).
 .equ WT 0x58000
 .equ WTL 0x8000
 .equ WTH 5
@@ -139,8 +139,9 @@ wr_damage_ret:
 .word 0
 wr_damage_color:
 .word 0
-; Silver Slate curved silhouette. Symmetric 4/2/1-pixel corner steps.
-; Draw disjoint horizontal bands, never a rectangular clear behind a corner.
+; Native circular silhouettes: 8px nominal radius on full panels,
+; 5px nominal radius on title caps and controls. Symmetric scanline spans,
+; no background erasure, and all writes pass through clipped wm_rect.
 ; r1=x r2=y r3=w r4=h r5=color; preserves r9-r14.
 wm_round:
 ST r15,r14,0
@@ -156,94 +157,73 @@ JMP[LE] @rr_plain
 MOVI r6,6
 CMP r4,r6
 JMP[LE] @rr_plain
-MOVI r6,3
-ADD r2,r2,r6
+MOVI r6,20
+CMP r3,r6
+JMP[LT] @rr_small
+CMP r4,r6
+JMP[LT] @rr_small
 MOVI r6,6
+MOVI r7,@rr_large_profile
+JMP @rr_profile
+rr_small:
+MOVI r6,3
+MOVI r7,@rr_small_profile
+rr_profile:
+ST r6,r0,@rr_n
+ST r7,r0,@rr_profile_ptr
+ADD r2,r2,r6
+SHL r6,r6,1
 SUB r4,r4,r6
 CALL @wm_rect
+ST r0,r0,@rr_i
+rr_band:
+LD r6,r0,@rr_i
+LD r7,r0,@rr_n
+CMP r6,r7
+JMP[GE] @rr_done
+LD r7,r0,@rr_profile_ptr
+ADD r7,r7,r6
+LD r7,r7,0
+ST r7,r0,@rr_inset
 LD r1,r0,@rr_x
-MOVI r6,4
-ADD r1,r1,r6
+ADD r1,r1,r7
 LD r2,r0,@rr_y
+ADD r2,r2,r6
 LD r3,r0,@rr_w
-MOVI r6,8
-SUB r3,r3,r6
+SHL r7,r7,1
+SUB r3,r3,r7
 MOVI r4,1
 LD r5,r0,@rr_c
 CALL @wm_rect
+LD r7,r0,@rr_inset
 LD r1,r0,@rr_x
-MOVI r6,4
-ADD r1,r1,r6
+ADD r1,r1,r7
 LD r2,r0,@rr_y
 LD r6,r0,@rr_h
 ADD r2,r2,r6
-MOVI r6,1
+LD r6,r0,@rr_i
 SUB r2,r2,r6
+SUB r2,r2,r13
 LD r3,r0,@rr_w
-MOVI r6,8
-SUB r3,r3,r6
+SHL r7,r7,1
+SUB r3,r3,r7
 MOVI r4,1
 LD r5,r0,@rr_c
 CALL @wm_rect
-LD r1,r0,@rr_x
-MOVI r6,2
-ADD r1,r1,r6
-LD r2,r0,@rr_y
-MOVI r6,1
-ADD r2,r2,r6
-LD r3,r0,@rr_w
-MOVI r6,4
-SUB r3,r3,r6
-MOVI r4,1
-LD r5,r0,@rr_c
-CALL @wm_rect
-LD r1,r0,@rr_x
-MOVI r6,2
-ADD r1,r1,r6
-LD r2,r0,@rr_y
-LD r6,r0,@rr_h
-ADD r2,r2,r6
-MOVI r6,2
-SUB r2,r2,r6
-LD r3,r0,@rr_w
-MOVI r6,4
-SUB r3,r3,r6
-MOVI r4,1
-LD r5,r0,@rr_c
-CALL @wm_rect
-LD r1,r0,@rr_x
-MOVI r6,1
-ADD r1,r1,r6
-LD r2,r0,@rr_y
-MOVI r6,2
-ADD r2,r2,r6
-LD r3,r0,@rr_w
-MOVI r6,2
-SUB r3,r3,r6
-MOVI r4,1
-LD r5,r0,@rr_c
-CALL @wm_rect
-LD r1,r0,@rr_x
-MOVI r6,1
-ADD r1,r1,r6
-LD r2,r0,@rr_y
-LD r6,r0,@rr_h
-ADD r2,r2,r6
-MOVI r6,3
-SUB r2,r2,r6
-LD r3,r0,@rr_w
-MOVI r6,2
-SUB r3,r3,r6
-MOVI r4,1
-LD r5,r0,@rr_c
-CALL @wm_rect
-JMP @rr_done
+LD r6,r0,@rr_i
+ADD r6,r6,r13
+ST r6,r0,@rr_i
+JMP @rr_band
 rr_plain:
 CALL @wm_rect
 rr_done:
 SUB r14,r14,r13
 LD r15,r14,0
 RET
+rr_large_profile:
+.word 6,4,3,2,1,1
+rr_small_profile:
+.word 4,2,1
 rr_x:
 .word 0
 rr_y:
@@ -253,6 +233,14 @@ rr_w:
 rr_h:
 .word 0
 rr_c:
+.word 0
+rr_n:
+.word 0
+rr_i:
+.word 0
+rr_profile_ptr:
+.word 0
+rr_inset:
 .word 0
 ; ---- puthex: r1=x r2=y r3=value r4=ndigits r5=colour ; clobbers r1-r9 ----
 wm_puthex:
