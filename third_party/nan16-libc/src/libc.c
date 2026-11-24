@@ -1872,8 +1872,15 @@ int access(const char *p, int m)
     MemFile *f;
     if (vfs_abspath(p, abs) < 0) return -1;
     f = mf_find(abs);
-    if (!f) return mf_isdir_name(abs) ? 0 : -1;
+    if (!f) {
+        if (mf_isdir_name(abs)) return (m & X_OK) ? 0 : (m & W_OK) ? -1 : 0;
+        errno = ENOENT;
+        return -1;
+    }
     if ((m & W_OK) && !f->writable) { errno = EACCES; return -1; }
+    /* The guest VFS has no executable files.  Tcl's "file executable" and
+       test_binary_name() use this to skip CLI/shell tests explicitly. */
+    if ((m & X_OK) && !f->isdir) { errno = EACCES; return -1; }
     return 0;
 }
 ssize_t readlink(const char *path, char *buf, size_t n)
