@@ -53,6 +53,12 @@ static void put_scalars(wr *w, const nan_vm *v) {
     for (int i = 0; i < 256; i++) w16(w, a->buf[i]);
     w32(w, (uint32_t)a->pos); w32(w, (uint32_t)a->mode); w32(w, a->lba_cur); w32(w, (uint32_t)a->remain); }
   w32(w, v->tick_last); w32(w, v->tick_same); w32(w, v->frame); w32(w, v->dirty);
+  /* Kernel ABI: entry uses entry+1 so an old v2 snapshot's zero tail means
+     "not configured" rather than entry word 0. */
+  w32(w, v->kentry == NAN_KABI_UNSET ? 0u : v->kentry + 1u);
+  w32(w, v->kframe); w32(w, v->ktimer); w32(w, v->ktimer_left);
+  w32(w, v->kstack); w32(w, v->kregions); w32(w, v->ktcb);
+  w32(w, v->kin); w32(w, v->ktimer_pending); w32(w, v->ktrap_pending);
   if (w->n - start > SCALAR_LEN) w->ok = 0;            /* layout outgrew the block: bump STATE_VERSION and SCALAR_LEN */
   while (w->n - start < SCALAR_LEN) w8(w, 0);          /* fixed-size block (room for later additions) */
 }
@@ -113,9 +119,23 @@ int nan_restore_state(nan_vm *v, const uint8_t *buf, size_t len) {
   for (int i = 0; i < 256; i++) a.buf[i] = (uint16_t)r16(&r);
   uint32_t apos = r32(&r), amode = r32(&r), alba = r32(&r), arem = r32(&r);
   uint32_t tick_last = r32(&r), tick_same = r32(&r), frame = r32(&r), dirty = r32(&r);
+  uint32_t kenc = r32(&r), kframe = r32(&r), ktimer = r32(&r), ktimer_left = r32(&r);
+  uint32_t kstack = r32(&r), kregions = r32(&r), ktcb = r32(&r);
+  uint32_t kin = r32(&r), ktp = r32(&r), ktrp = r32(&r);
   if (!r.ok) return -1;
   if (k > 3 || vmode > 1 || fbtot > NAN_VRAM || (vmode && (uint64_t)fbw * fbh > NAN_VRAM)) return -1;
   if (dwi > 255 || dwp > 2 || dri > 255 || drp > 2 || rhead > 15 || rtail > 15 || rawkb > 255 || apos > 255 || amode > 2 || arem > 256) return -1;
+  uint32_t kentry = kenc ? kenc - 1u : NAN_KABI_UNSET;
+  if (kentry != NAN_KABI_UNSET) {
+    if (kframe == NAN_KABI_UNSET ||
+        (uint64_t)kframe + NAN_TF_WORDS > v->mem_words) return -1;
+  } else {
+    kframe = kstack = kregions = ktcb = NAN_KABI_UNSET;
+    ktimer = ktimer_left = kin = ktp = ktrp = 0;
+  }
+  if (kin > 1 || ktp > 1 || ktrp > 1) return -1;
+  if (ktimer == 0) ktimer_left = 0;
+  else if (ktimer_left == 0 || ktimer_left > ktimer) ktimer_left = ktimer;
 
   /* apply */
   memset(v->mem, 0, (size_t)v->mem_words * 8u); memset(v->vram, 0, NAN_VRAM);
@@ -134,6 +154,9 @@ int nan_restore_state(nan_vm *v, const uint8_t *buf, size_t len) {
     d->err = a.err; d->count = a.count; memcpy(d->lba, a.lba, 3); d->drive = a.drive; d->status = a.status; d->cmd = a.cmd;
     memcpy(d->buf, a.buf, sizeof a.buf); d->pos = (int)apos; d->mode = (int)amode; d->lba_cur = alba; d->remain = (int)arem; }
   v->tick_last = tick_last; v->tick_same = tick_same; v->frame = frame; v->dirty = dirty + 1;
+  v->kentry = kentry; v->kframe = kframe; v->ktimer = ktimer; v->ktimer_left = ktimer_left;
+  v->kstack = kstack; v->kregions = kregions; v->ktcb = ktcb;
+  v->kin = kin; v->ktimer_pending = ktp; v->ktrap_pending = ktrp;
   v->ser_h = v->ser_t = 0;
   return 0;
 }
