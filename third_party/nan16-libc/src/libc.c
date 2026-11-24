@@ -763,8 +763,11 @@ static int mf_put_ro(unsigned slot, const char *name, const void *data,
 }
 int nan16_vfs_add(const char *name, const void *data, unsigned size)
 {
-    MemFile *f = mf_find(name);
-    if (!f) f = mf_new(name);
+    char abs[VFS_NAME_MAX];
+    MemFile *f;
+    if (vfs_abspath(name, abs) < 0) return -1;
+    f = mf_find(abs);
+    if (!f) f = mf_new(abs);
     if (!f) return -1;
     if (f->owned && f->data) free(f->data);
     f->data = malloc(size ? size : 1);
@@ -781,8 +784,11 @@ int nan16_vfs_add(const char *name, const void *data, unsigned size)
    megabyte sources in the guest heap. */
 int nan16_vfs_add_ro(const char *name, const void *data, unsigned size)
 {
-    MemFile *f = mf_find(name);
-    if (!f) f = mf_new(name);
+    char abs[VFS_NAME_MAX];
+    MemFile *f;
+    if (vfs_abspath(name, abs) < 0) return -1;
+    f = mf_find(abs);
+    if (!f) f = mf_new(abs);
     if (!f) return -1;
     if (f->owned && f->data) free(f->data);
     f->data = (unsigned char *)(void *)data;
@@ -1894,17 +1900,17 @@ double sqrt(double x)
     return r;
 }
 
-#define NAN16_PI    3.14159265358979323846
-#define NAN16_PIO2  1.57079632679489661923
-#define NAN16_PIO4  0.78539816339744830962
-#define NAN16_LN2   0.69314718055994530942
-#define NAN16_ILN2  1.44269504088896340736
-#define NAN16_SQ1_2 0.70710678118654752440
-#define NAN16_LN10  2.30258509299404568402
+#define NAN16_PI    0x1.921fb54442d18p+1
+#define NAN16_PIO2  0x1.921fb54442d18p+0
+#define NAN16_PIO4  0x1.921fb54442d18p-1
+#define NAN16_LN2   0x1.62e42fefa39efp-1
+#define NAN16_ILN2  0x1.71547652b82fep+0
+#define NAN16_SQ1_2 0x1.6a09e667f3bcdp-1
+#define NAN16_LN10  0x1.26bb1bbb55516p+1
 
 double trunc(double x)
 {
-    if (x >= 9223372036854775808.0 || x < -9223372036854775808.0) return x;
+    if (x >= 0x1.0000000000000p+63 || x < -0x1.0000000000000p+63) return x;
     return (double)(long long)x;
 }
 double round(double x)
@@ -1925,17 +1931,17 @@ double exp(double x)
     int k;
     double r, r2, p;
     if (x != x) return x;
-    if (x > 709.782712893384) return 1.0 / 0.0;
-    if (x < -745.133219101941) return 0.0;
+    if (x > 0x1.62e42fefa39efp+9) return 1.0 / 0.0;
+    if (x < -0x1.74910d52d3050p+9) return 0.0;
     k = (int)floor(x * NAN16_ILN2 + (x >= 0.0 ? 0.5 : -0.5));
     r = x - (double)k * NAN16_LN2;
     r2 = r * r;
-    p = 1.0 + r + r2 * (0.5 + r * (0.16666666666666666 +
-        r * (0.041666666666666664 + r * (0.008333333333333333 +
-        r * (0.001388888888888889 + r * (0.0001984126984126984 +
-        r * (0.0000248015873015873 + r * (0.0000027557319223985893 +
-        r * (0.0000002755731922398589 + r * (0.00000002505210838544172 +
-        r * 0.00000000208767569878681))))))))));
+    p = 1.0 + r + r2 * (0.5 + r * (0x1.5555555555555p-3 +
+        r * (0x1.5555555555555p-5 + r * (0x1.1111111111111p-7 +
+        r * (0x1.6c16c16c16c17p-10 + r * (0x1.a01a01a01a01ap-13 +
+        r * (0x1.a01a01a01a01ap-16 + r * (0x1.71de3a556c734p-19 +
+        r * (0x1.27e4fb7789f5cp-22 + r * (0x1.ae64567f544e4p-26 +
+        r * 0x1.1eed8eff8d898p-29))))))))));
     return ldexp(p, k);
 }
 double log(double x)
@@ -1971,7 +1977,7 @@ double pow(double x, double y)
     if (x == 1.0) return 1.0;
     if (y == 1.0) return x;
     n = (long long)y;
-    isint = ((double)n == y && y < 9007199254740992.0 && y > -9007199254740992.0);
+    isint = ((double)n == y && y < 0x1.0000000000000p+53 && y > -0x1.0000000000000p+53);
     if (x == 0.0) {
         if (y < 0.0) return 1.0 / 0.0;
         return 0.0;
@@ -1990,15 +1996,15 @@ static void sin_cos(double x, double *sp, double *cp)
     if (y > NAN16_PI) y -= 2.0 * NAN16_PI;
     if (y < -NAN16_PI) y += 2.0 * NAN16_PI;
     q = (int)floor(y / NAN16_PIO2 + 0.5);
-    r = y - (double)q * 1.5707963267948966 - (double)q * 6.123233995736766e-17;
+    r = y - (double)q * 0x1.921fb54442d18p+0 - (double)q * 0x1.1a62633145c07p-54;
     r2 = r * r;
-    s = r * (1.0 + r2 * (-0.16666666666666666 + r2 *
-        (0.008333333333333333 + r2 * (-0.0001984126984126984 + r2 *
-        (0.0000027557319223985893 + r2 * (-0.00000002505210838544172 +
-        r2 * 0.00000000016059043836821615))))));
-    c = 1.0 + r2 * (-0.5 + r2 * (0.041666666666666664 + r2 *
-        (-0.001388888888888889 + r2 * (0.0000248015873015873 + r2 *
-        (-0.0000002755731922398589 + r2 * 0.00000000208767569878681)))));
+    s = r * (1.0 + r2 * (-0x1.5555555555555p-3 + r2 *
+        (0x1.1111111111111p-7 + r2 * (-0x1.a01a01a01a01ap-13 + r2 *
+        (0x1.71de3a556c734p-19 + r2 * (-0x1.ae64567f544e4p-26 +
+        r2 * 0x1.6124613a86d0ap-33))))));
+    c = 1.0 + r2 * (-0.5 + r2 * (0x1.5555555555555p-5 + r2 *
+        (-0x1.6c16c16c16c17p-10 + r2 * (0x1.a01a01a01a01ap-16 + r2 *
+        (-0x1.27e4fb7789f5cp-22 + r2 * 0x1.1eed8eff8d898p-29)))));
     q = ((q % 4) + 4) % 4;
     if (q == 0) { *sp = s; *cp = c; }
     else if (q == 1) { *sp = c; *cp = -s; }
@@ -2023,7 +2029,7 @@ double atan(double x)
     if (x != x) return x;
     if (x < 0.0) return -atan(-x);
     if (x > 1.0) return NAN16_PIO2 - atan_small(1.0 / x);
-    if (x > 0.4142135623730950)
+    if (x > 0x1.a827999fcef31p-2)
         return NAN16_PIO4 + atan_small((x - 1.0) / (x + 1.0));
     return atan_small(x);
 }
@@ -2059,8 +2065,8 @@ double cosh(double x)
 double tanh(double x)
 {
     double e;
-    if (x > 20.0) return 1.0;
-    if (x < -20.0) return -1.0;
+    if (x > 0x1.4000000000000p+4) return 1.0;
+    if (x < -0x1.4000000000000p+4) return -1.0;
     e = exp(2.0 * x);
     return (e - 1.0) / (e + 1.0);
 }
