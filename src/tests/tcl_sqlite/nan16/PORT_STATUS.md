@@ -2,9 +2,44 @@
 
 ## Milestone 3 — guest script control block and veryquick
 
-Status: **atof1 is green; veryquick is awaiting its 150B+ rerun.** The full
-official TESTSRC set runs, the shared libc/SQLite VFS is in place, and the
-only prior failure class (floating-point text formatting) is fixed.
+Status: **the complete official aggregate now runs in one guest process
+with no step cap.**  A 49.6B-step checkpoint of `veryquick.test` has no test
+failures so far; `atof1` (40,006), `attach2` (71) and `ext/expert/expert1`
+(69) are green individually.  The remaining work is to let the aggregate
+finish and triage the later test/ files.
+
+### Single-process aggregate and resumable VM
+
+- `nan_cli --steps 0/unlimited` runs until HALT with a 64-bit counter.
+- `--checkpoint FILE --checkpoint-every S` writes an atomic sparse `NAN1`
+  snapshot of guest memory, registers and PC; SIGINT/SIGTERM also checkpoint
+  (exit 75), and `--img` accepts the snapshot to resume.  The console buffer
+  and the whole libc VFS are in guest memory, so output and files survive a
+  host restart.
+- `tools/nan16_suite_resume.sh BASE CHECKPOINT TEST OUTDIR` loops the runner:
+  base cartridge first, checkpoint afterwards, until HALT.  No sharding or
+  per-file splitting is needed.
+- `nan_cli` SIGUSR1 dumps the live console without stopping;
+  `tools/nan16_state_console.py` reads the same transcript directly from a
+  checkpoint.
+- `tools/s1_runner.sh --steps unlimited` passes `UINT64_MAX` to the 64-bit S1
+  guest loop; `S1_QEMU_TIMEOUT` controls QEMU wall time.
+
+### Locking, readonly and variadic fixes (veryquick triage)
+
+- SQLite same-process locks are emulated explicitly in
+  `nan16_vfs_libc.c` (shared/reserved/pending/exclusive, `SQLITE_FCNTL_LOCKSTATE`,
+  `xCheckReservedLock`), read-only opens reject writes, and `open(O_CREAT)`
+  requires an existing parent.  `attach2.test` is now **0 errors out of 71**.
+- A variadic call kept the hidden argument pointer in `r11`; the 16-bit load
+  in `nan_push_arg()` used `r11` as scratch, so a `short` variadic argument
+  replaced it with 0 and `va_arg` returned the first cartridge words.  Keep
+  the pointer in `r9`.  `PRAGMA index_info` (i16 through
+  `sqlite3VdbeMultiLoad`) and `sqlite3_expert_analyze` work again:
+  `ext/expert/expert1.test` is **0 errors out of 69**.
+- Tcl's `file executable` now returns false for regular VFS files, so the
+  official CLI/shell tests take their explicit `continue`/skip path instead
+  of aborting the aggregate in `exec`.
 
 ### Guest script control block
 
