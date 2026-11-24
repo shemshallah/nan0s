@@ -11,7 +11,8 @@ CLI=aarch64/android/nan_cli
 
 awk -f tools/nmk.awk -v CMD=emit src/museum/museum.nas > "$T/museum.nan" 2>"$T/m.err" || { cat "$T/m.err"; exit 1; }
 awk -f tools/nmk.awk -v CMD=emit src/exhibits/gui_cart.nas > "$T/gui.nan" 2>"$T/g.err" || { cat "$T/g.err"; exit 1; }
-printf 'boot:%s/gui.nan\n1:%s/src/nan/baby_cart.nan:1948:1:1:Baby\n' "$T" "$PWD" > "$T/carts.txt"
+awk -f tools/nmk.awk -v CMD=emit src/tests/ndbg_putc_cart.nas > "$T/putc.nan" 2>"$T/p.err" || { cat "$T/p.err"; exit 1; }
+printf 'boot:%s/gui.nan\n1:%s/src/nan/baby_cart.nan:1948:1:1:Baby\n2:%s/putc.nan:2026:2:1:PUTC\n' "$T" "$PWD" "$T" > "$T/carts.txt"
 gawk -f tools/mkimg.awk \
   -v GOLD=x86/native/nan16_x86.nan \
   -v GUEST="$T/museum.nan" \
@@ -43,9 +44,29 @@ if ! grep -qx 'carts' "$T/out.lf" ||
    ! grep -qx 'q' "$T/out.lf"; then
   echo "ndbg_term: FAIL"; cat "$T/out"; exit 1
 fi
-sed 's/BP=2001/BP=2002/' "$T/out.lf" > "$T/negative"
+# captured display: run Baby to the key wait and dump the text buffer
+"$CLI" --img "$T/guest.bin" --steps 160000000 \
+  --keys "@20000000,d,e,b,u,g,ENTER,@2000000,l,o,a,d,SPACE,1,ENTER,@2000000,r,u,n,ENTER,@4000000,s,c,r,e,e,n,ENTER,@4000000,q,u,i,t,ENTER,@3000000" \
+  --serial > "$T/scr" 2>/dev/null || true
+tr -d '\r' < "$T/scr" > "$T/scr.lf"
+if ! grep -qx 'S=5 PC=2009' "$T/scr.lf" ||
+   ! grep -q 'MANCHESTER SMALL-SCALE EXPERIMENTAL MACHINE - THE BABY - 21 JUNE 1948' "$T/scr.lf"; then
+  echo "ndbg_term: SCREEN FAIL"; cat "$T/scr"; exit 1
+fi
+
+# captured serial: a tiny PUTC cart prints HELLO
+"$CLI" --img "$T/guest.bin" --steps 90000000 \
+  --keys "@20000000,d,e,b,u,g,ENTER,@2000000,l,o,a,d,SPACE,2,ENTER,@2000000,r,u,n,ENTER,@2000000,s,e,r,i,a,l,ENTER,@3000000,q,u,i,t,ENTER,@3000000" \
+  --serial > "$T/ser" 2>/dev/null || true
+tr -d '\r' < "$T/ser" > "$T/ser.lf"
+if ! grep -qx 'S=1 PC=2012' "$T/ser.lf" ||
+   ! grep -qx 'HELLO' "$T/ser.lf"; then
+  echo "ndbg_term: SERIAL FAIL"; cat "$T/ser"; exit 1
+fi
+
+sed 's/BP=2001/BP=2002/'  "$T/out.lf" > "$T/negative"
 if cmp -s "$T/out.lf" "$T/negative"; then
   echo "ndbg_term: NEGATIVE FAIL"; exit 1
 fi
-echo "ndbg_term: PASS (terminal debug: carts/load, step/dis/regs/break/watch/bpts/wpts/mem/run/quit, exact)"
+echo "ndbg_term: PASS (terminal debug: carts/load, step/dis/regs/break/watch/bpts/wpts/mem/run; screen/serial, exact)"
 echo "ndbg_term: NEGATIVE PASS (mutated transcript rejected)"

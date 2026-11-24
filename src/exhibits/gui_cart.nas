@@ -31,6 +31,8 @@
 .equ DBG_WATCH 5811
 .equ DBG_CART 5813
 .equ DBG_MAP 5972
+.equ DBG_MEM_GETH 5961
+.equ DBG_TBUF 5960
 .equ TOC_SNAP 0x70000
 .org 8192
 JMP @cart_entry
@@ -5422,6 +5424,121 @@ do_lnk:
 .word 0
 
 
+; ---- captured target screen and serial ----
+tdbg_screen:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r14,r0,@dbg_sp
+CALL #DBG_TBUF
+LD r14,r0,@dbg_sp
+ST r1,r0,@sc_ptr
+MOVI r1,0
+ST r1,r0,@sc_r
+sc_row:
+MOVI r1,0
+ST r1,r0,@sc_c
+sc_col:
+LD r2,r0,@sc_r
+MOVI r1,80
+MUL r2,r2,r1
+LD r3,r0,@sc_c
+ADD r2,r2,r3
+LD r1,r0,@sc_ptr
+ADD r1,r1,r2
+LD r2,r1,0
+MOVI r3,255
+BOOL.8 r2,r2,r3
+CMP r2,r0
+MOVI[EQ] r2,32
+CALL @tdbg_ch
+LD r1,r0,@sc_c
+ADD r1,r1,r13
+ST r1,r0,@sc_c
+MOVI r2,80
+CMP r1,r2
+JMP[LT] @sc_col
+MOVI r2,10
+CALL @tdbg_ch
+LD r1,r0,@sc_r
+ADD r1,r1,r13
+ST r1,r0,@sc_r
+MOVI r2,25
+CMP r1,r2
+JMP[LT] @sc_row
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+sc_ptr:
+.word 0
+sc_r:
+.word 0
+sc_c:
+.word 0
+
+tdbg_serial:
+ST r15,r14,0
+ADD r14,r14,r13
+LA r1,0x61000
+ST r14,r0,@dbg_sp
+CALL #DBG_MEM_GETH
+LD r14,r0,@dbg_sp
+ST r1,r0,@se_len
+CMP r1,r0
+JMP[EQ] @se_none
+MOVI r1,0
+ST r1,r0,@se_i
+se_l:
+LD r1,r0,@se_i
+LD r2,r0,@se_len
+CMP r1,r2
+JMP[GE] @se_done
+LA r3,0x61000
+ADD r3,r3,r1
+ADDI r3,r3,1
+ST r14,r0,@dbg_sp
+ADD r1,r3,r0
+CALL #DBG_MEM_GETH
+LD r14,r0,@dbg_sp
+MOVI r2,255
+BOOL.8 r2,r1,r2
+CALL @tdbg_ch
+LD r1,r0,@se_i
+ADD r1,r1,r13
+ST r1,r0,@se_i
+JMP @se_l
+se_done:
+JMP @se_end
+se_none:
+MOVI r2,110
+CALL @tdbg_ch
+MOVI r2,111
+CALL @tdbg_ch
+MOVI r2,32
+CALL @tdbg_ch
+MOVI r2,115
+CALL @tdbg_ch
+MOVI r2,101
+CALL @tdbg_ch
+MOVI r2,114
+CALL @tdbg_ch
+MOVI r2,105
+CALL @tdbg_ch
+MOVI r2,97
+CALL @tdbg_ch
+MOVI r2,108
+CALL @tdbg_ch
+MOVI r2,10
+CALL @tdbg_ch
+se_end:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+se_len:
+.word 0
+se_i:
+.word 0
+
+
 ; ---- NANDBG terminal monitor (resident ABI, minimal first pane) ----
 dbg_echo:
 ST r15,r14,0
@@ -5543,6 +5660,12 @@ RET
 
 tdbg_dis:
 CALL @dbg_dis
+JMP @tdbg_done
+tdbg_screen_cmd:
+CALL @tdbg_screen
+JMP @tdbg_done
+tdbg_serial_cmd:
+CALL @tdbg_serial
 JMP @tdbg_done
 
 tdbg_carts:
@@ -5837,6 +5960,16 @@ LA r2,@s_tdbg_wpts
 CALL @fs_prefix
 CMP r1,r0
 JMP[NE] @tdbg_wpts
+LA r1,#FNB
+LA r2,@s_tdbg_screen
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @tdbg_screen_cmd
+LA r1,#FNB
+LA r2,@s_tdbg_serial
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @tdbg_serial_cmd
 LA r1,#FNB
 LA r2,@s_tdbg_reset
 CALL @fs_prefix
@@ -6264,11 +6397,11 @@ s_dbg_loaded:
 s_dbg_nocart:
 .str "no cart\n"
 s_tdbg_banner:
-.str "NANDBG TERMINAL MONITOR\ncarts load <id> step run regs break watch bpts wpts mem dis reset pc quit\n"
+.str "NANDBG TERMINAL MONITOR\ncarts load <id> step run regs break watch bpts wpts mem dis screen serial reset pc quit\n"
 s_tdbg_prompt:
 .str "> "
 s_tdbg_help:
-.str "carts load <id> step run regs break watch bpts wpts mem dis reset pc quit"
+.str "carts load <id> step run regs break watch bpts wpts mem dis screen serial reset pc quit"
 s_tdbg_carts:
 .str "carts"
 s_tdbg_load:
@@ -6295,6 +6428,10 @@ s_tdbg_wpts:
 .str "wpts"
 s_tdbg_reset:
 .str "reset"
+s_tdbg_screen:
+.str "screen"
+s_tdbg_serial:
+.str "serial"
 s_tdbg_quit:
 .str "quit"
 fs_s_debug:
