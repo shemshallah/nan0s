@@ -118,8 +118,8 @@
       height: clamp(260px, 62svh, 660px);
       overflow: auto;
       overscroll-behavior: contain;
-      /* One-finger scroll stays native; our two-finger handler zooms only NaN/0S. */
-      touch-action: pan-x pan-y;
+      /* Guest touchscreen owns single-finger input; two fingers pan/zoom. */
+      touch-action: none;
       -webkit-overflow-scrolling: touch;
     }
     #screen_container canvas {
@@ -306,6 +306,35 @@
   // Anchoring in guest-content coordinates keeps the pixels beneath the fingers
   // stationary even when the fingers also drag while changing their distance.
   var pinch = null;
+  var touchContact = null;
+  var touchBlocked = false;
+  // Host I/O only: encode absolute pixel coordinates and contact state in
+  // the guest's reserved virtual touchscreen packet. All hit testing,
+  // cursor drawing, window controls and drag decisions are native NaN16.
+  function guestTouchPacket(touch, buttons) {
+    if (!emulator || !touch || !screenEl.querySelector) return false;
+    var canvas = screenEl.querySelector("canvas");
+    if (!canvas || canvas.width < 1 || canvas.height < 1) return false;
+    var rect = canvas.getBoundingClientRect();
+    if (!(rect.width > 0 && rect.height > 0)) return false;
+    var x = Math.max(0, Math.min(4095, canvas.width - 1,
+      Math.floor((touch.clientX - rect.left) * canvas.width / rect.width)));
+    var y = Math.max(0, Math.min(4095, canvas.height - 1,
+      Math.floor((touch.clientY - rect.top) * canvas.height / rect.height)));
+    var word = (buttons & 7) * 0x1000000 + y * 0x1000 + x;
+    var packet = [0xE0, 0x7F];
+    for (var shift = 24; shift >= 0; shift -= 4) packet.push(0x60 | ((word >>> shift) & 15));
+    emulator.keyboard_send_scancodes(packet);
+    return true;
+  }
+  function consumeTouch(event) {
+    event.stopPropagation();
+    if (event.cancelable !== false) event.preventDefault();
+  }
+  function cancelGuestContact() {
+    if (touchContact && touchContact.down) guestTouchPacket(touchContact.last, 0);
+    touchContact = null;
+  }
   function pinchGeometry(touches) {
     var a = touches[0], b = touches[1];
     var rect = screenEl.getBoundingClientRect();
@@ -332,14 +361,34 @@
     event.stopPropagation();
   }
   screenEl.addEventListener("touchstart", function (event) {
-    if (event.touches.length === 2) beginGuestPinch(event);
+    if (!emulator || !isTouchView) return;
+    if (event.touches.length >= 2) {
+      cancelGuestContact();
+      touchBlocked = true;
+      if (event.touches.length === 2) beginGuestPinch(event);
+      consumeTouch(event);
+      return;
+    }
+    if (event.touches.length !== 1 || touchBlocked) return;
+    var touch = event.touches[0];
+    if (!guestTouchPacket(touch, 0)) return;
+    touchContact = {start:touch, last:touch, down:false};
+    consumeTouch(event);
   }, { passive: false });
   screenEl.addEventListener("touchmove", function (event) {
     if (!emulator || !isTouchView) return;
     if (event.touches.length === 1) {
-      // Let Chrome handle native one-finger scrolling, but not v86's
-      // window-level touch-to-mouse adapter (which calls preventDefault).
-      event.stopPropagation();
+      consumeTouch(event);
+      if (touchBlocked || !touchContact) return;
+      var touch = event.touches[0];
+      var moved = Math.hypot(touch.clientX - touchContact.start.clientX,
+        touch.clientY - touchContact.start.clientY);
+      if (!touchContact.down && moved >= 7) {
+        guestTouchPacket(touchContact.start, 1);
+        touchContact.down = true;
+      }
+      touchContact.last = touch;
+      guestTouchPacket(touch, touchContact.down ? 1 : 0);
       return;
     }
     if (event.touches.length !== 2) return;
@@ -367,10 +416,24 @@
     }
   }, { passive: false });
   screenEl.addEventListener("touchend", function (event) {
-    // Once only one finger remains, restore normal native viewport scrolling.
+    if (!emulator || !isTouchView) return;
+    consumeTouch(event);
     if (event.touches.length !== 2) pinch = null;
-  }, { passive: true });
-  screenEl.addEventListener("touchcancel", function () { pinch = null; }, { passive: true });
+    if (event.touches.length !== 0) return;
+    if (!touchBlocked && touchContact) {
+      var touch = event.changedTouches && event.changedTouches[0] || touchContact.last;
+      if (!touchContact.down) guestTouchPacket(touch, 1);
+      guestTouchPacket(touch, 0);
+    }
+    touchContact = null;
+    touchBlocked = false;
+  }, { passive: false });
+  screenEl.addEventListener("touchcancel", function (event) {
+    consumeTouch(event);
+    cancelGuestContact();
+    pinch = null;
+    touchBlocked = false;
+  }, { passive: false });
 
   function setInputEnabled(on) {
     typeEl.disabled = !on;
@@ -470,10 +533,27 @@
       // When the guest switches from SeaBIOS text to 1024x768 graphics, keep
       // the user's zoom rather than allowing the canvas to shrink to fit.
       if (size && size[0] > 0) guestWidth = size[0];
-      if (autoFitPending && size && size[0] >= 640 && size[1] >= 400) {
+      if (autoFitPending && size && size[0] >= 640 && size[1] >= 480) {
         fitGuestScreen();
       } else updateGuestZoom(zoom, true);
     });
+    // Some v86 builds do not expose the screen-size bus event to listeners.
+    // Observe the actual framebuffer size as a fallback, once per boot.
+    if (typeof MutationObserver !== "undefined" && screenEl.querySelector) {
+      var displayCanvas = screenEl.querySelector("canvas");
+      if (displayCanvas) {
+        var fitNative = function () {
+          if (!autoFitPending || displayCanvas.width < 640 || displayCanvas.height < 480 ||
+              displayCanvas.getBoundingClientRect().width <= 0) return;
+          guestWidth = displayCanvas.width;
+          fitGuestScreen();
+          sizeObserver.disconnect();
+        };
+        var sizeObserver = new MutationObserver(fitNative);
+        sizeObserver.observe(displayCanvas, {attributes:true, attributeFilter:["width","height","style"]});
+        fitNative();
+      }
+    }
     emulator.add_listener("serial0-output-byte", function (b) {
       serialBuf += String.fromCharCode(b);
       serialDirty = true;
