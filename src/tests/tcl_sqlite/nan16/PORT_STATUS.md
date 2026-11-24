@@ -120,7 +120,7 @@ tcl_nan16_port: pack guest VFS
 pack: 841 files, 3441604 bytes -> <TMPDIR>/suite.n16pack
 tcl_nan16_port: compile guest (83 generic + 8 OO + 69 tommath + 11 zlib + 10 port)
 tcl_nan16_port: run guest
-tcl_nan16_port: cartridge 21298008 bytes sha256 72bebb01778aeefc30e9242a2f40cefcba2143a9d70f27cd71dab73cf1e99fec
+tcl_nan16_port: cartridge 21305136 bytes sha256 4721632528374788f104a793a8175a90cf0ab4abd7ca17c796ba295d31a713b1
 tcl_nan16_port: PASS (guest VFS tclsh, exact stdout + main result 0)
 ```
 
@@ -158,7 +158,7 @@ guest heap to survive Tcl's allocator pattern.
 - Tcl `TCL_THREADS=0`; no socket, load or thread package is enabled.
 
 Image: 21,298,008 bytes.  SHA-256:
-`72bebb01778aeefc30e9242a2f40cefcba2143a9d70f27cd71dab73cf1e99fec`.
+`4721632528374788f104a793a8175a90cf0ab4abd7ca17c796ba295d31a713b1`.
 The pack is a generated static `tcl_nan16_pack[]` array (from
 `tools/nan16_embed.py`), not a fixed `GUEST_PACK_BASE` image section, so
 there is no header/image pack-base mismatch in this tclsh build.

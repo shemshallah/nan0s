@@ -287,13 +287,13 @@ unaffected by this ABI.
 - `tools/s1_big_guest_gate.sh` - >16 MiB (21,266,432-byte) flat cartridge;
   the guest sums every payload word against a host-computed constant and
   prints `BIG PASS`, proving the IDE large-image path is byte-exact.
-- `tools/tcl_nan16_port_gate.sh` - product Tcl milestone 1: a 21,298,008-byte
-  tcc0-built tclsh cartridge (SHA-256 `72bebb01...`) on the large IDE path,
+- `tools/tcl_nan16_port_gate.sh` - product Tcl milestone 1: a 21,305,136-byte
+  tcc0-built tclsh cartridge (SHA-256 `47216325...`) on the large IDE path,
   exact stdout `hello 42\n2\n`, main word 0x100 = 0, empty stderr; PASS with
   `TCL_NAN16_PORT_RUNNER=tools/s1_runner.sh` and no oracle flag.
 - `tools/s1_runner.sh` - product gate CLI:
   `--img FILE [--mem MB] [--steps N] [--serial] [--guest-stdout FILE]
-  [--guest-stderr FILE] [--peek 'ADDR[:LEN],...']`. It accepts nmk `.nan`
+  [--guest-stderr FILE] [--guest-script PATH] [--peek 'ADDR[:LEN],...']`. It accepts nmk `.nan`
   text or flat word cartridges and runs it on the x86_64 S1. Two load paths:
   payloads <= 768 KiB use the boot fixture (LBA 129 -> physical 0x40000,
   up to 1536 sectors); larger payloads are attached as a raw IDE disk
@@ -315,3 +315,9 @@ unaffected by this ABI.
   lines and exits nonzero, so gates cannot mistake a partial run for a pass.
   Time/steps are published at guest byte 0x03EFF010 (ms, steps low, steps
   high) every 1024 instructions, matching nan_cli.
+- Guest-script selector (testfixture): `--guest-script PATH` writes a u32
+  byte length at guest byte 0x03EFF020 and up to 255 path bytes at
+  0x03EFF024 before the cartridge starts. The block is distinct from the
+  stdout/stderr control at 0x03EFF000; a fresh guest sees length 0 when the
+  option is absent. This lets one testfixture image select any
+  `/sqlite/test/*.test` without rebuilding.

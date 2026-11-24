@@ -345,6 +345,17 @@ static void guest_write_u32(uint32_t byte_addr, uint32_t v) {
   if (wi >= MEM_WORDS) return;          /* e.g. --mem 64: no time block */
   MEM[wi] = mkword(v, 10);
 }
+static void guest_write_byte(uint32_t byte_addr, uint8_t v) {
+  uint32_t wi = byte_addr >> 2;
+  if (wi >= MEM_WORDS) return;
+  uint32_t sh = (byte_addr & 3u) * 8u;
+  uint32_t pl = (uint32_t)(MEM[wi] >> 16);
+  pl = (pl & ~(0xFFu << sh)) | ((uint32_t)v << sh);
+  MEM[wi] = mkword(pl, 10);
+}
+static void guest_write_bytes(uint32_t byte_addr, const uint8_t *src, uint32_t len) {
+  for (uint32_t i = 0; i < len; i++) guest_write_byte(byte_addr + i, src[i]);
+}
 static void guest_publish_time(void) {
   uint32_t ms = (uint32_t)(s.steps / 1000u);
   guest_write_u32(0x03EFF010u, ms);
@@ -842,6 +853,8 @@ void s1_main(void) {
 #else /* S1_GUEST: run a flat cartridge placed at guest word 0. */
 extern const uint32_t s1_guest_bytes;
 extern const uint32_t s1_guest_disk;
+extern const uint32_t s1_guest_script_len;
+extern const uint8_t s1_guest_script[];
 extern const uint32_t s1_peek_count;
 extern const uint32_t s1_peek_specs[];
 
@@ -957,6 +970,11 @@ void s1_main(void) {
   s.r[14] = S1_GUEST_STACK;
   s.pc = 0;
   s.k = 0;
+  /* Optional testfixture script path: u32 length at guest byte 0x03EFF020,
+     bytes at 0x03EFF024 (distinct from stdout/stderr at 0x03EFF000). */
+  guest_write_u32(0x03EFF020u, s1_guest_script_len);
+  if (s1_guest_script_len)
+    guest_write_bytes(0x03EFF024u, s1_guest_script, s1_guest_script_len);
   guest_publish_time();
   dbg_puts("S1GUEST LOAD "); dbg_dec(words); dbg_puts(" WORDS\n");
   uint32_t rc = s1_run(S1_GUEST_STEPS);

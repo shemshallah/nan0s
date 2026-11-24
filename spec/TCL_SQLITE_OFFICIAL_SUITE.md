@@ -214,6 +214,9 @@ Status legend: **done**, **partial**, **planned**.
       NFS2, VFS dirs/paths/capacity and time gates; the S1 also loads a
       21,266,432-byte cartridge byte-exactly through ATA PIO and implements
       scalar FP 0x30–0x37/0x46–0x48. Vector/display/device ops remain.
+- [x] Guest testfixture selector: `--guest-script PATH` writes u32 length at
+      `0x03EFF020` and up to 255 bytes at `0x03EFF024` before the cartridge
+      starts, distinct from stdout/stderr at `0x03EFF000`.
 
 ### P4 — SQLite testfixture and official suite
 
