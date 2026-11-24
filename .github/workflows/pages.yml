@@ -69,6 +69,24 @@ jobs:
         shell: bash
         run: sh tools/qgate_gui_commands.sh
 
+      - name: Boot actual WASM desktop in mobile Chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-save --package-lock=false playwright@1.51.1
+          npx playwright install --with-deps chromium
+          python3 -m http.server 8765 --directory docs > /tmp/nan0s-web.log 2>&1 &
+          server=$!
+          trap 'kill "$server" || true' EXIT
+          node tools/test_wasm_desktop.cjs
+      - name: Preserve browser framebuffer evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-mobile-desktop-evidence
+          path: browser-evidence/
+          if-no-files-found: warn
+
       # GitHub Pages is configured to publish main/docs directly. Its existing
       # 'pages build and deployment' workflow publishes the checked-in full image.
       # Avoid actions/deploy-pages here: that parallel deployment conflicted with
