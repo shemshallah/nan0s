@@ -106,6 +106,7 @@ ST r0,r0,@ms_state
 ST r0,r0,@ms_buttons
 ST r0,r0,@ms_prev
 ST r0,r0,@ms_drag
+ST r0,r0,@ms_cursor_saved
 ST r0,r0,@ms_last_title_tick
 MOVI r1,0xFFFF
 ST r1,r0,@ms_last_title_id
@@ -222,6 +223,16 @@ MOVI r3,256
 SUB r2,r2,r3
 ms_ypos:
 ST r2,r0,@ms_dy
+; Nothing changed: do not touch the framebuffer or dispatch a second click.
+LD r3,r0,@ms_dx
+BOOL.14 r3,r3,r2
+LD r4,r0,@ms_buttons
+LD r5,r0,@ms_prev
+BOOL.6 r4,r4,r5
+BOOL.14 r3,r3,r4
+CMP r3,r0
+JMP[EQ] @ms_update_done
+CALL @ms_erase
 LD r1,r0,@ms_x
 LD r2,r0,@ms_dx
 ADD r1,r1,r2
@@ -306,10 +317,23 @@ ms_release_end:
 ST r0,r0,@ms_drag
 JMP @ms_changed
 ms_move:
+LD r1,r0,@ms_drag
+CMP r1,r0
+JMP[EQ] @ms_changed
+LD r1,r0,@ms_dx
+LD r2,r0,@ms_dy
+BOOL.14 r1,r1,r2
+CMP r1,r0
+JMP[EQ] @ms_changed
 CALL @ms_drag_update
+ST r13,r0,@wm_redraw
 ms_changed:
-MOVI r1,1
-ST r1,r0,@wm_redraw
+; Pointer movement alone only updates its saved-under pixels. Geometry,
+; focus and shell actions request full ordered composition themselves.
+LD r1,r0,@wm_redraw
+CMP r1,r0
+JMP[NE] @ms_update_done
+CALL @ms_draw
 ms_update_done:
 SUB r14,r14,r13
 LD r15,r14,0
@@ -452,8 +476,13 @@ ADD r4,r4,r3
 CMP r2,r4
 JMP[GE] @ms_hit_loop
 ; Hit: focus now. Preserve the record pointer across nested calls.
-LD r1,r0,@ms_id
+CALL @wm_top
+LD r2,r0,@ms_id
+CMP r1,r2
+JMP[EQ] @ms_hit_focused
+ADD r1,r2,r0
 CALL @wm_raise
+ms_hit_focused:
 LD r1,r0,@ms_b
 LD r2,r0,@ms_y
 LD r3,r1,#W_Y
@@ -639,34 +668,92 @@ SUB r14,r14,r13
 LD r15,r14,0
 RET
 
-; Pointer is the last guest-owned layer, including above modal windows.
+; Pointer: guest-native save-under cursor. Erase before any app paints;
+; invalidate saved pixels before a complete frame replaces the framebuffer.
+ms_cursor_saved:
+.word 0
+ms_cursor_pixels:
+.word 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+ms_erase:
+LD r1,r0,@ms_cursor_saved
+CMP r1,r0
+RET[EQ]
+ST r0,r0,@ms_cursor_saved
+MOVI r11,0
+JMP @ms_cursor_blit
 ms_draw:
-ST r15,r14,0
-ADD r14,r14,r13
+LD r1,r0,@ms_cursor_saved
+CMP r1,r0
+RET[NE]
 LD r1,r0,@ms_x
-LD r2,r0,@ms_y
 ST r1,r0,@ms_frame
-ST r2,r0,@ms_tick
-MOVI r3,3
-MOVI r4,13
-MOVI r5,#C_TXT
-CALL @wm_rect
+LD r1,r0,@ms_y
+ST r1,r0,@ms_tick
+ST r13,r0,@ms_cursor_saved
+MOVI r11,1
+ms_cursor_blit:
 LD r1,r0,@ms_frame
 LD r2,r0,@ms_tick
-MOVI r3,11
-MOVI r4,3
-MOVI r5,#C_TXT
-CALL @wm_rect
-LD r1,r0,@ms_frame
-MOVI r3,4
-ADD r1,r1,r3
-LD r2,r0,@ms_tick
-MOVI r3,8
-ADD r2,r2,r3
-MOVI r3,7
-MOVI r4,2
-MOVI r5,#C_ACCENT
-CALL @wm_rect
-SUB r14,r14,r13
-LD r15,r14,0
+LD r5,r0,@fb_w
+LD r6,r0,@fb_h
+MOVI r7,@ms_cursor_pixels
+MOVI r4,0
+ms_cursor_row:
+MOVI r3,0
+ms_cursor_col:
+ADD r8,r1,r3
+CMP r8,r5
+JMP[GE] @ms_cursor_next
+ADD r9,r2,r4
+CMP r9,r6
+JMP[GE] @ms_cursor_next
+MUL r9,r9,r5
+ADD r9,r9,r8
+CMP r11,r0
+JMP[EQ] @ms_cursor_restore
+VPEEK r10,r9
+ST r10,r7,0
+; A compact arrow, rather than the old F-shaped cursor.
+MOVI r8,9
+CMP r4,r8
+JMP[GE] @ms_cursor_tail
+CMP r3,r4
+JMP[GT] @ms_cursor_next
+CMP r3,r0
+JMP[EQ] @ms_cursor_dark
+CMP r3,r4
+JMP[EQ] @ms_cursor_dark
+JMP @ms_cursor_light
+ms_cursor_tail:
+MOVI r8,2
+CMP r3,r8
+JMP[LT] @ms_cursor_next
+MOVI r8,4
+CMP r3,r8
+JMP[GT] @ms_cursor_next
+CMP r3,r8
+JMP[EQ] @ms_cursor_dark
+MOVI r8,2
+CMP r3,r8
+JMP[EQ] @ms_cursor_dark
+ms_cursor_light:
+MOVI r10,#C_TXT
+JMP @ms_cursor_poke
+ms_cursor_dark:
+MOVI r10,#C_BODY
+JMP @ms_cursor_poke
+ms_cursor_restore:
+LD r10,r7,0
+ms_cursor_poke:
+VPOKE r10,r9
+ms_cursor_next:
+ADD r7,r7,r13
+ADD r3,r3,r13
+MOVI r8,11
+CMP r3,r8
+JMP[LT] @ms_cursor_col
+ADD r4,r4,r13
+MOVI r8,13
+CMP r4,r8
+JMP[LT] @ms_cursor_row
 RET
