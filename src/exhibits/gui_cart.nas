@@ -15,6 +15,13 @@
 .equ CE_MAX 65535
 .equ TL_BASE 0x162200
 .equ TL_MAX 383
+.equ DBG_STEP 5801
+.equ DBG_RUN 5802
+.equ DBG_BEGIN 5803
+.equ DBG_REG 5804
+.equ DBG_PC 5805
+.equ DBG_STATUS 5806
+.equ DBG_BREAK 5810
 .org 8192
 JMP @cart_entry
 .include "../lib/fb.nas"
@@ -1282,6 +1289,10 @@ LD r1,r0,@tk_id
 MOVI r2,@s_unk
 CALL @vc_puts
 tk_finish:
+; NANDBG prints its own prompt and keeps terminal mode active.
+LD r1,r0,@dbg_mode
+CMP r1,r0
+JMP[NE] @tk_repaint
 ; e/edit/write show their own editor help ending in a prompt.
 LD r1,r0,@tk_id
 ADD r1,r1,r13
@@ -4944,9 +4955,272 @@ MOVI r1,0
 RET
 
 ; fs_dispatch: command line in FNB -> r1=1 handled
+; ---- NANDBG terminal monitor (resident ABI, minimal first pane) ----
+dbg_echo:
+ST r15,r14,0
+ADD r14,r14,r13
+LA r1,#FNB
+de_l:
+LDB r2,r1,0
+CMP r2,r0
+JMP[EQ] @de_d
+PUTC r2
+ADD r1,r1,r13
+JMP @de_l
+de_d:
+MOVI r2,10
+PUTC r2
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+tdbg_ch:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r2,r0,@tdc
+LD r1,r0,@tk_id
+LD r2,r0,@tdc
+CALL @vc_putc
+LD r2,r0,@tdc
+PUTC r2
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+dbg_puthex:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,@dph_id
+ST r2,r0,@dph_v
+ST r3,r0,@dph_n
+CMP r3,r0
+JMP[EQ] @dph_end
+MOVI r4,1
+SUB r4,r3,r4
+MOVI r5,@dph_pow
+ADD r5,r5,r4
+LD r5,r5,0
+MUL r2,r2,r5
+ST r2,r0,@dph_v
+dph_loop:
+LD r3,r0,@dph_n
+CMP r3,r0
+JMP[EQ] @dph_end
+LD r2,r0,@dph_v
+SHR r4,r2,28
+SHL r2,r2,4
+ST r2,r0,@dph_v
+MOVI r5,48
+ADD r5,r5,r4
+MOVI r6,10
+CMP r4,r6
+MOVI r7,7
+ADD[GE] r5,r5,r7
+PUTC r5
+LD r1,r0,@dph_id
+ADD r2,r5,r0
+CALL @vc_putc
+LD r3,r0,@dph_n
+SUB r3,r3,r13
+ST r3,r0,@dph_n
+JMP @dph_loop
+dph_end:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+dph_id:
+.word 0
+dph_v:
+.word 0
+dph_n:
+.word 0
+dph_pow:
+.word 268435456,16777216,1048576,65536,4096,256,16,1
+
+dbg_state:
+ST r15,r14,0
+ADD r14,r14,r13
+MOVI r2,83
+CALL @tdbg_ch
+MOVI r2,61
+CALL @tdbg_ch
+ST r14,r0,@dbg_sp
+CALL #DBG_STATUS
+LD r14,r0,@dbg_sp
+ST r1,r0,@tdbg_v
+LD r1,r0,@tk_id
+LD r2,r0,@tdbg_v
+MOVI r3,1
+CALL @dbg_puthex
+MOVI r2,32
+CALL @tdbg_ch
+MOVI r2,80
+CALL @tdbg_ch
+MOVI r2,67
+CALL @tdbg_ch
+MOVI r2,61
+CALL @tdbg_ch
+ST r14,r0,@dbg_sp
+CALL #DBG_PC
+LD r14,r0,@dbg_sp
+ST r1,r0,@tdbg_v
+LD r1,r0,@tk_id
+LD r2,r0,@tdbg_v
+MOVI r3,4
+CALL @dbg_puthex
+MOVI r2,10
+CALL @tdbg_ch
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+tdbg_step:
+ST r14,r0,@dbg_sp
+CALL #DBG_STEP
+LD r14,r0,@dbg_sp
+CALL @dbg_state
+JMP @tdbg_done
+
+tdbg_run:
+ST r14,r0,@dbg_sp
+LA r1,1000000
+CALL #DBG_RUN
+LD r14,r0,@dbg_sp
+CALL @dbg_state
+JMP @tdbg_done
+
+tdbg_regs:
+MOVI r1,0
+ST r1,r0,@tdbg_i
+tdbg_rl:
+LD r1,r0,@tdbg_i
+MOVI r2,16
+CMP r1,r2
+JMP[GE] @tdbg_rd
+ST r14,r0,@dbg_sp
+LD r1,r0,@tdbg_i
+CALL #DBG_REG
+LD r14,r0,@dbg_sp
+ST r1,r0,@tdbg_v
+MOVI r2,82
+CALL @tdbg_ch
+LD r1,r0,@tk_id
+LD r2,r0,@tdbg_i
+MOVI r3,1
+CALL @dbg_puthex
+MOVI r2,61
+CALL @tdbg_ch
+LD r1,r0,@tk_id
+LD r2,r0,@tdbg_v
+MOVI r3,8
+CALL @dbg_puthex
+MOVI r2,32
+CALL @tdbg_ch
+LD r1,r0,@tdbg_i
+ADD r1,r1,r13
+ST r1,r0,@tdbg_i
+MOVI r2,3
+BOOL.8 r3,r1,r2
+CMP r3,r0
+JMP[NE] @tdbg_rl
+MOVI r2,10
+CALL @tdbg_ch
+JMP @tdbg_rl
+tdbg_rd:
+JMP @tdbg_done
+
+tdbg_break:
+ST r14,r0,@dbg_sp
+CALL #DBG_PC
+LD r14,r0,@dbg_sp
+ST r1,r0,@tdbg_v
+ST r14,r0,@dbg_sp
+LD r1,r0,@tdbg_v
+CALL #DBG_BREAK
+LD r14,r0,@dbg_sp
+MOVI r2,66
+CALL @tdbg_ch
+MOVI r2,80
+CALL @tdbg_ch
+MOVI r2,61
+CALL @tdbg_ch
+LD r1,r0,@tk_id
+LD r2,r0,@tdbg_v
+MOVI r3,4
+CALL @dbg_puthex
+MOVI r2,10
+CALL @tdbg_ch
+JMP @tdbg_done
+
+tdbg_pc:
+ST r14,r0,@dbg_sp
+CALL #DBG_PC
+LD r14,r0,@dbg_sp
+ST r1,r0,@tdbg_v
+MOVI r2,80
+CALL @tdbg_ch
+MOVI r2,67
+CALL @tdbg_ch
+MOVI r2,61
+CALL @tdbg_ch
+LD r1,r0,@tk_id
+LD r2,r0,@tdbg_v
+MOVI r3,4
+CALL @dbg_puthex
+MOVI r2,10
+CALL @tdbg_ch
+JMP @tdbg_done
+
+tdbg_quit:
+ST r0,r0,@dbg_mode
+MOVI r2,113
+CALL @tdbg_ch
+MOVI r2,10
+CALL @tdbg_ch
+MOVI r1,1
+JMP @fs_disp_y
+
+tdbg_help:
+LD r1,r0,@tk_id
+MOVI r2,@s_tdbg_help
+CALL @vc_puts
+MOVI r2,10
+CALL @tdbg_ch
+JMP @tdbg_done
+
+tdbg_done:
+LD r1,r0,@tk_id
+MOVI r2,@s_tdbg_prompt
+CALL @vc_puts
+MOVI r1,1
+JMP @fs_disp_y
+
+tdbg_i:
+.word 0
+tdbg_v:
+.word 0
+tdbg_c:
+.word 0
+tdc:
+.word 0
+dbg_sp:
+.word 0
+dbg_mode:
+.word 0
+
+
 fs_dispatch:
 ST r15,r14,0
 ADD r14,r14,r13
+LD r1,r0,@dbg_mode
+CMP r1,r0
+JMP[NE] @fs_dbg_line
+; Enter NANDBG terminal monitor.
+LA r1,#FNB
+LA r2,@fs_s_debug
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @fs_d_debug
 ; Any "build..." input is handled BEFORE legacy first-letter shortcuts.
 ; "build" prints help rather than opening the b/browser window.
 ; "build nan0s" is an EXACT, NUL-terminated match; misspelled options
@@ -5010,6 +5284,58 @@ CMP r1,r0
 JMP[NE] @fs_d_pwd
 MOVI r1,0
 JMP @fs_disp_d
+fs_d_debug:
+MOVI r1,1
+ST r1,r0,@dbg_mode
+ST r14,r0,@dbg_sp
+CALL #DBG_BEGIN
+LD r14,r0,@dbg_sp
+LD r1,r0,@tk_id
+MOVI r2,@s_tdbg_banner
+CALL @vc_puts
+LD r1,r0,@tk_id
+MOVI r2,@s_tdbg_prompt
+CALL @vc_puts
+MOVI r1,1
+JMP @fs_disp_y
+
+fs_dbg_line:
+CALL @dbg_echo
+LD r1,r0,@tk_id
+MOVI r2,10
+CALL @vc_putc
+LA r1,#FNB
+LA r2,@s_tdbg_step
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @tdbg_step
+LA r1,#FNB
+LA r2,@s_tdbg_run
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @tdbg_run
+LA r1,#FNB
+LA r2,@s_tdbg_regs
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @tdbg_regs
+LA r1,#FNB
+LA r2,@s_tdbg_break
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @tdbg_break
+LA r1,#FNB
+LA r2,@s_tdbg_pc
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @tdbg_pc
+LA r1,#FNB
+LA r2,@s_tdbg_quit
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @tdbg_quit
+JMP @tdbg_help
+
 fs_d_build:
 CALL @sb_build
 JMP @fs_disp_y
@@ -5413,6 +5739,26 @@ fs_s_build_help_serial:
 .str "NANBUILD HELP\n"
 fs_s_cc:
 .str "cc "
+s_tdbg_banner:
+.str "NANDBG TERMINAL MONITOR\nstep run regs break pc quit\n"
+s_tdbg_prompt:
+.str "> "
+s_tdbg_help:
+.str "step run regs break pc quit"
+s_tdbg_step:
+.str "step"
+s_tdbg_run:
+.str "run"
+s_tdbg_regs:
+.str "regs"
+s_tdbg_break:
+.str "break"
+s_tdbg_pc:
+.str "pc"
+s_tdbg_quit:
+.str "quit"
+fs_s_debug:
+.str "debug"
 fs_s_run:
 .str "run "
 fs_s_cat:

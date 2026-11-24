@@ -9,7 +9,7 @@ NANDBG is both a standalone debugger and a component of this repository.
 - `src/dbg/n16dbg.nas` - standalone serial/bare-metal monitor.
 - `src/dbg/ndbg.nas` - the first typed-record proof.
 - `src/tests/ndbg_*` - core, differential, guard/watch, cart, and PUTC tests.
-- `tools/ndbg.sh`, `ndbg_diff.sh`, `ndbg_mon.sh`, `ndbg_img.sh` - exact gates.
+- `tools/ndbg.sh`, `ndbg_diff.sh`, `ndbg_mon.sh`, `ndbg_img.sh`, `ndbg_term.sh` - exact gates.
 - `spec/NANDBG.md` - design and rationale.
 - `src/museum/shell.nas` - resident ABI1 (5800..5813), ABI2 (5950..5972),
   debug core, demo target, and TOC/title snapshot at 0x70000/0x72000.
@@ -25,11 +25,28 @@ sh tools/ndbg_img.sh
 
 ## Desktop pane status
 
-The full desktop pane CLI is maintained in the `shemshallah/ndbg` repository.
-Its legacy GUI hook targets the pre-Silver-Slate window manager and is not
-registered as a gate here yet. The Silver Slate port is pending; the resident
-ABI and core are already shipped in this tree so the pane can be attached
-without changing the debugger.
+The Silver Slate terminal now has a wired `debug` monitor:
+
+```text
+> debug
+NANDBG TERMINAL MONITOR
+step run regs break pc quit
+> step
+S=0 PC=1FA5
+> regs
+R0=00000000 ...
+> break
+BP=1FA5
+> run
+!DIC@02001FA5 ...
+S=2 PC=1FA5
+> quit
+```
+
+`tools/ndbg_term.sh` gates the path. The richer pane CLI (carts/load, memory,
+captured screen/serial, undo/redo, checkpoints) remains in
+`shemshallah/ndbg`; the resident ABI and core are already shipped here so those
+commands can be attached without changing the debugger.
 
 ## Keeping this copy updated from ndbg
 

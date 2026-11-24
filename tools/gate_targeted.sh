@@ -53,9 +53,9 @@ for f in $FILES; do
     spec/*|third_party/*|*.md|build/*|aarch64/android/app/src/main/assets/*)
       ;;
     src/dbg/*|src/tests/ndbg_*|tools/ndbg*.sh)
-      add "ndbg ndbg_diff ndbg_mon ndbg_img" ;;
+      add "ndbg ndbg_diff ndbg_mon ndbg_img ndbg_term" ;;
     src/museum/shell.nas|src/tools/disasm.nas)
-      add "ndbg ndbg_diff ndbg_mon ndbg_img qgate_gui" ;;
+      add "ndbg ndbg_diff ndbg_mon ndbg_img ndbg_term qgate_gui" ;;
     src/lib/ncc.nas|src/lib/ppexpr.nas|src/lib/mpp.nas|src/lib/wide*.nas|src/lib/vscanf.nas|src/lib/iso*.nas|src/lib/mathx.nas|src/prog/nasm0_tables.nas|src/tools/disasm.nas|src/tests/ctests/*|src/tests/ncc_*)
       add "$COMPILER" ;;
     aarch64/android/core/*|aarch64/android/tests/*|aarch64/android/tools/nan_cli.c|aarch64/android/Makefile)
@@ -152,6 +152,9 @@ gate_files() {
       ;;
     ndbg|ndbg_diff|ndbg_mon|ndbg_img)
       echo "src/dbg/* src/tests/ndbg_* src/tools/disasm.nas tools/ndbg*.sh tools/nmk.awk tools/mkimg.awk x86/native/nan16_x86.nan"
+      ;;
+    ndbg_term)
+      echo "src/museum/* src/exhibits/gui_cart.nas src/dbg/* src/tools/disasm.nas tools/ndbg_term.sh tools/nmk.awk tools/mkimg.awk x86/native/nan16_x86.nan"
       ;;
     tcc_nan16_*)
       echo "third_party/tinycc/nan16-* third_party/tinycc/tcc.h third_party/tinycc/libtcc.c third_party/tinycc/libtcc.h third_party/tinycc/tccelf.c tools/tcc_nan16_*.sh"

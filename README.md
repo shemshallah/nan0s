@@ -307,8 +307,10 @@ sh tools/ndbg_mon.sh   # serial monitor
 sh tools/ndbg_img.sh   # bare-metal QEMU monitor boot
 ```
 
-The desktop pane CLI is maintained in `shemshallah/ndbg`; its Silver Slate port
-is pending. `tools/ndbg_sync.sh` refreshes the vendored component from an ndbg
+The Silver Slate terminal now has a wired `debug` monitor with `step`, `run`,
+`regs`, `break`, `pc`, and `quit`; `tools/ndbg_term.sh` gates it. The richer
+pane CLI is maintained in `shemshallah/ndbg` and will be attached to the same
+resident ABI. `tools/ndbg_sync.sh` refreshes the vendored component from an ndbg
 checkout.
 
 ## Mathematical and formal verification work
