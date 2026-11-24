@@ -684,6 +684,33 @@ ADD r2,r2,r5
 MOVI r3,43
 MOVI r4,#C_TXT
 CALL @fb_char7
+; Minimize control at x+w-46, matching raw PS/2 hit testing. The
+; existing maximize (x+w-31) and close (x+w-16) are unchanged.
+LD r9,r0,@dw_b
+LD r1,r9,#W_X
+LD r3,r9,#W_W
+ADD r1,r1,r3
+MOVI r5,46
+SUB r1,r1,r5
+LD r2,r9,#W_Y
+MOVI r5,2
+ADD r2,r2,r5
+MOVI r3,13
+MOVI r4,13
+MOVI r5,#C_BLUR
+CALL @wm_rect
+LD r9,r0,@dw_b
+LD r1,r9,#W_X
+LD r3,r9,#W_W
+ADD r1,r1,r3
+MOVI r5,43
+SUB r1,r1,r5
+LD r2,r9,#W_Y
+MOVI r5,3
+ADD r2,r2,r5
+MOVI r3,45
+MOVI r4,#C_TXT
+CALL @fb_char7
 LD r1,r0,@dw_id
 MOVI r2,1
 CALL @wm_kcall
