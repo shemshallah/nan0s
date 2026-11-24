@@ -69,6 +69,9 @@ mon_loop:
   MOVI r2,120
   CMP r1,r2
   JMP[EQ] @cmd_x
+  MOVI r2,110
+  CMP r1,r2
+  JMP[EQ] @cmd_n
   MOVI r2,113
   CMP r1,r2
   JMP[EQ] @cmd_q
@@ -195,6 +198,26 @@ ct_loop:
 ct_empty:
   MOVI r1,@s_empty
   CALL @nd_puts
+  JMP @mon_loop
+
+cmd_n:
+  MOVI r1,@s_ndr
+  CALL @nd_puts
+  MOVI r8,0
+cn_loop:
+  MOVI r1,@nd_rec
+  ADD r1,r1,r8
+  LD r1,r1,0
+  MOVI r2,8
+  CALL @nd_puthex
+  MOVI r1,32
+  PUTC r1
+  ADD r8,r8,r13
+  MOVI r2,8
+  CMP r8,r2
+  JMP[LT] @cn_loop
+  MOVI r1,10
+  PUTC r1
   JMP @mon_loop
 
 cmd_m:
@@ -405,8 +428,10 @@ mr_next:
 mr_lnk:
 .word 0
 
+s_ndr:
+.str "NDR "
 s_banner:
-.str "NANDBG MONITOR - s step  r run  b break  g goto  w watch  l hist  t stack  m types  p regs  d dis  x dump  q quit\n"
+.str "NANDBG MONITOR - s step  r run  b break  g goto  w watch  l hist  t stack  m types  p regs  d dis  x dump  n ndr  q quit\n"
 s_prompt:
 .str "> "
 s_bp:
