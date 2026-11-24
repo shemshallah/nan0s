@@ -40,6 +40,12 @@ finish and triage the later test/ files.
 - Tcl's `file executable` now returns false for regular VFS files, so the
   official CLI/shell tests take their explicit `continue`/skip path instead
   of aborting the aggregate in `exec`.
+- The testfixture build kept `SQLITE_OMIT_DEPRECATED`, which compiles
+  `test_expired()` down to a TCL_OK with no result; `badutf2-4.0` therefore
+  saw `{}` instead of `0`.  The official testfixture does not omit deprecated
+  APIs.  With that define removed, `badutf2.test` is **0 errors out of 42**.
+  Product fixture: 96,064,000 bytes, SHA-256
+  `16993026b069992129c2b3282cc2cb4a48bc6c29e84d71fe10773cb2e1a61af2`.
 
 ### Guest script control block
 
