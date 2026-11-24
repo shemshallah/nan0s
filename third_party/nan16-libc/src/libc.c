@@ -1372,9 +1372,142 @@ int printf(const char *fmt, ...)
     va_start(ap, fmt); r = vout(stdout, fmt, ap); va_end(ap);
     return r;
 }
-int scanf(const char *fmt, ...) { (void)fmt; return 0; }
-int sscanf(const char *s, const char *fmt, ...) { (void)s; (void)fmt; return 0; }
-int fscanf(FILE *fp, const char *fmt, ...) { (void)fp; (void)fmt; return 0; }
+/* A compact scanf family: integer/hex/octal/string/char conversions with
+   width and length modifiers, enough for SQLite's test1.c and Tcl probes. */
+int vsscanf(const char *s, const char *fmt, va_list ap)
+{
+    const char *p = s;
+    int assigned = 0;
+    while (*fmt) {
+        int suppress = 0, width = 0, lng = 0, base = 10, any = 0, neg = 0;
+        unsigned long long v = 0;
+        char conv;
+        const char *start;
+        if (isspace((unsigned char)*fmt)) {
+            while (isspace((unsigned char)*fmt)) fmt++;
+            while (isspace((unsigned char)*p)) p++;
+            continue;
+        }
+        if (*fmt != '%') {
+            if (*p != *fmt) break;
+            p++; fmt++; continue;
+        }
+        fmt++;
+        if (*fmt == '*') { suppress = 1; fmt++; }
+        while (isdigit((unsigned char)*fmt)) width = width * 10 + (*fmt++ - '0');
+        if (*fmt == 'h') { fmt++; if (*fmt == 'h') fmt++; }
+        else if (*fmt == 'l') { lng = 1; fmt++; if (*fmt == 'l') { lng = 2; fmt++; } }
+        else if (*fmt == 'z' || *fmt == 'j' || *fmt == 't') { lng = 2; fmt++; }
+        conv = *fmt++;
+        if (conv == '%') {
+            if (*p != '%') break;
+            p++; continue;
+        }
+        if (conv == 'n') {
+            if (!suppress) {
+                if (lng == 0) *va_arg(ap, int *) = (int)(p - s);
+                else if (lng == 1) *va_arg(ap, long *) = (long)(p - s);
+                else *va_arg(ap, long long *) = (long long)(p - s);
+            }
+            continue;
+        }
+        if (conv != 'c' && conv != '[')
+            while (isspace((unsigned char)*p)) p++;
+        if (!*p) break;
+        if (conv == 's' || conv == 'c') {
+            char *d = suppress ? 0 : va_arg(ap, char *);
+            unsigned n = 0, lim = (unsigned)width;
+            if (conv == 'c') {
+                if (!lim) lim = 1;
+                while (n < lim && *p) { if (d) d[n] = *p; n++; p++; }
+                if (n < lim) break;
+            } else {
+                while (*p && !isspace((unsigned char)*p) && (!lim || n < lim)) {
+                    if (d) d[n] = *p;
+                    n++; p++;
+                }
+                if (!n) break;
+                if (d) d[n] = 0;
+            }
+            if (!suppress) assigned++;
+            continue;
+        }
+        if (conv == 'd' || conv == 'i' || conv == 'u' || conv == 'x'
+            || conv == 'X' || conv == 'o') {
+            start = p;
+            if (conv == 'i') base = 0;
+            else if (conv == 'x' || conv == 'X') base = 16;
+            else if (conv == 'o') base = 8;
+            if (base == 10 || base == 0) {
+                if (*p == '+' || *p == '-') {
+                    neg = (*p == '-'); p++;
+                    if (width) width--;
+                }
+            }
+            if (base == 16 && p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) {
+                p += 2;
+                if (width) width -= 2;
+            }
+            if (base == 0) {
+                if (*p == '0') { base = 8; }
+                else base = 10;
+            }
+            while (*p) {
+                int c = (unsigned char)*p, d, used = (int)(p - start);
+                if (c >= '0' && c <= '9') d = c - '0';
+                else if (c >= 'a' && c <= 'f') d = c - 'a' + 10;
+                else if (c >= 'A' && c <= 'F') d = c - 'A' + 10;
+                else break;
+                if (d >= base) break;
+                if (width && used >= width) break;
+                v = v * (unsigned)base + (unsigned)d;
+                any = 1; p++;
+            }
+            if (!any) { p = start; break; }
+            if (neg) v = (unsigned long long)(-(long long)v);
+            if (!suppress) {
+                if (lng == 0) *va_arg(ap, int *) = (int)v;
+                else if (lng == 1) *va_arg(ap, long *) = (long)v;
+                else *va_arg(ap, long long *) = (long long)v;
+                assigned++;
+            }
+            continue;
+        }
+        break;
+    }
+    return assigned;
+}
+int sscanf(const char *s, const char *fmt, ...)
+{
+    va_list ap;
+    int r;
+    va_start(ap, fmt);
+    r = vsscanf(s, fmt, ap);
+    va_end(ap);
+    return r;
+}
+int fscanf(FILE *fp, const char *fmt, ...)
+{
+    char line[1024];
+    va_list ap;
+    int r;
+    if (!fgets(line, sizeof line, fp)) return EOF;
+    va_start(ap, fmt);
+    r = vsscanf(line, fmt, ap);
+    va_end(ap);
+    return r;
+}
+int scanf(const char *fmt, ...)
+{
+    char line[1024];
+    va_list ap;
+    int r;
+    if (!fgets(line, sizeof line, stdin)) return EOF;
+    va_start(ap, fmt);
+    r = vsscanf(line, fmt, ap);
+    va_end(ap);
+    return r;
+}
 
 /* ---------------------------------------------------------------- system */
 int stat(const char *name, struct stat *st)
