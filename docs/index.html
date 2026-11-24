@@ -21,6 +21,40 @@
     background:#000; border:1px solid #23234a; border-radius:6px; padding:10px; overflow:auto; }
   #screen_container > div { white-space:pre; font:14px/14px ui-monospace,monospace; color:#d8d8e8; }
   #screen_container canvas { display:none; image-rendering:pixelated; max-width:100%; height:auto; }
+  /* Dedicated immersive stage: the Exit button is not adjacent to the
+     normal Full screen launcher and remains accessible above mobile UI. */
+  #fullscreen-stage { position:relative; }
+  #fullscreen-exitbar { display:none; }
+  #fullscreen-stage.immersive {
+    position:fixed; inset:0; z-index:100; width:100%; height:100vh;
+    height:100dvh; padding: max(6px, env(safe-area-inset-top)) 6px 0;
+    background:#05050e; display:flex; flex-direction:column; gap:8px;
+  }
+  #fullscreen-stage.immersive #screen_container {
+    flex:1 1 auto; min-height:0; min-width:0; width:100%; max-width:none;
+    height:auto; margin:0; overflow:auto; border-radius:6px;
+    overscroll-behavior:contain;
+  }
+  #fullscreen-stage.immersive #fullscreen-exitbar {
+    flex:0 0 auto; display:flex; align-items:center; flex-wrap:nowrap;
+    justify-content:space-between; gap:8px;
+    padding:6px 4px max(10px, env(safe-area-inset-bottom));
+    background:#101027; border-top:1px solid #343464;
+  }
+  #fullscreen-exitbar .fullscreen-tools { display:flex; gap:5px; flex:0 1 auto; min-width:0; }
+  #fullscreen-exitbar button { min-height:48px; min-width:40px; padding:9px 10px; touch-action:manipulation; }
+  #exit-fullscreen {
+    margin-left:auto; flex:0 0 auto; min-width:128px !important;
+    background:#282047; border:2px solid #9fa8ff; font-weight:700;
+  }
+  body.nan0s-immersive { overflow:hidden; }
+  body.nan0s-immersive .typebar { display:none; }
+  body.nan0s-immersive.nan0s-keys-open .typebar {
+    display:block; position:fixed; top:max(8px, env(safe-area-inset-top));
+    left:8px; right:8px; margin:0; width:auto; max-width:none; z-index:150;
+    padding:8px; background:#101027; border:1px solid #555589;
+    border-radius:8px; box-shadow:0 4px 24px #000d;
+  }
   .controls { display:flex; gap:10px; align-items:center; flex-wrap:wrap; justify-content:center; margin:12px 0 4px; }
   button { background:#151534; color:var(--fg); border:1px solid #2e2e5e; border-radius:5px;
     padding:7px 14px; font:inherit; cursor:pointer; }
@@ -109,13 +143,24 @@
 </header>
 <main>
   <div id="status">loading NaN/0S full-system boot…</div>
-  <div id="screen_container" tabindex="0">
-    <div style="white-space:pre;font:14px/14px monospace;color:#d8d8e8"></div>
-    <canvas style="display:none"></canvas>
+  <div id="fullscreen-stage">
+    <div id="screen_container" tabindex="0">
+      <div style="white-space:pre;font:14px/14px monospace;color:#d8d8e8"></div>
+      <canvas style="display:none"></canvas>
+    </div>
+    <div id="fullscreen-exitbar" role="toolbar" aria-label="Full-screen NaN/0S controls">
+      <div class="fullscreen-tools">
+        <button type="button" id="fullscreen-keyboard" aria-pressed="false" title="Show or hide the guest keyboard and F0–F12 keys">Keys</button>
+        <button type="button" id="fullscreen-zoom-out" aria-label="Zoom out NaN/0S">−</button>
+        <button type="button" id="fullscreen-zoom-fit" aria-label="Fit NaN/0S display">Fit</button>
+        <button type="button" id="fullscreen-zoom-in" aria-label="Zoom in NaN/0S">+</button>
+      </div>
+      <button type="button" id="exit-fullscreen" aria-label="Exit NaN/0S full-screen display">Exit full screen</button>
+    </div>
   </div>
   <div class="controls">
     <button id="restart" disabled>Restart</button>
-    <button id="fullscreen" disabled>Full screen</button>
+    <button id="fullscreen" type="button" disabled aria-label="Enter NaN/0S full-screen display">Full screen</button>
     <button id="zoom-out" type="button" disabled aria-label="Zoom out guest screen">−</button>
     <span id="zoom-level" class="hint">100%</span>
     <button id="zoom-in" type="button" disabled aria-label="Zoom in guest screen">+</button>
@@ -200,6 +245,12 @@
   var serialEl = document.getElementById("serial");
   var restartBtn = document.getElementById("restart");
   var fsBtn = document.getElementById("fullscreen");
+  var stageEl = document.getElementById("fullscreen-stage");
+  var exitFsBtn = document.getElementById("exit-fullscreen");
+  var fsKeysBtn = document.getElementById("fullscreen-keyboard");
+  var fsZoomOutBtn = document.getElementById("fullscreen-zoom-out");
+  var fsZoomFitBtn = document.getElementById("fullscreen-zoom-fit");
+  var fsZoomInBtn = document.getElementById("fullscreen-zoom-in");
   var zoomOutBtn = document.getElementById("zoom-out");
   var zoomInBtn = document.getElementById("zoom-in");
   var zoomFitBtn = document.getElementById("zoom-fit");
@@ -440,9 +491,74 @@
   restartBtn.addEventListener("click", function () {
     if (emulator) { emulator.restart(); screenEl.focus(); }
   });
-  fsBtn.addEventListener("click", function () {
-    if (emulator) emulator.screen_go_fullscreen();
+  // Native v86.screen_go_fullscreen() only targets the canvas, leaving our
+  // exit control outside the fullscreen element. Request fullscreen on the
+  // entire stage instead, and ALWAYS enter a CSS immersive fallback first:
+  // Android browsers sometimes reject Fullscreen API requests outright.
+  var nativeFsActive = false;
+  function enterFullscreen() {
+    if (!emulator) return;
+    stageEl.classList.add("immersive");
+    document.body.classList.add("nan0s-immersive");
+    document.body.classList.remove("nan0s-keys-open");
+    fsKeysBtn.setAttribute("aria-pressed", "false");
+    fsBtn.setAttribute("aria-expanded", "true");
+    updateGuestZoom(zoom);
+    if (typeof stageEl.requestFullscreen === "function") {
+      try {
+        var promise = stageEl.requestFullscreen();
+        if (promise && typeof promise.then === "function") {
+          promise.then(function () { nativeFsActive = true; }, function () {
+            // CSS fallback remains interactive if the native API is denied.
+            nativeFsActive = false;
+          });
+        }
+      } catch (ignored) {
+        nativeFsActive = false;
+      }
+    }
+  }
+  function exitFullscreen() {
+    stageEl.classList.remove("immersive");
+    document.body.classList.remove("nan0s-immersive");
+    document.body.classList.remove("nan0s-keys-open");
+    fsKeysBtn.setAttribute("aria-pressed", "false");
+    fsBtn.setAttribute("aria-expanded", "false");
+    nativeFsActive = false;
+    if (document.fullscreenElement === stageEl && typeof document.exitFullscreen === "function") {
+      try {
+        var promise = document.exitFullscreen();
+        if (promise && typeof promise.catch === "function") promise.catch(function () {});
+      } catch (ignored) {}
+    }
+    updateGuestZoom(zoom);
+  }
+  fsBtn.addEventListener("click", enterFullscreen);
+  exitFsBtn.addEventListener("click", exitFullscreen);
+  // v86's global mouse adapter should never intercept these host controls.
+  var fsBar = document.getElementById("fullscreen-exitbar");
+  fsBar.addEventListener("touchstart", function (e) { e.stopPropagation(); }, { passive:true });
+  fsBar.addEventListener("touchmove", function (e) { e.stopPropagation(); }, { passive:true });
+  fsBar.addEventListener("mousedown", function (e) { e.stopPropagation(); });
+  fsKeysBtn.addEventListener("click", function () {
+    var open = !document.body.classList.contains("nan0s-keys-open");
+    document.body.classList.toggle("nan0s-keys-open", open);
+    fsKeysBtn.setAttribute("aria-pressed", open ? "true" : "false");
+    if (open) typeEl.focus({ preventScroll:true });
+    else if (typeof typeEl.blur === "function") typeEl.blur();
   });
+  fsZoomOutBtn.addEventListener("click", function () { updateGuestZoom(zoom / 1.25); });
+  fsZoomFitBtn.addEventListener("click", fitGuestScreen);
+  fsZoomInBtn.addEventListener("click", function () { updateGuestZoom(zoom * 1.25); });
+  if (typeof document.addEventListener === "function") {
+    document.addEventListener("fullscreenchange", function () {
+      // Chrome's system back/exit gesture should close our CSS overlay too.
+      if (nativeFsActive && document.fullscreenElement !== stageEl) exitFullscreen();
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && stageEl.classList.contains("immersive")) exitFullscreen();
+    });
+  }
 
   zoomOutBtn.addEventListener("click", function () { updateGuestZoom(zoom / 1.25); });
   zoomInBtn.addEventListener("click", function () { updateGuestZoom(zoom * 1.25); });
