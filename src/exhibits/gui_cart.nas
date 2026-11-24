@@ -22,6 +22,13 @@
 .equ DBG_PC 5805
 .equ DBG_STATUS 5806
 .equ DBG_BREAK 5810
+.equ DBG_WP_LIST 5957
+.equ DBG_WP_TOGGLE 5958
+.equ DBG_BP_LIST 5955
+.equ DBG_BP_TOGGLE 5956
+.equ DBG_MEM_CLS 5952
+.equ DBG_MEM 5950
+.equ DBG_WATCH 5811
 .equ DBG_CART 5813
 .equ TOC_SNAP 0x70000
 .org 8192
@@ -1291,10 +1298,6 @@ LD r1,r0,@tk_id
 MOVI r2,@s_unk
 CALL @vc_puts
 tk_finish:
-; NANDBG prints its own prompt and keeps terminal mode active.
-LD r1,r0,@dbg_mode
-CMP r1,r0
-JMP[NE] @tk_repaint
 ; e/edit/write show their own editor help ending in a prompt.
 LD r1,r0,@tk_id
 ADD r1,r1,r13
@@ -5126,6 +5129,197 @@ LD r15,r14,0
 RET
 
 
+; ---- memory, watchpoints, breakpoint tables, reset ----
+tdbg_mem:
+ST r14,r0,@dbg_sp
+CALL #DBG_PC
+LD r14,r0,@dbg_sp
+ST r1,r0,@mem_base
+MOVI r1,0
+ST r1,r0,@mem_i
+mem_l:
+LD r1,r0,@mem_i
+MOVI r2,8
+CMP r1,r2
+JMP[GE] @mem_d
+LD r1,r0,@mem_base
+LD r2,r0,@mem_i
+ADD r1,r1,r2
+ST r1,r0,@mem_a
+ST r14,r0,@dbg_sp
+LD r1,r0,@mem_a
+CALL #DBG_MEM
+LD r14,r0,@dbg_sp
+ST r1,r0,@mem_v
+ST r14,r0,@dbg_sp
+LD r1,r0,@mem_a
+CALL #DBG_MEM_CLS
+LD r14,r0,@dbg_sp
+ST r1,r0,@mem_c
+MOVI r2,77
+CALL @tdbg_ch
+LD r1,r0,@dk_id
+LD r2,r0,@mem_a
+MOVI r3,4
+CALL @dbg_puthex
+LD r1,r0,@dk_id
+LD r2,r0,@mem_v
+MOVI r3,8
+CALL @dbg_puthex
+LD r1,r0,@dk_id
+LD r2,r0,@mem_c
+MOVI r3,1
+CALL @dbg_puthex
+MOVI r2,10
+CALL @tdbg_ch
+LD r1,r0,@mem_i
+ADD r1,r1,r13
+ST r1,r0,@mem_i
+JMP @mem_l
+mem_d:
+JMP @tdbg_done
+mem_base:
+.word 0
+mem_i:
+.word 0
+mem_a:
+.word 0
+mem_v:
+.word 0
+mem_c:
+.word 0
+
+tdbg_watch:
+ST r14,r0,@dbg_sp
+CALL #DBG_PC
+LD r14,r0,@dbg_sp
+ST r1,r0,@w_pc
+ST r14,r0,@dbg_sp
+LD r1,r0,@w_pc
+CALL #DBG_WP_TOGGLE
+LD r14,r0,@dbg_sp
+MOVI r2,87
+CALL @tdbg_ch
+MOVI r2,61
+CALL @tdbg_ch
+LD r1,r0,@dk_id
+LD r2,r0,@w_pc
+MOVI r3,4
+CALL @dbg_puthex
+MOVI r2,10
+CALL @tdbg_ch
+JMP @tdbg_done
+w_pc:
+.word 0
+
+tdbg_bpts:
+ST r14,r0,@dbg_sp
+CALL #DBG_BP_LIST
+LD r14,r0,@dbg_sp
+ST r1,r0,@bp_ptr
+ST r2,r0,@bp_n
+MOVI r2,66
+CALL @tdbg_ch
+MOVI r2,80
+CALL @tdbg_ch
+MOVI r2,61
+CALL @tdbg_ch
+LD r1,r0,@dk_id
+LD r2,r0,@bp_n
+MOVI r3,1
+CALL @dbg_puthex
+MOVI r2,58
+CALL @tdbg_ch
+MOVI r2,10
+CALL @tdbg_ch
+MOVI r1,0
+ST r1,r0,@bp_i
+bp_l:
+LD r1,r0,@bp_i
+LD r2,r0,@bp_n
+CMP r1,r2
+JMP[GE] @bp_d
+LD r1,r0,@bp_ptr
+LD r2,r0,@bp_i
+ADD r1,r1,r2
+LD r2,r1,0
+LD r1,r0,@dk_id
+MOVI r3,4
+CALL @dbg_puthex
+MOVI r2,32
+CALL @tdbg_ch
+LD r1,r0,@bp_i
+ADD r1,r1,r13
+ST r1,r0,@bp_i
+JMP @bp_l
+bp_d:
+MOVI r2,10
+CALL @tdbg_ch
+JMP @tdbg_done
+
+tdbg_wpts:
+ST r14,r0,@dbg_sp
+CALL #DBG_WP_LIST
+LD r14,r0,@dbg_sp
+ST r1,r0,@wp_ptr
+ST r2,r0,@wp_n
+MOVI r2,87
+CALL @tdbg_ch
+MOVI r2,61
+CALL @tdbg_ch
+LD r1,r0,@dk_id
+LD r2,r0,@wp_n
+MOVI r3,1
+CALL @dbg_puthex
+MOVI r2,58
+CALL @tdbg_ch
+MOVI r2,10
+CALL @tdbg_ch
+MOVI r1,0
+ST r1,r0,@wp_i
+wp_l:
+LD r1,r0,@wp_i
+LD r2,r0,@wp_n
+CMP r1,r2
+JMP[GE] @wp_d
+LD r1,r0,@wp_ptr
+LD r2,r0,@wp_i
+ADD r1,r1,r2
+LD r2,r1,0
+LD r1,r0,@dk_id
+MOVI r3,4
+CALL @dbg_puthex
+MOVI r2,32
+CALL @tdbg_ch
+LD r1,r0,@wp_i
+ADD r1,r1,r13
+ST r1,r0,@wp_i
+JMP @wp_l
+wp_d:
+MOVI r2,10
+CALL @tdbg_ch
+JMP @tdbg_done
+bp_ptr:
+.word 0
+bp_n:
+.word 0
+bp_i:
+.word 0
+wp_ptr:
+.word 0
+wp_n:
+.word 0
+wp_i:
+.word 0
+
+tdbg_reset:
+ST r14,r0,@dbg_sp
+CALL #DBG_BEGIN
+LD r14,r0,@dbg_sp
+CALL @dbg_state
+JMP @tdbg_done
+
+
 ; ---- NANDBG terminal monitor (resident ABI, minimal first pane) ----
 dbg_echo:
 ST r15,r14,0
@@ -5315,7 +5509,7 @@ LD r14,r0,@dbg_sp
 ST r1,r0,@tdbg_v
 ST r14,r0,@dbg_sp
 LD r1,r0,@tdbg_v
-CALL #DBG_BREAK
+CALL #DBG_BP_TOGGLE
 LD r14,r0,@dbg_sp
 MOVI r2,66
 CALL @tdbg_ch
@@ -5368,9 +5562,6 @@ CALL @tdbg_ch
 JMP @tdbg_done
 
 tdbg_done:
-LD r1,r0,@tk_id
-MOVI r2,@s_tdbg_prompt
-CALL @vc_puts
 MOVI r1,1
 JMP @fs_disp_y
 
@@ -5477,9 +5668,6 @@ LD r14,r0,@dbg_sp
 LD r1,r0,@tk_id
 MOVI r2,@s_tdbg_banner
 CALL @vc_puts
-LD r1,r0,@tk_id
-MOVI r2,@s_tdbg_prompt
-CALL @vc_puts
 MOVI r1,1
 JMP @fs_disp_y
 
@@ -5523,6 +5711,31 @@ LA r2,@s_tdbg_pc
 CALL @fs_prefix
 CMP r1,r0
 JMP[NE] @tdbg_pc
+LA r1,#FNB
+LA r2,@s_tdbg_mem
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @tdbg_mem
+LA r1,#FNB
+LA r2,@s_tdbg_watch
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @tdbg_watch
+LA r1,#FNB
+LA r2,@s_tdbg_bpts
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @tdbg_bpts
+LA r1,#FNB
+LA r2,@s_tdbg_wpts
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @tdbg_wpts
+LA r1,#FNB
+LA r2,@s_tdbg_reset
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @tdbg_reset
 LA r1,#FNB
 LA r2,@s_tdbg_quit
 CALL @fs_prefix
@@ -5940,11 +6153,11 @@ s_dbg_loaded:
 s_dbg_nocart:
 .str "no cart\n"
 s_tdbg_banner:
-.str "NANDBG TERMINAL MONITOR\ncarts load <id> step run regs break pc quit\n"
+.str "NANDBG TERMINAL MONITOR\ncarts load <id> step run regs break watch bpts wpts mem reset pc quit\n"
 s_tdbg_prompt:
 .str "> "
 s_tdbg_help:
-.str "carts load <id> step run regs break pc quit"
+.str "carts load <id> step run regs break watch bpts wpts mem reset pc quit"
 s_tdbg_carts:
 .str "carts"
 s_tdbg_load:
@@ -5959,6 +6172,16 @@ s_tdbg_break:
 .str "break"
 s_tdbg_pc:
 .str "pc"
+s_tdbg_mem:
+.str "mem"
+s_tdbg_watch:
+.str "watch"
+s_tdbg_bpts:
+.str "bpts"
+s_tdbg_wpts:
+.str "wpts"
+s_tdbg_reset:
+.str "reset"
 s_tdbg_quit:
 .str "quit"
 fs_s_debug:

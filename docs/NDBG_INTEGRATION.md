@@ -30,7 +30,7 @@ The Silver Slate terminal now has a wired `debug` monitor:
 ```text
 > debug
 NANDBG TERMINAL MONITOR
-carts load <id> step run regs break pc quit
+carts load <id> step run regs break watch bpts wpts mem reset pc quit
 > carts
 1 Baby
 > load 1
@@ -42,6 +42,16 @@ S=0 PC=1FA5
 R0=00000000 ...
 > break
 BP=1FA5
+> watch
+W=1FA5
+> bpts
+BP=1:
+2001
+> wpts
+W=1:
+2001
+> mem
+M2000...
 > run
 !DIC@02001FA5 ...
 S=2 PC=1FA5
