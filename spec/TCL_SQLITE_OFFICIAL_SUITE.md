@@ -187,6 +187,14 @@ Status legend: **done**, **partial**, **planned**.
 
 - [ ] Vendor `sqlite-src-3540100` (test suite) with hashes; put the test
       tree and Tcl library on the guest VFS/disk.
+- [x] Pack the Tcl library and official test tree into an `N16PACK1` suite
+      image: `tools/nan16_suite_pack.py` produced 2,133 files / 25,806,592
+      bytes (Tcl library + `/sqlite/test`).
+- [x] Guest `N16PACK1` parser in the C libc VFS: `nan16_vfs_add_pack()` uses
+      the dynamically growable table (`NAN16_VFS_INIT_CAP`, optional
+      `NAN16_VFS_MAXFILES`), reserves once for the whole pack and registers all
+      2,133 files. `tools/tcc_nan16_vfs_pack.sh` proves the last entry is
+      readable; there is no fixed 2048/4096 array.
 - [ ] Full `testfixture` build with the official flags, THREADSAFE=1, all
       extensions and test hooks; guest VFS on NaNFS.
 - [ ] Port `tester.tcl` capability probes and the test runner; no host
