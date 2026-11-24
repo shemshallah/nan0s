@@ -60,7 +60,8 @@ The cart test puts the core at word 40000, the cart at 8192, and harmless
 `JMP -> RET` vectors at words 1..31. It validates running a real cartridge
 without loading it into the debugger's own address range.
 
-In the desktop terminal, type `debug` to open the second CLI. `carts` lists the
+In the desktop terminal, type `debug` to open the second CLI; the system
+utilities window's `[3] DEBUG` entry opens the same CLI. `carts` lists the
 catalog; `load <id>` copies a sealed cart into the debug arena at `0x80000` and
 maps guest 8192 onto it. `reset` returns to the built-in demo target at 8100. `next` steps over a call;
 `finish` runs until the current shadow frame returns. `break`, `bpts`, `watch`,

@@ -302,7 +302,7 @@ Design: `spec/NANDBG.md`. Gates: `tools/ndbg.sh`, `tools/ndbg_diff.sh`,
 - [x] Debug-pane vector I/O capture into a private 25x80 text buffer;
       `screen` CLI command.
 - [x] Serial capture from target `PUTC` into 0x61000; `serial` CLI command.
-- [ ] System menu `[3] DEBUG`.
+- [x] System utilities `[3] DEBUG` entry opens the desktop debug CLI.
 - [ ] 80×25 pane console (the serial/GUI CLIs already have the type matrix).
 - [x] Bounded scalar undo: 32-record ring at 0x30000, restore of registers,
       PC, condition, call depth, and two guest words per step; `undo [n]` CLI.

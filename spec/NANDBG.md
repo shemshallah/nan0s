@@ -963,7 +963,8 @@ and title area to `0x70000/0x72000` at cold boot, because a large cart loaded at
 8192 overwrites 22000/23600. The debugger reads the snapshot, not the live TOC.
 
 Entry today: the desktop terminal's `debug` command (`fs_dispatch` prefix in
-`gui_cart.nas`) opens a second terminal-shaped CLI of kind 8. It drives the
+`gui_cart.nas`) or the system utilities window's `[3] DEBUG` opens a second
+terminal-shaped CLI of kind 8. It drives the
 resident core at 6200. The ABI is fixed:
 
 ```
@@ -1238,7 +1239,7 @@ The next acceptance step is every text cart, then the GUI and NCC output.
 - [x] Debug-pane vector I/O capture: `VPOKE`/`VPEEK` and display ops go to
       a private 25x80 text buffer; `screen` command.
 - [x] Serial capture: target `PUTC` goes to 0x61000; `serial` command.
-- [ ] System menu `[3] DEBUG`.
+- [x] System utilities `[3] DEBUG` entry opens the desktop debug CLI.
 
 **Acceptance:** debug the GUI cart; break on a window-manager routine; feed a
 scripted key; verify the monitor survives a target that writes to `0`, to the

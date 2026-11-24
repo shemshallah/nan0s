@@ -148,6 +148,17 @@ if ! grep -qx 'NOCKPT' "$T/nockpt.lf"; then
   echo "ndbg_gui: NOCKPT FAIL"; cat "$T/nockpt"; exit 1
 fi
 
+# system utilities [3] DEBUG opens the same kind-8 CLI
+"$CLI" --img "$T/guest.bin" --steps 160000000 \
+  --keys "@20000000,u,ENTER,@4000000,3,@4000000,l,o,a,d,SPACE,1,ENTER,@2000000,s,t,e,p,ENTER,@4000000" \
+  --serial > "$T/menu" 2>/dev/null || true
+tr -d '\r' < "$T/menu" > "$T/menu.lf"
+if ! grep -qx 'load 1' "$T/menu.lf" ||
+   ! grep -qx 'S=0 PC=2000' "$T/menu.lf" ||
+   ! grep -qx 'S=0 PC=2001' "$T/menu.lf"; then
+  echo "ndbg_gui: SYSTEM MENU FAIL"; cat "$T/menu"; exit 1
+fi
+
 # captured cart serial: a tiny PUTC cart prints HELLO
 "$CLI" --img "$T/guest.bin" --steps 90000000 \
   --keys "$DBGKEYS,@1000000,c,a,r,t,s,ENTER,@1000000,l,o,a,d,SPACE,2,ENTER,@1000000,r,u,n,ENTER,@1000000,s,e,r,i,a,l,ENTER,@1000000" \
@@ -216,5 +227,5 @@ if cmp -s "$T/edit.lf" "$T/negative"; then
   echo "ndbg_gui: NEGATIVE FAIL (mutated transcript accepted)"
   exit 1
 fi
-echo "ndbg_gui: PASS (carts/load, break/log/mem, next/finish; screen/serial/dis; setr/setm/goto; bp/wp tables; undo [n]/redo [n]; checkpoint/restore; setw/setc)"
+echo "ndbg_gui: PASS (carts/load, break/log/mem, next/finish; screen/serial/dis; setr/setm/goto; bp/wp tables; undo [n]/redo [n]; checkpoint/restore; setw/setc; menu [3] DEBUG)"
 echo "ndbg_gui: NEGATIVE PASS (mutated transcript rejected)"

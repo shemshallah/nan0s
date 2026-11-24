@@ -302,7 +302,7 @@ kt:
 .word @hex_init,@hex_draw,@hex_key,@nop_k
 .word @st_init,@st_draw,@st_key,@st_tick
 .word @nn_init,@nn_draw,@nn_key,@nn_tick
-.word @ut_init,@ut_draw,@nop_k,@ut_tick
+.word @ut_init,@ut_draw,@ut_key,@ut_tick
 .word @br_init,@br_draw,@br_key,@nop_k
 .word @dbg_init,@term_draw,@dbg_key,@nop_k
 nop_k:
@@ -5854,6 +5854,25 @@ RET
 ; CPUID registers are stored as words: EBX,EDX,ECX of leaf 0 ARE the vendor string (4 chars per word), leaves 0x80000002-4 are the brand string.
 ; TSC low is also shown through its mirror: a class-6 word, BSWAPM, payload = the byte-reversed (big-endian face) value.
 .equ IDBUF 0x50000
+ut_key:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,@uk_id
+ST r3,r0,@uk_k
+MOVI r4,51
+CMP r3,r4
+JMP[NE] @uk_done
+MOVI r1,#DBG_KIND
+CALL @gui_open_new
+uk_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+uk_id:
+.word 0
+uk_k:
+.word 0
+
 ut_init:
 ST r15,r14,0
 ADD r14,r14,r13
@@ -6536,6 +6555,11 @@ LD r1,r0,@ud_i
 ADD r1,r1,r13
 ST r1,r0,@ud_i
 JMP @ud_pl
+MOVI r1,0
+MOVI r2,16
+MOVI r3,@s_udbg
+MOVI r4,#C_YEL
+CALL @tx_s
 ud_done:
 SUB r14,r14,r13
 LD r15,r14,0
@@ -6588,6 +6612,8 @@ ut_an:
 .word @s_ua0,@s_ua1,@s_ua2,@s_ua3
 s_u0:
 .str "SYSTEM UTILITIES"
+s_udbg:
+.str "[3] DEBUG"
 s_ucpu:
 .str "CPU"
 s_unm:
