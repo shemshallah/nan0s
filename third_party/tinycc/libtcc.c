@@ -872,6 +872,13 @@ LIBTCCAPI void tcc_undefine_symbol(TCCState *s1, const char *sym)
 LIBTCCAPI TCCState *tcc_new(void)
 {
     TCCState *s;
+#ifdef TCC_TARGET_NAN16
+    /* The flat NaN16 linker keeps relocation/jump fixup arrays in file-scope
+       storage.  A process that compiles several independent jobs (the guest
+       build driver does) must not apply one job's relocations to the next. */
+    nan16_reset_link_state();
+    nan16_reset_jumps();
+#endif
 
     s = tcc_mallocz(sizeof(TCCState));
 #ifdef MEM_DEBUG

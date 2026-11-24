@@ -79,6 +79,9 @@ echo "selfbuild: build tcc0"
 $CC -std=gnu99 -O2 -DTCC_TARGET_NAN16 -DONE_SOURCE -I"$TT" "$TT/tcc.c" \
     -o "$T/tcc0" -lm -ldl
 
+echo "selfbuild: multi-job linker regression"
+sh tools/tcc_nan16_multijob.sh
+
 # ------------------------------------------------------------------ sources
 mkdir -p "$T/tcc_raw" "$T/job_b" "$T/job_r" "$T/pack_b" "$T/pack_j"
 if [ ! -f "$T/R.raw" ]; then

@@ -43,6 +43,12 @@ void nan16_add_reloc(int pos, Sym *sym, int addend)
     nan_nrelocs++;
 }
 
+void nan16_reset_link_state(void)
+{
+    nan_nrelocs = 0;
+    nan_naddr_relocs = 0;
+}
+
 void nan16_add_addr_reloc(int lo, int hi, Sym *sym, int addend)
 {
     if (nocode_wanted) return;

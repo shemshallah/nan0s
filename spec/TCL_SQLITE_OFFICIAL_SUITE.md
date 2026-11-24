@@ -107,9 +107,9 @@ Status legend: **done**, **partial**, **planned**.
 | Q3 | Official harness capability detection/skips | native run works | testrunner |
 | Q4 | `test/*.test` corpus on guest filesystem | not vendored | 1,199 files |
 | C1 | tcc1 raw-source/VFS input compile (no host `.i`) | **done** (`tcc_nan16_rawcc`) | Tcl/SQLite on VM |
-| C1b | tcc1 builds its own libtcc from raw source via VFS | **done** (`tcc_nan16_selfbuild`: R = 1,940,008 bytes, raw `test.c` -> 42) | final bare-metal image |
-| C2 | tcc1 build of Tcl/testfixture | planned (raw SQLite-on-R probe is the open blocker) | final image |
-| C3 | tcc1==tcc2 fixpoint after C1/C2 | **done** at 1,904,320 bytes after C1 (SHA-256 `3c4acd8e...`); rerun after C2 | final proof |
+| C1b | tcc1 builds its own libtcc from raw source via VFS | **done** (`tcc_nan16_selfbuild`: R = 1,940,000 bytes, raw `test.c` -> 42) | final bare-metal image |
+| C2 | tcc1 build of Tcl/testfixture | raw SQLite-on-R probe **done** (byte-identical to tcc0); Tcl/testfixture build planned | final image |
+| C3 | tcc1==tcc2 fixpoint after C1/C2 | **done** at 1,904,656 bytes after C1 (SHA-256 `76ae1eeb...`); rerun after C2 | final proof |
 | V1 | Deterministic gates for each layer | partial | CI |
 | V2 | Official result archive + exact counts | planned | proof |
 
