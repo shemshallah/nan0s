@@ -1050,6 +1050,35 @@ ws_side:
 wm_tile:
 ST r15,r14,0
 ADD r14,r14,r13
+; One window gets the whole work area. Otherwise distribute into 2 columns
+; and ceil(n/2) rows, not a fixed 2x4 grid that wastes most of the screen.
+LD r1,r0,@wm_zn
+MOVI r2,1
+CMP r1,r2
+JMP[NE] @wt_two_cols
+MOVI r2,1
+JMP @wt_cols_set
+wt_two_cols:
+MOVI r2,2
+wt_cols_set:
+ST r2,r0,@wt_cols
+LD r3,r0,@fb_w
+DIV r3,r3,r2
+ST r3,r0,@wt_w
+LD r1,r0,@wm_zn
+ADD r1,r1,r2
+SUB r1,r1,r13
+DIV r1,r1,r2
+MOVI r3,1
+CMP r1,r3
+JMP[GE] @wt_rows
+MOVI r1,1
+wt_rows:
+LD r3,r0,@fb_h
+MOVI r4,54
+SUB r3,r3,r4
+DIV r3,r3,r1
+ST r3,r0,@wt_h
 ST r0,r0,@wt_i
 wt_loop:
 LD r2,r0,@wt_i
@@ -1061,36 +1090,32 @@ MOVHI r4,#ZOH
 ADD r4,r4,r2
 LD r1,r4,0
 CALL @wm_wbase
+; Compute cell x from index modulo columns, row from index / columns.
 LD r2,r0,@wt_i
-MOVI r3,1
-BOOL.8 r4,r2,r3
-LD r5,r0,@fb_w
-SHR r5,r5,1
+LD r3,r0,@wt_cols
+DIV r4,r2,r3
+MUL r4,r4,r3
+SUB r4,r2,r4
+LD r5,r0,@wt_w
 MUL r4,r4,r5
 MOVI r6,4
 ADD r4,r4,r6
 ST r4,r1,#W_X
 LD r2,r0,@wt_i
-SHR r2,r2,1
-LD r5,r0,@fb_h
-MOVI r6,54
-SUB r5,r5,r6
-SHR r5,r5,2
+LD r3,r0,@wt_cols
+DIV r2,r2,r3
+LD r5,r0,@wt_h
 MUL r2,r2,r5
 MOVI r6,#TOPH
 ADD r2,r2,r6
 MOVI r6,4
 ADD r2,r2,r6
 ST r2,r1,#W_Y
-LD r5,r0,@fb_w
-SHR r5,r5,1
+LD r5,r0,@wt_w
 MOVI r6,8
 SUB r5,r5,r6
 ST r5,r1,#W_W
-LD r5,r0,@fb_h
-MOVI r6,54
-SUB r5,r5,r6
-SHR r5,r5,2
+LD r5,r0,@wt_h
 MOVI r6,4
 SUB r5,r5,r6
 ST r5,r1,#W_H
@@ -1105,6 +1130,12 @@ ST r1,r0,@wm_redraw
 SUB r14,r14,r13
 LD r15,r14,0
 RET
+wt_cols:
+.word 0
+wt_w:
+.word 0
+wt_h:
+.word 0
 wt_i:
 .word 0
 
