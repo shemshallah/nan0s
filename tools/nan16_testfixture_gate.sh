@@ -65,7 +65,12 @@ grep -Eq 'TCL_PATCH_LEVEL[[:space:]]+"9\.0\.3"' "$TCL_SRC/generic/tcl.h" || {
 
 T=${TMPDIR:-$ROOT/build}/tcl-testfixture.$$
 mkdir -p "$T"
-trap 'rm -rf "$T"' EXIT INT TERM
+KEEP=${TCL_NAN16_TESTFIXTURE_KEEP:-0}
+OUT_IMG=${TCL_NAN16_TESTFIXTURE_OUT:-}
+cleanup() {
+    if [ "$KEEP" = 1 ]; then echo "tcl_testfixture: kept $T"; else rm -rf "$T"; fi
+}
+trap cleanup EXIT INT TERM
 
 MODE=product
 RUNNER=${TCL_NAN16_TESTFIXTURE_RUNNER:-}
@@ -92,6 +97,14 @@ $CC -std=gnu99 -O2 -DTCC_TARGET_NAN16 -DONE_SOURCE -I"$TT" "$TT/tcc.c" \
 echo "tcl_testfixture: pack official VFS"
 python3 tools/nan16_suite_pack.py "$T/suite.n16pack" \
     --tree "$SQLITE_SRC/test=/sqlite/test" \
+    --tree "$SQLITE_SRC/ext/rtree=/sqlite/ext/rtree" \
+    --tree "$SQLITE_SRC/ext/fts5/test=/sqlite/ext/fts5/test" \
+    --tree "$SQLITE_SRC/ext/expert=/sqlite/ext/expert" \
+    --tree "$SQLITE_SRC/ext/recover=/sqlite/ext/recover" \
+    --tree "$SQLITE_SRC/ext/rbu=/sqlite/ext/rbu" \
+    --tree "$SQLITE_SRC/ext/intck=/sqlite/ext/intck" \
+    --tree "$SQLITE_SRC/ext/vec1/test=/sqlite/ext/vec1/test" \
+    --tree "$SQLITE_SRC/ext/session=/sqlite/ext/session" \
     --tree "$TCL_SRC/library=/usr/lib/tcl9.0" --check
 PACK_LEN=$(wc -c < "$T/suite.n16pack" | tr -d ' ')
 PACK_COUNT=$(python3 - "$T/suite.n16pack" <<'PY'
@@ -100,8 +113,12 @@ d = open(sys.argv[1], "rb").read()
 print(struct.unpack_from("<I", d, 8)[0])
 PY
 )
-[ "$PACK_COUNT" = 2133 ] && [ "$PACK_LEN" = 25806592 ] || {
-    echo "tcl_testfixture: FAIL (unexpected pack: $PACK_COUNT files, $PACK_LEN bytes; expected 2133 / 25806592)" >&2
+[ "$PACK_COUNT" -ge 2500 ] || {
+    echo "tcl_testfixture: FAIL (pack has only $PACK_COUNT files; ext tests missing?)" >&2
+    exit 1
+}
+[ "$PACK_LEN" -le 33554432 ] || {
+    echo "tcl_testfixture: FAIL (pack $PACK_LEN bytes exceeds the 32 MiB low-map window)" >&2
     exit 1
 }
 python3 tools/nan16_pack_image.py "$T/suite.n16pack" \
@@ -176,6 +193,10 @@ python3 tools/nan16_pack_image.py "$T/suite.n16pack" \
     --header "$T/tcl_nan16_fixture_pack.h" --base 0x01000000 \
     --stack-floor 0x01000000 --image "$T/testfixture.raw.bin" \
     --out "$T/testfixture.bin"
+if [ -n "$OUT_IMG" ]; then
+    cp "$T/testfixture.bin" "$OUT_IMG"
+    echo "tcl_testfixture: image $OUT_IMG"
+fi
 
 echo "tcl_testfixture: run test/select1.test"
 "$RUNNER" --img "$T/testfixture.bin" --mem "$MEM" --steps "$STEPS" \
