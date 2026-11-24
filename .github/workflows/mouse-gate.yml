@@ -8,6 +8,7 @@ on:
       - "src/lib/wm.nas"
       - "src/exhibits/gui_cart.nas"
       - "tools/qgate_mouse.sh"
+      - "tools/qgate_close_x.sh"
       - ".github/workflows/mouse-gate.yml"
   workflow_dispatch:
 permissions:
@@ -31,3 +32,5 @@ jobs:
         run: sh tools/build.sh
       - name: Inject PS2 AUX movement into a booted NaN16 desktop and compare framebuffers
         run: sh tools/qgate_mouse.sh
+      - name: Physically click raw NaN16 title-bar X and verify desktop survives
+        run: sh tools/qgate_close_x.sh
