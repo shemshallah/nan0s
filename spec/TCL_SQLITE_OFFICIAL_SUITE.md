@@ -144,8 +144,10 @@ Status legend: **done**, **partial**, **planned**.
       bounds.
 - [ ] Signals: pending mask, handlers, `kill`, `alarm`, `SIGCHLD`; safe
       syscall restart rules.
-- [ ] NaNFS write/extend, directory tree, create/unlink/rename/stat/seek,
-      permissions, free-block bitmap, crash-consistency journal.
+- [~] NaNFS write/extend, directory tree, create/unlink/rename/stat/seek:
+      NFS2 now has `nfs_stat`/`nfs_readdir`/`nfs_rename`/`nfs_truncate` and
+      an exact gate (`tools/nfs2_extra_gate.sh`).  Permissions, free-space
+      reuse and crash consistency remain.
 - [ ] Console/tty: input ring, cooked/raw modes, termios, window size,
       stdout/stderr channels.
 - [ ] Pipes and process I/O redirection.
@@ -186,13 +188,28 @@ Status legend: **done**, **partial**, **planned**.
 - [ ] Thread package backed by the NaN thread ABI.
 - [ ] Dynamic loader adapter for `load`.
 - [ ] Library scripts on the guest VFS; `tclsh` runs script files and `-c`.
+- [x] Guest console capture: fixed stdout/stderr control block at
+      `0x03EFF000`, `nan_cli --guest-stdout/--guest-stderr`, exact console gate.
 - [ ] Tcl's own test suite subset first; then thread/socket/load tests.
 - [ ] Tcl build by tcc0, then by tcc1 on the VM.
 
 ### P4 — SQLite testfixture and official suite
 
-- [ ] Vendor `sqlite-src-3540100` (test suite) with hashes; put the test
-      tree and Tcl library on the guest VFS/disk.
+- [x] Pin Tcl 9.0.3 and `sqlite-src-3540100` provenance in
+      `src/tests/tcl_sqlite/VENDOR`; `tools/fetch_tcl_sqlite_suite.sh` verifies
+      both archives by SHA-256 and extracts outside the repo.
+- [x] `tools/tcl_sqlite_native_baseline.sh`: x86_64-gated native Tcl +
+      `testfixture` build and official-test baseline (development oracle is
+      explicitly opt-in on other hosts).
+- [ ] Run the x86_64 baseline and archive exact result counts.
+- [x] Pack the Tcl library and official test tree into an `N16PACK1` suite
+      image: `tools/nan16_suite_pack.py` produced 2,133 files / 25,806,592
+      bytes (Tcl library + `/sqlite/test`).
+- [x] Guest `N16PACK1` parser in the C libc VFS: dynamic pointer table
+      (`NAN16_VFS_INIT_CAP`, optional `NAN16_VFS_MAXFILES`), linear pack
+      registration, 5,000-file capacity gate. The real 2,133-file suite is
+      within the tested range; no host filesystem in the product path.
+      Remaining: run the actual suite archive through the loader on x86_64 S1.
 - [ ] Full `testfixture` build with the official flags, THREADSAFE=1, all
       extensions and test hooks; guest VFS on NaNFS.
 - [ ] Port `tester.tcl` capability probes and the test runner; no host

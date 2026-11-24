@@ -11,6 +11,7 @@
 #include <setjmp.h>
 #include <time.h>
 #include <unistd.h>
+#include <dirent.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/time.h>
@@ -418,16 +419,70 @@ void *bsearch(const void *key, const void *base, size_t n, size_t size,
     return 0;
 }
 
-static char *envp[] = { 0 };
+static char *env_store[64];
+char **environ = env_store;
+static int env_index(const char *name, size_t n)
+{
+    int i;
+    for (i = 0; environ[i]; i++)
+        if (!strncmp(environ[i], name, n) && environ[i][n] == '=')
+            return i;
+    return -1;
+}
 char *getenv(const char *name)
 {
-    unsigned i = 0;
-    (void)name;
-    while (envp[i]) {
-        if (!strncmp(envp[i], name, strlen(name)) && envp[i][strlen(name)] == '=')
-            return envp[i] + strlen(name) + 1;
-        i++;
+    int i = env_index(name, strlen(name));
+    return i < 0 ? 0 : environ[i] + strlen(name) + 1;
+}
+int setenv(const char *name, const char *value, int overwrite)
+{
+    char *s;
+    size_t n = strlen(name);
+    int i;
+    if (!name || !*name || strchr(name, '=')) { errno = EINVAL; return -1; }
+    i = env_index(name, n);
+    if (i >= 0 && !overwrite) return 0;
+    s = (char *)malloc(n + strlen(value) + 2);
+    if (!s) { errno = ENOMEM; return -1; }
+    memcpy(s, name, n);
+    s[n] = '=';
+    strcpy(s + n + 1, value);
+    if (i >= 0) { environ[i] = s; return 0; }
+    for (i = 0; environ[i]; i++) ;
+    if (i >= 63) { free(s); errno = ENOMEM; return -1; }
+    environ[i] = s;
+    environ[i + 1] = 0;
+    return 0;
+}
+int putenv(char *s)
+{
+    char *eq;
+    size_t n;
+    int i;
+    if (!s) { errno = EINVAL; return -1; }
+    eq = strchr(s, '=');
+    if (!eq) {
+        n = strlen(s);
+        i = env_index(s, n);
+        if (i >= 0) {
+            while (environ[i]) { environ[i] = environ[i + 1]; i++; }
+        }
+        return 0;
     }
+    n = (size_t)(eq - s);
+    i = env_index(s, n);
+    if (i >= 0) { environ[i] = s; return 0; }
+    for (i = 0; environ[i]; i++) ;
+    if (i >= 63) { errno = ENOMEM; return -1; }
+    environ[i] = s;
+    environ[i + 1] = 0;
+    return 0;
+}
+int unsetenv(const char *name)
+{
+    int i = env_index(name, strlen(name));
+    if (i < 0) return 0;
+    while (environ[i]) { environ[i] = environ[i + 1]; i++; }
     return 0;
 }
 
@@ -481,7 +536,13 @@ int atexit(void (*fn)(void)) { (void)fn; return 0; }
 int system(const char *s) { (void)s; return 0; }
 
 /* ---------------------------------------------------------------- stdio/VFS */
-#define MAXFILES 2048
+/* VFS capacity is a compile-time directive, not a fixed array:
+   -DNAN16_VFS_INIT_CAP=N   initial pointer-table slots (default 16)
+   -DNAN16_VFS_MAXFILES=N   optional hard cap; omitted = grow without a cap
+   The table doubles on demand and supports arbitrary pack sizes. */
+#ifndef NAN16_VFS_INIT_CAP
+#define NAN16_VFS_INIT_CAP 16u
+#endif
 #define MAXSTREAMS 64
 #define FD_VFS_BASE 3
 #define VFS_NAME_MAX 128
@@ -489,9 +550,12 @@ typedef struct MemFile {
     char name[VFS_NAME_MAX];
     unsigned char *data;
     unsigned size, cap, pos;
-    int used, writable, owned;
+    int used, writable, owned, isdir;
 } MemFile;
-static MemFile files[MAXFILES];
+static MemFile *files;
+static unsigned vfs_cap, vfs_used;
+static int vfs_abspath(const char *, char *);
+static MemFile *mf_find_p(const char *);
 
 typedef struct NFile {
     int fd;       /* 3.. or -1 for stdout/stderr */
@@ -522,27 +586,72 @@ static void outcap(unsigned char **buf, unsigned *len, unsigned *cap, int c)
     (*buf)[(*len)++] = (unsigned char)c;
 }
 
+static int vfs_reserve(unsigned need)
+{
+    unsigned ncap;
+    MemFile *nf;
+    if (need <= vfs_cap) return 0;
+    ncap = vfs_cap ? vfs_cap : NAN16_VFS_INIT_CAP;
+    while (ncap < need) {
+        if (ncap > 0x7FFFFFFFu / 2u) return -1;
+        ncap *= 2;
+    }
+#ifdef NAN16_VFS_MAXFILES
+    if (ncap > (unsigned)NAN16_VFS_MAXFILES) ncap = (unsigned)NAN16_VFS_MAXFILES;
+    if (need > ncap) return -1;
+#endif
+    nf = (MemFile *)realloc(files, (size_t)ncap * sizeof(MemFile));
+    if (!nf) return -1;
+    memset(nf + vfs_cap, 0, (size_t)(ncap - vfs_cap) * sizeof(MemFile));
+    files = nf;
+    vfs_cap = ncap;
+    return 0;
+}
 static MemFile *mf_find(const char *name)
 {
-    int i;
-    for (i = 0; i < MAXFILES; i++)
+    unsigned i;
+    for (i = 0; i < vfs_cap; i++)
         if (files[i].used && !strcmp(files[i].name, name)) return &files[i];
     return 0;
 }
 static MemFile *mf_new(const char *name)
 {
-    int i;
-    for (i = 0; i < MAXFILES; i++) {
+    unsigned i, slot;
+    for (i = 0; i < vfs_cap; i++) {
         if (!files[i].used) {
-            files[i].used = 1;
-            strncpy(files[i].name, name, VFS_NAME_MAX - 1);
-            files[i].name[VFS_NAME_MAX - 1] = 0;
-            files[i].data = 0; files[i].size = files[i].cap = files[i].pos = 0;
-            files[i].writable = 1;
-            files[i].owned = 1;
-            return &files[i];
+            slot = i;
+            goto init;
         }
     }
+    slot = vfs_cap;
+    if (vfs_reserve(slot + 1) < 0) return 0;
+init:
+    files[slot].used = 1;
+    strncpy(files[slot].name, name, VFS_NAME_MAX - 1);
+    files[slot].name[VFS_NAME_MAX - 1] = 0;
+    files[slot].data = 0; files[slot].size = files[slot].cap = files[slot].pos = 0;
+    files[slot].writable = 1;
+    files[slot].owned = 1;
+    files[slot].isdir = 0;
+    vfs_used++;
+    return &files[slot];
+}
+/* Fill a known-free slot directly.  nan16_vfs_add_pack reserves capacity for
+   the whole archive, so appending must not re-scan the table per file. */
+static int mf_put_ro(unsigned slot, const char *name, const void *data,
+                     unsigned size)
+{
+    if (slot >= vfs_cap || files[slot].used) return -1;
+    strncpy(files[slot].name, name, VFS_NAME_MAX - 1);
+    files[slot].name[VFS_NAME_MAX - 1] = 0;
+    files[slot].data = (unsigned char *)(void *)data;
+    files[slot].size = files[slot].cap = size;
+    files[slot].pos = 0;
+    files[slot].used = 1;
+    files[slot].writable = 0;
+    files[slot].owned = 0;
+    files[slot].isdir = 0;
+    vfs_used++;
     return 0;
 }
 int nan16_vfs_add(const char *name, const void *data, unsigned size)
@@ -556,6 +665,7 @@ int nan16_vfs_add(const char *name, const void *data, unsigned size)
     memcpy(f->data, data, size);
     f->size = f->cap = size;
     f->pos = 0; f->writable = 0; f->owned = 1;
+    f->isdir = 0;
     return 0;
 }
 
@@ -571,41 +681,303 @@ int nan16_vfs_add_ro(const char *name, const void *data, unsigned size)
     f->data = (unsigned char *)(void *)data;
     f->size = f->cap = size;
     f->pos = 0; f->writable = 0; f->owned = 0;
+    f->isdir = 0;
     return 0;
+}
+/* Register every file in an N16PACK1 archive (see
+   src/tests/tcl_sqlite/PACK_FORMAT.md).  The pack is a byte stream in guest
+   memory; callers place it with tools/nan16_pack_image.py, which encodes four
+   bytes per NaN16 payload word.  All integers are little-endian. */
+static unsigned pk_u16(const unsigned char *p)
+{
+    return (unsigned)p[0] | ((unsigned)p[1] << 8);
+}
+static unsigned pk_u32(const unsigned char *p)
+{
+    return (unsigned)p[0] | ((unsigned)p[1] << 8)
+         | ((unsigned)p[2] << 16) | ((unsigned)p[3] << 24);
+}
+int nan16_vfs_add_pack(const void *pack, unsigned len)
+{
+    const unsigned char *p = (const unsigned char *)pack;
+    unsigned count, off, i, slot;
+    if (len < 12 || memcmp(p, "N16PACK1", 8))
+        return -1;
+    count = pk_u32(p + 8);
+    /* Reserve once so 2,133-file (or larger) suites do not repeatedly grow
+       and re-copy the table.  This is an upper bound; duplicate names reuse
+       an existing slot. */
+    if (count > 0x7FFFFFFFu - vfs_used || vfs_reserve(vfs_used + count) < 0)
+        return -1;
+    off = 12;
+    slot = vfs_used;
+    for (i = 0; i < count; i++) {
+        unsigned nl, flags, dl;
+        char name[VFS_NAME_MAX];
+        if (off + 8 > len)
+            return -1;
+        nl = pk_u16(p + off);
+        flags = pk_u16(p + off + 2);
+        dl = pk_u32(p + off + 4);
+        off += 8;
+        if (!nl || nl >= VFS_NAME_MAX || flags)
+            return -1;
+        if (off + nl + dl > len)
+            return -1;
+        memcpy(name, p + off, nl);
+        name[nl] = 0;
+        if (name[0] != '/')
+            return -1;
+        /* Boot loads have contiguous slots; a hole or duplicate falls back
+           to the general lookup path. */
+        if (mf_put_ro(slot, name, p + off + nl, dl) < 0 &&
+            nan16_vfs_add_ro(name, p + off + nl, dl) < 0)
+            return -1;
+        off += nl + dl;
+        slot = vfs_used;
+    }
+    if (off != len)
+        return -1;
+    return (int)count;
+}
+unsigned nan16_vfs_count(void) { return vfs_used; }
+unsigned nan16_vfs_capacity(void) { return vfs_cap; }
+/* Enumerate the table by slot: returns 1 for a live entry.  Callers loop
+   i=0..nan16_vfs_capacity()-1 and skip holes.  Pointers stay valid until the
+   next table growth or mutation. */
+int nan16_vfs_entry(unsigned i, const char **name, unsigned *size, int *isdir)
+{
+    if (i >= vfs_cap || !files[i].used) return 0;
+    if (name) *name = files[i].name;
+    if (size) *size = files[i].size;
+    if (isdir) *isdir = files[i].isdir;
+    return 1;
 }
 int nan16_vfs_get(const char *name, unsigned char **data, unsigned *size)
 {
-    MemFile *f = mf_find(name);
+    MemFile *f = mf_find_p(name);
     if (!f) return -1;
     *data = f->data; *size = f->size;
+    return 0;
+}
+/* A path is a directory if it has an explicit directory entry or if any file
+   lives beneath it.  N16PACK1 stores only files, so suite directories such as
+   /sqlite/test are implicit.  Trailing slashes are ignored except for root. */
+static int mf_isdir_name(const char *name)
+{
+    char norm[VFS_NAME_MAX];
+    unsigned n, i;
+    MemFile *f;
+    if (!name || name[0] != '/') return 0;
+    n = (unsigned)strlen(name);
+    while (n > 1 && name[n - 1] == '/') n--;
+    if (n >= VFS_NAME_MAX) return 0;
+    memcpy(norm, name, n);
+    norm[n] = 0;
+    if (n == 1) return 1;
+    f = mf_find(norm);
+    if (f) return f->isdir;
+    for (i = 0; i < vfs_cap; i++)
+        if (files[i].used && !strncmp(files[i].name, norm, n) &&
+            files[i].name[n] == '/')
+            return 1;
+    return 0;
+}
+static int vfs_abspath(const char *, char *);
+int nan16_vfs_isdir(const char *name)
+{
+    char abs[VFS_NAME_MAX];
+    if (vfs_abspath(name, abs) < 0) return 0;
+    return mf_isdir_name(abs);
+}
+/* Absolute, normalized guest path.  Handles relative paths against vfs_cwd,
+   duplicate slashes, "." and ".."; result keeps the leading "/" and drops any
+   trailing slash except for root. */
+static char vfs_cwd[VFS_NAME_MAX] = "/";
+static int vfs_abspath(const char *name, char *out)
+{
+    char joined[2 * VFS_NAME_MAX];
+    const char *p, *comp;
+    unsigned olen = 1, clen, len;
+    if (!name || !*name) { errno = ENOENT; return -1; }
+    if (name[0] == '/') {
+        if (strlen(name) >= sizeof joined) { errno = ENAMETOOLONG; return -1; }
+        strcpy(joined, name);
+    } else {
+        clen = (unsigned)strlen(vfs_cwd);
+        len = (unsigned)strlen(name);
+        if (clen + 1u + len >= sizeof joined) { errno = ENAMETOOLONG; return -1; }
+        strcpy(joined, vfs_cwd);
+        if (clen == 0 || joined[clen - 1] != '/') strcat(joined, "/");
+        strcat(joined, name);
+    }
+    out[0] = '/'; out[1] = 0;
+    p = joined;
+    while (*p) {
+        while (*p == '/') p++;
+        if (!*p) break;
+        comp = p;
+        while (*p && *p != '/') p++;
+        len = (unsigned)(p - comp);
+        if (len == 1 && comp[0] == '.') continue;
+        if (len == 2 && comp[0] == '.' && comp[1] == '.') {
+            while (olen > 1 && out[olen - 1] != '/') olen--;
+            if (olen > 1) olen--;
+            out[olen] = 0;
+            continue;
+        }
+        if (olen + (olen > 1 ? 1u : 0u) + len >= VFS_NAME_MAX) {
+            errno = ENAMETOOLONG; return -1;
+        }
+        if (olen > 1) out[olen++] = '/';
+        memcpy(out + olen, comp, len);
+        olen += len;
+        out[olen] = 0;
+    }
+    return 0;
+}
+static MemFile *mf_find_p(const char *name)
+{
+    char abs[VFS_NAME_MAX];
+    if (vfs_abspath(name, abs) < 0) return 0;
+    return mf_find(abs);
+}
+
+/* ------------------------------------------------------------ directory API */
+struct __nan16_DIR {
+    char path[VFS_NAME_MAX];
+    struct dirent ent;
+    unsigned count, index, cap;
+    char **names;
+    unsigned char *types;
+};
+/* Return the immediate child component of file under dir.  *isdir is set when
+   the remaining path continues past a slash. */
+static int dir_child(const char *dir, const char *file, char *out,
+                     unsigned outsz, int *isdir)
+{
+    const char *start, *slash;
+    unsigned n, len;
+    n = (unsigned)strlen(dir);
+    while (n > 1 && dir[n - 1] == '/') n--;
+    if (file[0] != '/') return 0;
+    if (n == 1) {
+        start = file + 1;
+    } else {
+        if (strncmp(file, dir, n) || file[n] != '/') return 0;
+        start = file + n + 1;
+    }
+    if (!*start) return 0;
+    slash = strchr(start, '/');
+    len = slash ? (unsigned)(slash - start) : (unsigned)strlen(start);
+    if (!len || len >= outsz) return 0;
+    memcpy(out, start, len);
+    out[len] = 0;
+    *isdir = slash != 0;
+    return 1;
+}
+static int dir_add(DIR *d, const char *name, int isdir)
+{
+    unsigned i;
+    for (i = 0; i < d->count; i++) {
+        if (!strcmp(d->names[i], name)) {
+            if (isdir) d->types[i] = DT_DIR;
+            return 0;
+        }
+    }
+    if (d->count == d->cap) {
+        unsigned nc = d->cap ? d->cap * 2 : 16;
+        char **nn = (char **)realloc(d->names, nc * sizeof(char *));
+        unsigned char *nt;
+        if (!nn) return -1;
+        d->names = nn;
+        nt = (unsigned char *)realloc(d->types, nc);
+        if (!nt) return -1;
+        d->types = nt;
+        d->cap = nc;
+    }
+    d->names[d->count] = strdup(name);
+    if (!d->names[d->count]) return -1;
+    d->types[d->count] = isdir ? DT_DIR : DT_REG;
+    d->count++;
+    return 0;
+}
+DIR *opendir(const char *path)
+{
+    DIR *d;
+    unsigned i;
+    char comp[VFS_NAME_MAX], norm[VFS_NAME_MAX];
+    if (vfs_abspath(path, norm) < 0 || !mf_isdir_name(norm)) {
+        errno = ENOENT; return 0;
+    }
+    d = (DIR *)calloc(1, sizeof *d);
+    if (!d) { errno = ENOMEM; return 0; }
+    strcpy(d->path, norm);
+    if (dir_add(d, ".", 1) || dir_add(d, "..", 1)) goto fail;
+    for (i = 0; i < vfs_cap; i++) {
+        int isdir = 0;
+        if (!files[i].used) continue;
+        if (dir_child(norm, files[i].name, comp, sizeof comp, &isdir) &&
+            dir_add(d, comp, isdir || files[i].isdir))
+            goto fail;
+    }
+    return d;
+fail:
+    closedir(d);
+    errno = ENOMEM;
+    return 0;
+}
+struct dirent *readdir(DIR *d)
+{
+    if (!d || d->index >= d->count) return 0;
+    memset(&d->ent, 0, sizeof d->ent);
+    strncpy(d->ent.d_name, d->names[d->index], sizeof d->ent.d_name - 1);
+    d->ent.d_type = d->types[d->index];
+    d->ent.d_ino = d->index + 1;
+    d->ent.d_reclen = sizeof d->ent;
+    d->index++;
+    return &d->ent;
+}
+void rewinddir(DIR *d) { if (d) d->index = 0; }
+int closedir(DIR *d)
+{
+    unsigned i;
+    if (!d) return -1;
+    for (i = 0; i < d->count; i++) free(d->names[i]);
+    free(d->names);
+    free(d->types);
+    free(d);
     return 0;
 }
 
 int open(const char *name, int flags, ...)
 {
-    MemFile *f = mf_find(name);
+    char abs[VFS_NAME_MAX];
+    MemFile *f;
     int i;
+    if (vfs_abspath(name, abs) < 0) return -1;
+    f = mf_find(abs);
     if (!f) {
-        if (!(flags & O_CREAT)) return -1;
-        f = mf_new(name);
+        if (!(flags & O_CREAT)) { errno = ENOENT; return -1; }
+        f = mf_new(abs);
         if (!f) return -1;
     }
     if (flags & O_TRUNC) { f->size = 0; f->pos = 0; }
-    for (i = 0; i < MAXFILES; i++)
-        if (&files[i] == f) { f->pos = 0; return i + FD_VFS_BASE; }
-    return -1;
+    (void)i;
+    f->pos = 0;
+    return (int)(f - files) + FD_VFS_BASE;
 }
 int creat(const char *name, int mode) { (void)mode; return open(name, O_CREAT | O_WRONLY | O_TRUNC); }
 int close(int fd)
 {
-    if (fd >= FD_VFS_BASE && fd < FD_VFS_BASE + MAXFILES) files[fd - FD_VFS_BASE].pos = 0;
+    if (fd >= FD_VFS_BASE && (unsigned)(fd - FD_VFS_BASE) < vfs_cap) files[fd - FD_VFS_BASE].pos = 0;
     return 0;
 }
 ssize_t read(int fd, void *buf, size_t n)
 {
     MemFile *f;
     unsigned avail;
-    if (fd < FD_VFS_BASE || fd >= FD_VFS_BASE + MAXFILES) return -1;
+    if (fd < FD_VFS_BASE || (unsigned)(fd - FD_VFS_BASE) >= vfs_cap) return -1;
     f = &files[fd - FD_VFS_BASE];
     if (!f->used) return -1;
     avail = f->size - f->pos;
@@ -622,9 +994,18 @@ ssize_t write(int fd, const void *buf, size_t n)
         for (i = 0; i < n; i++)
             if (fd == 1) outcap(&nan16_stdout_data, &nan16_stdout_len, &nan16_stdout_cap, ((const unsigned char *)buf)[i]);
             else outcap(&nan16_stderr_data, &nan16_stderr_len, &nan16_stderr_cap, ((const unsigned char *)buf)[i]);
+        /* Fixed terminal-client control block (guest byte addresses):
+           0x03EFF000 stdout pointer, +4 length, +8 stderr pointer, +12 length.
+           nan_cli --guest-stdout/--guest-stderr reads this without symbols. */
+        *(volatile unsigned *)(unsigned long)0x03EFF000u =
+            (unsigned)(unsigned long)nan16_stdout_data;
+        *(volatile unsigned *)(unsigned long)0x03EFF004u = nan16_stdout_len;
+        *(volatile unsigned *)(unsigned long)0x03EFF008u =
+            (unsigned)(unsigned long)nan16_stderr_data;
+        *(volatile unsigned *)(unsigned long)0x03EFF00Cu = nan16_stderr_len;
         return n;
     }
-    if (fd < FD_VFS_BASE || fd >= FD_VFS_BASE + MAXFILES) return -1;
+    if (fd < FD_VFS_BASE || (unsigned)(fd - FD_VFS_BASE) >= vfs_cap) return -1;
     f = &files[fd - FD_VFS_BASE];
     if (!f->used || !f->writable) return -1;
     if (f->pos + n > f->cap) {
@@ -645,7 +1026,7 @@ off_t lseek(int fd, off_t off, int whence)
 {
     MemFile *f;
     long np;
-    if (fd < FD_VFS_BASE || fd >= FD_VFS_BASE + MAXFILES) return -1;
+    if (fd < FD_VFS_BASE || (unsigned)(fd - FD_VFS_BASE) >= vfs_cap) return -1;
     f = &files[fd - FD_VFS_BASE];
     if (!f->used) return -1;
     if (whence == SEEK_SET) np = off;
@@ -657,18 +1038,78 @@ off_t lseek(int fd, off_t off, int whence)
 }
 int unlink(const char *name)
 {
-    MemFile *f = mf_find(name);
-    if (!f) return -1;
-    if (f->data) free(f->data);
+    char abs[VFS_NAME_MAX];
+    MemFile *f;
+    if (vfs_abspath(name, abs) < 0) return -1;
+    f = mf_find(abs);
+    if (!f) {
+        if (mf_isdir_name(abs)) { errno = EISDIR; return -1; }
+        errno = ENOENT; return -1;
+    }
+    if (f->isdir) { errno = EISDIR; return -1; }
+    if (f->owned && f->data) free(f->data);
     f->used = 0;
+    if (vfs_used) vfs_used--;
+    return 0;
+}
+int rmdir(const char *name)
+{
+    char norm[VFS_NAME_MAX];
+    unsigned n, i;
+    MemFile *f;
+    if (vfs_abspath(name, norm) < 0) return -1;
+    n = (unsigned)strlen(norm);
+    f = mf_find(norm);
+    if (!f || !f->isdir) {
+        if (!f && mf_isdir_name(norm)) { errno = ENOTEMPTY; return -1; }
+        errno = ENOENT; return -1;
+    }
+    for (i = 0; i < vfs_cap; i++)
+        if (files[i].used &&
+            ((n == 1) ? (files[i].name[0] == '/' && files[i].name[1])
+                      : (!strncmp(files[i].name, norm, n) &&
+                         files[i].name[n] == '/'))) {
+            errno = ENOTEMPTY; return -1;
+        }
+    if (f->owned && f->data) free(f->data);
+    f->used = 0;
+    if (vfs_used) vfs_used--;
     return 0;
 }
 int remove(const char *name) { return unlink(name); }
 int rename(const char *a, const char *b)
 {
-    MemFile *f = mf_find(a);
-    if (!f) return -1;
-    strncpy(f->name, b, 63); f->name[63] = 0;
+    char absa[VFS_NAME_MAX], absb[VFS_NAME_MAX], tmp[VFS_NAME_MAX];
+    MemFile *f;
+    unsigned alen, i;
+    if (vfs_abspath(a, absa) < 0 || vfs_abspath(b, absb) < 0) return -1;
+    f = mf_find(absa);
+    if (!f) { errno = ENOENT; return -1; }
+    if (mf_find(absb) || mf_isdir_name(absb)) { errno = EEXIST; return -1; }
+    alen = (unsigned)strlen(absa);
+    if (f->isdir) {
+        for (i = 0; i < vfs_cap; i++) {
+            const char *suffix;
+            if (!files[i].used || &files[i] == f) continue;
+            if (strncmp(files[i].name, absa, alen) || files[i].name[alen] != '/')
+                continue;
+            suffix = files[i].name + alen;
+            if (strlen(absb) + strlen(suffix) >= VFS_NAME_MAX) {
+                errno = ENAMETOOLONG; return -1;
+            }
+        }
+        for (i = 0; i < vfs_cap; i++) {
+            const char *suffix;
+            if (!files[i].used || &files[i] == f) continue;
+            if (strncmp(files[i].name, absa, alen) || files[i].name[alen] != '/')
+                continue;
+            suffix = files[i].name + alen;
+            strcpy(tmp, absb);
+            strcat(tmp, suffix);
+            strcpy(files[i].name, tmp);
+        }
+    }
+    strcpy(f->name, absb);
     return 0;
 }
 
@@ -879,41 +1320,177 @@ int fscanf(FILE *fp, const char *fmt, ...) { (void)fp; (void)fmt; return 0; }
 /* ---------------------------------------------------------------- system */
 int stat(const char *name, struct stat *st)
 {
-    MemFile *f = mf_find(name);
-    if (!f) return -1;
+    char abs[VFS_NAME_MAX];
+    MemFile *f;
+    if (vfs_abspath(name, abs) < 0) return -1;
+    f = mf_find(abs);
+    if (!f) {
+        if (!mf_isdir_name(abs)) { errno = ENOENT; return -1; }
+        memset(st, 0, sizeof *st);
+        st->st_mode = S_IFDIR | 0755;
+        st->st_nlink = 2;
+        return 0;
+    }
     memset(st, 0, sizeof *st);
-    st->st_size = f->size;
-    st->st_mode = S_IFREG | 0644;
+    st->st_size = f->isdir ? 0 : (long)f->size;
+    st->st_mode = f->isdir ? (S_IFDIR | 0755) : (S_IFREG | (f->writable ? 0644 : 0444));
+    st->st_nlink = f->isdir ? 2 : 1;
     return 0;
 }
 int fstat(int fd, struct stat *st)
 {
-    if (fd < FD_VFS_BASE || fd >= FD_VFS_BASE + MAXFILES) return -1;
+    if (fd < FD_VFS_BASE || (unsigned)(fd - FD_VFS_BASE) >= vfs_cap) return -1;
     memset(st, 0, sizeof *st);
     st->st_size = files[fd - FD_VFS_BASE].size;
-    st->st_mode = S_IFREG | 0644;
+    st->st_mode = files[fd - FD_VFS_BASE].isdir
+        ? (S_IFDIR | 0755) : (S_IFREG | 0644);
     return 0;
 }
-int mkdir(const char *name, mode_t mode) { (void)name; (void)mode; return 0; }
-char *getcwd(char *buf, size_t n) { if (n) { strncpy(buf, "/", n); buf[n - 1] = 0; } return buf; }
-int chdir(const char *p) { (void)p; return 0; }
-int access(const char *p, int m) { (void)m; return mf_find(p) ? 0 : -1; }
+int mkdir(const char *name, mode_t mode)
+{
+    char abs[VFS_NAME_MAX];
+    MemFile *f;
+    (void)mode;
+    if (vfs_abspath(name, abs) < 0) return -1;
+    if (mf_find(abs) || mf_isdir_name(abs)) { errno = EEXIST; return -1; }
+    f = mf_new(abs);
+    if (!f) { errno = ENOSPC; return -1; }
+    f->isdir = 1;
+    f->writable = 0;
+    return 0;
+}
+char *getcwd(char *buf, size_t n)
+{
+    if (!buf || n <= strlen(vfs_cwd)) { errno = ERANGE; return 0; }
+    strcpy(buf, vfs_cwd);
+    return buf;
+}
+int chdir(const char *p)
+{
+    char abs[VFS_NAME_MAX];
+    if (vfs_abspath(p, abs) < 0) return -1;
+    if (!mf_isdir_name(abs)) { errno = ENOENT; return -1; }
+    strcpy(vfs_cwd, abs);
+    return 0;
+}
+int access(const char *p, int m)
+{
+    char abs[VFS_NAME_MAX];
+    MemFile *f;
+    if (vfs_abspath(p, abs) < 0) return -1;
+    f = mf_find(abs);
+    if (!f) return mf_isdir_name(abs) ? 0 : -1;
+    if ((m & W_OK) && !f->writable) { errno = EACCES; return -1; }
+    return 0;
+}
 int isatty(int fd) { (void)fd; return 0; }
 int getpid(void) { return 1; }
-char *realpath(const char *p, char *out) { if (out) { strcpy(out, p); return out; } return strdup(p); }
+char *realpath(const char *p, char *out)
+{
+    char abs[VFS_NAME_MAX], *r = out;
+    if (vfs_abspath(p, abs) < 0) return 0;
+    if (!r) r = (char *)malloc(strlen(abs) + 1);
+    if (!r) { errno = ENOMEM; return 0; }
+    strcpy(r, abs);
+    return r;
+}
 void *mmap(void *a, size_t n, int p, int f, int fd, off_t o)
 {
     (void)a; (void)n; (void)p; (void)f; (void)o;
-    if (fd >= FD_VFS_BASE && fd < FD_VFS_BASE + MAXFILES && files[fd - FD_VFS_BASE].used)
+    if (fd >= FD_VFS_BASE && (unsigned)(fd - FD_VFS_BASE) < vfs_cap && files[fd - FD_VFS_BASE].used)
         return files[fd - FD_VFS_BASE].data;
     return (void *)-1;
 }
 int munmap(void *a, size_t n) { (void)a; (void)n; return 0; }
-int gettimeofday(struct timeval *tv, void *tz) { (void)tz; if (tv) { tv->tv_sec = 0; tv->tv_usec = 0; } return 0; }
-time_t time(time_t *t) { if (t) *t = 0; return 0; }
-clock_t clock(void) { return 0; }
-struct tm *localtime(const time_t *t) { (void)t; return 0; }
-struct tm *gmtime(const time_t *t) { (void)t; return 0; }
+/* The runner publishes monotonic time and executed steps at guest byte
+   0x03EFF010 (ms, steps low, steps high).  The x86_64/S1 kernel must publish
+   the same block. */
+static unsigned nan16_now_ms(void)
+{
+    return *(volatile unsigned *)0x03EFF010u;
+}
+static long days_from_civil(int y, unsigned m, unsigned d)
+{
+    long era, yoe, doy, doe;
+    y -= m <= 2;
+    era = (y >= 0 ? y : y - 399) / 400;
+    yoe = y - era * 400;
+    doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1;
+    doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    return era * 146097 + doe - 719468;
+}
+static void civil_from_days(long z, int *yy, int *mm, int *dd)
+{
+    long era;
+    unsigned doe, yoe, doy, mp, d, m;
+    int y;
+    z += 719468;
+    era = (z >= 0 ? z : z - 146096) / 146097;
+    doe = (unsigned)(z - era * 146097);
+    yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    y = (int)(yoe + era * 400);
+    doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    mp = (5 * doy + 2) / 153;
+    d = doy - (153 * mp + 2) / 5 + 1;
+    m = mp + (mp < 10 ? 3 : (unsigned)-9);
+    y += (m <= 2);
+    *yy = y; *mm = (int)m; *dd = (int)d;
+}
+static struct tm *tm_from_time(time_t t)
+{
+    static struct tm out;
+    long days = (long)(t / 86400);
+    long rem = (long)(t % 86400);
+    int y, m, d;
+    if (rem < 0) { rem += 86400; days--; }
+    civil_from_days(days, &y, &m, &d);
+    out.tm_sec = (int)(rem % 60);
+    out.tm_min = (int)((rem / 60) % 60);
+    out.tm_hour = (int)(rem / 3600);
+    out.tm_mday = d;
+    out.tm_mon = m - 1;
+    out.tm_year = y - 1900;
+    out.tm_wday = (int)((days + 4) % 7);
+    if (out.tm_wday < 0) out.tm_wday += 7;
+    out.tm_yday = (int)(days - days_from_civil(y, 1, 1));
+    out.tm_isdst = 0;
+    return &out;
+}
+int gettimeofday(struct timeval *tv, void *tz)
+{
+    unsigned ms = nan16_now_ms();
+    (void)tz;
+    if (tv) { tv->tv_sec = (long)(ms / 1000u); tv->tv_usec = (long)(ms % 1000u) * 1000L; }
+    return 0;
+}
+time_t time(time_t *t)
+{
+    time_t s = (time_t)(nan16_now_ms() / 1000u);
+    if (t) *t = s;
+    return s;
+}
+clock_t clock(void) { return (clock_t)(nan16_now_ms() * 1000u); }
+int clock_gettime(clockid_t id, struct timespec *ts)
+{
+    unsigned ms = nan16_now_ms();
+    (void)id;
+    if (!ts) { errno = EINVAL; return -1; }
+    ts->tv_sec = (long)(ms / 1000u);
+    ts->tv_nsec = (long)(ms % 1000u) * 1000000L;
+    return 0;
+}
+int nanosleep(const struct timespec *req, struct timespec *rem)
+{
+    unsigned target, now;
+    if (!req) { errno = EINVAL; return -1; }
+    target = nan16_now_ms() + (unsigned)(req->tv_sec * 1000L + req->tv_nsec / 1000000L)
+           + (req->tv_nsec % 1000000L ? 1u : 0u);
+    do { now = nan16_now_ms(); } while (now < target);
+    if (rem) { rem->tv_sec = 0; rem->tv_nsec = 0; }
+    return 0;
+}
+struct tm *localtime(const time_t *t) { return tm_from_time(t ? *t : time(0)); }
+struct tm *gmtime(const time_t *t) { return tm_from_time(t ? *t : time(0)); }
 int setjmp(jmp_buf b) { (void)b; return 0; }
 void longjmp(jmp_buf b, int v) { (void)b; (void)v; exit(1); }
 int sem_init(sem_t *s, int p, unsigned v) { (void)p; s->v = v; return 0; }

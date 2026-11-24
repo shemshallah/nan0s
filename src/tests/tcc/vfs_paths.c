@@ -1,0 +1,78 @@
+/* vfs_paths.c - relative paths, cwd, normalization and realpath. */
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+
+static unsigned char pack[512];
+static unsigned poff = 12;
+
+static void w16(unsigned char *p, unsigned v) { p[0] = (unsigned char)v; p[1] = (unsigned char)(v >> 8); }
+static void w32(unsigned char *p, unsigned v)
+{
+    p[0] = (unsigned char)v; p[1] = (unsigned char)(v >> 8);
+    p[2] = (unsigned char)(v >> 16); p[3] = (unsigned char)(v >> 24);
+}
+static void add(const char *name, const char *data)
+{
+    unsigned nl = (unsigned)strlen(name) + 1u, dl = (unsigned)strlen(data);
+    unsigned char *p = pack + poff;
+    w16(p, nl); w16(p + 2, 0); w32(p + 4, dl);
+    memcpy(p + 8, name, nl);
+    memcpy(p + 8 + nl, data, dl);
+    poff += 8 + nl + dl;
+}
+
+int main(void)
+{
+    char cwd[128], abs[128], buf[8];
+    struct stat st;
+    int fd, r;
+
+    memcpy(pack, "N16PACK1", 8);
+    w32(pack + 8, 2);
+    add("/suite/a/one.txt", "1");
+    add("/suite/b.txt", "xyz");
+    if (nan16_vfs_add_pack(pack, poff) != 2) return 1;
+
+    printf("cwd0=%d\n", getcwd(cwd, sizeof cwd) && !strcmp(cwd, "/"));
+    printf("chdir1=%d\n", chdir("suite"));
+    getcwd(cwd, sizeof cwd); printf("cwd1=%s\n", cwd);
+    chdir("a");
+    getcwd(cwd, sizeof cwd); printf("cwd2=%s\n", cwd);
+    r = stat("one.txt", &st);
+    printf("one=%d:%d\n", r == 0, (int)st.st_size);
+    r = stat("../b.txt", &st);
+    printf("dotdot=%d:%d\n", r == 0, (int)st.st_size);
+
+    printf("abs=%s\n", realpath(".././b.txt", abs));
+    printf("access=%d\n", access("../b.txt", R_OK));
+    fd = open("../b.txt", O_RDONLY);
+    r = fd >= 0 ? (int)read(fd, buf, sizeof buf) : -1;
+    if (fd >= 0) close(fd);
+    printf("read=%d\n", r == 3 && !memcmp(buf, "xyz", 3));
+
+    printf("mkdir=%d\n", mkdir("tmp", 0755));
+    stat("tmp", &st);
+    printf("tmpdir=%d\n", S_ISDIR(st.st_mode));
+    chdir("tmp");
+    getcwd(cwd, sizeof cwd); printf("cwdtmp=%s\n", cwd);
+    chdir("..");
+    getcwd(cwd, sizeof cwd); printf("up=%s\n", cwd);
+    printf("rmtmp=%d\n", rmdir("tmp"));
+    printf("bad=%d\n", chdir("/nope"));
+    getcwd(cwd, sizeof cwd); printf("final=%s\n", cwd);
+
+    printf("env0=%d\n", getenv("NAN16_X") == 0);
+    printf("set=%d\n", setenv("NAN16_X", "one", 1));
+    printf("get=%d:%s\n", getenv("NAN16_X") != 0, getenv("NAN16_X"));
+    r = setenv("NAN16_X", "two", 0);
+    printf("noover=%d:%s\n", r, getenv("NAN16_X"));
+    r = setenv("NAN16_X", "two", 1);
+    printf("over=%d:%s\n", r, getenv("NAN16_X"));
+    unsetenv("NAN16_X");
+    printf("unset=%d\n", getenv("NAN16_X") == 0);
+    printf("PATHS PASS\n");
+    return 0;
+}

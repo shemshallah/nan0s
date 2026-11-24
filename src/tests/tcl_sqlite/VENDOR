@@ -1,0 +1,22 @@
+Tcl 9.0.3 + SQLite 3.54.1 official test suite provenance
+=========================================================
+
+These trees are not stored in git (Tcl is ~80 MB extracted; sqlite-src is
+~152 MB).  The fetch script verifies both pinned archives before extraction.
+
+Tcl 9.0.3
+  URL:      https://prdownloads.sourceforge.net/tcl/tcl9.0.3-src.tar.gz
+  SHA-256:  2537ba0c86112c8c953f7c09d33f134dd45c0fb3a71f2d7f7691fd301d2c33a6
+  Use:      Tcl interpreter for SQLite testfixture; Tcl library scripts for
+            the guest VFS.  SQLite 3.54.1 supports Tcl 8.5+ and Tcl 9.
+
+SQLite source 3.54.1 (official test suite)
+  URL:      https://www.sqlite.org/2026/sqlite-src-3540100.zip
+  SHA-256:  387e7f6cad4797b17848c07d453dc6606917bb356a6cfe5a3abafd38c240c71b
+  Contains: test/*.test (1,199 files, 489,129 lines), tester.tcl,
+            src/test1.c..test9.c, src/test_*.c, src/tclsqlite.c, tclsqlite-ex.c.
+  Note:     The runnable SQLite amalgamation is separately vendored in
+            third_party/sqlite with its own VENDOR hashes.
+
+Acceptance host: x86_64.  The portable C core/Android CLI is a development
+oracle only; no phone path is part of the product or acceptance gates.
