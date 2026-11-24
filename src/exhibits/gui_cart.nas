@@ -90,20 +90,33 @@ LD r1,r0,@fb_scene_offset
 CMP r1,r0
 JMP[NE] @g_compose
 ST r0,r0,@ms_cursor_saved
-CALL @wm_draw_all
 ST r13,r0,@gb_force
+CALL @wm_draw_all
 CALL @g_bar
 CALL @sh_draw
 CALL @ms_draw
 JMP @g_nodraw
 g_compose:
 ST r13,r0,@fb_mark_suppress
+ST r13,r0,@gb_force
 CALL @wm_draw_all
+CALL @g_bar
 CALL @sh_draw
 ST r0,r0,@fb_mark_suppress
 CALL @g_structural_damage
-ST r13,r0,@gb_force
-CALL @g_bar
+; Status bar was drawn while marks were suppressed; publish its two cells.
+LD r1,r0,@gb_x
+MOVI r2,2
+MOVI r3,48
+MOVI r4,11
+CALL @fb_damage
+LD r1,r0,@gb_x
+MOVI r2,70
+ADD r1,r1,r2
+MOVI r2,2
+MOVI r3,64
+MOVI r4,11
+CALL @fb_damage
 CALL @g_present
 g_nodraw:
 LD r1,r0,@g_quit

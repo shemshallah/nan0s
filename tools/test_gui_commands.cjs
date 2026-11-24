@@ -67,6 +67,10 @@ const shell = fs.readFileSync(path.join(__dirname, '../src/lib/shell.nas'), 'utf
 assert.match(source, /\.include "\.\.\/lib\/shell\.nas"/, 'Native shell must be linked into the bootable cartridge');
 assert.match(source, /CALL @wm_draw_all\s*\nCALL @g_bar\s*\nCALL @sh_draw/,
   'Native launcher/modal must render after guest windows');
+assert.match(block('g_compose:', 'g_nodraw:'), /CALL @wm_draw_all[\s\S]*?CALL @g_bar[\s\S]*?CALL @sh_draw[\s\S]*?CALL @g_present/,
+  'Retained scene must compose shell after windows and present afterwards');
+assert.match(block('g_present:', 'gs_ready:'), /gp_overlap:[\s\S]*?FBCOPY[\s\S]*?gp_right:[\s\S]*?FBCOPY/,
+  'Native damage presenter must preserve opaque cursor pixels');
 assert.match(source, /g_onkey:[\s\S]*?CALL @sh_handle[\s\S]*?gk_regular:/,
   'Modal guest keyboard routing must precede global hotkeys');
 assert.match(source, /CALL @sh_launcher/, 'F1 must open native app launcher');

@@ -39,6 +39,7 @@ jobs:
           sudo apt-get install -y gawk xxd qemu-system-x86 ffmpeg
 
       - name: Build current complete guest image
+        id: build_guest
         shell: bash
         run: |
           set -euo pipefail
@@ -70,6 +71,7 @@ jobs:
         run: sh tools/qgate_gui_commands.sh
 
       - name: Boot actual WASM desktop in mobile Chromium
+        if: ${{ !cancelled() && steps.build_guest.outcome == 'success' }}
         shell: bash
         run: |
           set -euo pipefail
