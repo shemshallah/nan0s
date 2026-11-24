@@ -8,8 +8,126 @@
 #include "tclInt.h"
 #include "tclFileSystem.h"
 
-const char *const tclpFileAttrStrings[] = { NULL };
-const TclFileAttrProcs tclpFileAttrProcs[] = { { NULL, NULL } };
+static int Nan16GetPermissions(Tcl_Interp *interp, int index,
+	Tcl_Obj *pathPtr, Tcl_Obj **valuePtr);
+static int Nan16SetPermissions(Tcl_Interp *interp, int index,
+	Tcl_Obj *pathPtr, Tcl_Obj *valuePtr);
+
+const char *const tclpFileAttrStrings[] = { "-permissions", NULL };
+const TclFileAttrProcs tclpFileAttrProcs[] = {
+    { Nan16GetPermissions, Nan16SetPermissions },
+};
+
+static int
+Nan16GetPermissions(
+    Tcl_Interp *interp,
+    TCL_UNUSED(int),
+    Tcl_Obj *pathPtr,
+    Tcl_Obj **valuePtr)
+{
+    struct stat st;
+    const char *path = (const char *)Tcl_FSGetNativePath(pathPtr);
+
+    if (path == NULL || stat(path, &st) != 0) {
+	if (interp) {
+	    Tcl_SetObjResult(interp, Tcl_ObjPrintf("could not read \"%s\": %s",
+		    TclGetString(pathPtr), Tcl_PosixError(interp)));
+	}
+	return TCL_ERROR;
+    }
+    *valuePtr = Tcl_ObjPrintf("%0#5o", (int)(st.st_mode & 0x7FFF));
+    return TCL_OK;
+}
+
+static int
+Nan16SetPermissions(
+    Tcl_Interp *interp,
+    TCL_UNUSED(int),
+    Tcl_Obj *pathPtr,
+    Tcl_Obj *valuePtr)
+{
+    struct stat st;
+    const char *path = (const char *)Tcl_FSGetNativePath(pathPtr);
+    const char *s = TclGetString(valuePtr);
+    char *end = NULL;
+    unsigned long mode;
+
+    if (path == NULL) return TCL_ERROR;
+    errno = 0;
+    mode = strtoul(s, &end, 8);
+    if (end == s || *end != '\0' || errno) {
+	unsigned cur;
+	int i;
+	if (stat(path, &st) != 0) {
+	    if (interp) Tcl_SetObjResult(interp, Tcl_ObjPrintf(
+		    "could not read \"%s\": %s", s, Tcl_PosixError(interp)));
+	    return TCL_ERROR;
+	}
+	cur = (unsigned)st.st_mode & 0777;
+	if (strlen(s) == 9 && strspn(s, "rwx-") == 9) {
+	    cur = 0;
+	    for (i = 0; i < 9; i++) if (s[i] != '-') cur |= 0400 >> i;
+	    mode = cur;
+	} else {
+	    /* Symbolic ugoa[+-=]rwx, sufficient for the official file-copy
+	       and permission tests (e.g. "u+w"). */
+	    const char *p = s;
+	    unsigned who = 0, bits = 0;
+	    int op = 0;
+	    while (*p == 'u' || *p == 'g' || *p == 'o' || *p == 'a') {
+		if (*p == 'u' || *p == 'a') who |= 0700;
+		if (*p == 'g' || *p == 'a') who |= 0070;
+		if (*p == 'o' || *p == 'a') who |= 0007;
+		p++;
+	    }
+	    if (!who) who = 0777;
+	    if (*p == '+' || *p == '-' || *p == '=') op = *p++;
+	    if (!op || !*p) goto bad;
+	    for (; *p; p++) {
+		unsigned b = (*p == 'r') ? 0444 : (*p == 'w') ? 0222
+		    : (*p == 'x') ? 0111 : 0;
+		if (!b) goto bad;
+		bits |= b;
+	    }
+	    mode = cur;
+	    if (op == '+') mode |= ((bits & 0444) ? (who & 0700 ? 0400 : 0) : 0)
+		| ((bits & 0222) ? (who & 0700 ? 0200 : 0) : 0)
+		| ((bits & 0111) ? (who & 0700 ? 0100 : 0) : 0)
+		| ((bits & 0444) ? (who & 0070 ? 0040 : 0) : 0)
+		| ((bits & 0222) ? (who & 0070 ? 0020 : 0) : 0)
+		| ((bits & 0111) ? (who & 0070 ? 0010 : 0) : 0)
+		| ((bits & 0444) ? (who & 0007 ? 0004 : 0) : 0)
+		| ((bits & 0222) ? (who & 0007 ? 0002 : 0) : 0)
+		| ((bits & 0111) ? (who & 0007 ? 0001 : 0) : 0);
+	    else if (op == '-') mode &= ~(((bits & 0444) ? (who & 0700 ? 0400 : 0) : 0)
+		| ((bits & 0222) ? (who & 0700 ? 0200 : 0) : 0)
+		| ((bits & 0111) ? (who & 0700 ? 0100 : 0) : 0)
+		| ((bits & 0444) ? (who & 0070 ? 0040 : 0) : 0)
+		| ((bits & 0222) ? (who & 0070 ? 0020 : 0) : 0)
+		| ((bits & 0111) ? (who & 0070 ? 0010 : 0) : 0)
+		| ((bits & 0444) ? (who & 0007 ? 0004 : 0) : 0)
+		| ((bits & 0222) ? (who & 0007 ? 0002 : 0) : 0)
+		| ((bits & 0111) ? (who & 0007 ? 0001 : 0) : 0));
+	    else mode = (((bits & 0444) ? (who & 0700 ? 0400 : 0) : 0)
+		| ((bits & 0222) ? (who & 0700 ? 0200 : 0) : 0)
+		| ((bits & 0111) ? (who & 0700 ? 0100 : 0) : 0)
+		| ((bits & 0444) ? (who & 0070 ? 0040 : 0) : 0)
+		| ((bits & 0222) ? (who & 0070 ? 0020 : 0) : 0)
+		| ((bits & 0111) ? (who & 0070 ? 0010 : 0) : 0)
+		| ((bits & 0444) ? (who & 0007 ? 0004 : 0) : 0)
+		| ((bits & 0222) ? (who & 0007 ? 0002 : 0) : 0)
+		| ((bits & 0111) ? (who & 0007 ? 0001 : 0) : 0));
+	}
+    }
+    if (chmod(path, (mode_t)(mode & 0777)) != 0) {
+bad:
+	if (interp) Tcl_SetObjResult(interp, Tcl_ObjPrintf(
+		"could not set permissions for file \"%s\": %s",
+		TclGetString(pathPtr), Tcl_PosixError(interp)));
+	return TCL_ERROR;
+    }
+    return TCL_OK;
+}
 
 int
 TclpObjAccess(
