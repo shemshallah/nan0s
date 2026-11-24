@@ -68,6 +68,19 @@ The official multi-thread warning remains: `Multi-threaded tests skipped:
 Linked against a non-threadsafe Tcl build`; Tcl/SQLite are still
 `TCL_THREADS=0` / `SQLITE_THREADSAFE=0`.
 
+### Formatter follow-up (not yet green)
+
+Main added an accurate float formatter plus the `nan16_digits_hook` backed by
+`TclDoubleDigits`, and fast 64/32-bit division.  After merging those changes:
+
+- `format %e 1.5` in a tclsh cartridge traps with `!O13FC8D` before printing
+  the result, so the libc formatter/hook path is still not usable.
+- `atof1.test` with a 40B-step budget still does not reach the harness
+  summary (step budget exhausted in the formatter/query path).
+- Therefore the first real veryquick failure remains the atof1 floating
+  conversion; veryquick has not been rerun to a green summary after the
+  formatter merge.
+
 ## Milestone 2 — official SQLite 3.54.1 testfixture
 
 Status: **test/select1.test passes the official tester harness on the
