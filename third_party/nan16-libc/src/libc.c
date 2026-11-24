@@ -24,8 +24,16 @@ int errno;
 
 /* ---------------------------------------------------------------- memory */
 #define HEAP_BASE ((unsigned char *)0x04000000u)
+/* Namespaced directive: zlib and other libraries also use HEAP_SIZE. */
+#ifndef NAN16_HEAP_SIZE
+# ifdef HEAP_SIZE
+#  define NAN16_HEAP_SIZE HEAP_SIZE
+# else
+#  define NAN16_HEAP_SIZE (64u * 1024u * 1024u)
+# endif
+#endif
 #ifndef HEAP_SIZE
-#define HEAP_SIZE (64u * 1024u * 1024u)
+#define HEAP_SIZE NAN16_HEAP_SIZE
 #endif
 #define HDR_ALIGN 16u
 
