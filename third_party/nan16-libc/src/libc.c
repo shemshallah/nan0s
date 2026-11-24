@@ -82,8 +82,13 @@ void *malloc(size_t n)
 void free(void *p)
 {
     Block *b, *n;
+    unsigned long addr;
     if (!p) return;
     b = (Block *)p - 1;
+    addr = (unsigned long)b;
+    if (addr < (unsigned long)HEAP_BASE ||
+        addr + sizeof(Block) > (unsigned long)HEAP_BASE + HEAP_SIZE)
+        return;
     if (b->free) return;
     b->free = 1;
     for (n = heap_head; n; n = n->next) {
