@@ -17,6 +17,57 @@ extern "C" {
 
 typedef struct nan_vm nan_vm;
 
+/* ---- Kernel ABI v0.1 (normative: spec/KERNEL_ABI.md) ----
+ * Ports are word addresses in guest memory, not byte addresses.  All
+ * control ports are written with OUTL (0x43) and STATUS is read with INL
+ * (0x4D).  NAN_KABI_UNSET is the power-on value ("not configured"). */
+enum {
+  NAN_KABI_PORT_ENTRY   = 0x4E00, /* kernel entry word address           */
+  NAN_KABI_PORT_FRAME   = 0x4E01, /* 24-word trap frame word address     */
+  NAN_KABI_PORT_TIMER   = 0x4E02, /* timer interval in instructions, 0=off */
+  NAN_KABI_PORT_KSTACK  = 0x4E03, /* kernel stack pointer word            */
+  NAN_KABI_PORT_REGIONS = 0x4E04, /* region table word address            */
+  NAN_KABI_PORT_TCB     = 0x4E05, /* current TCB word address             */
+  NAN_KABI_PORT_STATUS  = 0x4E06, /* INL: bit0 timer pending, bit1 trap   */
+  NAN_KABI_STATUS_TIMER = 1u,
+  NAN_KABI_STATUS_TRAP  = 2u,
+  NAN_KABI_UNSET        = 0xFFFFFFFFu
+};
+
+/* Trap frame: 24 aligned guest words, each holding a 32-bit value in its
+ * payload (the interpreter writes class +q/+q words). */
+enum {
+  NAN_TF_R0 = 0, NAN_TF_R1 = 1, NAN_TF_R2 = 2, NAN_TF_R3 = 3,
+  NAN_TF_R4 = 4, NAN_TF_R5 = 5, NAN_TF_R6 = 6, NAN_TF_R7 = 7,
+  NAN_TF_R8 = 8, NAN_TF_R9 = 9, NAN_TF_R10 = 10, NAN_TF_R11 = 11,
+  NAN_TF_R12 = 12, NAN_TF_R13 = 13, NAN_TF_R14 = 14, NAN_TF_R15 = 15,
+  NAN_TF_PC = 16, NAN_TF_K = 17, NAN_TF_ADDRH = 18, NAN_TF_CAUSE = 19,
+  NAN_TF_IMM = 20, NAN_TF_RET = 21, NAN_TF_SP = 22, NAN_TF_RESERVED = 23,
+  NAN_TF_WORDS = 24
+};
+enum { NAN_CAUSE_SVC = 0, NAN_CAUSE_IRQ = 1, NAN_CAUSE_FAULT = 2 };
+
+/* Region table entry: 4 guest words {base word, nwords, kind, prot}.
+ * nwords == 0 terminates the table. */
+enum {
+  NAN_REGION_WORDS = 4,
+  NAN_REGION_KIND_RAM = 0, NAN_REGION_KIND_DEV = 1,
+  NAN_PROT_R = 1, NAN_PROT_W = 2, NAN_PROT_X = 4
+};
+
+/* Frozen syscall numbers (append-only).  S1 saves the number in the trap
+ * frame; the NaN kernel owns the implementations. */
+enum {
+  NAN_SYS_YIELD = 0, NAN_SYS_EXIT = 1, NAN_SYS_REGION_MAP = 2,
+  NAN_SYS_REGION_QUERY = 3, NAN_SYS_OPEN = 4, NAN_SYS_READ = 5,
+  NAN_SYS_WRITE = 6, NAN_SYS_SEEK = 7, NAN_SYS_CLOSE = 8,
+  NAN_SYS_SPAWN = 9, NAN_SYS_WAIT = 10, NAN_SYS_TIME = 11,
+  NAN_SYS_SHARE = 12, NAN_SYS_THREAD_CREATE = 13,
+  NAN_SYS_THREAD_JOIN = 14, NAN_SYS_THREAD_EXIT = 15,
+  NAN_SYS_MUTEX = 16, NAN_SYS_COND = 17, NAN_SYS_TLS = 18,
+  NAN_SYS_GETPID = 20, NAN_SYS_GETPPID = 21, NAN_SYS_KILL = 22
+};
+
 /* nan_run() return values */
 enum {
   NAN_BUDGET   = 0,  /* step budget used up, call again            */

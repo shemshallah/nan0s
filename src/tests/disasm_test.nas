@@ -6,7 +6,7 @@ JMP @main
 main:
   MOVI r13,1
   MOVI r1,@sample
-  MOVI r2,22
+  MOVI r2,25
   CALL @dis_range
   MOVI r1,3
   MOVHI r1,786
@@ -61,4 +61,7 @@ OUTB r1,r2
 JMPF 3000000
 MUL r1,r2,r3
 VSYNC
+INL r1,r2
+SVC 7
+SVCRET
 HALT
