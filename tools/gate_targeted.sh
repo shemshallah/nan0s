@@ -52,6 +52,10 @@ for f in $FILES; do
       add "tcc_nan16_enc" ;;
     spec/*|third_party/*|*.md|build/*|aarch64/android/app/src/main/assets/*)
       ;;
+    src/dbg/*|src/tests/ndbg_*|tools/ndbg*.sh)
+      add "ndbg ndbg_diff ndbg_mon ndbg_img" ;;
+    src/museum/shell.nas|src/tools/disasm.nas)
+      add "ndbg ndbg_diff ndbg_mon ndbg_img qgate_gui" ;;
     src/lib/ncc.nas|src/lib/ppexpr.nas|src/lib/mpp.nas|src/lib/wide*.nas|src/lib/vscanf.nas|src/lib/iso*.nas|src/lib/mathx.nas|src/prog/nasm0_tables.nas|src/tools/disasm.nas|src/tests/ctests/*|src/tests/ncc_*)
       add "$COMPILER" ;;
     aarch64/android/core/*|aarch64/android/tests/*|aarch64/android/tools/nan_cli.c|aarch64/android/Makefile)
@@ -145,6 +149,9 @@ gate_files() {
   case "$1" in
     c_core_test|ncc_*)
       echo "src/lib/*.nas src/prog/nasm0_tables.nas src/tools/disasm.nas src/tests/ncc_*.nas src/tests/ctests/* aarch64/android/core/*.c aarch64/android/core/*.h aarch64/android/tests/*.c aarch64/android/tools/nan_cli.c aarch64/android/Makefile tools/nmk.awk tools/ncc_*.sh"
+      ;;
+    ndbg|ndbg_diff|ndbg_mon|ndbg_img)
+      echo "src/dbg/* src/tests/ndbg_* src/tools/disasm.nas tools/ndbg*.sh tools/nmk.awk tools/mkimg.awk x86/native/nan16_x86.nan"
       ;;
     tcc_nan16_*)
       echo "third_party/tinycc/nan16-* third_party/tinycc/tcc.h third_party/tinycc/libtcc.c third_party/tinycc/libtcc.h third_party/tinycc/tccelf.c tools/tcc_nan16_*.sh"

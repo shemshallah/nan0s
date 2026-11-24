@@ -454,3 +454,8 @@ JMPF 3000000
 MUL r1,r2,r3
 VSYNC
 HALT
+
+; output hook required by the shared disassembler
+dis_out:
+  PUTC r9
+  RET
