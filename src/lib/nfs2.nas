@@ -10,6 +10,11 @@
 ;   nfs_delete  r1=path        -> r1=1 removed / 0 absent
 ;   nfs_write   r1=path r2=src r3=bytes -> r1=entry or 0
 ;   nfs_data    r1=path        -> r1=data word ptr r2=bytes r3=found
+;   nfs_stat    r1=path        -> r1=size r2=dir r3=found
+;   nfs_is_dir  r1=path        -> r1=1/0
+;   nfs_readdir r1=dir r2=index -> r1=entry r2=name byte ptr r3=size r4=dir
+;   nfs_rename  r1=old r2=new    -> r1=1/0 (files; dir children are not rewritten)
+;   nfs_truncate r1=path         -> r1=1/0 (size only; arena is not reclaimed)
 .equ NFS_BASE    2250000
 .equ NFS_MAGIC   0x4E504146
 .equ NFS_MAX     64
@@ -29,6 +34,15 @@
 .equ W_NF_ENT  61333
 .equ W_NF_DIR  61334
 .equ W_NF_IDX  61335
+.equ W_NF_DIRP 61336
+.equ W_NF_SCAN 61337
+.equ W_NF_COUNT 61338
+.equ W_NF_TMP2 61339
+.equ W_NF_OLD  61340
+.equ W_NF_NEW  61341
+; ATA sync scratch (these were previously implicit/global 0)
+.equ W_DK_N    61342
+.equ W_DK_I    61343
 .equ NFS_DISK_LBA 2048
 .equ NFS_HDR 11023000
 
@@ -342,6 +356,207 @@ MOVI r1,0
 MOVI r2,0
 MOVI r3,0
 nfs_dd:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+
+; ---- directory/stat/rename/truncate extras for Tcl ---------------------------------
+; nf2_child: r1=path r2=dir -> 1 if path is an immediate child of dir.
+; dir must not have a trailing slash except for root "/".  Clobbers r3..r8.
+nf2_child:
+ADD r6,r1,r0
+ADD r7,r2,r0
+LDB r3,r7,0
+CMP r3,r0
+JMP[EQ] @nf2_ch_no
+MOVI r4,47
+CMP r3,r4
+JMP[NE] @nf2_ch_pre
+LDB r3,r7,1
+CMP r3,r0
+JMP[NE] @nf2_ch_pre
+ADD r8,r6,r13
+JMP @nf2_ch_rest
+nf2_ch_pre:
+LDB r3,r7,0
+CMP r3,r0
+JMP[EQ] @nf2_ch_after
+LDB r4,r6,0
+CMP r4,r3
+JMP[NE] @nf2_ch_no
+ADD r6,r6,r13
+ADD r7,r7,r13
+JMP @nf2_ch_pre
+nf2_ch_after:
+LDB r3,r6,0
+MOVI r4,47
+CMP r3,r4
+JMP[NE] @nf2_ch_no
+ADD r8,r6,r13
+nf2_ch_rest:
+LDB r3,r8,0
+CMP r3,r0
+JMP[EQ] @nf2_ch_no
+nf2_ch_scan:
+LDB r3,r8,0
+CMP r3,r0
+JMP[EQ] @nf2_ch_yes
+MOVI r4,47
+CMP r3,r4
+JMP[EQ] @nf2_ch_no
+ADD r8,r8,r13
+JMP @nf2_ch_scan
+nf2_ch_yes:
+MOVI r1,1
+RET
+nf2_ch_no:
+MOVI r1,0
+RET
+
+; nfs_stat: r1=path -> r1=size r2=dir r3=found
+nfs_stat:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @nfs_find
+CMP r1,r0
+JMP[EQ] @nfs_st_none
+LD r2,r1,#NF_E_SIZE
+LD r3,r1,#NF_E_DIR
+MOVI r4,1
+ADD r1,r2,r0
+ADD r2,r3,r0
+ADD r3,r4,r0
+JMP @nfs_st_done
+nfs_st_none:
+MOVI r1,0
+MOVI r2,0
+MOVI r3,0
+nfs_st_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; nfs_is_dir: r1=path -> r1=1/0
+nfs_is_dir:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @nfs_find
+CMP r1,r0
+JMP[EQ] @nfs_id_n
+LD r1,r1,#NF_E_DIR
+JMP @nfs_id_d
+nfs_id_n:
+MOVI r1,0
+nfs_id_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; nfs_readdir: r1=dir r2=index -> r1=entry r2=name ptr r3=size r4=dir
+nfs_readdir:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_NF_DIRP
+ST r2,r0,#W_NF_IDX
+ST r0,r0,#W_NF_SCAN
+ST r0,r0,#W_NF_COUNT
+nfs_rd_loop:
+LD r3,r0,#W_NF_SCAN
+MOVI r4,#NFS_MAX
+CMP r3,r4
+JMP[GE] @nfs_rd_none
+MOVI r4,#NF_E_SZ
+MUL r4,r3,r4
+LA r5,#NFS_BASE
+ADDI r5,r5,8
+ADD r4,r4,r5
+ST r4,r0,#W_NF_TMP2
+LD r5,r4,#NF_E_USED
+CMP r5,r0
+JMP[EQ] @nfs_rd_next
+ADDI r1,r4,#NF_E_PATH
+SHL r1,r1,2
+LD r2,r0,#W_NF_DIRP
+CALL @nf2_child
+CMP r1,r0
+JMP[EQ] @nfs_rd_next
+LD r3,r0,#W_NF_COUNT
+LD r4,r0,#W_NF_IDX
+CMP r3,r4
+JMP[EQ] @nfs_rd_found
+ADD r3,r3,r13
+ST r3,r0,#W_NF_COUNT
+nfs_rd_next:
+LD r3,r0,#W_NF_SCAN
+ADD r3,r3,r13
+ST r3,r0,#W_NF_SCAN
+JMP @nfs_rd_loop
+nfs_rd_found:
+LD r4,r0,#W_NF_TMP2
+LD r5,r4,#NF_E_SIZE
+LD r6,r4,#NF_E_DIR
+ADDI r2,r4,#NF_E_PATH
+SHL r2,r2,2
+ADD r1,r4,r0
+ADD r3,r5,r0
+ADD r4,r6,r0
+JMP @nfs_rd_done
+nfs_rd_none:
+MOVI r1,0
+nfs_rd_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; nfs_rename: r1=old r2=new -> r1=1/0 (file rename; directory children not rewritten)
+nfs_rename:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_NF_OLD
+ST r2,r0,#W_NF_NEW
+CALL @nfs_find
+CMP r1,r0
+JMP[EQ] @nfs_rn_no
+ST r1,r0,#W_NF_TMP2
+LD r1,r0,#W_NF_NEW
+ST r1,r0,#W_NF_PATH
+CALL @nfs_find
+CMP r1,r0
+JMP[NE] @nfs_rn_no
+LD r2,r0,#W_NF_TMP2
+ADDI r1,r2,#NF_E_PATH
+SHL r1,r1,2
+LD r2,r0,#W_NF_NEW
+MOVI r3,31
+CALL @nf2_strcpy
+LD r2,r0,#W_NF_TMP2
+ST r1,r2,#NF_E_PLEN
+CALL @nfs_sync
+MOVI r1,1
+JMP @nfs_rn_done
+nfs_rn_no:
+MOVI r1,0
+nfs_rn_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; nfs_truncate: r1=path -> r1=1/0 (size only; arena is not reclaimed)
+nfs_truncate:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @nfs_find
+CMP r1,r0
+JMP[EQ] @nfs_tr_no
+ST r0,r1,#NF_E_SIZE
+ST r1,r0,#W_NF_TMP2
+CALL @nfs_sync
+MOVI r1,1
+JMP @nfs_tr_done
+nfs_tr_no:
+MOVI r1,0
+nfs_tr_done:
 SUB r14,r14,r13
 LD r15,r14,0
 RET

@@ -138,8 +138,10 @@ Status legend: **done**, **partial**, **planned**.
       bounds.
 - [ ] Signals: pending mask, handlers, `kill`, `alarm`, `SIGCHLD`; safe
       syscall restart rules.
-- [ ] NaNFS write/extend, directory tree, create/unlink/rename/stat/seek,
-      permissions, free-block bitmap, crash-consistency journal.
+- [~] NaNFS write/extend, directory tree, create/unlink/rename/stat/seek:
+      NFS2 now has `nfs_stat`/`nfs_readdir`/`nfs_rename`/`nfs_truncate` and
+      an exact gate (`tools/nfs2_extra_gate.sh`).  Permissions, free-space
+      reuse and crash consistency remain.
 - [ ] Console/tty: input ring, cooked/raw modes, termios, window size,
       stdout/stderr channels.
 - [ ] Pipes and process I/O redirection.
