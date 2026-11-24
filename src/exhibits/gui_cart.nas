@@ -4,7 +4,7 @@
 ; Keys (kbd.nas, 1024x768): TAB focus | F2 MOVE mode (arrows move, ENTER leaves) | F3 enlarge/restore | ESC close.
 ; Terminal commands (first letter): h c v w l m x t s(settings) n(nannet) u(utils) f(files) e(run C demo) q.
 ; e compiles and runs a C program with the raw-NaN16 ncc front end (src/lib/ncc.nas) inside this terminal.
-; F5 Settings, F6 NaNNet, F7 System utilities (single-instance).
+; F0 Help (virtual PS/2), F5 Settings, F6 NaNNet, F7 System utilities.
 ; Window manager: src/lib/wm.nas. Framebuffer: fb.nas. Text: NaNGlyph 8x13 cells (fbtext.nas+font7.nas). Keys: kbd.nas. No native GUI code.
 .equ SLOT 8192
 .equ PERIOD 100
@@ -277,6 +277,14 @@ JMP[EQ] @gk_np
 CALL @st_pendkey
 JMP @gk_ret
 gk_np:
+; F0 is a NaN/0S-defined virtual function key, injected as Set-1 0x54.
+; Open a terminal/help panel rather than silently ignoring the event.
+MOVI r2,0x100
+CMP r1,r2
+JMP[NE] @gk_notf0
+CALL @gk_help
+JMP @gk_ret
+gk_notf0:
 MOVI r2,0x105
 CMP r1,r2
 JMP[NE] @gk_n5
@@ -347,6 +355,39 @@ gk_ret:
 SUB r14,r14,r13
 LD r15,r14,0
 RET
+; ---- F0: guest-native Help. Reuse the focused terminal if one exists;
+; otherwise open a terminal; all operations are raw NaN16. ----
+gk_help:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @wm_top
+MOVI r2,0xFFFF
+CMP r1,r2
+JMP[EQ] @gh_new
+ST r1,r0,@gh_id
+CALL @wm_wbase
+LD r2,r1,#W_KIND
+CMP r2,r0
+JMP[EQ] @gh_print
+gh_new:
+MOVI r1,0
+CALL @gui_open_new
+MOVI r2,0xFFFF
+CMP r1,r2
+JMP[EQ] @gh_done
+ST r1,r0,@gh_id
+gh_print:
+LD r1,r0,@gh_id
+MOVI r4,104
+CALL @term_cmd
+LD r1,r0,@gh_id
+CALL @term_draw
+gh_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+gh_id:
+.word 0
 ; ---- F3: enlarge/restore the focused window. Monitor fits its content (250x96), every other kind fills the screen ----
 g_enlarge:
 ST r15,r14,0
