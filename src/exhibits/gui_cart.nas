@@ -116,6 +116,7 @@ ST r1,r0,@g_last
 CALL @g_ticks
 CALL @wm_notice_tick
 CALL @g_bar
+CALL @ms_draw
 JMP @g_loop
 g_exit:
 MOVI r1,0xFFFF
@@ -196,6 +197,11 @@ s_resize:
 g_ticks:
 ST r15,r14,0
 ADD r14,r14,r13
+; App timers may advance state, but must not paint over shell overlays.
+LD r1,r0,@sh_open
+LD r2,r0,@sh_modal
+BOOL.14 r1,r1,r2
+ST r1,r0,@wm_tick_overlay
 ST r0,r0,@gt_i
 gt_loop:
 LD r1,r0,@gt_i
@@ -215,6 +221,7 @@ ADD r1,r1,r13
 ST r1,r0,@gt_i
 JMP @gt_loop
 gt_done:
+ST r0,r0,@wm_tick_overlay
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -1320,7 +1327,7 @@ CALL @gui_open_new
 JMP @tm_done
 tm_mon:
 MOVI r1,2
-CALL @gui_open_new
+CALL @gui_single
 JMP @tm_done
 tm_hex:
 MOVI r1,3
@@ -4196,8 +4203,9 @@ ST r1,r0,@mt_id
 CALL @wm_covered
 CMP r1,r0
 JMP[NE] @mt_done
-LD r1,r0,@mt_id
-CALL @mon_draw
+; Never draw directly from the monitor timer. Request an ordered frame
+; so the shell, taskbar, cursor and every higher window retain priority.
+ST r13,r0,@wm_redraw
 mt_done:
 SUB r14,r14,r13
 LD r15,r14,0
@@ -4212,6 +4220,17 @@ CALL @g_clr
 LD r1,r0,@md_id
 CALL @wm_wbase
 ST r1,r0,@md_wb
+; Keep timer text and lamps inside the window even after resizing.
+LD r5,r1,#W_W
+MOVI r6,16
+SUB r5,r5,r6
+SHR r5,r5,4
+MOVI r6,14
+CMP r5,r6
+JMP[LE] @md_step_ok
+ADD r5,r6,r0
+md_step_ok:
+ST r5,r0,@md_step
 LD r5,r1,#W_X
 MOVI r6,8
 ADD r5,r5,r6
@@ -4293,6 +4312,8 @@ md_id:
 .word 0
 md_wb:
 .word 0
+md_step:
+.word 0
 md_x:
 .word 0
 md_y:
@@ -4328,12 +4349,14 @@ ml_c:
 ST r5,r0,@ml_col
 MOVI r1,15
 SUB r1,r1,r10
-MOVI r6,14
+LD r6,r0,@md_step
 MUL r1,r1,r6
 LD r6,r0,@md_x
 ADD r1,r1,r6
 LD r2,r0,@ml_y
-MOVI r3,11
+LD r3,r0,@md_step
+MOVI r4,3
+SUB r3,r3,r4
 MOVI r4,9
 LD r5,r0,@ml_col
 CALL @wm_rect
