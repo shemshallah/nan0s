@@ -18,6 +18,7 @@ TT=third_party/tinycc
 LIBC=third_party/nan16-libc
 PORT=src/tests/tcl_sqlite/nan16
 MEM=${TCL_NAN16_TESTFIXTURE_MEM:-256}
+HEAP_MB=${TCL_NAN16_TESTFIXTURE_HEAP_MB:-128}
 TEST=${TCL_NAN16_TESTFIXTURE_TEST:-/sqlite/test/select1.test}
 if [ -n "${TCL_NAN16_TESTFIXTURE_STEPS:-}" ]; then
     STEPS=$TCL_NAN16_TESTFIXTURE_STEPS
@@ -65,7 +66,12 @@ grep -Eq 'TCL_PATCH_LEVEL[[:space:]]+"9\.0\.3"' "$TCL_SRC/generic/tcl.h" || {
 
 T=${TMPDIR:-$ROOT/build}/tcl-testfixture.$$
 mkdir -p "$T"
-trap 'rm -rf "$T"' EXIT INT TERM
+KEEP=${TCL_NAN16_TESTFIXTURE_KEEP:-0}
+OUT_IMG=${TCL_NAN16_TESTFIXTURE_OUT:-}
+cleanup() {
+    if [ "$KEEP" = 1 ]; then echo "tcl_testfixture: kept $T"; else rm -rf "$T"; fi
+}
+trap cleanup EXIT INT TERM
 
 MODE=product
 RUNNER=${TCL_NAN16_TESTFIXTURE_RUNNER:-}
@@ -92,6 +98,14 @@ $CC -std=gnu99 -O2 -DTCC_TARGET_NAN16 -DONE_SOURCE -I"$TT" "$TT/tcc.c" \
 echo "tcl_testfixture: pack official VFS"
 python3 tools/nan16_suite_pack.py "$T/suite.n16pack" \
     --tree "$SQLITE_SRC/test=/sqlite/test" \
+    --tree "$SQLITE_SRC/ext/rtree=/sqlite/ext/rtree" \
+    --tree "$SQLITE_SRC/ext/fts5/test=/sqlite/ext/fts5/test" \
+    --tree "$SQLITE_SRC/ext/expert=/sqlite/ext/expert" \
+    --tree "$SQLITE_SRC/ext/recover=/sqlite/ext/recover" \
+    --tree "$SQLITE_SRC/ext/rbu=/sqlite/ext/rbu" \
+    --tree "$SQLITE_SRC/ext/intck=/sqlite/ext/intck" \
+    --tree "$SQLITE_SRC/ext/vec1/test=/sqlite/ext/vec1/test" \
+    --tree "$SQLITE_SRC/ext/session=/sqlite/ext/session" \
     --tree "$TCL_SRC/library=/usr/lib/tcl9.0" --check
 PACK_LEN=$(wc -c < "$T/suite.n16pack" | tr -d ' ')
 PACK_COUNT=$(python3 - "$T/suite.n16pack" <<'PY'
@@ -100,8 +114,12 @@ d = open(sys.argv[1], "rb").read()
 print(struct.unpack_from("<I", d, 8)[0])
 PY
 )
-[ "$PACK_COUNT" = 2133 ] && [ "$PACK_LEN" = 25806592 ] || {
-    echo "tcl_testfixture: FAIL (unexpected pack: $PACK_COUNT files, $PACK_LEN bytes; expected 2133 / 25806592)" >&2
+[ "$PACK_COUNT" -ge 2500 ] || {
+    echo "tcl_testfixture: FAIL (pack has only $PACK_COUNT files; ext tests missing?)" >&2
+    exit 1
+}
+[ "$PACK_LEN" -le 33554432 ] || {
+    echo "tcl_testfixture: FAIL (pack $PACK_LEN bytes exceeds the 32 MiB low-map window)" >&2
     exit 1
 }
 python3 tools/nan16_pack_image.py "$T/suite.n16pack" \
@@ -140,7 +158,7 @@ TESTS=$(sed -n '/^TESTSRC =/,/^$/p; /^TESTSRC +=/,/^$/p' "$SQLITE_SRC/main.mk" \
     | grep -oE '\$\(TOP\)/[^ ]+\.c' \
     | sed "s|\$(TOP)|$SQLITE_SRC|" | grep -v '/src/test_tclsh.c$')
 
-SQLFLAGS="-DNAN16_HEAP_SIZE=134217728 -DNAN16_SQLITE_VFS_FILES=256 -DNAN16_SQLITE_VFS_NAME=256 -DSQLITE_OS_OTHER=1 -DSQLITE_THREADSAFE=0 -DSQLITE_TEMP_STORE=3 \
+SQLFLAGS="-DNAN16_HEAP_SIZE=$((HEAP_MB * 1048576)) -DNAN16_SQLITE_VFS_FILES=256 -DNAN16_SQLITE_VFS_NAME=256 -DSQLITE_OS_OTHER=1 -DSQLITE_THREADSAFE=0 -DSQLITE_TEMP_STORE=3 \
  -DSQLITE_OMIT_WAL -DSQLITE_OMIT_LOAD_EXTENSION -DSQLITE_OMIT_LOCALTIME \
  -DSQLITE_OMIT_DEPRECATED -DSQLITE_DQS=0 -DSQLITE_OMIT_SHARED_CACHE \
  -DSQLITE_MAX_MMAP_SIZE=0 -DNDEBUG \
@@ -176,6 +194,10 @@ python3 tools/nan16_pack_image.py "$T/suite.n16pack" \
     --header "$T/tcl_nan16_fixture_pack.h" --base 0x01000000 \
     --stack-floor 0x01000000 --image "$T/testfixture.raw.bin" \
     --out "$T/testfixture.bin"
+if [ -n "$OUT_IMG" ]; then
+    cp "$T/testfixture.bin" "$OUT_IMG"
+    echo "tcl_testfixture: image $OUT_IMG"
+fi
 
 echo "tcl_testfixture: run test/select1.test"
 "$RUNNER" --img "$T/testfixture.bin" --mem "$MEM" --steps "$STEPS" \
