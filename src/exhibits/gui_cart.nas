@@ -37,6 +37,8 @@ CALL @kbd_init
 CALL @wm_init
 CALL @sh_init
 CALL @ms_init
+MOVI r1,@ms_touch
+ST r1,r0,@kb_touch_hook
 CALL @nfs_format
 LA r1,@fs_hello_path
 SHL r1,r1,2
@@ -361,7 +363,7 @@ JMP[NE] @gk_notf4
 CALL @sh_dialog
 JMP @gk_ret
 gk_notf4:
-; F8 minimizes focused window (unless it is the final visible window).
+; F8 minimizes the focused window, including the final visible one.
 MOVI r2,0x108
 CMP r1,r2
 JMP[NE] @gk_notf8
@@ -3382,11 +3384,77 @@ CALL @wm_covered
 CMP r1,r0
 JMP[NE] @utk_ret
 LD r1,r0,@ud_id
-CALL @ut_draw
+CALL @ut_refresh
 utk_ret:
 SUB r14,r14,r13
 LD r15,r14,0
 RET
+; Refresh only the four changing utility fields. No full-body clear or chrome repaint.
+ut_refresh:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,@ud_id
+CALL @wm_wbase
+LD r2,r1,#W_W
+MOVI r3,310
+CMP r2,r3
+JMP[LT] @ur_ret
+LD r2,r1,#W_H
+MOVI r3,114
+CMP r2,r3
+JMP[LT] @ur_ret
+LD r1,r0,@ud_id
+CALL @tx_org
+MOVI r1,40
+MOVI r2,5
+MOVI r3,64
+CALL @ut_clear_field
+MOVI r1,40
+MOVI r2,5
+LD r3,r0,@ut_hi
+CALL @ux_h8
+MOVI r1,112
+MOVI r2,5
+MOVI r3,64
+CALL @ut_clear_field
+MOVI r1,112
+MOVI r2,5
+LD r3,r0,@ut_lo
+CALL @ux_h8
+MOVI r1,232
+MOVI r2,5
+MOVI r3,64
+CALL @ut_clear_field
+MOVI r1,232
+MOVI r2,5
+LD r3,r0,@ut_be
+MOVI r4,8
+MOVI r5,#C_YEL
+CALL @tx_h
+MOVI r1,40
+MOVI r2,6
+MOVI r3,80
+CALL @ut_clear_field
+MOVI r1,40
+MOVI r2,6
+LD r3,r0,@ut_mhz
+MOVI r4,#C_GRN
+CALL @tx_d
+ur_ret:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+; r1=x offset, r2=text row, r3=width. Clear one field only.
+ut_clear_field:
+LD r5,r0,@tx_x
+ADD r1,r1,r5
+MOVI r5,13
+MUL r2,r2,r5
+LD r5,r0,@tx_y
+ADD r2,r2,r5
+MOVI r4,11
+MOVI r5,#C_BODY
+JMP @wm_rect
 ux_lab:
 MOVI r4,#C_CY
 JMP @tx_s
@@ -4210,9 +4278,10 @@ ST r1,r0,@mt_id
 CALL @wm_covered
 CMP r1,r0
 JMP[NE] @mt_done
-; Never draw directly from the monitor timer. Request an ordered frame
-; so the shell, taskbar, cursor and every higher window retain priority.
-ST r13,r0,@wm_redraw
+; Only uncovered, live windows reach this point. Update digits and lamps
+; in place without clearing the desktop or any other window.
+LD r1,r0,@mt_id
+CALL @mon_refresh
 mt_done:
 SUB r14,r14,r13
 LD r15,r14,0
@@ -4224,6 +4293,52 @@ ST r15,r14,0
 ADD r14,r14,r13
 ST r1,r0,@md_id
 CALL @g_clr
+CALL @mon_layout
+LD r1,r0,@md_x
+LD r2,r0,@md_y
+MOVI r3,@s_fwd
+MOVI r4,#C_TXT
+CALL @fb_text7
+LD r1,r0,@md_x
+LD r2,r0,@md_y
+MOVI r5,13
+ADD r2,r2,r5
+MOVI r3,@s_rev
+MOVI r4,#C_TXT
+CALL @fb_text7
+LD r1,r0,@md_x
+LD r2,r0,@md_y
+MOVI r5,26
+ADD r2,r2,r5
+MOVI r3,@s_win
+MOVI r4,#C_TXT
+CALL @fb_text7
+CALL @mon_values
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+mon_refresh:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,@md_id
+CALL @wm_wbase
+LD r2,r1,#W_W
+MOVI r3,112
+CMP r2,r3
+JMP[LT] @mr_done
+LD r2,r1,#W_H
+MOVI r3,90
+CMP r2,r3
+JMP[LT] @mr_done
+CALL @mon_layout
+CALL @mon_values
+mr_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+mon_layout:
+ST r15,r14,0
+ADD r14,r14,r13
 LD r1,r0,@md_id
 CALL @wm_wbase
 ST r1,r0,@md_wb
@@ -4246,13 +4361,18 @@ LD r5,r1,#W_Y
 MOVI r6,22
 ADD r5,r5,r6
 ST r5,r0,@md_y
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+mon_values:
+ST r15,r14,0
+ADD r14,r14,r13
 TICK r3
 ST r3,r0,@md_t
-LD r1,r0,@md_x
-LD r2,r0,@md_y
-MOVI r3,@s_fwd
-MOVI r4,#C_TXT
-CALL @fb_text7
+MOVI r1,32
+MOVI r2,0
+MOVI r3,64
+CALL @md_clear_field
 LD r1,r0,@md_x
 MOVI r5,32
 ADD r1,r1,r5
@@ -4261,13 +4381,10 @@ LD r3,r0,@md_t
 MOVI r4,8
 MOVI r5,#C_TXT
 CALL @wm_puthex
-LD r1,r0,@md_x
-LD r2,r0,@md_y
-MOVI r5,13
-ADD r2,r2,r5
-MOVI r3,@s_rev
-MOVI r4,#C_TXT
-CALL @fb_text7
+MOVI r1,32
+MOVI r2,13
+MOVI r3,64
+CALL @md_clear_field
 LD r3,r0,@md_t
 MOVI r4,0
 SUB r3,r4,r3
@@ -4281,13 +4398,10 @@ ADD r2,r2,r5
 MOVI r4,8
 MOVI r5,#C_YEL
 CALL @wm_puthex
-LD r1,r0,@md_x
-LD r2,r0,@md_y
-MOVI r5,26
-ADD r2,r2,r5
-MOVI r3,@s_win
-MOVI r4,#C_TXT
-CALL @fb_text7
+MOVI r1,32
+MOVI r2,26
+MOVI r3,8
+CALL @md_clear_field
 LD r3,r0,@wm_zn
 LD r1,r0,@md_x
 MOVI r5,32
@@ -4315,6 +4429,14 @@ CALL @mon_lamps
 SUB r14,r14,r13
 LD r15,r14,0
 RET
+md_clear_field:
+LD r5,r0,@md_x
+ADD r1,r1,r5
+LD r5,r0,@md_y
+ADD r2,r2,r5
+MOVI r4,11
+MOVI r5,#C_BODY
+JMP @wm_rect
 md_id:
 .word 0
 md_wb:
