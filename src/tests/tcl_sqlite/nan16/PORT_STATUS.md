@@ -40,6 +40,20 @@ finish and triage the later test/ files.
 - Tcl's `file executable` now returns false for regular VFS files, so the
   official CLI/shell tests take their explicit `continue`/skip path instead
   of aborting the aggregate in `exec`.
+- Symbolic links are real in the libc VFS and Tcl (`file link`/`readlink`);
+  `xFullPathname` resolves the target and returns `SQLITE_OK_SYMLINK` for
+  `-nofollow`.  `symlink.test` now completes.  The remaining 13 failures are
+  WAL expectations (the fixture is built with `SQLITE_OMIT_WAL`) plus
+  `symlink-1.3`, which creates a loop with `exec ln -s` (no Tcl `exec`).
+- `ext/recover` currently reports 42 failures in the aggregate.  Traced so
+  far: official `PRAGMA page_size` is 1024, the copied page-2 header is a
+  valid 0x0D table leaf at 1024 (`recoverIsValidPage` semantics reproduced in
+  Python: cells end at 1024/1009, free block 1009+8, fragment count 0), and a
+  C probe using the same SQLite/recover/VFS with a `SQLITE_ENABLE_DBPAGE_VTAB`
+  build recovers to page size 1024.  The Tcl-copied `test.db2` instead makes
+  `sqlite3_recover_run` return SQLITE_NOTADB and the test output page size
+  512.  This points at the recover wrapper input-page path, not at TCC; the
+  remaining page-size detector/wrapper interaction is still open.
 - The testfixture build kept `SQLITE_OMIT_DEPRECATED`, which compiles
   `test_expired()` down to a TCL_OK with no result; `badutf2-4.0` therefore
   saw `{}` instead of `0`.  The official testfixture does not omit deprecated
