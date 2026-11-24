@@ -78,7 +78,7 @@ static void dump_guest_console(nan_vm *v, uint32_t ctl, const char *path)
 }
 
 int main(int argc, char **argv) {
-  const char *vga = NULL, *img = NULL, *keys = NULL, *ppm = NULL, *disk = NULL, *peek = NULL, *dump_bytes = NULL, *state_out = NULL, *corpus = NULL, *candidate_out = NULL, *guest_stdout = NULL, *guest_stderr = NULL; uint64_t steps = 50000000ull, per_ms = 1000;
+  const char *vga = NULL, *img = NULL, *keys = NULL, *ppm = NULL, *disk = NULL, *peek = NULL, *dump_bytes = NULL, *state_out = NULL, *corpus = NULL, *candidate_out = NULL, *guest_stdout = NULL, *guest_stderr = NULL, *guest_script = NULL; uint64_t steps = 50000000ull, per_ms = 1000;
   unsigned long mem_mb = 0;
   int train_mode = 0;
   int dump_text = 0, serial = 0, trim = 1;
@@ -97,12 +97,13 @@ int main(int argc, char **argv) {
     else if (!strcmp(argv[i], "--dump-bytes") && i + 1 < argc) dump_bytes = argv[++i];
     else if (!strcmp(argv[i], "--guest-stdout") && i + 1 < argc) guest_stdout = argv[++i];
     else if (!strcmp(argv[i], "--guest-stderr") && i + 1 < argc) guest_stderr = argv[++i];
+    else if (!strcmp(argv[i], "--guest-script") && i + 1 < argc) guest_script = argv[++i];
     else if (!strcmp(argv[i], "--state-out") && i + 1 < argc) state_out = argv[++i];
     else if (!strcmp(argv[i], "--clock") && i + 1 < argc) { const char *c = argv[++i]; if (!strncmp(c, "steps:", 6)) per_ms = strtoull(c + 6, 0, 0); }
     else if (!strcmp(argv[i], "--dump-text")) dump_text = 1;
     else if (!strcmp(argv[i], "--no-trim")) trim = 0;
     else if (!strcmp(argv[i], "--serial")) serial = 1;
-    else { fprintf(stderr, "usage: nan_cli [--img f] [--mem MB] [--nannet-train [corpus.txt]] [--candidate-out state.nan1] [--state-out state.nan1] [--steps N] [--keys \"1,ESC,~,@5000000\"] [--serial] [--dump-text] [--dump-ppm f] [--peek ADDR[:LEN]] [--dump-bytes ADDR:LEN:FILE [--guest-stdout FILE] [--guest-stderr FILE]] [--disk f] [--clock steps:N]\n"); return 2; }
+    else { fprintf(stderr, "usage: nan_cli [--img f] [--mem MB] [--nannet-train [corpus.txt]] [--candidate-out state.nan1] [--state-out state.nan1] [--steps N] [--keys \"1,ESC,~,@5000000\"] [--serial] [--dump-text] [--dump-ppm f] [--peek ADDR[:LEN]] [--dump-bytes ADDR:LEN:FILE] [--guest-stdout FILE] [--guest-stderr FILE] [--guest-script PATH] [--disk f] [--clock steps:N]\n"); return 2; }
   }
   if (!img && !train_mode) { fprintf(stderr, "need --img or --nannet-train\n"); return 2; }
   size_t len = 0;
@@ -153,6 +154,12 @@ int main(int argc, char **argv) {
   }
   if (train_mode) serial = 1;
   if (disk) { int fd = open(disk, O_RDWR); struct stat st; if (fd < 0 || fstat(fd, &st)) { perror(disk); return 1; } nan_attach_disk_fd(v, fd, (size_t)st.st_size); }
+  if (guest_script) {
+    uint32_t n = (uint32_t)strlen(guest_script);
+    if (n > 255u) { fprintf(stderr, "guest script path too long\n"); return 2; }
+    nan_write_bytes(v, 0x03EFF020u, (const uint8_t *)&n, 4);
+    nan_write_bytes(v, 0x03EFF024u, (const uint8_t *)guest_script, n);
+  }
   char *kcopy = keys ? strdup(keys) : NULL; char *save = NULL; char *tok = kcopy ? strtok_r(kcopy, ",", &save) : NULL;
   uint64_t pause_until = 0; int rc = NAN_BUDGET;
 #define PUBLISH_TIME() do { \
