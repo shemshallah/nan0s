@@ -98,7 +98,7 @@ Other fixes required for tcc1:
   stdout/stderr (fd 1/2).
 
 Result: self1 compiles the TCC sources with the self-hosted libtcc to a
-byte-identical self2 (2,026,928 bytes), and self2 compiles `test.c` to 42.
+byte-identical self2 (2,031,584 bytes), and self2 compiles `test.c` to 42.
 The softfloat runtime supplies IEEE binary64 add/sub/mul/div, comparison and
 conversion helpers, plus `__divdi3`, `__udivdi3`, `__moddi3`, `__umoddi3`,
 `__ashldi3`, `__ashrdi3` and `__lshrdi3`.
@@ -137,10 +137,10 @@ correctly rounded power of ten from a generated table
 (`third_party/nan16-libc/src/nan16_pow10.h`).  self1 and tcc0 emit
 byte-identical cartridges for a test using DBL_MAX, 2^64 and 2^96.  The
 fixpoint run then completes within the 4,000,000,000-step gate budget:
-`self1` and `self2` are both 2,026,928 bytes and byte-identical, and self2
+`self1` and `self2` are both 2,031,584 bytes and byte-identical, and self2
 compiles `test.c` to a 144-byte cartridge whose `main` returns 42.  The
 fixed-point image SHA-256 is
-`3cb681798f890dd71290158beea82c2eb287a05c69015a1cda98719bdd1804a8`
+`812c252e4d89b5146c1129e77f58abd01fb95a967159291c63da0dde73451183`
 for this tree and the documented build commands; the scratch harness and
 `tools/tcc_nan16_tcc2.sh` reproduce the same bytes.  The earlier
 1,891,544-byte / `9af0d603...` fixpoint predates the SQLite-driven compiler
@@ -225,7 +225,7 @@ R's SQLite output identical to tcc0's.
 
 `tcc1` and `tcc2` are reached.  `tcc1` is TCC compiled by TCC on NaN16; it
 compiles `test.c` to a cartridge that returns 42.  `tcc2` is self1 compiling
-the TCC sources again to a byte-identical 2,026,928-byte self2, which also
+the TCC sources again to a byte-identical 2,031,584-byte self2, which also
 compiles `test.c` to 42.  NaN16 is now a self-hosting platform with its own C
 compiler, libc, VFS and linker.  The fixpoint completes within the
 gate budget.  The raw-source tcc1 rebuild R also compiles SQLite 3.54.1 +
@@ -312,7 +312,7 @@ New target files:
    resulting self1 cartridge compiles `test.c` to a working cartridge.
    `tcc_nan16_selfhost --run` checks this end to end.
 3. **tcc2 (reached)**: `tcc1` compiles the TCC sources again to a
-   byte-identical `self2` (2,026,928 bytes).  The gate runs `self2` on
+   byte-identical `self2` (2,031,584 bytes).  The gate runs `self2` on
    `test.c` (inner `main` returns 42) and checks `self1 == self2`.
 4. **SQLite (reached)**: host `tcc0` cross-compiles the vendored 3.54.1
    amalgamation with `SQLITE_OS_OTHER=1` and `third_party/sqlite/nan16_vfs.c`
@@ -429,10 +429,10 @@ gates, not assumptions.
   process; job a -> 0, job b -> 42.  This is the linker relocation-state
   reset regression (disabling the reset makes job b return 1). Passing.
 - `tools/tcc_nan16_tcc2.sh`: self1 compiles the TCC sources to a
-  byte-identical self2 (2,026,928 bytes); self2 also compiles `test.c` to a
+  byte-identical self2 (2,031,584 bytes); self2 also compiles `test.c` to a
   144-byte cartridge whose `main` returns 42.  Passing within the 8.0B-step cumulative
   budget, resumable in slices.  SHA-256
-  `3cb681798f890dd71290158beea82c2eb287a05c69015a1cda98719bdd1804a8`.
+  `812c252e4d89b5146c1129e77f58abd01fb95a967159291c63da0dde73451183`.
 - `tools/tcc_sqlite.sh`: vendored SQLite 3.54.1 plus the NaN16 in-memory VFS;
   suite, 500-row stress database, and `SQLITE_DEBUG` assertion build all
   match native bit-for-bit.  Passing (standalone; the pre-SQLite battery stays
@@ -460,7 +460,7 @@ TCC cannot precede the ABI and memory work:
 2. [x] Flat cartridge writer, 24-bit branches, 32-bit direct calls, sections,
    relocations and the entry prelude.
 3. [x] tcc1: self1 compiles `test.c`; the inner cartridge returns 42.
-4. [x] tcc2: self1 compiles the TCC sources to a byte-identical 2,026,928-byte
+4. [x] tcc2: self1 compiles the TCC sources to a byte-identical 2,031,584-byte
    self2; self2 compiles `test.c` to 42.
 5. [x] SQLite 3.54.1: vendored, cross-compiled by tcc0, and exercised by
    `tcc_sqlite` (suite/stress/assert builds match native).
