@@ -926,6 +926,8 @@ twin, a corrupted byte is a NAK, not a wrong memory write.
 
 This is a P2 feature, but it is the reason the error type system is a *word*
 rather than a string: a second machine can act on it without parsing English.
+The current `n16dbg` prototype is text-only (`o` then `H/R/W/S/U/E/Q`); the
+sealed binary frame and mailbox are still to come.
 
 ---
 
@@ -1259,7 +1261,8 @@ cart seal valid.
 - [x] Cart checkpoint/restore: registers, PC, condition, call depth, 64K arena.
 - [x] Desktop `dis [addr]` using the shared disassembler and `map`.
 - [ ] Full-memory checkpoints and bulk-write checkpoints.
-- [ ] NDP over serial and mailbox; `HELLO/READ/WRITE/STEP/RUN/EVENT`.
+- [~] NDP text prototype over serial (`H/R/W/S/U/E/Q`); sealed binary frame
+      and mailbox next.
 - [ ] Symbol blob from `nmk.awk -v LABELS`; source lines if the assembler
       gains `.line`.
 - [ ] Poison fill and read checks.
