@@ -301,7 +301,9 @@ static int l_sync(sqlite3_file *pFile, int flags)
 {
     NanLFile *f = (NanLFile *)pFile;
 #ifdef SQLITE_TEST
-    if (flags & SQLITE_SYNC_FULL) sqlite3_fullsync_count++;
+    /* SQLITE_SYNC_FULL is 0x03 and NORMAL is 0x02; testing a single bit
+       counts NORMAL as full.  Match os_unix.c's (flags&0x0F) test. */
+    if ((flags & 0x0F) == SQLITE_SYNC_FULL) sqlite3_fullsync_count++;
     sqlite3_sync_count++;
 #endif
     return f->fd >= 0 && fsync(f->fd) == 0 ? SQLITE_OK : SQLITE_IOERR_FSYNC;
