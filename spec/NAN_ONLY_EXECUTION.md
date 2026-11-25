@@ -1,7 +1,8 @@
 # NaN-only execution boundary
 
-Status: convergence checkpoint 2026-11-25 (merged `nan-only-suite` `2836b7a`; `nan0s/main` canonical).  This document is authoritative for
-what may be C and what must be raw NaN16.
+Status: convergence checkpoint 2026-11-25. `nan-only-suite` is merged into
+`nan0s/main`; main is canonical. This document is authoritative for what may
+be C and what must be raw NaN16.
 
 ## The rule
 
@@ -38,9 +39,9 @@ an oracle, not the product.
    mechanics.
 4. The CI `oracle` mode runs `nan_cli`; it is functional evidence only and
    must never be reported as S1/product acceptance.
-5. The suite branch is 271 commits divergent from `nan0s/main`, which is 277
-   commits ahead and contains the current NaN system work.  The suite has not
-   yet been integrated with the current kernel.
+5. The suite branch has been integrated into `nan0s/main`; the NaN process
+   and thread subsystems now run on the S1 machine model. Remaining work is
+   the NaN boot image and the libc/testfixture service boundary.
 
 ## Proven NaN service boundaries
 
@@ -60,7 +61,7 @@ The following are raw-NaN gates, not oracle claims:
 
 ## Migration checklist
 
-- [ ] Merge/rebase the suite tools and Tcl/SQLite port onto current
+- [x] Merge/rebase the suite tools and Tcl/SQLite port onto current
       `nan0s/main`; do not fork a parallel system lineage.
 - [ ] Restrict `src/native64/s1_kabi.c` to the S1 machine model: ISA, trap
       frames, ports, timer, regions.  Move process/spawn/wait/sleep/load
