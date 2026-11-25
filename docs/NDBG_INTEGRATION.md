@@ -123,7 +123,7 @@ HELLO
 `tools/ndbg_term.sh` gates the path, including the sealed-cart catalog and
 `load <id>`. `next` and `finish` use the resident shadow stack: `next` steps over a CALL
 and `finish` runs out of the current frame. `log` prints the newest typed
-records, `ndr` the latest eight-word record, `mirror` verifies its twin, `hist` the newest eight PCs, `stack` the shadow frames, and `types`
+records with A/B/D operands and seal, `ndr` the latest eight-word record, `mirror` verifies its twin, `hist` the newest eight PCs, `stack` the shadow frames, and `types`
 the live 4x4 type matrix. `bp <hex>`/`wp <hex>` toggle table entries and
 print `BP=... +`/`-` or `W=... +`/`-`; `goto <hex>` moves the PC and invalidates
 the time-travel rings. `mem [addr]` and `dis [addr]` accept an optional base,
