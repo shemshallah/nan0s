@@ -118,6 +118,7 @@ void nan_reset(nan_vm *v) {
   v->trap[0] = 0; v->ser_h = v->ser_t = 0;
   v->tick_last = 0xFFFFFFFFu; v->tick_same = 0;
   v->kentry = v->kframe = v->kstack = v->kregions = v->ktcb = NAN_KABI_UNSET;
+  v->kdata = 0xF0000u;
   v->ktimer = v->ktimer_left = 0;
   v->kin = v->ktimer_pending = v->ktrap_pending = 0;
   v->dirty++; v->frame++;
@@ -333,7 +334,7 @@ static int kabi_region_range(const nan_vm *v, uint32_t first, uint32_t nwords,
  * a guest write is a region-style fault. */
 static int kabi_port_locked(const nan_vm *v, uint32_t port) {
   return v->kentry != NAN_KABI_UNSET && !v->kin &&
-         port >= NAN_KABI_PORT_ENTRY && port <= NAN_KABI_PORT_STATUS;
+         port >= NAN_KABI_PORT_ENTRY && port <= NAN_KABI_PORT_DATA;
 }
 static int kabi_byte_range(const nan_vm *v, uint32_t byte_addr, uint32_t nbytes,
                            uint32_t prot) {
@@ -443,10 +444,10 @@ int nan_run(nan_vm *v, uint32_t max_steps) {
     case 0x15: nan_ser_putc(v, (uint8_t)r[d]); break;
     case 0x16: if (!kabi_region_range(v, A, 1, NAN_PROT_W)) KABI_FAULT(at, A);
       mem[A & M] = nan_mkword(r[d], (int)(B & 15)); break;
-    case 0x1C: { uint32_t ad = 0xF0000u + imm;
+    case 0x1C: { uint32_t ad = v->kdata + imm;
       if (!kabi_region_range(v, ad, 1, NAN_PROT_R)) KABI_FAULT(at, ad);
       r[d] = (uint32_t)(mem[ad & M] >> 16); break; }
-    case 0x1D: { uint32_t ad = 0xF0000u + imm;
+    case 0x1D: { uint32_t ad = v->kdata + imm;
       if (!kabi_region_range(v, ad, 1, NAN_PROT_W)) KABI_FAULT(at, ad);
       mem[ad & M] = nan_mkword(r[d], 10); break; }
     case 0x17: { uint32_t ad = A + imm;

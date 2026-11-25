@@ -15,6 +15,21 @@ main:
   LA r3,0xABCD
   CMP r2,r3
   JMP[NE] @fail
+  ; relocate the high-data window through the KABI data port
+  MOVI r1,0x4E07
+  MOVI r2,0
+  MOVHI r2,0xE
+  OUTL r2,r1
+  MOVI r1,0x6789
+  STS r1,64
+  LDS r2,64
+  MOVI r3,0x6789
+  CMP r2,r3
+  JMP[NE] @fail
+  MOVI r1,0x4E07
+  MOVI r2,0
+  MOVHI r2,0xF
+  OUTL r2,r1
   MOVI r1,76
   PUTC r1
   MOVI r1,68

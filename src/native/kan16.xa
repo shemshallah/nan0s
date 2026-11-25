@@ -5,6 +5,7 @@
 .equ MASKM 0x80C0
 .equ NWORDS 0x80C4
 .equ MBYTES 0x80C8
+.equ DATAB 0x80CC
 .equ RAW 0x01000000
 .equ RAWG 0xF000
 .equ MAXOP 0x61
@@ -47,6 +48,7 @@ _start:
   MOVL $0x7FFFFFFF,[MAXS]
   MOVL $1,[FLAGM]
   MOVL $0,[STEPS]
+  MOVL $0xF0000,[DATAB]
   MOVL $0xA0000,[FBBASE]
   MOVL $64000,[FBTOT]
   MOVB $0,[RAWKB]
@@ -271,13 +273,13 @@ h_ld:
   JMP @st
 h_lds:
   MOVZWL %AX,%EAX
-  ADD $0xF0000,%EAX
+  ADD [DATAB],%EAX
   AND [MASKM],%EAX
   MOV [G+2+EAX*8],%EBX
   JMP @st
 h_sts:
   MOVZWL %AX,%EAX
-  ADD $0xF0000,%EAX
+  ADD [DATAB],%EAX
   AND [MASKM],%EAX
   MOV [R+EBP],%EBX
   MOV $10,%ECX
@@ -697,6 +699,11 @@ h_outl:
   MOV [R+EBP],%EAX
   MOV %ECX,%EDX
   AND $0xFFFF,%EDX
+  CMP $0x4E07,%EDX
+  JNE @ol_out
+  MOV %EAX,[DATAB]
+  JMP @loop
+ol_out:
   OUT %EAX,%DX
   JMP @loop
 h_mul:
