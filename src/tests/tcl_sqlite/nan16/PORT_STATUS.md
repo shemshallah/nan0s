@@ -131,12 +131,15 @@ finish and triage the later test/ files.
   `SQLITE_IOCAP_POWERSAFE_OVERWRITE | SQLITE_IOCAP_SUBPAGE_READ` (truthful
   for the RAM-backed store), with `SQLITE_FCNTL_POWERSAFE_OVERWRITE` support
   for `psow=0`.
-- Candidate final fixture (`diag-final5.bin`): 96,064,648 bytes, SHA-256
-  `d7e515299c676c3ce45fa36bbe40eb1119521832f26e1780ee77237f82f730df`.
-  It adds the completed strftime shim, fake-time/localtime, 160 MiB heap,
-  system errno, xSleep microseconds and chunk-rounded SIZE_HINT.  Verified
-  slices: select1 **199/0**, cache **190/0**, date **1749/0**, capi3
-  **249/0**, chunksize **7/0**.  cksumvfs and recovercorrupt3 remain open.
+- Candidate final fixture (`diag-final6.bin`): 96,065,960 bytes, SHA-256
+  `4f4c0d53efebe94c2c26bc65c75b45353b09e0b22ebd733a978eca39dc137a28`,
+  run with `--mem 384` and a 288 MiB heap.  It adds the completed strftime
+  shim, fake-time/localtime, system errno, xSleep microseconds,
+  chunk-rounded SIZE_HINT, the recover `dbdata` payload bound, and
+  realloc-growing VFS files.  Verified slices: select1 **199/0**, cache
+  **190/0**, date **1749/0**, capi3 **249/0**, chunksize **7/0**,
+  recovercorrupt3 **7/0**, and cksumvfs **13/0** (76.3B steps; the 97.5 MB
+  database plus its save/restore copy needs the larger heap).
   On the preceding `564121aa` fixture the official results were select1
   **199/0**, cache **190/0**, recoverpgsz **89/0**, backup2 **16/16**,
   busy2 **0/15** at `--clock steps:100000`, symlink **1/39** (only
