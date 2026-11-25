@@ -41,4 +41,5 @@ run_guest() {
 run_guest focused src/tests/s1_guest_test.nas
 run_guest fp src/tests/s1_fp_test.nas
 run_guest nfs2 src/tests/nfs2_test.nas
+run_guest far src/tests/far_test.nas
 echo "s1_guest: PASS (flat cartridges execute on x86_64 S1; COM1 == C oracle)"
