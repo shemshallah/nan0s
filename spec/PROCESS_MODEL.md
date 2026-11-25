@@ -61,14 +61,18 @@ region table.
 - `tools/kabi_proc_gate.sh` - assembles `kabi_proc_demo.nas`, runs it on the
   C core and on the x86_64 S1, and compares exact serial output:
   `MAPPED`, `FAULT`, `ISOLATED`, `OK`.
+- `tools/kabi_sched_gate.sh` - two processes with separate code/data regions
+  and trap frames, preempted by the instruction timer, exact `AAAABBBBAABB`
+  on the C oracle and x86_64 S1.
 - `tools/s1_guest_gate.sh` - flat-cartridge parity for the implemented S1
   subset, including the host-test NFS2 cartridge.
 
 ## 5. Next boundaries
 
-- One global region table and one trap frame are still enough for a single
-  runnable process. Multiple processes need per-process frames plus a
-  kernel context switch that swaps `0x4E01`, `0x4E04` and the TCB port.
+- `kabi_sched_demo.nas` proves timer preemption with two processes by saving
+  one trap frame per process and swapping the frame (0x4E01) and region
+  (0x4E04) ports. A production scheduler still needs a ready queue, priority
+  or fair-share policy, `spawn`/`wait`, and per-process TCB bookkeeping.
 - The `LDS`/`STS` window base is now control port `0x4E07` (default
   `0xF0000`). A kernel can therefore point each process at its own mapped
   64K scratch window while `nmk` keeps emitting window-relative offsets.
