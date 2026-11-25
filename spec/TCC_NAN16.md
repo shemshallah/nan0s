@@ -113,6 +113,24 @@ The softfloat runtime supplies IEEE binary64 add/sub/mul/div, comparison and
 conversion helpers, plus `__divdi3`, `__udivdi3`, `__moddi3`, `__umoddi3`,
 `__ashldi3`, `__ashrdi3` and `__lshrdi3`.
 
+### Flat-image stack placement (WAL-sized images)
+
+The flat prelude used a fixed `SP = 0x300000` words while the stack grows
+upward.  WAL-disabled testfixture data ends at word 3,134,713 (guest
+0xBF53E4), 44,060 bytes below the stack; WAL-enabled data ends at word
+3,157,665 (guest 0xC0BA84), 47,748 bytes **above** it.  The first stack frames
+then overwrite `sqlite3Config`/`xLog`; `sqlite3_log()` loads the corrupt
+`xLog` and calls into `aDateTimeFuncs` in data, halting at word 3,146,612.
+
+`nan16-link.c` now emits `SP = max(0x300000, align16(total_words))`, leaving
+images that fit below 0x300000 byte-identical and rejecting images with less
+than 0x1000 words of stack below the pack at word 0x400000.  The WAL-enabled
+official testfixture now passes `select1` **199/0** (96,064,648 bytes, SHA-256
+`8e59fd9a6e690d9b3795a4fa678f91a7ac3454e6928f6c1839fe7561245d4a46`).
+WAL is enabled in the testfixture gate; `busy2` runs to a normal halt but has
+5/15 failures because the VFS `xShmLock` is still a no-op (checkpoint
+read-mark/busy results), which is the next WAL parity item.
+
 ### tcc2 fixpoint
 
 The first tcc2 attempt compiles preprocessed sources (`libc.i`, `libtcc.i`,
