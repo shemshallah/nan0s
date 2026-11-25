@@ -8,7 +8,7 @@ The NaN-native debug system. Design and rationale: `spec/NANDBG.md`.
 |---|---|
 | `ndbg.nas` | first proof: 16 diagnostic types, records, subset step core, breakpoint, gate/bad-op records |
 | `core.nas` | reusable full `0x00–0x5F` step core: typed traps, shadow call stack, non-blocking KEY, DP4B, vectors, scalar undo hooks |
-| `n16dbg.nas` | serial monitor: step, run, breakpoint, goto, watch, history, stack, types, registers, disassembly, dump, NDR, mirror verify |
+| `n16dbg.nas` | serial monitor: step, run, breakpoint, goto, watch, history, stack, types, registers, disassembly, dump, NDR, mirror verify, flight seal |
 | `undo_stub.nas` | no-op recording hooks for standalone core builds |
 | `ndr.nas` | included by `core.nas`: NDR w4-w6 operands and FNV-1a/32 seal in w7 |
 | `../tests/ndbg_core_test.nas` | reset/run/step on a small target |
