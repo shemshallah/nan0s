@@ -45,6 +45,12 @@ timer is 0. The kernel ABI is **active iff 0x4E00 is not UNSET**. Before then,
 0x4E and 0x4F keep their previous reserved-op trap behaviour, so old programs
 do not change. `INL` itself is always a valid opcode.
 
+Once the ABI is active, writes to ports 0x4E00-0x4E06 are kernel-only. A
+guest-mode write vectors as `cause=2` with the port number in `frame[20]`
+instead of reconfiguring the boundary. Boot code writes the ports before the
+entry port activates the ABI; kernel code writes them with `in_kernel=1`.
+Control-port reads remain available so a process can inspect status.
+
 Word alignment is inherent: a port value is an index of an 8-byte guest word.
 A byte address is not representable; a value whose word span leaves
 `[0, mem_words)` is rejected. The last legal 24-word frame starts at

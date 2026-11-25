@@ -328,6 +328,13 @@ static int kabi_region_range(const nan_vm *v, uint32_t first, uint32_t nwords,
   }
   return 1;
 }
+/* Kernel control ports are configured by the boot path before the entry
+ * port is set.  Once the ABI is live, only kernel-mode code may write them;
+ * a guest write is a region-style fault. */
+static int kabi_port_locked(const nan_vm *v, uint32_t port) {
+  return v->kentry != NAN_KABI_UNSET && !v->kin &&
+         port >= NAN_KABI_PORT_ENTRY && port <= NAN_KABI_PORT_STATUS;
+}
 static int kabi_byte_range(const nan_vm *v, uint32_t byte_addr, uint32_t nbytes,
                            uint32_t prot) {
   if (v->kregions == NAN_KABI_UNSET || v->kin) return 1;
@@ -436,8 +443,12 @@ int nan_run(nan_vm *v, uint32_t max_steps) {
     case 0x15: nan_ser_putc(v, (uint8_t)r[d]); break;
     case 0x16: if (!kabi_region_range(v, A, 1, NAN_PROT_W)) KABI_FAULT(at, A);
       mem[A & M] = nan_mkword(r[d], (int)(B & 15)); break;
-    case 0x1C: r[d] = (uint32_t)(mem[(0xF0000u + imm) & M] >> 16); break;
-    case 0x1D: mem[(0xF0000u + imm) & M] = nan_mkword(r[d], 10); break;
+    case 0x1C: { uint32_t ad = 0xF0000u + imm;
+      if (!kabi_region_range(v, ad, 1, NAN_PROT_R)) KABI_FAULT(at, ad);
+      r[d] = (uint32_t)(mem[ad & M] >> 16); break; }
+    case 0x1D: { uint32_t ad = 0xF0000u + imm;
+      if (!kabi_region_range(v, ad, 1, NAN_PROT_W)) KABI_FAULT(at, ad);
+      mem[ad & M] = nan_mkword(r[d], 10); break; }
     case 0x17: { uint32_t ad = A + imm;
       if (!kabi_region_range(v, ad, 1, NAN_PROT_R)) KABI_FAULT(at, ad);
       uint64_t q = mem[ad & M];
@@ -491,14 +502,21 @@ int nan_run(nan_vm *v, uint32_t max_steps) {
     case 0x3B: if (v->vmode == 1) { v->frame++; LEAVE(NAN_VSYNC); } break;
     case 0x3C: fb_copy(v, r[d], A, B); break;
     case 0x3D: fb_fill(v, r[d], A, (uint8_t)B); break;
-    case 0x3E: nan_port_out(v, A & 0xFFFF, r[d], 1); break;
+    case 0x3E: { uint32_t po = A & 0xFFFF;
+      if (kabi_port_locked(v, po)) KABI_FAULT(at, po);
+      nan_port_out(v, po, r[d], 1); break; }
     case 0x3F: r[d] = nan_port_in(v, A & 0xFFFF, 1) & 0xFF; break;
     case 0x40: r[d] = nan_port_in(v, A & 0xFFFF, 2) & 0xFFFF; break;
-    case 0x41: nan_port_out(v, A & 0xFFFF, r[d] & 0xFFFF, 2); break;
-    case 0x42: { uint32_t cnt = r[d], idx = B;
+    case 0x41: { uint32_t po = A & 0xFFFF;
+      if (kabi_port_locked(v, po)) KABI_FAULT(at, po);
+      nan_port_out(v, po, r[d] & 0xFFFF, 2); break; }
+    case 0x42: { uint32_t cnt = r[d], idx = B, po = A & 0xFFFF;
+      if (kabi_port_locked(v, po)) KABI_FAULT(at, po);
       if (!kabi_region_range(v, idx, cnt, NAN_PROT_R)) KABI_FAULT(at, idx);
       for (uint32_t i = 0; i < cnt; i++, idx++) nan_port_out(v, A & 0xFFFF, (uint32_t)(mem[idx & M] >> 16) & 0xFFFF, 2); break; }
-    case 0x43: nan_port_out(v, A & 0xFFFF, r[d], 4); break;
+    case 0x43: { uint32_t po = A & 0xFFFF;
+      if (kabi_port_locked(v, po)) KABI_FAULT(at, po);
+      nan_port_out(v, po, r[d], 4); break; }
     case 0x44: { uint32_t reg[4] = {0, 0, 0, 0};
       if (A == 0x4E4D00FFu) {              /* machine-memory discovery */
         reg[0] = v->mem_mask;

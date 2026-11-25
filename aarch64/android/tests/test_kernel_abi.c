@@ -109,18 +109,16 @@ static void t_svc_yield_exit(void) {
   EQ(fw(NAN_TF_R1), 7);
 }
 
-/* OUTL/INL control ports and the status word. */
+/* Control ports are host-configured before the ABI goes live; INL stays
+ * available to the guest.  Guest writes to a live control port fault. */
 static void t_control_ports(void) {
   begin();
-  I(0x01, 1, 0, NAN_KABI_PORT_ENTRY); I(0x01, 2, 0, ENTRY); I(0x43, 2, 1, 0);
-  I(0x01, 1, 0, NAN_KABI_PORT_FRAME); I(0x01, 2, 0, FRAME); I(0x43, 2, 1, 0);
-  I(0x01, 1, 0, NAN_KABI_PORT_TIMER); I(0x01, 2, 0, 16); I(0x43, 2, 1, 0);
-  I(0x01, 1, 0, NAN_KABI_PORT_KSTACK); I(0x01, 2, 0, KSTACK); I(0x43, 2, 1, 0);
-  I(0x01, 1, 0, NAN_KABI_PORT_TCB); I(0x01, 2, 0, TCB); I(0x43, 2, 1, 0);
-  /* 0xFFFFFFFF needs MOVI+MOVHI (imm16 fields).  Write REGIONS last: once
-     it points at an empty table, the next fetch is an execute fault. */
-  I(0x01, 1, 0, NAN_KABI_PORT_REGIONS);
-  I(0x01, 2, 0, 0xFFFF); I(0x02, 2, 0, 0xFFFF); I(0x43, 2, 1, 0);
+  nan_port_out(V, NAN_KABI_PORT_ENTRY, ENTRY, 4);
+  nan_port_out(V, NAN_KABI_PORT_FRAME, FRAME, 4);
+  nan_port_out(V, NAN_KABI_PORT_TIMER, 16, 4);
+  nan_port_out(V, NAN_KABI_PORT_KSTACK, KSTACK, 4);
+  nan_port_out(V, NAN_KABI_PORT_REGIONS, NAN_KABI_UNSET, 4);
+  nan_port_out(V, NAN_KABI_PORT_TCB, TCB, 4);
   I(0x01, 1, 0, NAN_KABI_PORT_STATUS); I(0x4D, 3, 1, 0);
   halt();
   EQ(go(100), NAN_HALTED);
@@ -128,6 +126,20 @@ static void t_control_ports(void) {
   EQ(V->kstack, KSTACK);
   EQ(V->kregions, NAN_KABI_UNSET); EQ(V->ktcb, TCB);
   EQ(R(3), 0);
+}
+
+static void t_control_locked(void) {
+  begin();
+  cfg(ENTRY, FRAME, 0, KSTACK, NAN_KABI_UNSET);
+  I(0x01, 1, 0, NAN_KABI_PORT_ENTRY);
+  I(0x01, 2, 0, 0x7777);
+  I(0x43, 2, 1, 0);                             /* guest OUTL to ENTRY */
+  halt();
+  nan_set_word(V, ENTRY, nan_mkword(0xFF000000u, 15));
+  EQ(go(100), NAN_HALTED);
+  EQ(fw(NAN_TF_CAUSE), NAN_CAUSE_FAULT);
+  EQ(fw(NAN_TF_IMM), NAN_KABI_PORT_ENTRY);
+  EQ(V->kentry, ENTRY);                         /* unchanged */
 }
 
 /* Timer IRQ vectors with cause=1 and resumes where it interrupted. */
@@ -392,6 +404,7 @@ int main(void) {
   struct { const char *n; void (*f)(void); } t[] = {
     {"svc yield/exit", t_svc_yield_exit},
     {"control ports", t_control_ports},
+    {"control locked", t_control_locked},
     {"timer irq", t_timer},
     {"region read fault", t_region_read},
     {"region write fault", t_region_write},

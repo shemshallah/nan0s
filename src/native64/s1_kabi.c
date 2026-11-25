@@ -462,6 +462,14 @@ static uint32_t s1_run(uint64_t budget) {
     case 0x16: if (s.kregions != UNSET && !s.kin &&
                    !region_range(A, 1, PROT_W)) S1_VECTOR(CAUSE_FAULT, at, A);
       MEM[A & MEM_MASK] = mkword(s.r[d], (int)(B & 15u)); break;
+    case 0x1C: { uint32_t ad = 0xF0000u + imm;
+      if (s.kregions != UNSET && !s.kin &&
+          !region_range(ad, 1, PROT_R)) S1_VECTOR(CAUSE_FAULT, at, ad);
+      s.r[d] = word_payload(ad); break; }
+    case 0x1D: { uint32_t ad = 0xF0000u + imm;
+      if (s.kregions != UNSET && !s.kin &&
+          !region_range(ad, 1, PROT_W)) S1_VECTOR(CAUSE_FAULT, at, ad);
+      MEM[ad & MEM_MASK] = mkword(s.r[d], 10); break; }
     case 0x17: { uint32_t ad = A + imm;
       if (s.kregions != UNSET && !s.kin &&
           !region_range(ad, 1, PROT_R)) S1_VECTOR(CAUSE_FAULT, at, ad);
@@ -526,7 +534,16 @@ static uint32_t s1_run(uint64_t budget) {
       for (uint32_t i = 0; i < cnt; i++) MEM[(dst + i) & MEM_MASK] = wd; break; }
     case 0x38: pc = p & 0xFFFFFFu; break;
     case 0x39: s.r[15] = pc; pc = p & 0xFFFFFFu; break;
-    case 0x43: port_out((uint16_t)(A & 0xFFFFu), s.r[d]); break;
+    case 0x43: { uint16_t po = (uint16_t)(A & 0xFFFFu);
+      if (s.kentry != UNSET && !s.kin && po >= 0x4E00u && po <= 0x4E06u)
+        S1_VECTOR(CAUSE_FAULT, at, po);
+      port_out(po, s.r[d]); break; }
+    case 0x44: { uint32_t reg[4] = {0, 0, 0, 0};
+      if (A == 0x4E4D00FFu) {
+        reg[0] = MEM_MASK; reg[1] = MEM_WORDS;
+        reg[2] = 0x4E160001u; reg[3] = MEM_WORDS * 4u;
+      }
+      s.r[d] = reg[B & 3u]; break; }
     case 0x4D: s.r[d] = port_in((uint16_t)(A & 0xFFFFu)); break;
     case 0x4E: {
       if (s.kentry == UNSET || s.kin) { badop(pc); s.pc = pc; return NAN_HALTED; }
@@ -644,20 +661,26 @@ static void t_svc(void) {
 
 static void t_ports(void) {
   begin_at(0);
-  ins(0x01, 1, 0, 0x4E00); ins(0x01, 2, 0, ENTRY); ins(0x43, 2, 1, 0);
-  ins(0x01, 1, 0, 0x4E01); ins(0x01, 2, 0, FRAME); ins(0x43, 2, 1, 0);
-  ins(0x01, 1, 0, 0x4E02); ins(0x01, 2, 0, 16); ins(0x43, 2, 1, 0);
-  ins(0x01, 1, 0, 0x4E03); ins(0x01, 2, 0, KSTACK); ins(0x43, 2, 1, 0);
-  ins(0x01, 1, 0, 0x4E05); ins(0x01, 2, 0, TCB); ins(0x43, 2, 1, 0);
-  ins(0x01, 1, 0, 0x4E04); ins(0x01, 2, 0, 0xFFFF); ins(0x02, 2, 0, 0xFFFF);
-  ins(0x43, 2, 1, 0);                        /* REGIONS = 0xFFFFFFFF */
+  port_out(0x4E00, ENTRY); port_out(0x4E01, FRAME); port_out(0x4E02, 16);
+  port_out(0x4E03, KSTACK); port_out(0x4E04, UNSET); port_out(0x4E05, TCB);
   ins(0x01, 1, 0, 0x4E06); ins(0x4D, 3, 1, 0);
   halt_emit();
   eq(s1_run(100), NAN_HALTED, "ports halted");
-  eq(s.kentry, ENTRY, "port entry"); eq(s.kframe, FRAME, "port frame");
-  eq(s.ktimer, 16, "port timer"); eq(s.kstack, KSTACK, "port kstack");
-  eq(s.kregions, UNSET, "port regions unset"); eq(s.ktcb, TCB, "port tcb");
-  eq(s.r[3], 0, "INL status idle");
+  eq(s.kentry, ENTRY, "entry port"); eq(s.kframe, FRAME, "frame port");
+  eq(s.ktimer, 16, "timer port"); eq(s.kstack, KSTACK, "stack port");
+  eq(s.kregions, UNSET, "regions port"); eq(s.ktcb, TCB, "tcb port");
+  eq(s.r[3], 0, "status port");
+}
+
+static void t_port_locked(void) {
+  begin_at(0);
+  cfg(ENTRY, FRAME, 0, KSTACK, UNSET);
+  ins(0x01, 1, 0, 0x4E00); ins(0x01, 2, 0, 0x7777); ins(0x43, 2, 1, 0);
+  halt_emit(); kernel_halt();
+  eq(s1_run(100), NAN_HALTED, "locked port halted");
+  eq(frame_w(TF_CAUSE), CAUSE_FAULT, "locked port cause");
+  eq(frame_w(TF_IMM), 0x4E00, "locked port address");
+  eq(s.kentry, ENTRY, "locked port unchanged");
 }
 
 static void t_timer(void) {
@@ -855,6 +878,7 @@ void s1_main(void) {
   serial_puts("NAN0S S1 KABI x86_64\n");
   t_svc();
   t_ports();
+  t_port_locked();
   t_timer();
   t_regions();
   t_bounds();
