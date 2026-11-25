@@ -94,20 +94,32 @@ finish and triage the later test/ files.
   select1 **199/0**.  The current `sym-fix.bin` (SHA-256
   `b12183ab...`) adds the symlink and recover/backup fixes and still passes
   select1 199/0, backup2 16/16, and recoverpgsz 89/0.
-- Official `wal.test` on `sym-fix.bin`: **15 errors out of 518 tests**
-  (12.96B steps).  Ten `wal-10.2.x` failures are frame-count inflation
-  (expected 7/8/9 frames, got 13/15/17); `wal-23.4` recovers 4 frames
-  instead of 2 and `wal-24.5` has a 2128-byte WAL instead of 1080.  Host
-  3.54.1 with page size 1024 writes `[1,2,2]` for the same setup, so each
-  guest write transaction is appending one extra frame.  `wal-20.2/20.3/
-  20.4` use `launch_testfixture` (child process) and are capability
-  failures, not engine failures.  `busy2` remains 5/15: the in-progress
-  shm lock table moves nBackfill 7->5 but the same extra frame appears
-  (mxFrame 7 vs 4).  Fixing the duplicate frame is the next WAL item.
-- Current product fixture: 96,064,648 bytes, SHA-256
-  `758e4ed1182a938fc42e0c1aa52d111032f9d495a4bce1b12a2db6b7f8850f62`
-  (select1 199/0).  A fresh one-process veryquick run (checkpointed) is in
-  progress; earlier runs reached 431B steps before the busy2 abort.
+- The duplicate WAL frames were caused by the VFS device characteristics:
+  `l_device()` returned 0, so WAL kept `padToSectorBoundary=1` and every
+  `synchronous=FULL` commit repeated its last frame to the next 512-byte
+  sector boundary.  `l_device()` now advertises
+  `SQLITE_IOCAP_POWERSAFE_OVERWRITE | SQLITE_IOCAP_SUBPAGE_READ` (truthful
+  for the RAM-backed store), with `SQLITE_FCNTL_POWERSAFE_OVERWRITE` support
+  for `psow=0`.
+- Final WAL fixture (`wal-locks.bin`): 96,064,648 bytes, SHA-256
+  `6129f2e4d41f249884f9044985b55e2390c9df8e31f4ec96d3d34c92526d968f`.
+  Official results: select1 **199/0**, recoverpgsz **89/0**, backup2
+  **16/16**, busy2 **0/15** at `--clock steps:100000`, symlink **1/39**
+  (only `symlink-1.3`, `exec ln -s`), wal.test **3/518** (only
+  `wal-20.2/20.3/20.4`, which use `launch_testfixture`/pipes).  The old
+  `wal-10.2.x` frame-count failures, `wal-23.4` recovered-frame count, and
+  `wal-24.5` WAL size all pass.
+- Real single-process WAL shm locks are in place: per-path slot table,
+  per-handle SHARED/EXCLUSIVE masks, refcounted shm, release on
+  close/unmap.  `xSleep` advances a virtual-sleep word at `0x03EFF01C`
+  which libc adds to the guest clock; this makes busy-handler timeouts
+  deterministic and calibrated (`NAN16_CLOCK`, default
+  `steps:100000`).  The S1 kernel zeroes the word once at boot and leaves
+  it guest-writable.
+- A fresh one-process veryquick aggregate runs on `wal-locks.bin` with
+  unlimited steps, 30-second `NAN1` checkpoints, and the calibrated clock;
+  earlier runs reached 431B steps before the busy2 abort, and a WAL-disabled
+  checkpointed run reached 96,066,000,000 steps with 0 failures.
 - The testfixture build kept `SQLITE_OMIT_DEPRECATED`, which compiles
   `test_expired()` down to a TCL_OK with no result; `badutf2-4.0` therefore
   saw `{}` instead of `0`.  The official testfixture does not omit deprecated

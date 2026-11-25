@@ -252,9 +252,11 @@ Status legend: **done**, **partial**, **planned**.
       fixture is tcc0-built with the official `TESTFIXTURE_FLAGS`,
       `SQLITE_THREADSAFE=0`, all static TESTSRC extensions and the ext test
       tree; 96,064,648 bytes, SHA-256
-      `857e8a97cd976d10db65d161d1a27889a37c705c2236feb02d8967120d217a49`.
+      `6129f2e4d41f249884f9044985b55e2390c9df8e31f4ec96d3d34c92526d968f`.
       WAL is enabled; the large-image startup crash was a fixed-SP overlap,
-      fixed by `SP=max(0x300000,align16(total_words))`.
+      fixed by `SP=max(0x300000,align16(total_words))`.  The fixture also
+      advertises `POWERSAFE_OVERWRITE`, which removes the sector-padding
+      duplicate WAL frames.
 - [x] Port `tester.tcl` capability probes and the test runner; the official
       `tester.tcl`/`tcltest`/`permutations` path is used unchanged.  The only
       port shim is the no-pipe multi-client probe in `lock_common.tcl`
@@ -265,22 +267,31 @@ Status legend: **done**, **partial**, **planned**.
 - [x] Official module slices on the final fixture: `attach` **0/113**,
       `attach2` **0/71**, `ext/expert/expert1` **0/69**, `badutf2` **0/42**,
       `exec` **0/4**, `atof1` **0/40,006** (92.18B steps),
-      `ext/recover/recoverpgsz` **0/89**, and `backup2` **0/16**.
+      `ext/recover/recoverpgsz` **0/89**, `backup2` **0/16**,
+      `busy2` **0/15** (calibrated clock), and `wal` **3/518** whose only
+      failures are the `launch_testfixture` child-process cases
+      `wal-20.2/20.3/20.4`.  `symlink` is **1/39** (only the `exec ln -s`
+      loop case).
 - [~] Run `veryquick` in one process with unlimited steps and a periodic
       `NAN1` checkpoint (`tools/nan16_suite_resume.sh`).  A previous run
       reached 431B steps and reproduced 51 failures (42 recover, 27 avtrans
       sync counters, backup2/attach) before aborting at busy2's child-pipe
       launch; those causes are fixed.  A WAL-disabled checkpointed run
       reached 96,066,000,000 steps with 0 failures before being stopped.
-      The next run uses the WAL-enabled final-fix image.  Remaining open
-      items: `busy2`'s shm-lock semantics and the `exec`-dependent
-      symlink-1.3 case.
+      A fresh run now uses `wal-locks.bin` with the calibrated clock
+      (`NAN16_CLOCK=steps:100000`), unlimited steps and 30-second
+      checkpoints.  Remaining capability gaps: child `testfixture`
+      processes/pipes (`launch_testfixture`, shell tests) and `exec`.
 - [ ] Run `quick`, `full`/`all`, then the complete `.test` corpus; archive
       exact pass/skip/error counts.
-- [ ] Fix every compiler/libc/kernel defect; no SQLite field-size or page
-      workarounds.  Open traces: WAL-enabled testfixture halts during startup
-      at pc 3,146,612 (map ends at `__nan16_f2ull`); recover Tcl path; Tcl
-      backup/restore of a non-database file.
+- [x] Fix every traced compiler/libc/kernel defect without SQLite
+      field-size or page workarounds: the WAL startup halt was fixed-SP
+      overlap, recoverpgsz was a libc write-hole, backup2 was readonly
+      `pOutFlags`/directory-open semantics, and WAL frame doubling was the
+      missing PSOW capability.  No SQLite field or page-size changes.
+- [ ] Child processes/pipes and `exec` remain unavailable; classify every
+      resulting test as an explicit capability skip (shell tests,
+      `launch_testfixture` cases, `symlink-1.3`).
 - [ ] Enable real Tcl/SQLite threads and rerun with `THREADSAFE=1`.
 - [ ] Re-run the native reference on the same tree for differential results.
 
