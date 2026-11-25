@@ -94,6 +94,18 @@ finish and triage the later test/ files.
   select1 **199/0**.  The current `sym-fix.bin` (SHA-256
   `b12183ab...`) adds the symlink and recover/backup fixes and still passes
   select1 199/0, backup2 16/16, and recoverpgsz 89/0.
+- The aggregate exposed two more fixture defects.  `l_sync()` classified
+  `SQLITE_SYNC_NORMAL` (0x02) as FULL because it tested
+  `flags & SQLITE_SYNC_FULL` (0x03); it now uses `(flags & 0x0F) ==
+  SQLITE_SYNC_FULL` like os_unix.c, so `avtrans-9.*.5` sees
+  `fullfsync_count` correctly.  `test3.c`'s `Tcl_CreateCommand` loop does
+  not install the `btree_*` commands in the guest even though the
+  immediately following `Tcl_CreateObjCommand(btree_insert)` works; the
+  array data and proc addresses in the image are correct.  A port unit
+  (`tclNan16Btree.c`) includes the official test3.c and registers the same
+  static procs through Obj-command argv bridges.  `cache.test` is now
+  **0 errors out of 190**.  The underlying Tcl_CreateCommand/TCC trace
+  remains open; the pinned SQLite source is unmodified.
 - The duplicate WAL frames were caused by the VFS device characteristics:
   `l_device()` returned 0, so WAL kept `padToSectorBoundary=1` and every
   `synchronous=FULL` commit repeated its last frame to the next 512-byte
