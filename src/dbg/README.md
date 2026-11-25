@@ -16,7 +16,7 @@ The NaN-native debug system. Design and rationale: `spec/NANDBG.md`.
 | `../tests/ndbg_diff_native.nas` / `ndbg_diff_debug.nas` | the same target natively and through `core.nas` |
 | `../tests/ndbg_cart_test.nas` | a real museum cartridge (Baby) run under the core to `KEY` |
 | `../museum/shell.nas` | resident ABI1 5800, ABI2 5950, core 6200, demo target 8100, undo ring 0x30000 |
-| `../exhibits/gui_cart.nas` | terminal `debug` command + kind-8 second CLI + `carts`/`load` + `next`/`finish` + `mem [addr]`/`dis [addr]`/`log`/`ndr`/`hist`/`stack`/`types`/`bpts`/`wpts`/`bp`/`wp`/`goto` + `screen`/`serial` + `undo [n]`/`redo [n]`/`checkpoint`/`restore` + `setw`/`setc` + `dis` |
+| `../exhibits/gui_cart.nas` | terminal `debug` command + kind-8 second CLI + `carts`/`load` + `next`/`finish` + `mem [addr]`/`dis [addr]`/`log`/`ndr`/`mirror`/`hist`/`stack`/`types`/`bpts`/`wpts`/`bp`/`wp`/`goto` + `screen`/`serial` + `undo [n]`/`redo [n]`/`checkpoint`/`restore` + `setw`/`setc` + `dis` |
 | `../tests/ndbg_guard_test.nas` | write-window fault and before-write watchpoint |
 | `../tests/ndbg_putc_cart.nas` | tiny PUTC cartridge for the serial-capture gate |
 | `../tests/ndbg_ndr_test.nas` | NDR operands and seal over a deliberately bad word |
@@ -67,7 +67,7 @@ utilities window's `[3] DEBUG` entry opens the same CLI. `carts` lists the
 catalog; `load <id>` copies a sealed cart into the debug arena at `0x80000` and
 maps guest 8192 onto it. `reset` returns to the built-in demo target at 8100. `next` steps over a call;
 `finish` runs until the current shadow frame returns. `break`, `bpts`, `watch`,
-`wpts`, `log`, `ndr`, `hist`, `stack`, `types`, `mem [addr]`, `dis [addr]`, `screen`
+`wpts`, `log`, `ndr`, `mirror`, `hist`, `stack`, `types`, `mem [addr]`, `dis [addr]`, `screen`
 and `serial` cover breakpoints, watchpoints, the last four typed records, the
 newest eight PCs, the shadow frames, the live 4x4 type matrix, eight words at
 PC or a chosen address, the captured 80x25 cart text buffer, and the captured
