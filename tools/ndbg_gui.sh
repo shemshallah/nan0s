@@ -7,7 +7,7 @@
 set -e
 cd "$(dirname "$0")/.."
 export LC_ALL=C
-T="${TMPDIR:-/data/data/com.termux/files/usr/tmp}/ndbggui.$$"
+T="${TMPDIR:-/tmp}/ndbggui.$$"
 mkdir -p "$T"
 trap 'rm -rf "$T"' EXIT
 CLI=aarch64/android/nan_cli
