@@ -22,7 +22,7 @@ gawk -f tools/mkimg.awk \
   -v OUTB="$T/boot.bin" -v OUTG="$T/guest.bin" 2>"$T/mk.err" || { cat "$T/mk.err"; exit 1; }
 
 "$CLI" --img "$T/guest.bin" --steps 100000000 \
-  --keys "@20000000,d,e,b,u,g,ENTER,@2000000,c,a,r,t,s,ENTER,@2000000,l,o,a,d,SPACE,1,ENTER,@2000000,s,t,e,p,ENTER,@2000000,d,i,s,ENTER,@2000000,r,e,g,s,ENTER,@2000000,s,e,t,r,SPACE,1,SPACE,4,2,ENTER,@2000000,s,e,t,m,SPACE,3,0,0,0,SPACE,1,2,3,4,ENTER,@2000000,s,e,t,w,SPACE,3,0,0,0,SPACE,5,6,7,8,SPACE,9,ENTER,@2000000,s,e,t,c,SPACE,3,0,0,0,SPACE,5,ENTER,@2000000,b,r,e,a,k,ENTER,@2000000,w,a,t,c,h,ENTER,@2000000,b,p,t,s,ENTER,@2000000,w,p,t,s,ENTER,@2000000,m,e,m,ENTER,@2000000,r,u,n,ENTER,@2000000,q,u,i,t,ENTER,@4000000" \
+  --keys "@20000000,d,e,b,u,g,ENTER,@2000000,c,a,r,t,s,ENTER,@2000000,l,o,a,d,SPACE,1,ENTER,@2000000,s,t,e,p,ENTER,@2000000,d,i,s,ENTER,@2000000,r,e,g,s,ENTER,@2000000,s,e,t,r,SPACE,1,SPACE,4,2,ENTER,@2000000,s,e,t,m,SPACE,3,0,0,0,SPACE,1,2,3,4,ENTER,@2000000,s,e,t,w,SPACE,3,0,0,0,SPACE,5,6,7,8,SPACE,9,ENTER,@2000000,s,e,t,c,SPACE,3,0,0,0,SPACE,5,ENTER,@2000000,b,r,e,a,k,ENTER,@2000000,w,a,t,c,h,ENTER,@2000000,b,p,t,s,ENTER,@2000000,w,p,t,s,ENTER,@2000000,m,e,m,ENTER,@2000000,r,u,n,ENTER,@2000000,p,o,i,s,o,n,SPACE,3,0,0,0,SPACE,4,SPACE,d,e,a,d,ENTER,@2000000,v,e,r,i,f,y,SPACE,3,0,0,0,SPACE,4,SPACE,d,e,a,d,ENTER,@2000000,s,e,t,m,SPACE,3,0,0,2,SPACE,1,2,3,4,ENTER,@2000000,v,e,r,i,f,y,SPACE,3,0,0,0,SPACE,4,SPACE,d,e,a,d,ENTER,@2000000,q,u,i,t,ENTER,@4000000" \
   --serial > "$T/out" 2>"$T/err" || true
 tr -d '\r' < "$T/out" > "$T/out.lf"
 if ! grep -qx 'carts' "$T/out.lf" ||
@@ -47,6 +47,10 @@ if ! grep -qx 'carts' "$T/out.lf" ||
    ! grep -qx 'W=1:' "$T/out.lf" ||
    ! grep -q '^M2001' "$T/out.lf" ||
    ! grep -qx 'S=2 PC=2001' "$T/out.lf" ||
+   ! grep -qx 'POISON 3000/0004' "$T/out.lf" ||
+   ! grep -qx 'VERIFY OK' "$T/out.lf" ||
+   ! grep -qx 'M3002=00001234' "$T/out.lf" ||
+   ! grep -qx 'VERIFY BAD 3002' "$T/out.lf" ||
    ! grep -qx 'q' "$T/out.lf"; then
   echo "ndbg_term: FAIL"; cat "$T/out"; exit 1
 fi
@@ -196,5 +200,5 @@ sed 's/BP=2001/BP=2002/'    "$T/out.lf" > "$T/negative"
 if cmp -s "$T/out.lf" "$T/negative"; then
   echo "ndbg_term: NEGATIVE FAIL"; exit 1
 fi
-echo "ndbg_term: PASS (terminal debug: carts/load, step/dis/regs/break/watch/bpts/wpts/mem/run; screen/serial; setr/setm/setw/setc; next/finish; log/ndr/mirror/hist/stack/types; bp/wp/goto; checkpoint capture; mem/dis/undo/redo args; undo/multi-redo/checkpoint/restore, exact)"
+echo "ndbg_term: PASS (terminal debug: carts/load, step/dis/regs/break/watch/bpts/wpts/mem/run; screen/serial; setr/setm/setw/setc; next/finish; log/ndr/mirror/hist/stack/types; bp/wp/goto; checkpoint capture; poison/verify; mem/dis/undo/redo args; undo/multi-redo/checkpoint/restore, exact)"
 echo "ndbg_term: NEGATIVE PASS (mutated transcript rejected)"

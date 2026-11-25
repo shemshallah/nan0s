@@ -308,7 +308,7 @@ sh tools/ndbg_img.sh   # bare-metal QEMU monitor boot
 ```
 
 The Silver Slate terminal now has a wired `debug` monitor with `carts`,
-`load <id>`, `step`, `next`, `finish`, `run`, `regs`, `log`, `ndr`, `mirror`, `hist`, `stack`,
+`load <id>`, `step`, `next`, `finish`, `run`, `regs`, `log`, `ndr`, `mirror`, `poison`/`verify`, `hist`, `stack`,
 `types`, `break`, `watch`, `bpts`, `wpts`, `bp`, `wp`, `goto`, `mem [addr]`, `dis [addr]`, `screen`, `serial`,
 `setr`, `setm`, `setw`, `setc`, multi-level `undo [n]`/`redo [n]`, `checkpoint`,
 `restore`, `reset`, `pc`, and `quit`; `tools/ndbg_term.sh` gates it. The richer

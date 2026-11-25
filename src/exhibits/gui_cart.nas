@@ -6976,6 +6976,179 @@ tgt_pc:
 .word 0
 
 
+; ---- poison / verify: fill a guest range with class-15 poison and check it ----
+tdbg_poison:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @tdbg_args_reset
+CALL @tdbg_nexthex
+CMP r2,r0
+JMP[EQ] @tpo_bad
+ST r1,r0,@tpo_a
+CALL @tdbg_nexthex
+CMP r2,r0
+JMP[EQ] @tpo_bad
+ST r1,r0,@tpo_n
+CALL @tdbg_nexthex
+CMP r2,r0
+JMP[EQ] @tpo_bad
+ST r1,r0,@tpo_v
+LD r1,r0,@tpo_n
+MOVI r2,256
+CMP r1,r2
+JMP[GT] @tpo_bad
+MOVI r1,0
+ST r1,r0,@tpo_i
+tpo_l:
+LD r1,r0,@tpo_i
+LD r2,r0,@tpo_n
+CMP r1,r2
+JMP[GE] @tpo_d
+LD r1,r0,@tpo_a
+LD r2,r0,@tpo_i
+ADD r1,r1,r2
+ST r14,r0,@dbg_sp
+CALL #DBG_MAP
+LD r14,r0,@dbg_sp
+ST r1,r0,@tpo_h
+ST r14,r0,@dbg_sp
+LD r1,r0,@tpo_h
+LD r2,r0,@tpo_v
+MOVI r3,15
+CALL #DBG_MEM_SETH
+LD r14,r0,@dbg_sp
+LD r1,r0,@tpo_i
+ADD r1,r1,r13
+ST r1,r0,@tpo_i
+JMP @tpo_l
+tpo_d:
+CALL @tdbg_inval
+MOVI r2,@s_tdbg_poisonp
+CALL @tdbg_str
+LD r1,r0,@tk_id
+LD r2,r0,@tpo_a
+MOVI r3,4
+CALL @dbg_puthex
+MOVI r2,47
+CALL @tdbg_ch
+LD r1,r0,@tk_id
+LD r2,r0,@tpo_n
+MOVI r3,4
+CALL @dbg_puthex
+MOVI r2,10
+CALL @tdbg_ch
+JMP @tpo_done
+tpo_bad:
+MOVI r2,@s_tdbg_badarg
+CALL @tdbg_str
+tpo_done:
+SUB r14,r14,r13
+LD r15,r14,0
+JMP @tdbg_done
+tpo_a:
+.word 0
+tpo_n:
+.word 0
+tpo_v:
+.word 0
+tpo_i:
+.word 0
+tpo_h:
+.word 0
+
+tdbg_verify:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @tdbg_args_reset
+CALL @tdbg_nexthex
+CMP r2,r0
+JMP[EQ] @tve_badarg
+ST r1,r0,@tve_a
+CALL @tdbg_nexthex
+CMP r2,r0
+JMP[EQ] @tve_badarg
+ST r1,r0,@tve_n
+CALL @tdbg_nexthex
+CMP r2,r0
+JMP[EQ] @tve_badarg
+ST r1,r0,@tve_v
+LD r1,r0,@tve_n
+MOVI r2,256
+CMP r1,r2
+JMP[GT] @tve_badarg
+MOVI r1,0
+ST r1,r0,@tve_i
+tve_l:
+LD r1,r0,@tve_i
+LD r2,r0,@tve_n
+CMP r1,r2
+JMP[GE] @tve_ok
+LD r1,r0,@tve_a
+LD r2,r0,@tve_i
+ADD r1,r1,r2
+ST r1,r0,@tve_cur
+ST r14,r0,@dbg_sp
+CALL #DBG_MEM
+LD r14,r0,@dbg_sp
+ST r1,r0,@tve_p
+ST r14,r0,@dbg_sp
+LD r1,r0,@tve_cur
+CALL #DBG_MEM_CLS
+LD r14,r0,@dbg_sp
+ST r1,r0,@tve_c
+LD r1,r0,@tve_p
+LD r2,r0,@tve_v
+CMP r1,r2
+JMP[NE] @tve_bad
+LD r1,r0,@tve_c
+MOVI r2,15
+CMP r1,r2
+JMP[NE] @tve_bad
+LD r1,r0,@tve_i
+ADD r1,r1,r13
+ST r1,r0,@tve_i
+JMP @tve_l
+tve_ok:
+MOVI r2,@s_tdbg_verifyp
+CALL @tdbg_str
+MOVI r2,@s_tdbg_ok
+CALL @tdbg_str
+JMP @tve_done
+tve_bad:
+MOVI r2,@s_tdbg_verifyp
+CALL @tdbg_str
+MOVI r2,@s_tdbg_bad2
+CALL @tdbg_str
+LD r1,r0,@tk_id
+LD r2,r0,@tve_cur
+MOVI r3,4
+CALL @dbg_puthex
+MOVI r2,10
+CALL @tdbg_ch
+JMP @tve_done
+tve_badarg:
+MOVI r2,@s_tdbg_badarg
+CALL @tdbg_str
+tve_done:
+SUB r14,r14,r13
+LD r15,r14,0
+JMP @tdbg_done
+tve_a:
+.word 0
+tve_n:
+.word 0
+tve_v:
+.word 0
+tve_i:
+.word 0
+tve_cur:
+.word 0
+tve_p:
+.word 0
+tve_c:
+.word 0
+
+
 ; ---- exact redo: save the post-step state before undo rewinds ----
 tdbg_redo_save:
 ST r15,r14,0
@@ -7834,6 +8007,16 @@ CALL @fs_prefix
 CMP r1,r0
 JMP[NE] @tdbg_goto
 LA r1,#FNB
+LA r2,@s_tdbg_poison
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @tdbg_poison
+LA r1,#FNB
+LA r2,@s_tdbg_verify
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @tdbg_verify
+LA r1,#FNB
 LA r2,@s_tdbg_setr
 CALL @fs_prefix
 CMP r1,r0
@@ -8300,11 +8483,11 @@ s_dbg_loaded:
 s_dbg_nocart:
 .str "no cart\n"
 s_tdbg_banner:
-.str "NANDBG TERMINAL MONITOR\ncarts load <id> step next finish run regs break watch bpts wpts mem [addr] dis [addr] screen serial log ndr mirror hist stack types goto bp wp undo [n] redo [n] setr setm setw setc checkpoint restore reset pc quit\n"
+.str "NANDBG TERMINAL MONITOR\ncarts load <id> step next finish run regs break watch bpts wpts mem [addr] dis [addr] screen serial log ndr mirror hist stack types poison verify goto bp wp undo [n] redo [n] setr setm setw setc checkpoint restore reset pc quit\n"
 s_tdbg_prompt:
 .str "> "
 s_tdbg_help:
-.str "carts load <id> step next finish run regs break watch bpts wpts mem [addr] dis [addr] screen serial log ndr mirror hist stack types goto bp wp undo [n] redo [n] setr setm setw setc checkpoint restore reset pc quit"
+.str "carts load <id> step next finish run regs break watch bpts wpts mem [addr] dis [addr] screen serial log ndr mirror hist stack types poison verify goto bp wp undo [n] redo [n] setr setm setw setc checkpoint restore reset pc quit"
 s_tdbg_carts:
 .str "carts"
 s_tdbg_load:
@@ -8341,6 +8524,18 @@ s_tdbg_mok:
 .str "MIRROR OK\n"
 s_tdbg_mbad:
 .str "MIRROR BAD\n"
+s_tdbg_poison:
+.str "poison"
+s_tdbg_poisonp:
+.str "POISON "
+s_tdbg_verify:
+.str "verify"
+s_tdbg_verifyp:
+.str "VERIFY "
+s_tdbg_ok:
+.str "OK\n"
+s_tdbg_bad2:
+.str "BAD "
 s_tdbg_ndr:
 .str "ndr"
 s_tdbg_log:
