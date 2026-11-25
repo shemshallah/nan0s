@@ -195,8 +195,8 @@ Status legend: **done**, **partial**, **planned**.
       replaces the Unix port (`TCL_THREADS=0`, real init.tcl/clock/msgcat).
       Milestone 1: `tools/tcl_nan16_port_gate.sh` builds tclsh with tcc0 and
       runs `/test.tcl` from the guest VFS; 110 commands after real `Tcl_Init`,
-      exact stdout `hello 42` / `2`. **x86_64 S1 product PASS**: 21,317,160-byte
-      cartridge, SHA-256 `38dfbf98d1755bd87c7e9dc4b1e3f2d69f352fa1bebba80c3ac7370150ade766`,
+      exact stdout `hello 42` / `2`. **x86_64 S1 product PASS**: 21,383,808-byte
+      cartridge, SHA-256 `288eae147caa361576b350eba214196b2c6714c540e30322d74f017cf2fbd0b5`,
       exact stdout, main=0.
 - [x] Channel drivers: console and VFS files (open/read/write/seek/truncate,
       relative paths, implicit dirs). Pipes/sockets remain explicit errors.
