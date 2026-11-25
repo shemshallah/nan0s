@@ -1,0 +1,2 @@
+# NaN/0S OS image: the GUI desktop is the boot cart.  No museum exhibits.
+boot:src/nan/gui_cart.nan

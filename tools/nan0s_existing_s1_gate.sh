@@ -37,10 +37,10 @@ if ! grep -q 'NaN/0S' "$COM"; then
     head -10 "$COM" | cat -v; exit 1
 fi
 
-# The OS boots straight into the text shell command line; no museum menu.
-# Commands go through bare_fs_* (the NaN POSIX service layer) and exit halts
-# deterministically.
-KEYS='mkdir /k\nwrite /k/a hi\ncat /k/a\nls /k\nstat /k/a\nrm /k/a\nrmdir /k\nhelp\nexit\n'
+# The OS default boot is the GUI desktop (qgate_gui).  A pending ESC at cold
+# boot enters the text shell instead; no museum menu.  Commands go through
+# bare_fs_* (the NaN POSIX service layer) and exit halts deterministically.
+KEYS='\x1bmkdir /k\nwrite /k/a hi\ncat /k/a\nls /k\nstat /k/a\nrm /k/a\nrmdir /k\nhelp\nexit\n'
 if ! sh tools/s1_runner.sh --img "$T/guest.bin" \
     --mem "${NAN0S_EXISTING_MEM:-128}" --steps 3000000 \
     --keys "$KEYS" --serial > "$T/cli.out" 2> "$T/cli.err"; then

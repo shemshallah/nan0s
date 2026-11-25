@@ -120,9 +120,18 @@ STW r1,r2,r3
 
 ; ---- cold boot: snapshot the catalog, then run the system cart (GUI desktop)
 ; when the builder declared one. The snapshot survives a large cart loaded at 8192.
-; OS boot: vectors are installed; go straight to the command line.
-; The museum launcher/GUI is no longer the boot path.
-JMP @cli_entry
+; OS boot: launch the bootstrap cart (GUI desktop) when present.
+; ESC at cold boot enters the text shell instead; no museum menu.
+CALL @sh_snap_toc
+LA r10,@boot_rec
+LD r1,r10,0
+CMP r1,r0
+JMP[EQ] @cli_entry
+CALL @v_keyq
+MOVI r2,27
+CMP r1,r2
+JMP[EQ] @cli_entry
+JMP @sh_run
 
 ; ---- 2. Clear screen and display menu ----
 sh_redraw:

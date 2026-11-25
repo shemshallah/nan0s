@@ -12,7 +12,7 @@ rm -rf "$T"; mkdir -p "$T"
 gawk -f tools/mkimg.awk \
      -v GOLD=src/native/nan16_x86.nan \
      -v GUEST=src/nan/museum.nan \
-     -v CARTS=tools/carts.txt \
+     -v CARTS=tools/os_carts.txt \
      -v OUTB="$T/n0sb.bin" -v OUTG="$T/n0sg.bin"
 cat "$T/n0sb.bin" "$T/n0sg.bin" > build/nan0s.img
 sz=$(wc -c < build/nan0s.img)
