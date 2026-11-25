@@ -85,9 +85,15 @@ Raw-NaN gates, not oracle claims:
   x86_64 S1 machine by default and on the 32-bit `kboot0+kan16` image in
   `NAN0S_GUEST_ARCH=32` parity mode.
 - `tools/nan0s_existing_s1_gate.sh` — extracts the guest region from the
-  existing `build/nan0s.img` and boots it on x86_64 S1.  The real system
-  banner `NaN/0S ... READY MENU=S` is required.  This is the upgraded
-  existing system, not a separate CLI.
+  existing `build/nan0s.img` and boots it on x86_64 S1.  The OS boots the GUI
+  desktop by default; ESC at cold boot enters the text shell, whose command
+  transcript is checked.  This is the upgraded existing system, not a
+  separate CLI.
+- `tools/nan0s_gui64_gate.sh` — boots the same OS guest on x86_64 S1, dumps
+  the 1024x768 8bpp framebuffer, and requires the GUI desktop and the
+  Terminal window region to be drawn.
+- `tools/nanpipe_libc_gate.sh` — guest libc `pipe()/dup2()/read()/write()`
+  over the NaN byte-pipe table; `PIPE PASS` on x86_64 S1.
 - `tools/nancli64_gate.sh` — a 64-bit text command line (mkdir/write/cat/ls/
   stat/truncate/rm/rmdir/help/exit) compiled to NaN and running on x86_64
   S1; every filesystem operation goes through the NaN POSIX table.

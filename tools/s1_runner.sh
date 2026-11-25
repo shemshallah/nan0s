@@ -2,7 +2,7 @@
 # tools/s1_runner.sh - x86_64 bare-metal S1 runner with the gate CLI.
 #
 #   --img FILE [--mem MB] [--steps N] [--serial]
-#   [--keys TEXT] [--guest-input FILE]
+#   [--keys TEXT] [--guest-input FILE] [--dump-fb FILE]
 #   [--guest-script PATH] [--guest-stdout FILE] [--guest-stderr FILE]
 #   [--peek 'ADDR[:LEN],...']
 #
@@ -17,10 +17,10 @@ export LC_ALL=C
 ROOT=$(pwd)
 
 usage() {
-  echo "usage: $0 --img FILE [--mem MB] [--steps N] [--serial] [--keys TEXT] [--guest-input FILE] [--guest-script PATH] [--guest-stdout FILE] [--guest-stderr FILE] [--peek 'ADDR[:LEN][,ADDR[:LEN]...]']" >&2
+  echo "usage: $0 --img FILE [--mem MB] [--steps N] [--serial] [--keys TEXT] [--guest-input FILE] [--dump-fb FILE] [--guest-script PATH] [--guest-stdout FILE] [--guest-stderr FILE] [--peek 'ADDR[:LEN][,ADDR[:LEN]...]']" >&2
   exit 2
 }
-IMG=""; MEM_MB=128; STEPS=50000000; SERIAL=0; GOUT=""; GERR=""; PEEK=""; GSCRIPT=""; KEYS=""; GINPUT=""
+IMG=""; MEM_MB=128; STEPS=50000000; SERIAL=0; GOUT=""; GERR=""; PEEK=""; GSCRIPT=""; KEYS=""; GINPUT=""; DUMPFB=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --img) [ "$#" -ge 2 ] || usage; IMG=$2; shift 2 ;;
@@ -29,6 +29,7 @@ while [ "$#" -gt 0 ]; do
     --serial) SERIAL=1; shift ;;
     --keys) [ "$#" -ge 2 ] || usage; KEYS=$2; shift 2 ;;
     --guest-input) [ "$#" -ge 2 ] || usage; GINPUT=$2; shift 2 ;;
+    --dump-fb) [ "$#" -ge 2 ] || usage; DUMPFB=$2; shift 2 ;;
     --guest-script) [ "$#" -ge 2 ] || usage; GSCRIPT=$2; shift 2 ;;
     --guest-stdout) [ "$#" -ge 2 ] || usage; GOUT=$2; shift 2 ;;
     --guest-stderr) [ "$#" -ge 2 ] || usage; GERR=$2; shift 2 ;;
@@ -225,11 +226,21 @@ else
 fi
 
 rm -f "$T/com" "$T/dbg"
-timeout "${S1_QEMU_TIMEOUT:-600}" "$QEMU_BIN" -m "$QMEM" $QEMU_ACCEL \
-  -drive format=raw,if=floppy,file="$T/image" $DRIVE -boot a \
-  -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
-  -display none -serial "file:$T/com" -debugcon "file:$T/dbg" \
-  -no-reboot >/dev/null 2>&1 || true
+if [ -n "$DUMPFB" ]; then
+  ( sleep "${S1_FB_DELAY:-8}"
+    printf 'pmemsave 0x10000000 0x300000 "%s"\nquit\n' "$DUMPFB" ) | \
+  timeout "${S1_QEMU_TIMEOUT:-600}" "$QEMU_BIN" -m "$QMEM" $QEMU_ACCEL \
+    -drive format=raw,if=floppy,file="$T/image" $DRIVE -boot a \
+    -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
+    -display none -serial "file:$T/com" -debugcon "file:$T/dbg" \
+    -monitor stdio -no-reboot > "$T/mon.txt" 2>&1 || true
+else
+  timeout "${S1_QEMU_TIMEOUT:-600}" "$QEMU_BIN" -m "$QMEM" $QEMU_ACCEL \
+    -drive format=raw,if=floppy,file="$T/image" $DRIVE -boot a \
+    -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
+    -display none -serial "file:$T/com" -debugcon "file:$T/dbg" \
+    -no-reboot >/dev/null 2>&1 || true
+fi
 
 python3 - "$T/com" "$T/dbg" "$GOUT" "$GERR" "$SERIAL" <<'PY'
 import re, sys

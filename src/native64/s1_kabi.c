@@ -236,6 +236,11 @@ static uint32_t key_pop(void) {
 #define TEXT_BASE_BYTE 0x03EFF800u
 #define TEXT_BASE_WORD (TEXT_BASE_BYTE / 4u)
 static uint32_t disp_vmode, disp_fbw, disp_fbh, disp_fbtot;
+/* GUI framebuffer.  The S1 runs with identity-mapped RAM; keep the VRAM in
+   high physical memory, clear of the S1 image, guest word memory and stack. */
+#define S1_VRAM_BASE  0x10000000u
+#define S1_VRAM_BYTES (1024u * 768u * 4u)
+static uint8_t *const s1_vram = (uint8_t *)S1_VRAM_BASE;
 static int text_plane_ok(void) {
   return (uint64_t)TEXT_BASE_WORD + TEXT_CELLS <= (uint64_t)MEM_WORDS;
 }
@@ -253,7 +258,10 @@ enum { TF_PC = 16, TF_K = 17, TF_ADDRH = 18, TF_CAUSE = 19,
 static void s1_reset(void) {
   for (uint32_t i = 0; i < S1_GUEST_ZERO_WORDS; i++) MEM[i] = 0;
   key_reset();
-  disp_vmode = 0; disp_fbw = 0; disp_fbh = 0; disp_fbtot = 64000;
+  /* The GUI OS boots in 1024x768 framebuffer mode.  The text shell uses
+     PUTC/COM1 and does not depend on this; DISPSET can still switch modes. */
+  disp_vmode = 1; disp_fbw = 1024; disp_fbh = 768; disp_fbtot = 1024u * 768u;
+  memset(s1_vram, 0, S1_VRAM_BYTES);
   text_plane_init(0x0720);
   s.kdata = 0xF0000u;
   for (int i = 0; i < 16; i++) s.r[i] = 0;
@@ -505,9 +513,33 @@ static uint32_t s1_run(uint64_t budget) {
         disp_fbtot = disp_fbw * disp_fbh;
       } else if ((v & 0xFFu) == 0x13u) {
         disp_vmode = 1; disp_fbw = 320; disp_fbh = 200; disp_fbtot = 64000;
+        memset(s1_vram, 0, 64000);
       } else {
         disp_vmode = 0; disp_fbw = TEXT_COLS; disp_fbh = TEXT_ROWS;
         text_plane_init(0);
+      }
+      break; }
+    case 0x3A: s.r[d] = (disp_fbw << 16) | (disp_fbh & 0xFFFFu); break;
+    case 0x3B: break;                                  /* VSYNC: headless */
+    case 0x3C: { uint32_t cnt = s.r[d], dst = A, src = B;
+      uint64_t cap = S1_VRAM_BYTES;
+      if (dst < cap && src < cap && cnt) {
+        uint64_t n = cnt;
+        if ((uint64_t)dst + n > cap) n = cap - dst;
+        if ((uint64_t)src + n > cap) n = cap - src;
+        if (dst < src) {
+          for (uint64_t i = 0; i < n; i++) s1_vram[dst + i] = s1_vram[src + i];
+        } else if (dst > src) {
+          for (uint64_t i = n; i-- > 0; ) s1_vram[dst + i] = s1_vram[src + i];
+        }
+      }
+      break; }
+    case 0x3D: { uint32_t cnt = s.r[d], start = A, c = B & 0xFFu;
+      uint64_t cap = S1_VRAM_BYTES;
+      if (start < cap && cnt) {
+        uint64_t n = cnt;
+        if ((uint64_t)start + n > cap) n = cap - start;
+        memset(s1_vram + start, (int)c, (size_t)n);
       }
       break; }
     case 0x1A: s.r[d] = key_pop(); break;
