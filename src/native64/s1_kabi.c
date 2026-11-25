@@ -338,8 +338,10 @@ static uint32_t port_in(uint16_t port) {
 
 #ifdef S1_GUEST
 /* Guest time/steps control block (guest BYTE addresses):
-   0x03EFF010 ms, +4 steps low, +8 steps high.  The C core publishes the same
-   block, so tcc libc time/nanosleep work unchanged. */
+   0x03EFF010 ms, +4 steps low, +8 steps high.  +0x1C is the virtual-sleep
+   millisecond accumulator written by the guest libc's SQLite xSleep; the
+   kernel zeroes it once at boot and never overwrites it.  The C core
+   publishes the same block, so tcc libc time/nanosleep work unchanged. */
 static void guest_write_u32(uint32_t byte_addr, uint32_t v) {
   uint32_t wi = byte_addr >> 2;
   if (wi >= MEM_WORDS) return;          /* e.g. --mem 64: no time block */
@@ -976,6 +978,8 @@ void s1_main(void) {
   if (s1_guest_script_len)
     guest_write_bytes(0x03EFF024u, s1_guest_script, s1_guest_script_len);
   guest_publish_time();
+  /* Guest-written virtual sleep; keep it zero at boot and preserve it. */
+  guest_write_u32(0x03EFF01Cu, 0);
   dbg_puts("S1GUEST LOAD "); dbg_dec(words); dbg_puts(" WORDS\n");
   uint32_t rc = s1_run(S1_GUEST_STEPS);
   dbg_puts("S1GUEST HALT rc="); dbg_dec(rc);
