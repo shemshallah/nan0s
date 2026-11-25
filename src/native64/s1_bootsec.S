@@ -1,7 +1,8 @@
 /* s1_bootsec.S - minimal 512-byte floppy boot fixture for the x86_64 S1.
  *
  * LBA 1..128 -> 0x10000 (64 KiB kernel window)
- * LBA 129.. -> 0x40000 (guest payload staging, up to 1536 sectors / 768 KiB)
+ * LBA 129.. -> 0x40000 (guest payload staging, up to 768 sectors / 384 KiB;
+ * the window ends at the VGA aperture at 0xA0000)
  * Then A20, flat protected mode, jump to the S1 image at 0x10000.
  * S1_GUEST_SECTORS is supplied by the runner; 0 is the KABI-only build.
  */
