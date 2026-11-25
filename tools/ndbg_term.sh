@@ -95,7 +95,7 @@ fi
 tr -d '\r' < "$T/blog" > "$T/blog.lf"
 if ! grep -qx '!DFC@20002003 W=0000000F7F000000' "$T/blog.lf" ||
    ! grep -qx 'S=3 PC=2003' "$T/blog.lf" ||
-   ! grep -qx 'D0:20:002003' "$T/blog.lf" ||
+   ! grep -qx 'D0:20:002003 A=00000000 B=00000000 D=00000000 S=47997CA3' "$T/blog.lf" ||
    ! grep -qx 'NDR 20000000 00002003 7F000000 0000000F 00000000 00000000 00000000 47997CA3 ' "$T/blog.lf" ||
    ! grep -qx 'MIRROR OK' "$T/blog.lf" ||
    ! grep -qx 'TYPES FC:01 FM:00 FD:00 FS:00 ' "$T/blog.lf"; then

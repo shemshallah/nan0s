@@ -6408,6 +6408,7 @@ LD r3,r0,@tlg_s
 SHL r3,r3,3
 LD r1,r0,@tlg_ptr
 ADD r1,r1,r3
+ST r1,r0,@tlg_rec
 LDN r4,r1,0
 ST r4,r0,@tlg_t
 LD r4,r1,0
@@ -6434,6 +6435,58 @@ CALL @tdbg_ch
 LD r1,r0,@tk_id
 LD r2,r0,@tlg_site
 MOVI r3,6
+CALL @dbg_puthex
+; A operand
+MOVI r2,32
+CALL @tdbg_ch
+MOVI r2,65
+CALL @tdbg_ch
+MOVI r2,61
+CALL @tdbg_ch
+LD r4,r0,@tlg_rec
+ADDI r4,r4,4
+LD r2,r4,0
+LD r1,r0,@tk_id
+MOVI r3,8
+CALL @dbg_puthex
+; B operand
+MOVI r2,32
+CALL @tdbg_ch
+MOVI r2,66
+CALL @tdbg_ch
+MOVI r2,61
+CALL @tdbg_ch
+LD r4,r0,@tlg_rec
+ADDI r4,r4,5
+LD r2,r4,0
+LD r1,r0,@tk_id
+MOVI r3,8
+CALL @dbg_puthex
+; D operand
+MOVI r2,32
+CALL @tdbg_ch
+MOVI r2,68
+CALL @tdbg_ch
+MOVI r2,61
+CALL @tdbg_ch
+LD r4,r0,@tlg_rec
+ADDI r4,r4,6
+LD r2,r4,0
+LD r1,r0,@tk_id
+MOVI r3,8
+CALL @dbg_puthex
+; seal
+MOVI r2,32
+CALL @tdbg_ch
+MOVI r2,83
+CALL @tdbg_ch
+MOVI r2,61
+CALL @tdbg_ch
+LD r4,r0,@tlg_rec
+ADDI r4,r4,7
+LD r2,r4,0
+LD r1,r0,@tk_id
+MOVI r3,8
 CALL @dbg_puthex
 MOVI r2,10
 CALL @tdbg_ch
@@ -6464,6 +6517,8 @@ tlg_t:
 tlg_c:
 .word 0
 tlg_site:
+.word 0
+tlg_rec:
 .word 0
 
 ; ---- ndr: the latest eight-word record ----
