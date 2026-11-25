@@ -252,8 +252,9 @@ Status legend: **done**, **partial**, **planned**.
       fixture is tcc0-built with the official `TESTFIXTURE_FLAGS`,
       `SQLITE_THREADSAFE=0`, all static TESTSRC extensions and the ext test
       tree; 96,064,648 bytes, SHA-256
-      `758e4ed1182a938fc42e0c1aa52d111032f9d495a4bce1b12a2db6b7f8850f62`.
-      WAL is compiled out until the large-image startup crash is fixed.
+      `857e8a97cd976d10db65d161d1a27889a37c705c2236feb02d8967120d217a49`.
+      WAL is enabled; the large-image startup crash was a fixed-SP overlap,
+      fixed by `SP=max(0x300000,align16(total_words))`.
 - [x] Port `tester.tcl` capability probes and the test runner; the official
       `tester.tcl`/`tcltest`/`permutations` path is used unchanged.  The only
       port shim is the no-pipe multi-client probe in `lock_common.tcl`
@@ -263,15 +264,18 @@ Status legend: **done**, **partial**, **planned**.
       x86_64 S1 product runner (`tools/nan16_testfixture_gate.sh`); 0 omitted.
 - [x] Official module slices on the final fixture: `attach` **0/113**,
       `attach2` **0/71**, `ext/expert/expert1` **0/69**, `badutf2` **0/42**,
-      `exec` **0/4**, and `atof1` **0/40,006** (92.18B steps).
+      `exec` **0/4**, `atof1` **0/40,006** (92.18B steps),
+      `ext/recover/recoverpgsz` **0/89**, and `backup2` **15/16**
+      (only backup2-10's directory-open wording).
 - [~] Run `veryquick` in one process with unlimited steps and a periodic
       `NAN1` checkpoint (`tools/nan16_suite_resume.sh`).  A previous run
       reached 431B steps and reproduced 51 failures (42 recover, 27 avtrans
       sync counters, backup2/attach) before aborting at busy2's child-pipe
-      launch; those causes are fixed.  The current checkpointed run is in
-      progress; `ext/recover` (Tcl recover wrapper returns
-      `SQLITE_NOTADB` although the C probe recovers correctly) and the
-      WAL/`exec`-dependent symlink cases remain open.
+      launch; those causes are fixed.  A WAL-disabled checkpointed run
+      reached 96,066,000,000 steps with 0 failures before being stopped.
+      The next run uses the WAL-enabled final-fix image.  Remaining open
+      items: `busy2`'s shm-lock semantics, backup2-10 wording, and the
+      `exec`-dependent symlink-1.3 case.
 - [ ] Run `quick`, `full`/`all`, then the complete `.test` corpus; archive
       exact pass/skip/error counts.
 - [ ] Fix every compiler/libc/kernel defect; no SQLite field-size or page
