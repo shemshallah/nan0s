@@ -4,7 +4,8 @@ set -eu; cd "$(dirname "$0")/.."; export LC_ALL=C
 T="${TMPDIR:-/tmp}/cbarefs.$$"; mkdir -p "$T"
 trap 'rm -rf "$T"' EXIT
 CC=${HOST_CC:-cc}; TT=third_party/tinycc
-CLI=aarch64/android/nan_cli; [ -x $CLI ] || (cd aarch64/android && make -s nan_cli)
+CLI=${CBARE_FS_RUNNER:-aarch64/android/nan_cli}
+[ -x "$CLI" ] || (cd aarch64/android && make -s nan_cli)
 [ -f "$TT/config.h" ] || (cd "$TT" && ./configure --cpu=x86_64 >/dev/null 2>&1)
 grep -q 'TCC_TARGET_NAN16' "$TT/config.h" || \
   sed -i 's/TCC_TARGET_RISCV64 || TCC_TARGET_C67)/TCC_TARGET_RISCV64 || TCC_TARGET_C67 || TCC_TARGET_NAN16)/' "$TT/config.h"

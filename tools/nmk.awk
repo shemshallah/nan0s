@@ -174,7 +174,10 @@ function parse_item(t,  ii,jj,s1,b1,n4,s4,k4,v4,rest,wi,w,mmla,prd,mm){
   if (substr(t,1,4)==".equ"){
     split(t, ea, " ")
     if (length(ea)<3) die("bad .equ: " t)
-    EQ[ea[2]] = inum(ea[3])
+    # Compile-time configuration: an environment variable with the .equ
+    # name overrides the source default (for example NFS_MAX=512).
+    if (ea[2] in ENVIRON) EQ[ea[2]] = inum(ENVIRON[ea[2]])
+    else EQ[ea[2]] = inum(ea[3])
     return
   }
   if (substr(t,1,4)==".org"){

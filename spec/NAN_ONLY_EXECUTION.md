@@ -1,7 +1,8 @@
 # NaN-only execution boundary
 
-Status: convergence checkpoint 2026-11-25 (merged `nan-only-suite` `2836b7a`; `nan0s/main` canonical).  This document is authoritative for
-what may be C and what must be raw NaN16.
+Status: convergence checkpoint 2026-11-25. `nan-only-suite` is merged into
+`nan0s/main`; main is canonical. This document is authoritative for what may
+be C and what must be raw NaN16.
 
 ## The rule
 
@@ -22,7 +23,7 @@ an oracle, not the product.
 | conformance oracle | C (`aarch64/android/core/nan16.c`, `nan_cli`) | OK only when labelled oracle; never acceptance |
 | S1 machine model | C is acceptable only as the hardware/ISA emulator (`src/native64/s1_kabi.c`), never as kernel services | currently mixes machine and kernel services |
 | NaN kernel/services | raw NaN16 (`.nas`): traps, SVC, scheduler, processes, spawn/wait, sleep, VFS, console, devices | incomplete; C KABI currently supplies process/spawn/sleep/load |
-| guest runtime (libc) | C compiled to NaN; service calls must go through the NaN machine interface (`src/lib/bare.nas`) or SVC ABI | currently self-contained C VFS/console/time |
+| guest runtime (libc) | C compiled to NaN; service calls must go through the NaN machine interface (`src/lib/bare.nas`) or SVC ABI | file persistence is now proven through NaN services (`cbare_sqlite`, `cbare_fs`); console/time and the Tcl libc VFS are still self-contained C |
 | guest applications (Tcl/SQLite/testfixture) | C compiled to NaN | OK |
 
 ## Known violations in the current suite path
@@ -38,13 +39,29 @@ an oracle, not the product.
    mechanics.
 4. The CI `oracle` mode runs `nan_cli`; it is functional evidence only and
    must never be reported as S1/product acceptance.
-5. The suite branch is 271 commits divergent from `nan0s/main`, which is 277
-   commits ahead and contains the current NaN system work.  The suite has not
-   yet been integrated with the current kernel.
+5. The suite branch has been integrated into `nan0s/main`; the NaN process
+   and thread subsystems now run on the S1 machine model. Remaining work is
+   the NaN boot image and the libc/testfixture service boundary.
+
+## Proven NaN service boundaries
+
+The following are raw-NaN gates, not oracle claims:
+
+- `tools/cbare_gate.sh` — a C guest calls NaN console and tick services.
+- `tools/cbare_fs_gate.sh` — a C guest creates, writes and reads a file
+  through `bare_fs_open/write/read/close`.
+- `tools/cbare_sqlite_gate.sh` — SQLite (C compiled by TCC) opens a
+  database, inserts, closes, reopens, updates and reopens again.  The only
+  persistence boundary is `bare_fs_load/save/remove/size`; the database
+  header and rows are verified after each reopen.
+- `tools/nfs2_capacity_gate.sh` — NPAF stores 512 files / about 4 MiB and
+  verifies the first, middle and last entries.  `NFS_MAX` and `NFS_CAP` are
+  compile-time `.equ` values that `tools/nmk.awk` accepts from the
+  environment; the arena base is derived from `NFS_BASE + 8 + NFS_MAX*16`.
 
 ## Migration checklist
 
-- [ ] Merge/rebase the suite tools and Tcl/SQLite port onto current
+- [x] Merge/rebase the suite tools and Tcl/SQLite port onto current
       `nan0s/main`; do not fork a parallel system lineage.
 - [ ] Restrict `src/native64/s1_kabi.c` to the S1 machine model: ISA, trap
       frames, ports, timer, regions.  Move process/spawn/wait/sleep/load
