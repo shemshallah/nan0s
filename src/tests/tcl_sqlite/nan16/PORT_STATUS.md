@@ -113,14 +113,16 @@ finish and triage the later test/ files.
   `SQLITE_IOCAP_POWERSAFE_OVERWRITE | SQLITE_IOCAP_SUBPAGE_READ` (truthful
   for the RAM-backed store), with `SQLITE_FCNTL_POWERSAFE_OVERWRITE` support
   for `psow=0`.
-- Final WAL fixture (`wal-locks.bin`): 96,064,648 bytes, SHA-256
-  `6129f2e4d41f249884f9044985b55e2390c9df8e31f4ec96d3d34c92526d968f`.
-  Official results: select1 **199/0**, recoverpgsz **89/0**, backup2
-  **16/16**, busy2 **0/15** at `--clock steps:100000`, symlink **1/39**
-  (only `symlink-1.3`, `exec ln -s`), wal.test **3/518** (only
-  `wal-20.2/20.3/20.4`, which use `launch_testfixture`/pipes).  The old
-  `wal-10.2.x` frame-count failures, `wal-23.4` recovered-frame count, and
-  `wal-24.5` WAL size all pass.
+- Final fixture (`product-final.bin`, copy of `diag-btree.bin`):
+  96,064,648 bytes, SHA-256
+  `564121aad84f07b0174c9914326daa6954c130ceb6463b5b43e7b94d9a53c79d`.
+  Official results: select1 **199/0**, cache **190/0**, recoverpgsz
+  **89/0**, backup2 **16/16**, busy2 **0/15** at `--clock steps:100000`,
+  symlink **1/39** (only `symlink-1.3`, `exec ln -s`), wal.test **3/518**
+  (only `wal-20.2/20.3/20.4`, which use `launch_testfixture`/pipes).  The
+  old `wal-10.2.x` frame-count failures, `wal-23.4` recovered-frame count,
+  `wal-24.5` WAL size, `avtrans-9.*.5` fullsync counts, and `cache`'s
+  missing `btree_*` commands are fixed.
 - Real single-process WAL shm locks are in place: per-path slot table,
   per-handle SHARED/EXCLUSIVE masks, refcounted shm, release on
   close/unmap.  `xSleep` advances a virtual-sleep word at `0x03EFF01C`
