@@ -1265,7 +1265,7 @@ cart seal valid.
       and mailbox next.
 - [ ] Symbol blob from `nmk.awk -v LABELS`; source lines if the assembler
       gains `.line`.
-- [ ] Poison fill and read checks.
+- [~] Poison fill + `verify`; read-trap checks next.
 - [ ] ATA/NaNFS postmortem persistence.
 
 **Acceptance:** replay a recorded session byte-for-byte; a corrupted log twin
