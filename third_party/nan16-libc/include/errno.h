@@ -10,10 +10,14 @@ extern int errno;
 #define ENOMEM 12
 #define EACCES 13
 #define EEXIST 17
+#define EISDIR 21
 #define EINVAL 22
 #define ENFILE 23
 #define EMFILE 24
 #define ENOSPC 28
 #define EPIPE 32
 #define ERANGE 34
+#define ENAMETOOLONG 36
+#define ELOOP 40
+#define ENOTEMPTY 39
 #endif

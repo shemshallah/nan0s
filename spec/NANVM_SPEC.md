@@ -412,7 +412,7 @@ model that is explicit rather than accidental.
 ### 9.3 New ops (v1 revision, 0x38-0x3F)
 
     38 MEMQ d,a (planned)      region query: base/nwords/kind
-    39 SVC imm                 syscall/trap gate (trap frame, kernel entry)
+    39 CALLF                   far CALL (kept; SVC moved off 0x39)
     3A INB d,a | 3B OUTB a,b | 3C INW d,a | 3D OUTW a,b   port I/O
     3E DISKW (optional)        write sealed block range
     3F reserved                IRQ control stays in the kernel via port I/O
@@ -422,19 +422,22 @@ model that is explicit rather than accidental.
       45 RDTSC d,a
       46 FEXP d,a | 47 FTANH d,a | 48 FLOG d,a
       4A DP4B d,a,b              exact dot product of four signed i8 lanes;
-                                 r[d]=int32, k=(Z,0)
-      49,4B-4F reserved          FMA/DP2H/CVTPK land only with exact gates
+                                  r[d]=int32, k=(Z,0)
+    4D INL d,a                 32-bit port read (OUTL is 0x43)
+    4E SVC imm                 syscall/trap gate: cause=0 trap frame, kernel entry
+    4F SVCRET                  restore the trap frame and resume
+    49,4B-4C reserved          FMA/DP2H/CVTPK land only with exact gates
 
 All atomics operate on the 32-bit payload of one aligned word and are
 sequentially consistent with FENCE; they are the only shared-memory
 primitives the scheduler and the AI kernels need. Existing ops keep 32-bit
 value semantics; only effective addresses widen.
 
-SVC syscall ABI (v1 draft; numbers stable once used, new calls append):
-0 yield, 1 exit(code), 2 region_map(id, base, words, kind), 3 region_query,
-4 open(path, flags) -> handle, 5 read(handle, buf, len), 6 write(handle,
-buf, len), 7 seek, 8 close, 9 spawn(path, args) -> pid, 10 wait(pid),
-11 time(ticks), 12 share(pid, region, perms).
+SVC syscall ABI: frozen in `spec/KERNEL_ABI.md` (0 yield, 1 exit,
+2 region_map, 3 region_query, 4 open, 5 read, 6 write, 7 seek, 8 close,
+9 spawn, 10 wait, 11 time, 12 share, 13 thread_create, 14 thread_join,
+15 thread_exit, 16 mutex, 17 cond, 18 tls, 20 getpid, 21 getppid, 22 kill).
+Numbers are stable once used; new calls append.
 
 Interrupt model: a kernel-owned vector table; the timer is IRQ0, keyboard
 IRQ1, NIC per driver; guest handlers are registered through SVC; EOI via

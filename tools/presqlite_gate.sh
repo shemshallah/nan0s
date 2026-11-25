@@ -27,7 +27,7 @@ while [ $# -gt 0 ]; do
                nan_simd nan_vec nan_vec_native nan_vec_avx2 nan_q4 nan_q4lm nan_bench \
                xlate_x86 ncc_dp4b nmatmul nmat64 nmat64x64 ncc_headers ncc_ppexpr \
                ncc_torture ncc_donut_exact ncc_macro_text ncc_include ncc_libm_exact \
-               ncc_iso_c ncc_ctests tcc_nan16_enc tcc_nan16_smoke mkproof ndbg ndbg_diff ndbg_mon ndbg_img ndbg_term mkall qgate qgate_gui xmemgate qgate64 \
+               ncc_iso_c ncc_ctests tcc_nan16_enc tcc_nan16_smoke mkproof ndbg ndbg_diff ndbg_mon ndbg_img ndbg_term mkall qgate qgate_gui xmemgate qgate64 \ tcc_nan16_selfhost tcc_nan16_rawcc ndbg_gui
                qgate64core qgate64block qgate64alu qgate64branch qgate64mem qgate64byte \
                qgate64prog qgate64mul qgate64div qgate64fp qgate64fpe qgate64mem2 \
                qgate64blockops qgate64trap qgate64vec qgate64vldst qgate64vdp4b \
@@ -145,6 +145,8 @@ done
 for g in ncc_macro_text ncc_include ncc_libm_exact ncc_iso_c ncc_ctests tcc_nan16_enc tcc_nan16_smoke; do
   [ -f "tools/$g.sh" ] && run "$g" sh "tools/$g.sh"
 done
+[ -f tools/tcc_nan16_selfhost.sh ] && run tcc_nan16_selfhost sh tools/tcc_nan16_selfhost.sh --run
+[ -f tools/tcc_nan16_rawcc.sh ] && run tcc_nan16_rawcc sh tools/tcc_nan16_rawcc.sh
 [ -f tools/py_m1.sh ] && run py_m1 sh tools/py_m1.sh
 [ -f tools/mkproof.sh ] && run mkproof sh tools/mkproof.sh src/tests/key_test.nas
 [ -f tools/ndbg.sh ] && run ndbg sh tools/ndbg.sh
@@ -162,6 +164,7 @@ done
 [ -f tools/kabi_sleep_gate.sh ] && run kabi_sleep sh tools/kabi_sleep_gate.sh
 [ -f tools/kabi_kill_gate.sh ] && run kabi_kill sh tools/kabi_kill_gate.sh
 [ -f tools/s1_guest_gate.sh ] && run s1_guest sh tools/s1_guest_gate.sh
+[ -f tools/ndbg_gui.sh ] && run ndbg_gui sh tools/ndbg_gui.sh
 
 if [ -f tools/mkall.sh ] && want mkall; then
   run mkall sh tools/mkall.sh

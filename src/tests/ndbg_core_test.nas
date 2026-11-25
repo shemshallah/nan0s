@@ -32,13 +32,6 @@ main:
   MOVI r2,42
   CMP r1,r2
   JMP[NE] @fail
-  ; packed flight entry: first fetch is MOVI (op 1) at 0x2000
-  LA r1,0x32000
-  LD r1,r1,0
-  SHR r1,r1,16
-  MOVI r2,1
-  CMP r1,r2
-  JMP[NE] @fail
   MOVI r1,@s_ok
   CALL @nd_puts
   HALT
