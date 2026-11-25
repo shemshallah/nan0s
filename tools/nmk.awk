@@ -13,7 +13,7 @@ BEGIN {
   for (i=1; i<nob; i+=2) dn[OB[i]] = OB[i+1]+0
   delete OB
   for (m in dn) opname[dn[m]] = m
-  FORMS = "BOOL=dab,ADD=dab,SUB=dab,STW=dab,MOVI=di,MOVHI=di,SHL=dai,SHR=dai,LD=dai,ST=dai,LDN=dai,CMP=ab,JMP=i,CALL=i,RET=,NOP=,HALT=,JMPR=a,KEY=d,DISPQ=d,DISPSET=d,KEYQ=d,BEEP=d,TICK=d,PUTC=d,VPOKE=da,VPEEK=da,BSWAPM=ai,MUL=dab,MULH=dab,MULHU=dab,DIV=dab,MOD=dab,DIVU=dab,MODU=dab,SAR=dai,CMPS=ab,ADDI=dai,LDB=dai,STB=dai,CALLR=a,BCOPY=dab,BFILL=dab,FADD=dab,FEXP=da,FTANH=da,FLOG=da,FSUB=dab,FMUL=dab,FDIV=dab,FSQRT=da,FCMP=ab,CVTIF=da,CVTFI=da,JMPF=j,CALLF=j,FBINFO=d,VSYNC=,FBCOPY=dab,FBFILL=dab,OUTB=da,INB=da,INW=da,OUTW=da,OUTSW=dab,OUTL=da,CPUID=dab,RDTSC=da,DP4B=dab,VDP4B4=dab,INL=da,SVC=i,SVCRET=,VZERO=d,VBCAST=da,VLOAD=da,VSTORE=da,VADD8=dab,VSUB8=dab,VADD32=dab,VSUB32=dab,VMUL32=dab,VDP4B=dab,VGET=dai,VSET=dai,CODELEN=a,EXECN=a"
+  FORMS = "LDS=di,STS=di,BOOL=dab,ADD=dab,SUB=dab,STW=dab,MOVI=di,MOVHI=di,SHL=dai,SHR=dai,LD=dai,ST=dai,LDN=dai,CMP=ab,JMP=i,CALL=i,RET=,NOP=,HALT=,JMPR=a,KEY=d,DISPQ=d,DISPSET=d,KEYQ=d,BEEP=d,TICK=d,PUTC=d,VPOKE=da,VPEEK=da,BSWAPM=ai,MUL=dab,MULH=dab,MULHU=dab,DIV=dab,MOD=dab,DIVU=dab,MODU=dab,SAR=dai,CMPS=ab,ADDI=dai,LDB=dai,STB=dai,CALLR=a,BCOPY=dab,BFILL=dab,FADD=dab,FEXP=da,FTANH=da,FLOG=da,FSUB=dab,FMUL=dab,FDIV=dab,FSQRT=da,FCMP=ab,CVTIF=da,CVTFI=da,JMPF=j,CALLF=j,FBINFO=d,VSYNC=,FBCOPY=dab,FBFILL=dab,OUTB=da,INB=da,INW=da,OUTW=da,OUTSW=dab,OUTL=da,CPUID=dab,RDTSC=da,DP4B=dab,VDP4B4=dab,INL=da,SVC=i,SVCRET=,VZERO=d,VBCAST=da,VLOAD=da,VSTORE=da,VADD8=dab,VSUB8=dab,VADD32=dab,VSUB32=dab,VMUL32=dab,VDP4B=dab,VGET=dai,VSET=dai,CODELEN=a,EXECN=a"
   nf = split(FORMS, FCT, ",")
   for (i=1; i<=nf; i++){ fl=index(FCT[i],"="); FORM[substr(FCT[i],1,fl-1)] = substr(FCT[i],fl+1) }
   delete FCT
