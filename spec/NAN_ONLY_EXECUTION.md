@@ -124,19 +124,45 @@ Raw-NaN gates, not oracle claims:
   `src/lib/nansched.nas` and is installed through `nk_install_proc` in
   `nankernel.nas` (process SVCs 0/1/9/10/20/21/22/23/24).
 
+## What NANIX replaces today
+
+Normal NaN/0S operation does not enter the C libc POSIX implementation:
+
+| surface | implementation |
+|---|---|
+| desktop, window manager, keyboard, framebuffer | raw NaN16 cartridges |
+| desktop Terminal and ESC shell command line | raw NaN16 `fs_dispatch` / `cli_dispatch` |
+| file create/read/write/append/truncate | `bare_fs_*` over NPAF (`nfs2.nas`) |
+| mkdir/stat/readdir/rmdir/access | `bare_fs_*` metadata over NPAF |
+| persistence | NPAF snapshot through the ATA block adapter |
+| process/thread control | `nansched` + `nanproc` + `nanthr`, SVC 0/1/9/10/13..28 |
+| C guests / TCC / SQLite | C compiled to NaN, still carrying `libc.c` VFS helpers |
+
+The remaining C POSIX surface is therefore the **guest-compatibility
+library**, not the running desktop or native shell.  It is listed in the
+deletion ledger above and is removed as each call is switched to the NaN
+service table.
+
 ## Remaining integration work
 
-1. Port the frozen KABI machine mechanics (SVC/SVCRET, trap frame, ports,
+1. Boot the NaN/0S desktop and Terminal as scheduled processes under
+   `nankernel` + `nansched` (today the GUI is the boot guest, not PID 1).
+2. Extend `nanthr` from one cooperative thread-owner process to per-process
+   thread state and per-thread preemption for AI workloads.
+3. Integrate per-CPU queues, IPIs and locks from the SMP prototype into
+   `nansched`; the S1 multicore prototype is separate from the product
+   scheduler until that lands.
+5. Port the frozen KABI machine mechanics (SVC/SVCRET, trap frame, ports,
    regions) from the S6 C model into `kan16.xa`, or run the equivalent NaN
    call table inside the unified guest.
-2. Replace libc POSIX calls with the NaN service table; delete each C body as
+6. Replace libc POSIX calls with the NaN service table; delete each C body as
    it is switched.  The metadata half is done; open/read/write/seek/close is
    done at the FS service level; stat/fstat/opendir/readdir/rename/link/
    symlink/chmod/utime/getcwd/chdir remain to wire.
-3. Package the Tcl/SQLite testfixture and the suite tree as a NaN cartridge
+7. Package the Tcl/SQLite testfixture and the suite tree as a NaN cartridge
    and load it through NaN ATA + nanfs under `build/nan0s.img`.
-4. Keep `n16i` as the self-hosted interpreter and differential validator.
-5. Close self-replication by regenerating `kboot0.xa`/`kan16.xa` from the
+8. Keep `n16i` as the self-hosted interpreter and differential validator.
+9. Close self-replication by regenerating `kboot0.xa`/`kan16.xa` from the
    NaN-written x86 emitter (bootstrap plan R4).
 
 ## Migration checklist
@@ -151,6 +177,9 @@ Raw-NaN gates, not oracle claims:
       via `nk_install_proc`.
 - [x] 512-process stress plus four cooperative threads (mutex/cond/join)
       under the kernel scheduler.
+- [ ] Desktop/Terminal as scheduled processes under `nansched` (PID 1).
+- [ ] Per-thread preemption and per-process nanthr state.
+- [ ] SMP per-CPU queues/ IPIs integrated into the product scheduler.
 - [ ] KABI machine mechanics (SVC/trap/ports/regions) in the NaN-coded
       64-bit core itself.
 - [ ] libc POSIX switched to NaN; C bodies deleted.
