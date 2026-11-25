@@ -1,18 +1,18 @@
 ; wide2.nas - remaining wide-string and multibyte helpers (raw NaN16).
 
-.equ W_WTOK 61870
+.equ W_WTOK 0xF074E
 
-.equ W_W2V 61871
-.equ W_W2A 61872
-.equ W_W2B 61873
-.equ W_W2C 61874
-.equ W_W2D 61875
-.equ W_W2E 61876
-.equ W_W2F 61877
-.equ W_W2G 61878
-.equ W_W2H 61879
-.equ W_W2I 61880
-.equ W_W2J 61881
+.equ W_W2V 0xF074F
+.equ W_W2A 0xF0750
+.equ W_W2B 0xF0751
+.equ W_W2C 0xF0752
+.equ W_W2D 0xF0753
+.equ W_W2E 0xF0754
+.equ W_W2F 0xF0755
+.equ W_W2G 0xF0756
+.equ W_W2H 0xF0757
+.equ W_W2I 0xF0758
+.equ W_W2J 0xF0759
 w2_load:
 MOVI r2,#SZ_32
 JMP @ni_loadv

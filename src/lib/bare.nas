@@ -74,11 +74,11 @@ JMP @ata_write28
 ; ---- path filesystem adapter (NPAF-backed) -------------------------
 ; Handles are opaque STTAB entry addresses.  The adapter works without a
 ; prior ncc_compile call by lazily initializing the C heap.
-.equ W_BFS_PATH 61790
-.equ W_BFS_MODE 61791
-.equ W_BFS_ENT  61792
-.equ W_BFS_TMP  61793
-.equ W_BFS_OFF  61794
+.equ W_BFS_PATH 0xF06FE
+.equ W_BFS_MODE 0xF06FF
+.equ W_BFS_ENT  0xF0700
+.equ W_BFS_TMP  0xF0701
+.equ W_BFS_OFF  0xF0702
 
 bare_fs_open:
 ST r15,r14,0

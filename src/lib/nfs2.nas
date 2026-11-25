@@ -28,21 +28,21 @@
 .equ NF_E_PATH   5
 .equ NF_E_SZ     16
 
-.equ W_NF_PATH 61330
-.equ W_NF_SRC  61331
-.equ W_NF_SIZE 61332
-.equ W_NF_ENT  61333
-.equ W_NF_DIR  61334
-.equ W_NF_IDX  61335
-.equ W_NF_DIRP 61336
-.equ W_NF_SCAN 61337
-.equ W_NF_COUNT 61338
-.equ W_NF_TMP2 61339
-.equ W_NF_OLD  61340
-.equ W_NF_NEW  61341
+.equ W_NF_PATH 0xF0532
+.equ W_NF_SRC  0xF0533
+.equ W_NF_SIZE 0xF0534
+.equ W_NF_ENT  0xF0535
+.equ W_NF_DIR  0xF0536
+.equ W_NF_IDX  0xF0537
+.equ W_NF_DIRP 0xF0538
+.equ W_NF_SCAN 0xF0539
+.equ W_NF_COUNT 0xF053A
+.equ W_NF_TMP2 0xF053B
+.equ W_NF_OLD  0xF053C
+.equ W_NF_NEW  0xF053D
 ; ATA sync scratch (these were previously implicit/global 0)
-.equ W_DK_N    61342
-.equ W_DK_I    61343
+.equ W_DK_N    0xF053E
+.equ W_DK_I    0xF053F
 .equ NFS_DISK_LBA 2048
 .equ NFS_HDR 11023000
 

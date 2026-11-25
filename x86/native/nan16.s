@@ -239,6 +239,18 @@ h_st:	movzwl %ax,%eax
 	mov $10,%ecx
 	call putw
 	jmp loop
+h_lds:	movzwl %ax,%eax
+	add $0xF0000,%eax
+	and $MASK,%eax
+	mov G+2(,%eax,8),%ebx
+	jmp st
+h_sts:	movzwl %ax,%eax
+	add $0xF0000,%eax
+	and $MASK,%eax
+	mov R(%ebp),%ebx
+	mov $10,%ecx
+	call putw
+	jmp loop
 h_stw:	mov %ecx,%eax
 	and $MASK,%eax
 	mov R(%ebp),%ebx
@@ -652,7 +664,7 @@ ktab:	.byte 0,27
 	.ascii "\\zxcvbnm,./"
 	.byte 0,42,0,32
 tbl:	.long h_bool,h_movi,h_movhi,h_add,h_sub,h_shl,h_shr,h_cmp,h_ld,h_st,h_jmp,h_call,h_ret,h_jmpr,badop,h_nop
-	.long h_vpoke,h_vpeek,h_key,h_tick,h_bswapm,h_putc,h_stw,h_ldn,h_dispq,h_dispset,h_key,h_nop,badop,badop,badop,badop
+	.long h_vpoke,h_vpeek,h_key,h_tick,h_bswapm,h_putc,h_stw,h_ldn,h_dispq,h_dispset,h_key,h_nop,h_lds,h_sts,badop,badop
 	.long h_mul,h_mulh,h_mulhu,h_div,h_mod,h_divu,h_modu,h_sar,h_cmps,h_addi,h_ldb,h_stb,h_callr,h_bcopy,h_bfill,h_nop
 	.long h_fadd,h_fsub,h_fmul,h_fdiv,h_fsqrt,h_fcmp,h_cvtif,h_cvtfi
 	.long badop,badop,h_fbinfo,h_vsync,h_fbcopy,h_fbfill,h_outb,h_inb,h_inw,h_outw,h_outsw,h_outl

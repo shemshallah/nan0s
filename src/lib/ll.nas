@@ -1,18 +1,18 @@
 ; ll.nas - 64-bit long long runtime (raw NaN16).
 ; Values live on the eval stack as low,high pairs (high on top).
-.equ W_LLD0 61580
-.equ W_LLD1 61581
-.equ W_LLB0 61582
-.equ W_LLB1 61583
-.equ W_LLQ0 61584
-.equ W_LLQ1 61585
-.equ W_LLR0 61586
-.equ W_LLR1 61587
-.equ W_LLS  61588
+.equ W_LLD0 0xF062C
+.equ W_LLD1 0xF062D
+.equ W_LLB0 0xF062E
+.equ W_LLB1 0xF062F
+.equ W_LLQ0 0xF0630
+.equ W_LLQ1 0xF0631
+.equ W_LLR0 0xF0632
+.equ W_LLR1 0xF0633
+.equ W_LLS  0xF0634
 .equ LLFMT  11020800
 .equ LLREV  11020900
-.equ W_LLF0 61590
-.equ W_LLF1 61591
+.equ W_LLF0 0xF0636
+.equ W_LLF1 0xF0637
 
 ; ll_push_pair: r1=lo r2=hi
 ll_push_pair:

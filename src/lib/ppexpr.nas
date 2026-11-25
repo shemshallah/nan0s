@@ -36,14 +36,14 @@
 .equ PPE_QMARK 23
 .equ PPE_COLON 24
 ; Scratch words (above the allocator/header scratch block)
-.equ W_PPE_KIND 61828
-.equ W_PPE_VAL  61829
-.equ W_PPE_OP   61830
-.equ W_PPE_HASH 61831
-.equ W_PPE_LEN  61832
-.equ W_PPE_T0   61833
-.equ W_PPE_T1   61834
-.equ W_PPE_T2   61835
+.equ W_PPE_KIND 0xF0724
+.equ W_PPE_VAL  0xF0725
+.equ W_PPE_OP   0xF0726
+.equ W_PPE_HASH 0xF0727
+.equ W_PPE_LEN  0xF0728
+.equ W_PPE_T0   0xF0729
+.equ W_PPE_T1   0xF072A
+.equ W_PPE_T2   0xF072B
 
 ; ppe_expr_eval: evaluate the rest of the directive line -> r1=0/1
 ppe_expr_eval:
