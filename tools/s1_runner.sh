@@ -46,8 +46,12 @@ if [ "${S1_QEMU_ACCEL:-}" = kvm ] && [ -e /dev/kvm ]; then
   QEMU_ACCEL="-enable-kvm -cpu host"
 fi
 if [ -n "${S1_QEMU_MEM:-}" ]; then QMEM=$S1_QEMU_MEM
-elif [ "$MEM_MB" -le 128 ]; then QMEM=256
-else QMEM=$((MEM_MB * 2)); fi
+else
+    # --mem is MiB of C payload; guest words are 8 bytes and hold four C
+    # bytes, so the machine needs twice that plus the kernel/BIOS/stack.
+    QMEM=$((MEM_MB * 2 + 128))
+    [ "$QMEM" -lt 256 ] && QMEM=256
+fi
 
 T="${TMPDIR:-/tmp}/s1_runner.$$"; mkdir -p "$T"; trap 'if [ "${S1_KEEP:-0}" = 1 ]; then echo "s1_runner: kept $T" >&2; else rm -rf "$T"; fi' EXIT INT TERM
 

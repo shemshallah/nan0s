@@ -172,6 +172,8 @@ done
 [ -f tools/cbare_fs_gate.sh ] && run cbare_fs sh tools/cbare_fs_gate.sh
 [ -f tools/cbare_sqlite_gate.sh ] && run cbare_sqlite sh tools/cbare_sqlite_gate.sh
 [ -f tools/nfs2_capacity_gate.sh ] && run nfs2_capacity sh tools/nfs2_capacity_gate.sh
+[ -f tools/nanfs_svc_gate.sh ] && run nanfs_svc sh tools/nanfs_svc_gate.sh
+[ -f tools/n16i_s1_gate.sh ] && run n16i_s1 sh tools/n16i_s1_gate.sh
 [ -f tools/ndbg_gui.sh ] && run ndbg_gui sh tools/ndbg_gui.sh
 
 if [ -f tools/mkall.sh ] && want mkall; then

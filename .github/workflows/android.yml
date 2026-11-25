@@ -68,6 +68,8 @@ jobs:
           sh tools/cbare_fs_gate.sh || exit 1
           sh tools/cbare_sqlite_gate.sh || exit 1
           sh tools/nfs2_capacity_gate.sh || exit 1
+          sh tools/nanfs_svc_gate.sh || exit 1
+          sh tools/n16i_s1_gate.sh || exit 1
           sh tools/ncc_lex.sh || exit 1
           sh tools/ncc_m1.sh || exit 1
           sh tools/ncc_m2.sh || exit 1
