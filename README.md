@@ -1,3 +1,9 @@
+> **Execution-model rule:** `aarch64/android/core/nan16.c` and the
+> `nan_cli` built from it are a host C **oracle**, not the product runtime.
+> The raw NaN/0S implementation is authoritative, and x86_64 S1 is the
+> product gate. Read [`DONT_USE_NAN16_C.md`](DONT_USE_NAN16_C.md) before
+> reporting a `nan_cli` result.
+
 <div align="center">
 
 <img src="assets/github/nan0s-banner.svg" alt="NaN/0S — double-ended NaN computing" width="100%">
