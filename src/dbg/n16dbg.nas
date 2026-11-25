@@ -156,11 +156,11 @@ cmd_l:
   LD r8,r0,@nd_hi
   MOVI r2,16
   SUB r8,r8,r2
-  MOVI r2,63
+  MOVI r2,4095
   BOOL.8 r8,r8,r2
   MOVI r9,0
 cl_loop:
-  MOVI r1,@nd_hist
+  LA r1,0x32000
   ADD r1,r1,r8
   LD r1,r1,0
   MOVI r2,4
@@ -168,7 +168,7 @@ cl_loop:
   MOVI r1,32
   PUTC r1
   ADD r8,r8,r13
-  MOVI r2,63
+  MOVI r2,4095
   BOOL.8 r8,r8,r2
   ADD r9,r9,r13
   MOVI r2,16

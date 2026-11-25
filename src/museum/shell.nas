@@ -814,7 +814,7 @@ dbg_status:
   LD r1,r0,@nd_status
   RET
 dbg_hist:
-  MOVI r1,@nd_hist
+  LA r1,0x32000
   LD r2,r0,@nd_hi
   RET
 dbg_stack:
