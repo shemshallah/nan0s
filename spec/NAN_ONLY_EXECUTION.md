@@ -112,6 +112,12 @@ Raw-NaN gates, not oracle claims:
   1024-slot scheduler, 73 killed, 512 waited/reaped, status sum 31672, then
   four cooperative nanthr threads with mutex/cond/join.  `SCHED STRESS PASS`,
   timer-preemption counter 711 on S1, C oracle == x86_64 S1.
+- `tools/nansmp_gate.sh` — the x86_64 S1 2-CPU and 4-CPU prototype:
+  ACPI MADT discovery, INIT-SIPI-SIPI AP startup, per-CPU LAPIC timers,
+  cross-CPU reschedule IPIs, NaN spinlock/CAS/fetch-add/fence, and the same
+  NaN workload on every core.  Exact transcripts on QEMU `-smp 2` and
+  `-smp 4`.  This is a separate prototype; `nansched` still uses one run
+  queue.
 - `tools/nancli64_gate.sh` — a 64-bit text command line (mkdir/write/cat/ls/
   stat/truncate/rm/rmdir/help/exit) compiled to NaN and running on x86_64
   S1; every filesystem operation goes through the NaN POSIX table.
@@ -149,9 +155,9 @@ service table.
    `nankernel` + `nansched` (today the GUI is the boot guest, not PID 1).
 2. Extend `nanthr` from one cooperative thread-owner process to per-process
    thread state and per-thread preemption for AI workloads.
-3. Integrate per-CPU queues, IPIs and locks from the SMP prototype into
-   `nansched`; the S1 multicore prototype is separate from the product
-   scheduler until that lands.
+3. Integrate per-CPU queues, IPIs and locks from the proven SMP prototype
+   (`src/lib/nansmp.nas`) into `nansched`; the 2/4-CPU gate passes, but the
+   product scheduler is still single-core until that wiring lands.
 5. Port the frozen KABI machine mechanics (SVC/SVCRET, trap frame, ports,
    regions) from the S6 C model into `kan16.xa`, or run the equivalent NaN
    call table inside the unified guest.
@@ -179,7 +185,8 @@ service table.
       under the kernel scheduler.
 - [ ] Desktop/Terminal as scheduled processes under `nansched` (PID 1).
 - [ ] Per-thread preemption and per-process nanthr state.
-- [ ] SMP per-CPU queues/ IPIs integrated into the product scheduler.
+- [x] SMP 2/4-CPU prototype (AP startup, per-CPU timers, IPIs, NaN atomics).
+- [ ] SMP per-CPU queues/IPIs integrated into the product scheduler.
 - [ ] KABI machine mechanics (SVC/trap/ports/regions) in the NaN-coded
       64-bit core itself.
 - [ ] libc POSIX switched to NaN; C bodies deleted.

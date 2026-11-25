@@ -42,8 +42,12 @@ are NaN/0S; the command line you type into the desktop Terminal is NANIX.
 The process subsystem is a 1024-slot kernel table with 32 priority levels,
 timer preemption, spawn/wait/kill/sleep, set/getpriority and count/limit SVCs.
 The stress gate runs 512 live processes and four cooperative threads with
-mutex/cond/join on x86_64 S1.  Threads are per-owner-process and cooperative;
-full per-thread preemption and SMP are the remaining scheduler work.
+mutex/cond/join on x86_64 S1.  A separate 2/4-CPU S1 prototype now brings APs
+online through APIC INIT-SIPI-SIPI, runs a LAPIC timer and reschedule IPI on
+each core, and executes the same NaN workload on all cores with NaN atomics.
+Threads are per-owner-process and cooperative, and the product scheduler is
+still single-core; per-thread preemption and per-CPU queue integration are
+the remaining scheduler work.
 
 **ndbg** — the NaN-native debugger in this repository. Design: [`spec/NANDBG.md`](spec/NANDBG.md) · Working guide: [`src/dbg/README.md`](src/dbg/README.md).
 
