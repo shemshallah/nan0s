@@ -691,7 +691,8 @@ entry = class 10, payload = pc:16 | op:8 | k:2 | flags:6
 ```
 
 A 4096-entry ring is 32 KB. The core packs `pc:16 | op:8 | k:2` at 0x32000,
-clears it on reset, and reserves the six flag bits; the rolling seal is next. On a fault, the monitor can print the last N with disassembly. This is the “show its own work” ethos applied to a crash:
+clears it on reset, and reserves the six flag bits. The monitor's `f` command
+computes an FNV-1a/32 over the full ring; an incremental rolling seal is next. On a fault, the monitor can print the last N with disassembly. This is the “show its own work” ethos applied to a crash:
 the machine can show the road to the fault, not only the hole.
 
 ### 7.7 Undo / time travel
@@ -1252,7 +1253,7 @@ cart seal valid.
 
 - [x] 8-word NDR with operands and seal; mirror pair storage.
 - [x] Flight-recorder ring (4096 packed pc/op/k entries) and log ring (256 records).
-- [ ] Rolling flight-recorder seal (flags reserved).
+- [~] Full-ring flight seal (`f`); incremental rolling seal next.
 - [x] Bounded scalar undo ring (32 records, two writes each); `undo [n]`.
 - [x] Redo ring (32 records) with post-step state and write values; `redo [n]`.
 - [x] Cart checkpoint/restore: registers, PC, condition, call depth, 64K arena.

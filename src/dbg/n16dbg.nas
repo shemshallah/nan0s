@@ -72,6 +72,9 @@ mon_loop:
   MOVI r2,118
   CMP r1,r2
   JMP[EQ] @cmd_v
+  MOVI r2,102
+  CMP r1,r2
+  JMP[EQ] @cmd_f
   MOVI r2,110
   CMP r1,r2
   JMP[EQ] @cmd_n
@@ -203,6 +206,31 @@ ct_loop:
 ct_empty:
   MOVI r1,@s_empty
   CALL @nd_puts
+  JMP @mon_loop
+
+cmd_f:
+  MOVI r3,0x9DC5
+  MOVHI r3,0x811C
+  MOVI r4,0x0193
+  MOVHI r4,0x0100
+  LA r1,0x32000
+  MOVI r2,4096
+cf_l:
+  LD r5,r1,0
+  BOOL.6 r3,r3,r5
+  MUL r3,r3,r4
+  ADDI r1,r1,1
+  SUB r2,r2,r13
+  CMP r2,r0
+  JMP[NE] @cf_l
+  ST r3,r0,@hseal_v
+  MOVI r1,@s_hseal
+  CALL @nd_puts
+  LD r1,r0,@hseal_v
+  MOVI r2,8
+  CALL @nd_puthex
+  MOVI r1,10
+  PUTC r1
   JMP @mon_loop
 
 cmd_v:
@@ -469,6 +497,10 @@ mr_lnk:
 
 s_ndr:
 .str "NDR "
+s_hseal:
+.str "HSEAL "
+hseal_v:
+.word 0
 s_mok:
 .str "MIRROR OK\n"
 s_mbad:
@@ -476,7 +508,7 @@ s_mbad:
 ndr_scratch:
 .word 0
 s_banner:
-.str "NANDBG MONITOR - s step  r run  b break  g goto  w watch  l hist  t stack  m types  p regs  d dis  x dump  n ndr  v mirror  q quit\n"
+.str "NANDBG MONITOR - s step  r run  b break  g goto  w watch  l hist  t stack  m types  p regs  d dis  x dump  n ndr  v mirror  f seal  q quit\n"
 s_prompt:
 .str "> "
 s_bp:
