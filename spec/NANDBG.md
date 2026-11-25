@@ -395,8 +395,9 @@ in the register words.
 
 The proof implements w0–w3; that is enough to show the type and the exact
 faulting word. `core.nas` includes `ndr.nas`, which adds w4–w6 from the decoded
-`a`/`b`/`d` registers and writes the FNV-1a/32 seal in w7. The log ring now
-stores sixteen eight-word NDRs at 0x31000; the mirrored twin pairs are next.
+`a`/`b`/`d` registers and writes the FNV-1a/32 seal in w7. The log ring stores
+sixteen eight-word NDRs at 0x31000; each record is mirrored at 0x31100 with
+BSWAPM, and the monitor's `v` command verifies the newest pair.
 
 ### 4.3 The mirror pair
 
@@ -989,7 +990,7 @@ the store is never modified, so its seal remains valid. The demo target at
 8100 remains for `reset`.
 
 The second CLI accepts `carts load <id> step next finish run regs mem [addr]
-log ndr hist stack types screen serial dis [addr] undo [n] redo [n] break bp bpts
+log hist stack types screen serial dis [addr] undo [n] redo [n] break bp bpts
 watch wp wpts setr setm setw setc goto checkpoint restore reset help quit`.
 `break` is a fast single breakpoint at PC; `bp <hex>`/`wp <hex>` toggle table
 entries and `bpts`/`wpts` list them. `setr <n> <hex>`, `setm <addr> <hex>`, `setw <addr> <word> <class>`,
