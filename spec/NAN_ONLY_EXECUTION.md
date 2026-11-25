@@ -26,8 +26,11 @@ tools/mkall.sh  ->  build/nan0s.img
 ```
 
 `sh tools/qgate.sh` boots that image on bare x86 (QEMU) and requires the
-`NaN/0S` banner on COM1.  Acceptance claims must come from this image or the
-bare S1 machine, never from `nan_cli` alone.
+`NaN/0S` banner on COM1.  The upgraded machine target is **x86_64 S1**
+(`tools/s1_runner.sh`); `tools/nan0s_guest_gate.sh` runs a NaN guest on it by
+default and keeps `NAN0S_GUEST_ARCH=32` as legacy parity for the
+`kboot0+kan16` image.  Acceptance claims must come from the x86_64 S1 machine
+or the unified image, never from `nan_cli` alone.
 
 ## Layers
 
@@ -75,6 +78,9 @@ Raw-NaN gates, not oracle claims:
   truncate are NaN services over NPAF, on S1.
 - `tools/n16i_s1_gate.sh` — the NaN-coded n16i interpreter runs the same
   guest as the native machine with byte-identical output on S1.
+- `tools/nan0s_guest_gate.sh` — a NaN guest (POSIX metadata/FS) runs on the
+  x86_64 S1 machine by default and on the 32-bit `kboot0+kan16` image in
+  `NAN0S_GUEST_ARCH=32` parity mode.
 
 ## Remaining integration work
 
