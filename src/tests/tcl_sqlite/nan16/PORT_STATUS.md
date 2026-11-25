@@ -49,6 +49,9 @@ finish and triage the later test/ files.
   `b12183abe665c4f99949c9873c205bb69045d4af36463a98e06cf2fd9ac34a8b`)
   is **1 error out of 39**: only `symlink-1.3`, which builds a loop with
   `exec ln -s` and therefore needs a guest `exec`/process spawn.
+  The same `sym-fix.bin` also passes official `backup2.test` **0/16** and
+  `ext/recover/recoverpgsz.test` **0/89**, so the symlink path changes did
+  not regress recover/backup.
 - `ext/recover` currently reports 42 failures in the aggregate.  Traced so
   far: official `PRAGMA page_size` is 1024, the copied page-2 header is a
   valid 0x0D table leaf at 1024 (`recoverIsValidPage` semantics reproduced in
