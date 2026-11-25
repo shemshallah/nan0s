@@ -985,9 +985,9 @@ static uint32_t guest_load_image(void) {
       if (ata_read_sector(i, (uint8_t *)MEM + (size_t)i * 512u)) return 0;
     return words;
   }
-  if (bytes > 0xC0000u) return 0;
-  /* Small path: the boot fixture staged guest bytes at physical 0x40000
-     (0x40000..0xFFFFF, 768 KiB max).  Copy them into guest word memory. */
+  if (bytes > 0x60000u) return 0;
+  /* Small path: the boot fixture staged guest bytes at physical 0x40000.
+     The safe window ends at the VGA aperture 0xA0000 (384 KiB). */
   const uint8_t *src = (const uint8_t *)0x40000u;
   for (uint32_t i = 0; i < words; i++) {
     uint64_t w = 0;

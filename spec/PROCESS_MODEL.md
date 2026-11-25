@@ -64,6 +64,8 @@ region table.
 - `tools/kabi_sched_gate.sh` - two processes with separate code/data regions,
   per-process `LDS`/`STS` scratch windows, and trap frames, preempted by the
   instruction timer, exact `AAAABBBBAABB` on the C oracle and x86_64 S1.
+- `tools/kabi_spawn_gate.sh` - process table, `spawn`/`wait`/`exit`, and
+  round-robin scheduling; exact `12OK` on both engines.
 - `tools/s1_guest_gate.sh` - flat-cartridge parity for the implemented S1
   subset, including the host-test NFS2 cartridge.
 
@@ -72,9 +74,14 @@ region table.
 - `kabi_sched_demo.nas` proves timer preemption with two processes by saving
   one trap frame per process and swapping the frame (0x4E01), region
   (0x4E04) and data-window (0x4E07) ports. Each process writes and re-reads
-  offset 4 of its own 64K scratch window after preemption. A production
-  scheduler still needs a ready queue, priority or fair-share policy,
-  `spawn`/`wait`, and per-process TCB bookkeeping.
+  offset 4 of its own 64K scratch window after preemption.
+- `kabi_spawn_demo.nas` adds a four-slot process table. `SVC 9` allocates a
+  slot from an eight-word descriptor, writes the child frame and three-region
+  table, and returns a pid. `SVC 10` blocks the parent until the child exits;
+  `SVC 1` stores the status and wakes waiters. The scheduler scans for the
+  next runnable slot and halts when none remain.
+- Still missing for a production scheduler: priority/fair-share policy,
+  blocking I/O, sleep/wake timers, signals, and a filesystem-backed loader.
 - The `LDS`/`STS` window base is now control port `0x4E07` (default
   `0xF0000`). A kernel can therefore point each process at its own mapped
   64K scratch window while `nmk` keeps emitting window-relative offsets.
