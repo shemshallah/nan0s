@@ -40,11 +40,19 @@ adapters can patch table words at boot without changing the C ABI.
 | 12 | `fs_close(h)` | close |
 | 13 | `fs_remove(path)` | remove |
 | 14 | `fs_rename(old, new)` | rename |
+| 17 | `fs_stat(path)` | size, directory flag, found |
+| 18 | `fs_readdir(dir, index)` | entry/name/size/dir for the next immediate child |
 | 15 | `entropy_u32()` | random word for `rand`/hash seeds |
 | 16 | `halt(code)` | stop the guest |
 
 Timers (including `alarm`/`SIGALRM`) are built on `tick_ms` in guest code; the
 interface itself does not deliver signals.
+
+NPAF/NFS2 exposes `nfs_stat`, `nfs_is_dir`, `nfs_readdir`, `nfs_rename` and
+`nfs_truncate` in `src/lib/nfs2.nas`; `tools/nfs2_extra_gate.sh` checks them
+on the x86_64 runner or the explicitly opted-in C-core oracle.  Paths are byte
+strings; `nfs_write` takes a source **word** pointer.  `nfs_truncate` does not
+yet reclaim arena space, and `nfs_rename` does not rewrite directory children.
 
 ## Mapping from the current library
 

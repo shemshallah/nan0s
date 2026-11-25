@@ -1046,6 +1046,11 @@ ST_FUNC void vset_VT_CMP(int op)
     vtop->cmp_op = op;
     vtop->jfalse = 0;
     vtop->jtrue = 0;
+#ifdef TCC_TARGET_NAN16
+    /* No deferred operands: an immediate CMP/FCMP already set the flags.
+       nan_gen_cmp() overwrites this with the register pair it saved. */
+    vtop->cmp_r = 0xFFFF;
+#endif
 }
 
 /* called once before asking generators to load VT_CMP to a register */
@@ -1389,7 +1394,7 @@ static Sym *external_sym(int v, CType *type, int r, AttributeDef *ad)
         /* push forward reference */
         s = global_identifier_push(v, type->t, 0);
         s->r |= r;
-        s->a = ad->a;
+        memcpy(&s->a, &ad->a, sizeof(s->a));
         s->asm_label = ad->asm_label;
         s->type.ref = type->ref;
     } else {
@@ -1602,9 +1607,18 @@ static void move_reg(int r, int s, int t)
 ST_FUNC void gaddrof(void)
 {
     vtop->r &= ~VT_LVAL;
-    /* tricky: if saved lvalue, then we can go back to lvalue */
-    if ((vtop->r & VT_VALMASK) == VT_LLOCAL)
-        vtop->r = (vtop->r & ~VT_VALMASK) | VT_LOCAL | VT_LVAL;
+    /* A saved lvalue (VT_LLOCAL) holds the address of the object in a
+       stack slot.  Materialise that address in a register.  Switching to
+       VT_LOCAL|VT_LVAL here would make the backend treat the member
+       offset in c.i as a stack slot. */
+    if ((vtop->r & VT_VALMASK) == VT_LLOCAL) {
+        CType ptr_type;
+        ptr_type.t = VT_PTR;
+        ptr_type.ref = NULL;
+        vtop->type = ptr_type;
+        gv(RC_INT);
+        vtop->c.i = 0;
+    }
 }
 
 #ifdef CONFIG_TCC_BCHECK
@@ -1999,6 +2013,8 @@ ST_FUNC int gv(int rc)
                     vset_VT_JMP();
                 /* one register type load */
                 load(r, vtop);
+                if ((vtop->type.t & VT_BTYPE) == VT_PTR)
+                    vtop->c.i = 0;  /* pointer value is in the register */
             }
         }
         vtop->r = r;
@@ -4495,7 +4511,12 @@ static void struct_layout(CType *type, AttributeDef *ad)
         size = type_size(&f->type, &align);
 
         if (bit_pos + bit_size <= size * 8 && f->c + size <= c
-#ifdef TCC_TARGET_ARM
+#if defined TCC_TARGET_ARM || defined TCC_TARGET_NAN16
+            /* These targets cannot perform unaligned word accesses.
+               A bit-field run may start at any byte offset (for example
+               after two u8 fields), so only use the declared type when
+               its container is naturally aligned.  Otherwise select a
+               smaller aligned container or fall back to byte access. */
             && !(f->c & (align - 1))
 #endif
             )
@@ -4525,7 +4546,8 @@ static void struct_layout(CType *type, AttributeDef *ad)
         }
 
         if (px + bit_size <= s * 8 && cx + s <= c
-#ifdef TCC_TARGET_ARM
+#if defined TCC_TARGET_ARM || defined TCC_TARGET_NAN16
+            /* The replacement container must be naturally aligned too. */
             && !(cx & (align - 1))
 #endif
             ) {
@@ -4796,7 +4818,7 @@ do_decl:
 		    }
                     if (v) {
                         ss = sym_push(v | SYM_FIELD, &type1, 0, 0);
-                        ss->a = ad1.a;
+                        memcpy(&ss->a, &ad1.a, sizeof(ss->a));
                         *ps = ss;
                         ps = &ss->next;
                     }
@@ -5265,7 +5287,7 @@ static int post_type(CType *type, AttributeDef *ad, int storage, int td)
         ad->f.func_args = arg_size;
         ad->f.func_type = l;
         sr->type = *type, s = sr;
-        s->a = ad->a;
+        memcpy(&s->a, &ad->a, sizeof(s->a));
         s->f = ad->f;
         s->next = first;
         type->t = VT_FUNC;
@@ -6373,6 +6395,8 @@ special_math_val:
             vtop->type = char_pointer_type; /* change type to 'char *' */
             vpushi(cumofs);
             gen_op('+');
+            if ((vtop->r & VT_VALMASK) < VT_CONST)
+                vtop->c.i = 0;          /* field address is in a register */
             /* change type to field type, and set to lvalue */
             vtop->type = s->type;
             if (qualifiers)
@@ -7817,9 +7841,17 @@ static void parse_init_elem(int expr_type)
 #if 1
 static void init_assert(init_params *p, int offset)
 {
-    if (p->sec ? !NODATA_WANTED && offset > p->sec->data_offset
-               : !nocode_wanted && offset > p->local_offset)
+    int bad = 0;
+    if (p->sec) {
+        if (!NODATA_WANTED && offset > p->sec->data_offset)
+            bad = 1;
+    } else {
+        if (!nocode_wanted && offset > p->local_offset)
+            bad = 1;
+    }
+    if (bad) {
         tcc_internal_error("initializer overflow");
+    }
 }
 #else
 #define init_assert(sec, offset)
@@ -8630,7 +8662,7 @@ static void decl_initializer_alloc(CType *type, AttributeDef *ad, int r,
 		cur_scope->cl.s = cls;
 	    }
 
-            sym->a = ad->a;
+            memcpy(&sym->a, &ad->a, sizeof(sym->a));
         } else {
             /* push local reference */
             vset(type, r, addr);
@@ -9167,7 +9199,7 @@ static int decl(int l)
                     } else {
                         sym = sym_push(v, &type, 0, 0);
                     }
-                    sym->a = ad.a;
+                    memcpy(&sym->a, &ad.a, sizeof(sym->a));
                     if ((type.t & VT_BTYPE) == VT_FUNC)
                       merge_funcattr(&sym->type.ref->f, &ad.f);
                     if (debug_modes)

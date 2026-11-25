@@ -6,7 +6,40 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <signal.h>
+#include <time.h>
 
+static volatile sig_atomic_t stop_requested;
+static volatile sig_atomic_t dump_requested;
+static void request_stop(int sig) { (void)sig; stop_requested = 1; }
+static void request_dump(int sig) { (void)sig; dump_requested = 1; }
+static double monotonic_seconds(void) {
+  struct timespec ts;
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  return (double)ts.tv_sec + (double)ts.tv_nsec / 1e9;
+}
+static int write_state_file(const nan_vm *v, const char *path) {
+  size_t len = nan_state_size(v);
+  uint8_t *buf;
+  char *tmp;
+  FILE *f;
+  int ok = 0;
+  if (!len) return -1;
+  buf = (uint8_t *)malloc(len);
+  tmp = (char *)malloc(strlen(path) + 5);
+  if (!buf || !tmp) { free(buf); free(tmp); return -1; }
+  if (nan_save_state(v, buf, len) != len) goto done;
+  sprintf(tmp, "%s.tmp", path);
+  f = fopen(tmp, "wb");
+  if (!f) goto done;
+  if (fwrite(buf, 1, len, f) == len) { fflush(f); ok = 1; }
+  if (fclose(f) != 0) ok = 0;
+  if (ok && rename(tmp, path) != 0) ok = 0;
+  if (!ok) remove(tmp);
+done:
+  free(buf); free(tmp);
+  return ok ? 0 : -1;
+}
 static uint8_t *slurp(const char *p, size_t *n) {
   FILE *f = fopen(p, "rb"); if (!f) return NULL;
   fseek(f, 0, SEEK_END); long l = ftell(f); fseek(f, 0, SEEK_SET);
@@ -56,8 +89,29 @@ static uint32_t words_for_mb(unsigned long mb) {
   while ((unsigned long long)p < want && p < 0x10000000u) p <<= 1;
   return p;
 }
+/* Guest console control block written by the NaN16 libc:
+   0x03EFF000 stdout ptr, +4 len, +8 stderr ptr, +12 len. */
+static void dump_guest_console(nan_vm *v, uint32_t ctl, const char *path)
+{
+  uint32_t ptr, len;
+  uint8_t *buf;
+  FILE *f;
+  if (!path) return;
+  ptr = (uint32_t)(nan_word(v, ctl >> 2) >> 16);
+  len = (uint32_t)(nan_word(v, (ctl + 4) >> 2) >> 16);
+  if (!ptr || !len || len > (64u << 20)) return;
+  buf = (uint8_t *)malloc(len);
+  if (!buf) return;
+  if (nan_read_bytes(v, ptr, buf, len) == 0) {
+    f = fopen(path, "wb");
+    if (f) { fwrite(buf, 1, len, f); fclose(f); }
+    else perror(path);
+  }
+  free(buf);
+}
+
 int main(int argc, char **argv) {
-  const char *vga = NULL, *img = NULL, *keys = NULL, *ppm = NULL, *disk = NULL, *peek = NULL, *corpus = NULL, *candidate_out = NULL; uint64_t steps = 50000000ull, per_ms = 1000;
+  const char *vga = NULL, *img = NULL, *keys = NULL, *ppm = NULL, *disk = NULL, *peek = NULL, *dump_bytes = NULL, *state_out = NULL, *corpus = NULL, *candidate_out = NULL, *guest_stdout = NULL, *guest_stderr = NULL, *guest_script = NULL, *checkpoint = NULL; uint64_t steps = 50000000ull, per_ms = 1000; int endless = 0, checkpoint_every = 60;
   unsigned long mem_mb = 0;
   int train_mode = 0;
   int dump_text = 0, serial = 0, trim = 1;
@@ -67,17 +121,28 @@ int main(int argc, char **argv) {
     else if (!strcmp(argv[i], "--corpus") && i + 1 < argc) { train_mode = 1; corpus = argv[++i]; }
     else if (!strcmp(argv[i], "--candidate-out") && i + 1 < argc) candidate_out = argv[++i];
     else if (!strcmp(argv[i], "--mem") && i + 1 < argc) mem_mb = strtoul(argv[++i], NULL, 0);
-    else if (!strcmp(argv[i], "--steps") && i + 1 < argc) steps = strtoull(argv[++i], 0, 0);
+    else if (!strcmp(argv[i], "--steps") && i + 1 < argc) {
+      const char *a = argv[++i];
+      if (!strcmp(a, "unlimited") || !strcmp(a, "none") || !strcmp(a, "0")) endless = 1;
+      else steps = strtoull(a, 0, 0);
+    }
+    else if (!strcmp(argv[i], "--checkpoint") && i + 1 < argc) checkpoint = argv[++i];
+    else if (!strcmp(argv[i], "--checkpoint-every") && i + 1 < argc) checkpoint_every = atoi(argv[++i]);
     else if (!strcmp(argv[i], "--keys") && i + 1 < argc) keys = argv[++i];
     else if (!strcmp(argv[i], "--dump-ppm") && i + 1 < argc) ppm = argv[++i];
     else if (!strcmp(argv[i], "--dump-vga") && i + 1 < argc) vga = argv[++i];
     else if (!strcmp(argv[i], "--disk") && i + 1 < argc) disk = argv[++i];
     else if (!strcmp(argv[i], "--peek") && i + 1 < argc) peek = argv[++i];
+    else if (!strcmp(argv[i], "--dump-bytes") && i + 1 < argc) dump_bytes = argv[++i];
+    else if (!strcmp(argv[i], "--guest-stdout") && i + 1 < argc) guest_stdout = argv[++i];
+    else if (!strcmp(argv[i], "--guest-stderr") && i + 1 < argc) guest_stderr = argv[++i];
+    else if (!strcmp(argv[i], "--guest-script") && i + 1 < argc) guest_script = argv[++i];
+    else if (!strcmp(argv[i], "--state-out") && i + 1 < argc) state_out = argv[++i];
     else if (!strcmp(argv[i], "--clock") && i + 1 < argc) { const char *c = argv[++i]; if (!strncmp(c, "steps:", 6)) per_ms = strtoull(c + 6, 0, 0); }
     else if (!strcmp(argv[i], "--dump-text")) dump_text = 1;
     else if (!strcmp(argv[i], "--no-trim")) trim = 0;
     else if (!strcmp(argv[i], "--serial")) serial = 1;
-    else { fprintf(stderr, "usage: nan_cli [--img f] [--mem MB] [--nannet-train [corpus.txt]] [--candidate-out state.nan1] [--steps N] [--keys \"1,ESC,~,@5000000\"] [--serial] [--dump-text] [--dump-ppm f] [--peek ADDR[:LEN]] [--disk f] [--clock steps:N]\n"); return 2; }
+    else { fprintf(stderr, "usage: nan_cli [--img f] [--mem MB] [--nannet-train [corpus.txt]] [--candidate-out state.nan1] [--state-out state.nan1] [--steps N] [--keys \"1,ESC,~,@5000000\"] [--serial] [--dump-text] [--dump-ppm f] [--peek ADDR[:LEN]] [--dump-bytes ADDR:LEN:FILE] [--guest-stdout FILE] [--guest-stderr FILE] [--guest-script PATH] [--checkpoint FILE] [--checkpoint-every S] [--disk f] [--clock steps:N]\n"); return 2; }
   }
   if (!img && !train_mode) { fprintf(stderr, "need --img or --nannet-train\n"); return 2; }
   size_t len = 0;
@@ -128,13 +193,47 @@ int main(int argc, char **argv) {
   }
   if (train_mode) serial = 1;
   if (disk) { int fd = open(disk, O_RDWR); struct stat st; if (fd < 0 || fstat(fd, &st)) { perror(disk); return 1; } nan_attach_disk_fd(v, fd, (size_t)st.st_size); }
+  if (guest_script) {
+    uint32_t n = (uint32_t)strlen(guest_script);
+    if (n > 255u) { fprintf(stderr, "guest script path too long\n"); return 2; }
+    nan_write_bytes(v, 0x03EFF020u, (const uint8_t *)&n, 4);
+    nan_write_bytes(v, 0x03EFF024u, (const uint8_t *)guest_script, n);
+  }
   char *kcopy = keys ? strdup(keys) : NULL; char *save = NULL; char *tok = kcopy ? strtok_r(kcopy, ",", &save) : NULL;
-  uint64_t pause_until = 0; int rc = NAN_BUDGET;
-  while (nan_steps(v) < steps) {
+  uint64_t pause_until = 0; int rc = NAN_BUDGET, interrupted = 0;
+  double next_checkpoint = monotonic_seconds() + (checkpoint_every > 0 ? checkpoint_every : 0);
+  signal(SIGINT, request_stop);
+  signal(SIGTERM, request_stop);
+  signal(SIGUSR1, request_dump);
+#define PUBLISH_TIME() do { \
+    uint32_t ms_ = (uint32_t)(nan_steps(v) / per_ms); \
+    uint64_t st_ = nan_steps(v); \
+    uint32_t lo_ = (uint32_t)st_, hi_ = (uint32_t)(st_ >> 32); \
+    nan_write_bytes(v, 0x03EFF010u, (const uint8_t *)&ms_, 4); \
+    nan_write_bytes(v, 0x03EFF014u, (const uint8_t *)&lo_, 4); \
+    nan_write_bytes(v, 0x03EFF018u, (const uint8_t *)&hi_, 4); \
+  } while (0)
+  while (endless || nan_steps(v) < steps) {
     nan_set_time_ms(v, (uint32_t)(nan_steps(v) / per_ms));
-    uint64_t left = steps - nan_steps(v); uint32_t slice = left > 100000 ? 100000 : (uint32_t)left;
+    PUBLISH_TIME();
+    uint64_t left = endless ? 100000ull : steps - nan_steps(v);
+    uint32_t slice = left > 100000 ? 100000 : (uint32_t)left;
     rc = nan_run(v, slice); drain(v, serial);
     if (rc == NAN_HALTED) break;
+    if (dump_requested) {
+      dump_guest_console(v, 0x03EFF000u, guest_stdout);
+      dump_guest_console(v, 0x03EFF008u, guest_stderr);
+      dump_requested = 0;
+    }
+    if (stop_requested) { interrupted = 1; break; }
+    if (checkpoint && checkpoint_every > 0 && monotonic_seconds() >= next_checkpoint) {
+      if (write_state_file(v, checkpoint) == 0)
+        fprintf(stderr, "[nan_cli] checkpoint %s at %llu steps\n", checkpoint,
+                (unsigned long long)nan_steps(v));
+      else
+        fprintf(stderr, "[nan_cli] checkpoint %s failed\n", checkpoint);
+      next_checkpoint = monotonic_seconds() + checkpoint_every;
+    }
     int can_key = nan_steps(v) >= pause_until || rc == NAN_WAIT_KEY;
     if (can_key && tok) {
       if (tok[0] == '@') { pause_until = nan_steps(v) + strtoull(tok + 1, 0, 0); tok = strtok_r(NULL, ",", &save); continue; }
@@ -144,6 +243,18 @@ int main(int argc, char **argv) {
     if (rc == NAN_WAIT_KEY && !tok) break;
   }
   drain(v, serial);
+  if (interrupted && checkpoint) {
+    if (write_state_file(v, checkpoint) == 0)
+      fprintf(stderr, "[nan_cli] interrupt checkpoint %s at %llu steps\n",
+              checkpoint, (unsigned long long)nan_steps(v));
+    else
+      fprintf(stderr, "[nan_cli] interrupt checkpoint failed\n");
+    dump_guest_console(v, 0x03EFF000u, guest_stdout);
+    dump_guest_console(v, 0x03EFF008u, guest_stderr);
+    fprintf(stderr, "[nan_cli] stopped by signal at %llu steps\n",
+            (unsigned long long)nan_steps(v));
+    return 75;
+  }
   if (serial && isatty(1)) fputc('\n', stdout);
   if (dump_text) { static char b[16384]; nan_text_utf8(v, b, sizeof b, trim); fputs(b, stdout); }
   if (peek) { /* --peek ADDR[:LEN][,ADDR[:LEN]...]: hex-dump guest words (gate/debug) */
@@ -153,6 +264,23 @@ int main(int argc, char **argv) {
       if (c) nw = strtoul(c + 1, NULL, 0);
       for (unsigned long i = 0; i < nw; i++) printf("%08X\n", (uint32_t)(nan_word(v, (uint32_t)(a0 + i)) >> 16));
     }
+    free(spec);
+  }
+  dump_guest_console(v, 0x03EFF000u, guest_stdout);
+  dump_guest_console(v, 0x03EFF008u, guest_stderr);
+  if (dump_bytes) { /* --dump-bytes ADDR:LEN:FILE [--guest-stdout FILE] [--guest-stderr FILE]: copy guest payload bytes */
+    char *spec = strdup(dump_bytes), *sv = NULL;
+    char *a = strtok_r(spec, ":", &sv), *n = strtok_r(NULL, ":", &sv), *fn = strtok_r(NULL, ":", &sv);
+    if (a && n && fn) {
+      unsigned long addr = strtoul(a, NULL, 0), len2 = strtoul(n, NULL, 0);
+      uint8_t *buf = malloc(len2 ? len2 : 1);
+      if (buf && nan_read_bytes(v, (uint32_t)addr, buf, len2) == 0) {
+        FILE *f = fopen(fn, "wb");
+        if (f) { fwrite(buf, 1, len2, f); fclose(f); }
+        else perror(fn);
+      } else fprintf(stderr, "dump-bytes: read failed\n");
+      free(buf);
+    } else fprintf(stderr, "dump-bytes: expected ADDR:LEN:FILE\n");
     free(spec);
   }
   if (vga) { FILE *f = fopen(vga, "wb"); if (f) { for (int i = 0; i < 2000; i++) { uint16_t c = nan_text_cell(v, i); fputc(c & 255, f); fputc(c >> 8, f); } fclose(f); } }
@@ -167,6 +295,8 @@ int main(int argc, char **argv) {
       if (f) fclose(f); free(px);
     } else fprintf(stderr, "(text mode: no PPM written)\n");
   }
+  if (state_out && write_state_file(v, state_out) != 0)
+    fprintf(stderr, "could not serialize VM state to %s\n", state_out);
   fprintf(stderr, "[nan_cli] %s: %llu steps, rc=%d, pc=%u, trap='%s'\n", kind, (unsigned long long)nan_steps(v), rc, nan_pc(v), nan_trap_text(v));
   int train_ok = !train_mode || (rc == NAN_HALTED && (uint32_t)(nan_word(v, 8449u) >> 16) != 0);
   if (candidate_out) {

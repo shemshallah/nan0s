@@ -44,7 +44,7 @@ Trap text: "!" + 'G'|'O' + uppercase hex of (pc after the fetch increment), min 
 30 FADD 31 FSUB 32 FMUL 33 FDIV 34 FSQRT 35 FCMP 36 CVTIF 37 CVTFI (32-bit IEEE float in r[]). All FP ops set k=0 except FCMP/CVTFI (below).
 38 JMPF pc=payload&0xFFFFFF  39 CALLF (r15=pc first)
 3A FBINFO r[d]=FBW<<16|FBH  3B VSYNC  3C FBCOPY(count r[d], dst A, src B)  3D FBFILL(count r[d], start A, colour B&255)
-3E OUTB(port A&0xFFFF, val r[d])  3F INB  40 INW  41 OUTW  42 OUTSW(port A, src word index B, count r[d]; low16 of each payload, B not masked in x86)  43 OUTL (no INL exists)
+3E OUTB(port A&0xFFFF, val r[d])  3F INB  40 INW  41 OUTW  42 OUTSW(port A, src word index B, count r[d]; low16 of each payload, B not masked in x86)  43 OUTL  4D INL (kernel ABI, 4-byte port read)
 44 CPUID(leaf A, subleaf 0; r[d] = reg B&3 of EAX,EBX,ECX,EDX)  45 RDTSC (r[d] = A==0 ? low32 : high32)
 4A DP4B (four signed i8 lanes in A and B; r[d] = exact int32 dot; k Z=result==0, L=0)
 4C VDP4B4 d,a,b (Q4 x Q8: Va lane = 8 signed i4, low nibble first; activations
@@ -58,7 +58,8 @@ lowers VDP4B and the packed VADD8/VSUB8/VADD32/VSUB32/VMUL32 family with
 a runtime-selected AVX2 (256-bit) or SSE2 path, and VLOAD/VSTORE with an aligned
 SSE2 gather/scatter fast path plus an exact byte-loop fallback.  The scalar
 handlers remain as the fallback tier; AVX2/AVX-512/NEON/RVV are next.
-4B-4F and 60-7F are reserved for wider (1024/2048-bit) and fp8/int4 forms,
+4E/4F are the kernel ABI slots (SVC imm, SVCRET; spec/KERNEL_ABI.md) and
+4D is INL. 4B-4C and 60-7F remain reserved for wider (1024/2048-bit) and fp8/int4 forms,
 so old cartridges do not move when the abstract width grows.
 46 FEXP d,a = expf(A)  47 FTANH d,a = tanhf(A)  48 FLOG d,a = logf(A)
 Plain ops leave flags alone: MOVI MOVHI LD ST LDN STW KEY KEYQ TICK VPEEK VPOKE BSWAPM PUTC DISPQ FBINFO INB... BOOL/ADD/SUB/shifts/CMP*/MUL*/DIV*/ADDI set flags.

@@ -405,10 +405,22 @@ relocate_sections(s1);                       /* tccelf.c:1198 -> your relocate()
   `put_elf_reloca` rejects non-zero addends (`tccelf.c:815-816`); always
   encode addends in the emitted word instead.
 
-Hard limits to enforce at relocation time: imm16 → target word index
-`< 0x10000`, i.e. cartridge `<= 64Ki words = 512 KiB`; a 32-bit
-`LD/ST` base must be materialized with `MOVI`/`MOVHI`, since `nan16_ld` /
-`nan16_st` take only a 16-bit offset (`uint16_t imm` in `nan16-enc.h`).
+The implemented NaN16 backend does not route compiler-emitted branches and
+direct calls through ELF `R_NAN16_WORD`/`R_DATA_*`.  It records them in its
+own `NanReloc`/`NanAddrReloc` tables in `nan16-link.c` and patches the flat
+text directly; the `relocate` hook remains for the encoder/object path.
+Address relocations are resolved by stored symbol index when its name still
+matches, then by the target section/value captured at emission (local string
+literals can have duplicate names and moving symtab indices), then by name.
+
+Hard limits: the compiler emits `0x38` far branches with a 24-bit absolute
+word target, so branch targets must be `< 0x1000000`; the linker patches
+bytes 2..4 and the entry-prelude shift also uses 24 bits.  Direct calls
+materialize a 32-bit address with `MOVI`/`MOVHI` + `0x2C CALLR`.  The legacy
+16-bit `0x0A`/`0x0B` forms are not emitted; if a caller uses them, the linker
+must reject targets `>= 0x10000`.  A 32-bit `LD/ST` base must be materialized
+with `MOVI`/`MOVHI`, since `nan16_ld` / `nan16_st` take only a 16-bit
+immediate offset (`uint16_t imm` in `nan16-enc.h`).
 
 ### 4.5 What can be stubbed for a flat cartridge
 
@@ -528,8 +540,9 @@ must add `TCC_TARGET_NAN16` cases to `tcctok.h:179-188`,
 
 ### 6.4 Output constraints recap
 
-* Word index space 16 bits → whole cartridge `<= 512 KiB`; branch/call
-  relocation must fail loudly beyond that.
+* Branches are 24-bit absolute word targets (`0x38`); text must stay below
+  `0x1000000` words.  Direct calls use 32-bit addresses.  The linker rejects
+  out-of-range targets; the legacy 16-bit branch forms are not emitted.
 * No PIC/GOT/PLT/dynamic linker: keep `s1->static_link` semantics irrelevant
   by never calling `build_got_entries`.
 * `TCC_OUTPUT_MEMORY` (`-run`) is unreachable; reject it explicitly.

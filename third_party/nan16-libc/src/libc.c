@@ -11,58 +11,117 @@
 #include <setjmp.h>
 #include <time.h>
 #include <unistd.h>
+#include <dirent.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <math.h>
 #include <semaphore.h>
 #include <glob.h>
+#include "nan16_pow10.h"
 
 int errno;
 
 /* ---------------------------------------------------------------- memory */
 #define HEAP_BASE ((unsigned char *)0x04000000u)
-#define HEAP_SIZE (64u * 1024u * 1024u)
+/* Namespaced directive: zlib and other libraries also use HEAP_SIZE. */
+#ifndef NAN16_HEAP_SIZE
+# ifdef HEAP_SIZE
+#  define NAN16_HEAP_SIZE HEAP_SIZE
+# else
+#  define NAN16_HEAP_SIZE (64u * 1024u * 1024u)
+# endif
+#endif
+#ifndef HEAP_SIZE
+#define HEAP_SIZE NAN16_HEAP_SIZE
+#endif
 #define HDR_ALIGN 16u
 
 typedef struct Block {
-    unsigned size;
-    int free;
-    struct Block *next;
+    unsigned size;          /* payload bytes, 16-byte aligned */
+    unsigned prev_size;     /* previous physical block payload size, 0 at base */
+    unsigned free;          /* 0 allocated, 1 free */
+    unsigned pad;           /* 16-byte header, keeps payload 16-byte aligned */
 } Block;
 
 static Block *heap_head;
+static Block *free_head;
+static unsigned char *heap_end;
+
+#define BLK_NEXT(b) (*(Block **)(void *)((b) + 1))
+#define BLK_PREV(b) (*(Block **)(void *)((unsigned char *)((b) + 1) + 4))
 
 static unsigned align_up(unsigned n)
 {
     return (n + HDR_ALIGN - 1) & ~(HDR_ALIGN - 1);
 }
 
+static Block *block_next(Block *b)
+{
+    unsigned char *p = (unsigned char *)(b + 1) + b->size;
+    return (p + sizeof(Block) <= heap_end) ? (Block *)p : 0;
+}
+static Block *block_prev(Block *b)
+{
+    if (!b->prev_size) return 0;
+    return (Block *)((unsigned char *)b - b->prev_size - sizeof(Block));
+}
+static int block_valid(Block *b)
+{
+    unsigned long a = (unsigned long)b;
+    return a >= (unsigned long)HEAP_BASE &&
+           a + sizeof(Block) <= (unsigned long)heap_end &&
+           !(b->size & (HDR_ALIGN - 1)) && b->size <= HEAP_SIZE;
+}
+static void free_insert(Block *b)
+{
+    BLK_PREV(b) = 0;
+    BLK_NEXT(b) = free_head;
+    if (free_head) BLK_PREV(free_head) = b;
+    free_head = b;
+}
+static void free_remove(Block *b)
+{
+    Block *n = BLK_NEXT(b), *p = BLK_PREV(b);
+    if (p) BLK_NEXT(p) = n;
+    else free_head = n;
+    if (n) BLK_PREV(n) = p;
+}
 static void heap_init(void)
 {
     if (!heap_head) {
+        heap_end = (unsigned char *)HEAP_BASE + HEAP_SIZE;
         heap_head = (Block *)HEAP_BASE;
         heap_head->size = HEAP_SIZE - sizeof(Block);
+        heap_head->prev_size = 0;
         heap_head->free = 1;
-        heap_head->next = 0;
+        free_head = heap_head;
+        BLK_NEXT(heap_head) = 0;
+        BLK_PREV(heap_head) = 0;
     }
 }
 
 void *malloc(size_t n)
 {
-    Block *b, *prev = 0;
+    Block *b;
     unsigned need;
     heap_init();
-    need = align_up((unsigned)n);
-    for (b = heap_head; b; prev = b, b = b->next) {
-        if (b->free && b->size >= need) {
+    if (n > HEAP_SIZE - sizeof(Block)) return 0;
+    need = align_up(n ? (unsigned)n : 1);
+    if (need < n) return 0;
+    for (b = free_head; b; b = BLK_NEXT(b)) {
+        if (b->size >= need) {
+            free_remove(b);
             if (b->size >= need + sizeof(Block) + HDR_ALIGN) {
                 Block *nb = (Block *)((unsigned char *)(b + 1) + need);
+                Block *nn;
                 nb->size = b->size - need - sizeof(Block);
+                nb->prev_size = need;
                 nb->free = 1;
-                nb->next = b->next;
-                b->next = nb;
                 b->size = need;
+                nn = block_next(nb);
+                if (nn) nn->prev_size = nb->size;
+                free_insert(nb);
             }
             b->free = 0;
             return b + 1;
@@ -73,35 +132,96 @@ void *malloc(size_t n)
 
 void free(void *p)
 {
-    Block *b, *n;
+    Block *b, *n, *pr;
     if (!p) return;
+    heap_init();
     b = (Block *)p - 1;
+    if (!block_valid(b) || b->free) return;
     b->free = 1;
-    for (n = heap_head; n; n = n->next) {
-        if (n->free && n->next && n->next->free) {
-            n->size += sizeof(Block) + n->next->size;
-            n->next = n->next->next;
-        }
+    n = block_next(b);
+    if (n && n->free) {
+        Block *nn;
+        free_remove(n);
+        b->size += sizeof(Block) + n->size;
+        nn = block_next(b);
+        if (nn) nn->prev_size = b->size;
     }
+    pr = block_prev(b);
+    if (pr && pr->free) {
+        Block *nn;
+        free_remove(pr);
+        pr->size += sizeof(Block) + b->size;
+        b = pr;
+        nn = block_next(b);
+        if (nn) nn->prev_size = b->size;
+    }
+    free_insert(b);
 }
 
 void *calloc(size_t n, size_t s)
 {
-    void *p = malloc(n * s);
+    void *p;
+    if (n && s > (size_t)-1 / n) return 0;
+    p = malloc(n * s);
     if (p) memset(p, 0, n * s);
     return p;
 }
-
+/* Debug/integrity hook: returns 0 when the physical chain and free list agree. */
+int nan16_heap_check(void)
+{
+    Block *b, *f;
+    unsigned physical = 0, physical_free = 0, freecount = 0;
+    heap_init();
+    b = heap_head;
+    while (b) {
+        Block *n = block_next(b);
+        if (!block_valid(b)) return 1;
+        if (n && n->prev_size != b->size) return 2;
+        if (b->free) physical_free++;
+        physical++;
+        b = n;
+    }
+    for (f = free_head; f; f = BLK_NEXT(f)) {
+        if (!block_valid(f) || !f->free) return 3;
+        if (++freecount > physical) return 4;
+    }
+    if (freecount != physical_free) return 5;
+    return 0;
+}
 void *realloc(void *p, size_t n)
 {
-    Block *b;
+    Block *b, *nx;
     void *q;
     unsigned old;
     if (!p) return malloc(n);
     if (!n) { free(p); return 0; }
+    if (n > HEAP_SIZE - sizeof(Block)) return 0;
+    heap_init();
     b = (Block *)p - 1;
+    if (!block_valid(b) || b->free) return 0;
     old = b->size;
     if (old >= n) return p;
+    nx = block_next(b);
+    if (nx && nx->free && old + sizeof(Block) + nx->size >= n) {
+        Block *nn;
+        unsigned need = align_up(n);
+        free_remove(nx);
+        b->size += sizeof(Block) + nx->size;
+        if (b->size >= need + sizeof(Block) + HDR_ALIGN) {
+            Block *nb = (Block *)((unsigned char *)(b + 1) + need);
+            nb->size = b->size - need - sizeof(Block);
+            nb->prev_size = need;
+            nb->free = 1;
+            b->size = need;
+            nn = block_next(nb);
+            if (nn) nn->prev_size = nb->size;
+            free_insert(nb);
+        } else {
+            nn = block_next(b);
+            if (nn) nn->prev_size = b->size;
+        }
+        return p;
+    }
     q = malloc(n);
     if (!q) return 0;
     memcpy(q, p, old);
@@ -288,36 +408,98 @@ extern unsigned long long __nan16_dmul(unsigned long long, unsigned long long);
 extern unsigned long long __nan16_dadd(unsigned long long, unsigned long long);
 extern unsigned long long __nan16_i2d(int);
 extern unsigned long long __nan16_ll2d(long long);
+extern unsigned long long __nan16_ull2d(unsigned long long);
 extern long long __nan16_d2ll(unsigned long long);
 extern unsigned long long __nan16_ddiv(unsigned long long, unsigned long long);
 
+/* Decimal to binary64.  Keep at most 19 significant digits in a 64-bit
+   mantissa (the exact limit before unsigned overflow would lose digits),
+   remember the discarded digits for round-to-nearest-even, then apply one
+   correctly rounded power of ten.  The old implementation accumulated
+   every integer digit without an overflow check, so 2^64 and 2^96 wrapped
+   to zero, and repeated multiplication by ten lost the low bits of
+   values like DBL_MAX. */
 double strtod(const char *s, char **end)
 {
     unsigned long long mant = 0;
-    int neg = 0, any = 0, exp = 0, edig = 0, esign = 1, i;
-    unsigned long long d = __nan16_i2d(0);
-    unsigned long long ten = __nan16_ll2d(10);
-    while (isspace((unsigned char)*s)) s++;
-    if (*s == '+' || *s == '-') { neg = *s == '-'; s++; }
-    while (isdigit((unsigned char)*s)) { mant = mant * 10 + (*s - '0'); any = 1; s++; }
-    if (*s == '.') {
-        s++;
-        while (isdigit((unsigned char)*s)) {
-            if (mant < 100000000000000000ULL) { mant = mant * 10 + (*s - '0'); exp--; }
-            any = 1; s++;
+    unsigned long long d;
+    int neg = 0, any = 0, sig = 0, frac = 0;
+    int kept = 0, dropped = 0, frac_digits = 0;
+    int exp = 0, edig = 0, esign = 1;
+    int first_drop = 0, sticky = 0;
+    int dexp, k;
+    const char *p = s;
+
+    while (isspace((unsigned char)*p)) p++;
+    if (*p == '+' || *p == '-') { neg = *p == '-'; p++; }
+
+    while (isdigit((unsigned char)*p) || *p == '.') {
+        int c = *p;
+        if (c == '.') {
+            if (frac) break;
+            frac = 1;
+            p++;
+            continue;
+        }
+        any = 1;
+        if (frac) frac_digits++;
+        if (sig || c != '0') {
+            sig = 1;
+            if (kept < 19) {
+                mant = mant * 10 + (unsigned)(c - '0');
+                kept++;
+            } else {
+                if (!dropped) first_drop = c;
+                else if (c != '0') sticky = 1;
+                dropped++;
+            }
+        }
+        p++;
+    }
+    if (any && (*p == 'e' || *p == 'E')) {
+        p++;
+        if (*p == '+' || *p == '-') { esign = (*p == '+') ? 1 : -1; p++; }
+        while (isdigit((unsigned char)*p)) {
+            if (edig < 100000) edig = edig * 10 + (*p - '0');
+            p++;
+        }
+        exp = esign * edig;
+    }
+    if (end) *end = (char *)p;
+    if (!any) return 0.0;
+    if (!sig) {
+        d = 0;
+        if (neg) d ^= 0x8000000000000000ULL;
+        return *(double *)&d;
+    }
+
+    if (first_drop) {
+        if (first_drop > '5'
+            || (first_drop == '5' && (sticky || (mant & 1))))
+            mant++;
+    }
+
+    dexp = exp - frac_digits + dropped;
+    d = __nan16_ull2d(mant);
+    if (dexp >= 0) {
+        if (dexp > 308) {
+            d = 0x7FF0000000000000ULL;
+        } else {
+            d = __nan16_dmul(d, nan16_pow10_bits[dexp]);
+        }
+    } else {
+        k = -dexp;
+        if (k > 308) {
+            d = __nan16_ddiv(d, nan16_pow10_bits[308]);
+            k -= 308;
+            if (k <= 308)
+                d = __nan16_ddiv(d, nan16_pow10_bits[k]);
+            else
+                d = 0;
+        } else {
+            d = __nan16_ddiv(d, nan16_pow10_bits[k]);
         }
     }
-    if (any && (*s == 'e' || *s == 'E')) {
-        s++;
-        if (*s == '+' || *s == '-') { esign = *s == '+'; s++; }
-        while (isdigit((unsigned char)*s)) { edig = edig * 10 + (*s - '0'); s++; }
-        exp += esign ? edig : -edig;
-    }
-    if (end) *end = (char *)s;
-    if (!any) return 0.0;
-    d = __nan16_ll2d((long long)mant);
-    if (exp > 0) { for (i = 0; i < exp; i++) d = __nan16_dmul(d, ten); }
-    else if (exp < 0) { for (i = 0; i < -exp; i++) d = __nan16_ddiv(d, ten); }
     if (neg) d ^= 0x8000000000000000ULL;
     return *(double *)&d;
 }
@@ -352,39 +534,147 @@ void *bsearch(const void *key, const void *base, size_t n, size_t size,
     return 0;
 }
 
-static char *envp[] = { 0 };
+static char *env_store[64];
+char **environ = env_store;
+static int env_index(const char *name, size_t n)
+{
+    int i;
+    for (i = 0; environ[i]; i++)
+        if (!strncmp(environ[i], name, n) && environ[i][n] == '=')
+            return i;
+    return -1;
+}
 char *getenv(const char *name)
 {
-    unsigned i = 0;
-    (void)name;
-    while (envp[i]) {
-        if (!strncmp(envp[i], name, strlen(name)) && envp[i][strlen(name)] == '=')
-            return envp[i] + strlen(name) + 1;
-        i++;
+    int i = env_index(name, strlen(name));
+    return i < 0 ? 0 : environ[i] + strlen(name) + 1;
+}
+int setenv(const char *name, const char *value, int overwrite)
+{
+    char *s;
+    size_t n = strlen(name);
+    int i;
+    if (!name || !*name || strchr(name, '=')) { errno = EINVAL; return -1; }
+    i = env_index(name, n);
+    if (i >= 0 && !overwrite) return 0;
+    s = (char *)malloc(n + strlen(value) + 2);
+    if (!s) { errno = ENOMEM; return -1; }
+    memcpy(s, name, n);
+    s[n] = '=';
+    strcpy(s + n + 1, value);
+    if (i >= 0) { environ[i] = s; return 0; }
+    for (i = 0; environ[i]; i++) ;
+    if (i >= 63) { free(s); errno = ENOMEM; return -1; }
+    environ[i] = s;
+    environ[i + 1] = 0;
+    return 0;
+}
+int putenv(char *s)
+{
+    char *eq;
+    size_t n;
+    int i;
+    if (!s) { errno = EINVAL; return -1; }
+    eq = strchr(s, '=');
+    if (!eq) {
+        n = strlen(s);
+        i = env_index(s, n);
+        if (i >= 0) {
+            while (environ[i]) { environ[i] = environ[i + 1]; i++; }
+        }
+        return 0;
     }
+    n = (size_t)(eq - s);
+    i = env_index(s, n);
+    if (i >= 0) { environ[i] = s; return 0; }
+    for (i = 0; environ[i]; i++) ;
+    if (i >= 63) { errno = ENOMEM; return -1; }
+    environ[i] = s;
+    environ[i + 1] = 0;
+    return 0;
+}
+int unsetenv(const char *name)
+{
+    int i = env_index(name, strlen(name));
+    if (i < 0) return 0;
+    while (environ[i]) { environ[i] = environ[i + 1]; i++; }
     return 0;
 }
 
 int nan16_exit_code;
-void exit(int code) { nan16_exit_code = code; for (;;) ; }
+#ifdef NAN16_EXIT_DIAG
+extern unsigned char *nan16_stderr_data;
+extern unsigned nan16_stderr_len;
+extern unsigned char *nan16_stdout_data;
+extern unsigned nan16_stdout_len;
+static void exit_diag(int code)
+{
+    unsigned char *d;
+    unsigned n;
+    d = (unsigned char *)0x03E00000u;
+    n = nan16_stderr_len; if (n > 262144u) n = 262144u;
+    if (n && nan16_stderr_data) memcpy(d, nan16_stderr_data, n);
+    d[n] = 0;
+    *(volatile unsigned *)0x03DFFFF0u = n;
+    d = (unsigned char *)0x03E40000u;
+    n = nan16_stdout_len; if (n > 262144u) n = 262144u;
+    if (n && nan16_stdout_data) memcpy(d, nan16_stdout_data, n);
+    d[n] = 0;
+    *(volatile unsigned *)0x03DFFFF4u = n;
+    *(volatile unsigned *)0x03DFFFF8u = (unsigned)code;
+}
+#endif
+void exit(int code) {
+#ifdef NAN16_EXIT_DIAG
+    exit_diag(code);
+#endif
+    nan16_exit_code = code; for (;;) ;
+}
 void _Exit(int code) { exit(code); }
 void abort(void) { exit(134); }
+
+#ifdef NAN16_ASSERT_DIAG
+void __nan16_assert_fail(const char *expr, const char *file, int line)
+{
+    volatile char *d = (volatile char *)0x03000400u;
+    int i, n = 0;
+    for (i = 0; expr && expr[i] && n < 100; i++) d[n++] = expr[i];
+    d[n++] = 0;
+    for (i = 0; file && file[i] && n < 200; i++) d[n++] = file[i];
+    d[n++] = 0;
+    *(volatile unsigned *)0x03000500u = (unsigned)line;
+    *(volatile unsigned *)0x02FFFFF0u = 0xAB0B0000u;
+    for (;;) ;
+}
+#endif
 int atexit(void (*fn)(void)) { (void)fn; return 0; }
 int system(const char *s) { (void)s; return 0; }
 
 /* ---------------------------------------------------------------- stdio/VFS */
-#define MAXFILES 64
-#define MAXSTREAMS 16
+/* VFS capacity is a compile-time directive, not a fixed array:
+   -DNAN16_VFS_INIT_CAP=N   initial pointer-table slots (default 16)
+   -DNAN16_VFS_MAXFILES=N   optional hard cap; omitted = grow without a cap
+   The table doubles on demand and supports arbitrary pack sizes. */
+#ifndef NAN16_VFS_INIT_CAP
+#define NAN16_VFS_INIT_CAP 16u
+#endif
+#define MAXSTREAMS 64
+#define FD_VFS_BASE 3
+#define VFS_NAME_MAX 128
 typedef struct MemFile {
-    char name[64];
+    char name[VFS_NAME_MAX];
     unsigned char *data;
     unsigned size, cap, pos;
-    int used, writable;
+    unsigned mode;
+    int used, writable, owned, isdir, islink;
 } MemFile;
-static MemFile files[MAXFILES];
+static MemFile *files;
+static unsigned vfs_cap, vfs_used;
+static int vfs_abspath(const char *, char *);
+static MemFile *mf_find_p(const char *);
 
 typedef struct NFile {
-    int fd;       /* 1..MAXFILES, or -1 for stdout/stderr */
+    int fd;       /* 3.. or -1 for stdout/stderr */
     int is_err;
     int eof;
 } NFile;
@@ -412,80 +702,557 @@ static void outcap(unsigned char **buf, unsigned *len, unsigned *cap, int c)
     (*buf)[(*len)++] = (unsigned char)c;
 }
 
+static int vfs_reserve(unsigned need)
+{
+    unsigned ncap;
+    MemFile *nf;
+    if (need <= vfs_cap) return 0;
+    ncap = vfs_cap ? vfs_cap : NAN16_VFS_INIT_CAP;
+    while (ncap < need) {
+        if (ncap > 0x7FFFFFFFu / 2u) return -1;
+        ncap *= 2;
+    }
+#ifdef NAN16_VFS_MAXFILES
+    if (ncap > (unsigned)NAN16_VFS_MAXFILES) ncap = (unsigned)NAN16_VFS_MAXFILES;
+    if (need > ncap) return -1;
+#endif
+    nf = (MemFile *)realloc(files, (size_t)ncap * sizeof(MemFile));
+    if (!nf) return -1;
+    memset(nf + vfs_cap, 0, (size_t)(ncap - vfs_cap) * sizeof(MemFile));
+    files = nf;
+    vfs_cap = ncap;
+    return 0;
+}
 static MemFile *mf_find(const char *name)
 {
-    int i;
-    for (i = 0; i < MAXFILES; i++)
+    unsigned i;
+    for (i = 0; i < vfs_cap; i++)
         if (files[i].used && !strcmp(files[i].name, name)) return &files[i];
     return 0;
 }
 static MemFile *mf_new(const char *name)
 {
-    int i;
-    for (i = 0; i < MAXFILES; i++) {
+    unsigned i, slot;
+    for (i = 0; i < vfs_cap; i++) {
         if (!files[i].used) {
-            files[i].used = 1;
-            strncpy(files[i].name, name, 63);
-            files[i].name[63] = 0;
-            files[i].data = 0; files[i].size = files[i].cap = files[i].pos = 0;
-            files[i].writable = 1;
-            return &files[i];
+            slot = i;
+            goto init;
         }
     }
+    slot = vfs_cap;
+    if (vfs_reserve(slot + 1) < 0) return 0;
+init:
+    files[slot].used = 1;
+    strncpy(files[slot].name, name, VFS_NAME_MAX - 1);
+    files[slot].name[VFS_NAME_MAX - 1] = 0;
+    files[slot].data = 0; files[slot].size = files[slot].cap = files[slot].pos = 0;
+    files[slot].writable = 1;
+    files[slot].owned = 1;
+    files[slot].isdir = 0;
+    files[slot].islink = 0;
+    files[slot].mode = 0644;
+    vfs_used++;
+    return &files[slot];
+}
+/* Fill a known-free slot directly.  nan16_vfs_add_pack reserves capacity for
+   the whole archive, so appending must not re-scan the table per file. */
+static int mf_put_ro(unsigned slot, const char *name, const void *data,
+                     unsigned size)
+{
+    if (slot >= vfs_cap || files[slot].used) return -1;
+    strncpy(files[slot].name, name, VFS_NAME_MAX - 1);
+    files[slot].name[VFS_NAME_MAX - 1] = 0;
+    files[slot].data = (unsigned char *)(void *)data;
+    files[slot].size = files[slot].cap = size;
+    files[slot].pos = 0;
+    files[slot].used = 1;
+    files[slot].writable = 0;
+    files[slot].owned = 0;
+    files[slot].isdir = 0;
+    files[slot].islink = 0;
+    files[slot].mode = 0444;
+    vfs_used++;
     return 0;
 }
 int nan16_vfs_add(const char *name, const void *data, unsigned size)
 {
-    MemFile *f = mf_find(name);
-    if (!f) f = mf_new(name);
+    char abs[VFS_NAME_MAX];
+    MemFile *f;
+    if (vfs_abspath(name, abs) < 0) return -1;
+    f = mf_find(abs);
+    if (!f) f = mf_new(abs);
     if (!f) return -1;
-    f->data = malloc(size);
+    if (f->owned && f->data) free(f->data);
+    f->data = malloc(size ? size : 1);
     if (!f->data) return -1;
     memcpy(f->data, data, size);
     f->size = f->cap = size;
-    f->pos = 0; f->writable = 0;
+    f->pos = 0; f->writable = 0; f->owned = 1;
+    f->isdir = 0; f->islink = 0; f->mode = 0444;
     return 0;
+}
+
+/* Register a read-only file backed directly by embedded ROM data.  The
+   compiler and the test suite use this to avoid a second copy of multi-
+   megabyte sources in the guest heap. */
+int nan16_vfs_add_ro(const char *name, const void *data, unsigned size)
+{
+    char abs[VFS_NAME_MAX];
+    MemFile *f;
+    if (vfs_abspath(name, abs) < 0) return -1;
+    f = mf_find(abs);
+    if (!f) f = mf_new(abs);
+    if (!f) return -1;
+    if (f->owned && f->data) free(f->data);
+    f->data = (unsigned char *)(void *)data;
+    f->size = f->cap = size;
+    f->pos = 0; f->writable = 0; f->owned = 0;
+    f->isdir = 0; f->islink = 0; f->mode = 0444;
+    return 0;
+}
+/* Register every file in an N16PACK1 archive (see
+   src/tests/tcl_sqlite/PACK_FORMAT.md).  The pack is a byte stream in guest
+   memory; callers place it with tools/nan16_pack_image.py, which encodes four
+   bytes per NaN16 payload word.  All integers are little-endian. */
+static unsigned pk_u16(const unsigned char *p)
+{
+    return (unsigned)p[0] | ((unsigned)p[1] << 8);
+}
+static unsigned pk_u32(const unsigned char *p)
+{
+    return (unsigned)p[0] | ((unsigned)p[1] << 8)
+         | ((unsigned)p[2] << 16) | ((unsigned)p[3] << 24);
+}
+int nan16_vfs_add_pack(const void *pack, unsigned len)
+{
+    const unsigned char *p = (const unsigned char *)pack;
+    unsigned count, off, i, slot;
+    if (len < 12 || memcmp(p, "N16PACK1", 8))
+        return -1;
+    count = pk_u32(p + 8);
+    /* Reserve once so 2,133-file (or larger) suites do not repeatedly grow
+       and re-copy the table.  This is an upper bound; duplicate names reuse
+       an existing slot. */
+    if (count > 0x7FFFFFFFu - vfs_used || vfs_reserve(vfs_used + count) < 0)
+        return -1;
+    off = 12;
+    slot = vfs_used;
+    for (i = 0; i < count; i++) {
+        unsigned nl, flags, dl;
+        char name[VFS_NAME_MAX];
+        if (off + 8 > len)
+            return -1;
+        nl = pk_u16(p + off);
+        flags = pk_u16(p + off + 2);
+        dl = pk_u32(p + off + 4);
+        off += 8;
+        if (!nl || nl >= VFS_NAME_MAX || flags)
+            return -1;
+        if (off + nl + dl > len)
+            return -1;
+        memcpy(name, p + off, nl);
+        name[nl] = 0;
+        if (name[0] != '/')
+            return -1;
+        /* Boot loads have contiguous slots; a hole or duplicate falls back
+           to the general lookup path. */
+        if (mf_put_ro(slot, name, p + off + nl, dl) < 0 &&
+            nan16_vfs_add_ro(name, p + off + nl, dl) < 0)
+            return -1;
+        off += nl + dl;
+        slot = vfs_used;
+    }
+    if (off != len)
+        return -1;
+    return (int)count;
+}
+unsigned nan16_vfs_count(void) { return vfs_used; }
+unsigned nan16_vfs_capacity(void) { return vfs_cap; }
+/* Enumerate the table by slot: returns 1 for a live entry.  Callers loop
+   i=0..nan16_vfs_capacity()-1 and skip holes.  Pointers stay valid until the
+   next table growth or mutation. */
+int nan16_vfs_entry(unsigned i, const char **name, unsigned *size, int *isdir)
+{
+    if (i >= vfs_cap || !files[i].used) return 0;
+    if (name) *name = files[i].name;
+    if (size) *size = files[i].size;
+    if (isdir) *isdir = files[i].isdir;
+    return 1;
 }
 int nan16_vfs_get(const char *name, unsigned char **data, unsigned *size)
 {
-    MemFile *f = mf_find(name);
+    MemFile *f = mf_find_p(name);
     if (!f) return -1;
     *data = f->data; *size = f->size;
+    return 0;
+}
+/* A path is a directory if it has an explicit directory entry or if any file
+   lives beneath it.  N16PACK1 stores only files, so suite directories such as
+   /sqlite/test are implicit.  Trailing slashes are ignored except for root. */
+static int mf_isdir_name(const char *name)
+{
+    char norm[VFS_NAME_MAX];
+    unsigned n, i;
+    MemFile *f;
+    if (!name || name[0] != '/') return 0;
+    n = (unsigned)strlen(name);
+    while (n > 1 && name[n - 1] == '/') n--;
+    if (n >= VFS_NAME_MAX) return 0;
+    memcpy(norm, name, n);
+    norm[n] = 0;
+    if (n == 1) return 1;
+    f = mf_find(norm);
+    if (f) return f->isdir;
+    for (i = 0; i < vfs_cap; i++)
+        if (files[i].used && !strncmp(files[i].name, norm, n) &&
+            files[i].name[n] == '/')
+            return 1;
+    return 0;
+}
+static int vfs_abspath(const char *, char *);
+int nan16_vfs_isdir(const char *name)
+{
+    char abs[VFS_NAME_MAX];
+    if (vfs_abspath(name, abs) < 0) return 0;
+    return mf_isdir_name(abs);
+}
+/* Absolute, normalized guest path.  Handles relative paths against vfs_cwd,
+   duplicate slashes, "." and ".."; result keeps the leading "/" and drops any
+   trailing slash except for root. */
+static char vfs_cwd[VFS_NAME_MAX] = "/";
+static int vfs_abspath(const char *name, char *out)
+{
+    char joined[2 * VFS_NAME_MAX];
+    const char *p, *comp;
+    unsigned olen = 1, clen, len;
+    if (!name || !*name) { errno = ENOENT; return -1; }
+    if (name[0] == '/') {
+        if (strlen(name) >= sizeof joined) { errno = ENAMETOOLONG; return -1; }
+        strcpy(joined, name);
+    } else {
+        clen = (unsigned)strlen(vfs_cwd);
+        len = (unsigned)strlen(name);
+        if (clen + 1u + len >= sizeof joined) { errno = ENAMETOOLONG; return -1; }
+        strcpy(joined, vfs_cwd);
+        if (clen == 0 || joined[clen - 1] != '/') strcat(joined, "/");
+        strcat(joined, name);
+    }
+    out[0] = '/'; out[1] = 0;
+    p = joined;
+    while (*p) {
+        while (*p == '/') p++;
+        if (!*p) break;
+        comp = p;
+        while (*p && *p != '/') p++;
+        len = (unsigned)(p - comp);
+        if (len == 1 && comp[0] == '.') continue;
+        if (len == 2 && comp[0] == '.' && comp[1] == '.') {
+            while (olen > 1 && out[olen - 1] != '/') olen--;
+            if (olen > 1) olen--;
+            out[olen] = 0;
+            continue;
+        }
+        if (olen + (olen > 1 ? 1u : 0u) + len >= VFS_NAME_MAX) {
+            errno = ENAMETOOLONG; return -1;
+        }
+        if (olen > 1) out[olen++] = '/';
+        memcpy(out + olen, comp, len);
+        olen += len;
+        out[olen] = 0;
+    }
+    return 0;
+}
+/* Resolve every symbolic link in an absolute, normalized path.  The guest
+   VFS has no inodes; a link is a MemFile whose data is its target string.
+   Each expansion re-normalizes and recurses, so absolute/relative targets,
+   intermediate directory links and loops all follow normal POSIX rules. */
+static int resolve_links(const char *abs, char *out, int depth)
+{
+    const char *p = abs;
+    unsigned olen = 0;
+    if (depth > 8) { errno = ELOOP; return -1; }
+    out[0] = '/';
+    out[1] = 0;
+    olen = 1;
+    while (*p) {
+        const char *comp;
+        unsigned clen;
+        MemFile *f;
+        while (*p == '/') p++;
+        if (!*p) break;
+        comp = p;
+        while (*p && *p != '/') p++;
+        clen = (unsigned)(p - comp);
+        if (olen + (olen > 1 ? 1u : 0u) + clen >= VFS_NAME_MAX) {
+            errno = ENAMETOOLONG;
+            return -1;
+        }
+        if (olen > 1) out[olen++] = '/';
+        memcpy(out + olen, comp, clen);
+        olen += clen;
+        out[olen] = 0;
+        f = mf_find(out);
+        if (f && f->islink) {
+            char target[VFS_NAME_MAX], dir[VFS_NAME_MAX];
+            char joined[2 * VFS_NAME_MAX], norm[VFS_NAME_MAX];
+            char *slash;
+            if (f->size >= VFS_NAME_MAX) { errno = ENAMETOOLONG; return -1; }
+            memcpy(target, f->data, f->size);
+            target[f->size] = 0;
+            strcpy(dir, out);
+            slash = strrchr(dir, '/');
+            if (slash == dir) slash[1] = 0; else *slash = 0;
+            if (target[0] == '/') {
+                if (snprintf(joined, sizeof joined, "%s%s", target, p)
+                        >= (int)sizeof joined) { errno = ENAMETOOLONG; return -1; }
+            } else {
+                if (snprintf(joined, sizeof joined, "%s/%s%s", dir, target, p)
+                        >= (int)sizeof joined) { errno = ENAMETOOLONG; return -1; }
+            }
+            if (vfs_abspath(joined, norm) < 0) return -1;
+            return resolve_links(norm, out, depth + 1);
+        }
+    }
+    return 0;
+}
+static int vfs_resolve(const char *name, char *out)
+{
+    char abs[VFS_NAME_MAX];
+    if (vfs_abspath(name, abs) < 0) return -1;
+    return resolve_links(abs, out, 0);
+}
+int nan16_vfs_resolve(const char *name, char *out)
+{
+    return vfs_resolve(name, out);
+}
+int nan16_vfs_is_symlink_path(const char *name)
+{
+    char abs[VFS_NAME_MAX], cur[VFS_NAME_MAX];
+    const char *p;
+    unsigned olen = 0;
+    if (vfs_abspath(name, abs) < 0) return 0;
+    p = abs;
+    cur[0] = '/'; cur[1] = 0; olen = 1;
+    while (*p) {
+        const char *comp;
+        unsigned clen;
+        struct stat st;
+        while (*p == '/') p++;
+        if (!*p) break;
+        comp = p;
+        while (*p && *p != '/') p++;
+        clen = (unsigned)(p - comp);
+        if (olen + (olen > 1 ? 1u : 0u) + clen >= VFS_NAME_MAX) return 0;
+        if (olen > 1) cur[olen++] = '/';
+        memcpy(cur + olen, comp, clen);
+        olen += clen;
+        cur[olen] = 0;
+        if (lstat(cur, &st) == 0 && S_ISLNK(st.st_mode)) return 1;
+    }
+    return 0;
+}
+
+static MemFile *mf_find_p(const char *name)
+{
+    char abs[VFS_NAME_MAX];
+    if (vfs_abspath(name, abs) < 0) return 0;
+    return mf_find(abs);
+}
+
+/* ------------------------------------------------------------ directory API */
+struct __nan16_DIR {
+    char path[VFS_NAME_MAX];
+    struct dirent ent;
+    unsigned count, index, cap;
+    char **names;
+    unsigned char *types;
+};
+/* Return the immediate child component of file under dir.  *isdir is set when
+   the remaining path continues past a slash. */
+static int dir_child(const char *dir, const char *file, char *out,
+                     unsigned outsz, int *isdir)
+{
+    const char *start, *slash;
+    unsigned n, len;
+    n = (unsigned)strlen(dir);
+    while (n > 1 && dir[n - 1] == '/') n--;
+    if (file[0] != '/') return 0;
+    if (n == 1) {
+        start = file + 1;
+    } else {
+        if (strncmp(file, dir, n) || file[n] != '/') return 0;
+        start = file + n + 1;
+    }
+    if (!*start) return 0;
+    slash = strchr(start, '/');
+    len = slash ? (unsigned)(slash - start) : (unsigned)strlen(start);
+    if (!len || len >= outsz) return 0;
+    memcpy(out, start, len);
+    out[len] = 0;
+    *isdir = slash != 0;
+    return 1;
+}
+static int dir_add(DIR *d, const char *name, int isdir)
+{
+    unsigned i;
+    for (i = 0; i < d->count; i++) {
+        if (!strcmp(d->names[i], name)) {
+            if (isdir) d->types[i] = DT_DIR;
+            return 0;
+        }
+    }
+    if (d->count == d->cap) {
+        unsigned nc = d->cap ? d->cap * 2 : 16;
+        char **nn = (char **)realloc(d->names, nc * sizeof(char *));
+        unsigned char *nt;
+        if (!nn) return -1;
+        d->names = nn;
+        nt = (unsigned char *)realloc(d->types, nc);
+        if (!nt) return -1;
+        d->types = nt;
+        d->cap = nc;
+    }
+    d->names[d->count] = strdup(name);
+    if (!d->names[d->count]) return -1;
+    d->types[d->count] = isdir ? DT_DIR : DT_REG;
+    d->count++;
+    return 0;
+}
+DIR *opendir(const char *path)
+{
+    DIR *d;
+    unsigned i;
+    char comp[VFS_NAME_MAX], norm[VFS_NAME_MAX];
+    if (vfs_abspath(path, norm) < 0 || !mf_isdir_name(norm)) {
+        errno = ENOENT; return 0;
+    }
+    d = (DIR *)calloc(1, sizeof *d);
+    if (!d) { errno = ENOMEM; return 0; }
+    strcpy(d->path, norm);
+    if (dir_add(d, ".", 1) || dir_add(d, "..", 1)) goto fail;
+    for (i = 0; i < vfs_cap; i++) {
+        int isdir = 0;
+        if (!files[i].used) continue;
+        if (dir_child(norm, files[i].name, comp, sizeof comp, &isdir) &&
+            dir_add(d, comp, isdir || files[i].isdir))
+            goto fail;
+    }
+    return d;
+fail:
+    closedir(d);
+    errno = ENOMEM;
+    return 0;
+}
+struct dirent *readdir(DIR *d)
+{
+    if (!d || d->index >= d->count) return 0;
+    memset(&d->ent, 0, sizeof d->ent);
+    strncpy(d->ent.d_name, d->names[d->index], sizeof d->ent.d_name - 1);
+    d->ent.d_type = d->types[d->index];
+    d->ent.d_ino = d->index + 1;
+    d->ent.d_reclen = sizeof d->ent;
+    d->index++;
+    return &d->ent;
+}
+void rewinddir(DIR *d) { if (d) d->index = 0; }
+int closedir(DIR *d)
+{
+    unsigned i;
+    if (!d) return -1;
+    for (i = 0; i < d->count; i++) free(d->names[i]);
+    free(d->names);
+    free(d->types);
+    free(d);
     return 0;
 }
 
 int open(const char *name, int flags, ...)
 {
-    MemFile *f = mf_find(name);
+    char abs[VFS_NAME_MAX];
+    MemFile *f;
     int i;
+    if (flags & O_NOFOLLOW) {
+        struct stat lst;
+        if (lstat(name, &lst) < 0) return -1;
+        if (S_ISLNK(lst.st_mode)) { errno = ELOOP; return -1; }
+    }
+    if (vfs_resolve(name, abs) < 0) return -1;
+    f = mf_find(abs);
     if (!f) {
-        if (!(flags & O_CREAT)) return -1;
-        f = mf_new(name);
+        char parent[VFS_NAME_MAX];
+        const char *slash;
+        size_t plen;
+        if (!(flags & O_CREAT)) { errno = ENOENT; return -1; }
+        /* O_CREAT creates a file only in an existing (real or implicit)
+           directory.  A missing parent is ENOENT, not an implicit dir. */
+        slash = strrchr(abs, '/');
+        plen = slash ? (size_t)(slash - abs) : 0;
+        if (plen == 0) strcpy(parent, "/");
+        else { memcpy(parent, abs, plen); parent[plen] = 0; }
+        if (!mf_isdir_name(parent)) { errno = ENOENT; return -1; }
+        f = mf_new(abs);
         if (!f) return -1;
+    } else {
+        if (f->isdir) { errno = EISDIR; return -1; }
+        if ((flags & O_CREAT) && (flags & O_EXCL)) { errno = EEXIST; return -1; }
+        if ((flags & (O_WRONLY | O_RDWR)) && (!f->writable || !(f->mode & 0222))) {
+            errno = EACCES; return -1;
+        }
+        if (!(flags & (O_WRONLY | O_RDWR)) && !(f->mode & 0444)) {
+            errno = EACCES; return -1;
+        }
     }
     if (flags & O_TRUNC) { f->size = 0; f->pos = 0; }
-    for (i = 0; i < MAXFILES; i++)
-        if (&files[i] == f) { f->pos = 0; return i + 1; }
-    return -1;
+    (void)i;
+    f->pos = (flags & O_APPEND) ? f->size : 0;
+    return (int)(f - files) + FD_VFS_BASE;
 }
 int creat(const char *name, int mode) { (void)mode; return open(name, O_CREAT | O_WRONLY | O_TRUNC); }
 int close(int fd)
 {
-    if (fd >= 1 && fd <= MAXFILES) files[fd - 1].pos = 0;
+    if (fd >= FD_VFS_BASE && (unsigned)(fd - FD_VFS_BASE) < vfs_cap) files[fd - FD_VFS_BASE].pos = 0;
     return 0;
 }
+int fsync(int fd)
+{
+    if (fd >= FD_VFS_BASE && (unsigned)(fd - FD_VFS_BASE) < vfs_cap &&
+        files[fd - FD_VFS_BASE].used) return 0;
+    errno = EBADF;
+    return -1;
+}
+int fdatasync(int fd) { return fsync(fd); }
+int sync(void) { return 0; }
 ssize_t read(int fd, void *buf, size_t n)
 {
     MemFile *f;
     unsigned avail;
-    if (fd < 1 || fd > MAXFILES) return -1;
-    f = &files[fd - 1];
+    if (fd < FD_VFS_BASE || (unsigned)(fd - FD_VFS_BASE) >= vfs_cap) return -1;
+    f = &files[fd - FD_VFS_BASE];
     if (!f->used) return -1;
     avail = f->size - f->pos;
     if (n > avail) n = avail;
     memcpy(buf, f->data + f->pos, n);
     f->pos += n;
     return n;
+}
+/* Grow a file buffer to at least 'need' bytes.  Use realloc() so the
+   allocator can extend in place: cksumvfs.test grows test.db to ~97 MB and
+   a malloc-new/copy/free doubling would briefly need the old 64 MB buffer
+   plus a new 128 MB one (192 MB) in the 160 MB guest heap. */
+static int mf_grow(MemFile *f, unsigned need)
+{
+    unsigned ncap = f->cap ? f->cap : 256;
+    unsigned char *nb;
+    while (ncap < need) {
+        if (ncap > 0x7FFFFFFFu) { ncap = need; break; }
+        ncap *= 2;
+    }
+    if (ncap < need) { errno = ENOMEM; return -1; }
+    nb = (unsigned char *)realloc(f->data, ncap);
+    if (!nb) { errno = ENOMEM; return -1; }
+    f->data = nb;
+    f->cap = ncap;
+    return 0;
 }
 ssize_t write(int fd, const void *buf, size_t n)
 {
@@ -495,19 +1262,29 @@ ssize_t write(int fd, const void *buf, size_t n)
         for (i = 0; i < n; i++)
             if (fd == 1) outcap(&nan16_stdout_data, &nan16_stdout_len, &nan16_stdout_cap, ((const unsigned char *)buf)[i]);
             else outcap(&nan16_stderr_data, &nan16_stderr_len, &nan16_stderr_cap, ((const unsigned char *)buf)[i]);
+        /* Fixed terminal-client control block (guest byte addresses):
+           0x03EFF000 stdout pointer, +4 length, +8 stderr pointer, +12 length.
+           nan_cli --guest-stdout/--guest-stderr reads this without symbols. */
+        *(volatile unsigned *)(unsigned long)0x03EFF000u =
+            (unsigned)(unsigned long)nan16_stdout_data;
+        *(volatile unsigned *)(unsigned long)0x03EFF004u = nan16_stdout_len;
+        *(volatile unsigned *)(unsigned long)0x03EFF008u =
+            (unsigned)(unsigned long)nan16_stderr_data;
+        *(volatile unsigned *)(unsigned long)0x03EFF00Cu = nan16_stderr_len;
         return n;
     }
-    if (fd < 1 || fd > MAXFILES) return -1;
-    f = &files[fd - 1];
-    if (!f->used) return -1;
+    if (fd < FD_VFS_BASE || (unsigned)(fd - FD_VFS_BASE) >= vfs_cap) return -1;
+    f = &files[fd - FD_VFS_BASE];
+    if (!f->used || !f->writable) return -1;
+    if (n == 0) return 0;
     if (f->pos + n > f->cap) {
-        unsigned nc = f->cap ? f->cap : 256;
-        unsigned char *nb;
-        while (nc < f->pos + n) nc *= 2;
-        nb = malloc(nc);
-        if (!nb) return -1;
-        if (f->data) { memcpy(nb, f->data, f->size); free(f->data); }
-        f->data = nb; f->cap = nc;
+        if (mf_grow(f, f->pos + n) != 0) return -1;
+    }
+    /* Seeking past EOF and writing must leave a zero-filled hole, as on a
+       POSIX filesystem.  Without this, recover's page-size detection can
+       read stale bytes from a recycled heap buffer as synthetic page 1. */
+    if (f->pos > f->size) {
+        memset(f->data + f->size, 0, f->pos - f->size);
     }
     memcpy(f->data + f->pos, buf, n);
     f->pos += n;
@@ -518,8 +1295,8 @@ off_t lseek(int fd, off_t off, int whence)
 {
     MemFile *f;
     long np;
-    if (fd < 1 || fd > MAXFILES) return -1;
-    f = &files[fd - 1];
+    if (fd < FD_VFS_BASE || (unsigned)(fd - FD_VFS_BASE) >= vfs_cap) return -1;
+    f = &files[fd - FD_VFS_BASE];
     if (!f->used) return -1;
     if (whence == SEEK_SET) np = off;
     else if (whence == SEEK_CUR) np = (long)f->pos + off;
@@ -528,20 +1305,105 @@ off_t lseek(int fd, off_t off, int whence)
     f->pos = (unsigned)np;
     return np;
 }
+static int mf_resize(MemFile *f, unsigned n)
+{
+    unsigned oldsize = f->size;
+    if (n > f->cap) {
+        if (mf_grow(f, n) != 0) return -1;
+    }
+    if (n > oldsize) memset(f->data + oldsize, 0, n - oldsize);
+    f->size = n;
+    if (f->pos > n) f->pos = n;
+    return 0;
+}
+int ftruncate(int fd, off_t len)
+{
+    MemFile *f;
+    if (fd < FD_VFS_BASE || (unsigned)(fd - FD_VFS_BASE) >= vfs_cap) return -1;
+    f = &files[fd - FD_VFS_BASE];
+    if (!f->used || f->isdir || !f->writable || len < 0) { errno = EINVAL; return -1; }
+    return mf_resize(f, (unsigned)len);
+}
+int truncate(const char *name, off_t len)
+{
+    MemFile *f = mf_find_p(name);
+    if (!f || f->isdir || !f->writable || len < 0) { errno = EINVAL; return -1; }
+    return mf_resize(f, (unsigned)len);
+}
 int unlink(const char *name)
 {
-    MemFile *f = mf_find(name);
-    if (!f) return -1;
-    if (f->data) free(f->data);
+    char abs[VFS_NAME_MAX];
+    MemFile *f;
+    if (vfs_abspath(name, abs) < 0) return -1;
+    f = mf_find(abs);
+    if (!f) {
+        if (mf_isdir_name(abs)) { errno = EISDIR; return -1; }
+        errno = ENOENT; return -1;
+    }
+    if (f->isdir) { errno = EISDIR; return -1; }
+    if (f->owned && f->data) free(f->data);
     f->used = 0;
+    if (vfs_used) vfs_used--;
+    return 0;
+}
+int rmdir(const char *name)
+{
+    char norm[VFS_NAME_MAX];
+    unsigned n, i;
+    MemFile *f;
+    if (vfs_abspath(name, norm) < 0) return -1;
+    n = (unsigned)strlen(norm);
+    f = mf_find(norm);
+    if (!f || !f->isdir) {
+        if (!f && mf_isdir_name(norm)) { errno = ENOTEMPTY; return -1; }
+        errno = ENOENT; return -1;
+    }
+    for (i = 0; i < vfs_cap; i++)
+        if (files[i].used &&
+            ((n == 1) ? (files[i].name[0] == '/' && files[i].name[1])
+                      : (!strncmp(files[i].name, norm, n) &&
+                         files[i].name[n] == '/'))) {
+            errno = ENOTEMPTY; return -1;
+        }
+    if (f->owned && f->data) free(f->data);
+    f->used = 0;
+    if (vfs_used) vfs_used--;
     return 0;
 }
 int remove(const char *name) { return unlink(name); }
 int rename(const char *a, const char *b)
 {
-    MemFile *f = mf_find(a);
-    if (!f) return -1;
-    strncpy(f->name, b, 63); f->name[63] = 0;
+    char absa[VFS_NAME_MAX], absb[VFS_NAME_MAX], tmp[VFS_NAME_MAX];
+    MemFile *f;
+    unsigned alen, i;
+    if (vfs_abspath(a, absa) < 0 || vfs_abspath(b, absb) < 0) return -1;
+    f = mf_find(absa);
+    if (!f) { errno = ENOENT; return -1; }
+    if (mf_find(absb) || mf_isdir_name(absb)) { errno = EEXIST; return -1; }
+    alen = (unsigned)strlen(absa);
+    if (f->isdir) {
+        for (i = 0; i < vfs_cap; i++) {
+            const char *suffix;
+            if (!files[i].used || &files[i] == f) continue;
+            if (strncmp(files[i].name, absa, alen) || files[i].name[alen] != '/')
+                continue;
+            suffix = files[i].name + alen;
+            if (strlen(absb) + strlen(suffix) >= VFS_NAME_MAX) {
+                errno = ENAMETOOLONG; return -1;
+            }
+        }
+        for (i = 0; i < vfs_cap; i++) {
+            const char *suffix;
+            if (!files[i].used || &files[i] == f) continue;
+            if (strncmp(files[i].name, absa, alen) || files[i].name[alen] != '/')
+                continue;
+            suffix = files[i].name + alen;
+            strcpy(tmp, absb);
+            strcat(tmp, suffix);
+            strcpy(files[i].name, tmp);
+        }
+    }
+    strcpy(f->name, absb);
     return 0;
 }
 
@@ -551,10 +1413,11 @@ FILE *fopen(const char *name, const char *mode)
     int i, fd;
     int flags = 0;
     if (strchr(mode, 'w')) flags = O_CREAT | O_WRONLY | O_TRUNC;
-    else if (strchr(mode, 'a')) flags = O_CREAT | O_WRONLY;
+    else if (strchr(mode, 'a')) flags = O_CREAT | O_WRONLY | O_APPEND;
     else flags = O_RDONLY;
     fd = open(name, flags, 0666);
     if (fd < 0) return 0;
+    if (flags & O_APPEND) lseek(fd, 0, SEEK_END);
     for (i = 0; i < MAXSTREAMS; i++) {
         if (!streams[i].fd && !streams[i].is_err) {
             streams[i].fd = fd; streams[i].is_err = 0; streams[i].eof = 0;
@@ -638,16 +1501,188 @@ static void onum(Out *o, unsigned long long v, int base, int width, int zero, in
     for (i = n; i < width; i++) oc(o, zero ? '0' : ' ');
     while (n) oc(o, tmp[--n]);
 }
+int (*nan16_digits_hook)(double, char *, int *);
+static void nan16_digits(double m, char *d, int *e)
+{
+    int i;
+    unsigned long long v;
+    if (m != 0.0 && nan16_digits_hook) {
+        if (nan16_digits_hook(m, d, e) == 0) return;
+    }
+    if (m == 0.0) {
+        for (i = 0; i < 17; i++) d[i] = '0';
+        *e = 0;
+        return;
+    }
+    *e = 0;
+    while (m >= 10.0) { m /= 10.0; (*e)++; }
+    while (m < 1.0) { m *= 10.0; (*e)--; }
+    v = (unsigned long long)(m * 10000000000000000.0 + 0.5);
+    if (v >= 100000000000000000ULL) { v /= 10; (*e)++; }
+    for (i = 16; i >= 0; i--) { d[i] = (char)('0' + v % 10); v /= 10; }
+}
+static int nan16_round(char *d, int e, int ns)
+{
+    int i, up;
+    if (ns >= 17) return e;
+    if (ns <= 0) {
+        int carry = ns == 0 && d[0] >= '5';
+        for (i = 0; i < 17; i++) d[i] = '0';
+        if (carry) { d[0] = '1'; return e + 1; }
+        return e;
+    }
+    up = d[ns] >= '5';
+    for (i = ns; i < 17; i++) d[i] = '0';
+    if (up) {
+        i = ns - 1;
+        while (i >= 0 && d[i] == '9') { d[i] = '0'; i--; }
+        if (i >= 0) d[i]++;
+        else { d[0] = '1'; for (i = 1; i < 17; i++) d[i] = '0'; e++; }
+    }
+    return e;
+}
+static void nan16_body_f(Out *o, const char *d, int e, int p)
+{
+    int point = e + 1, j, idx;
+    if (point <= 0) {
+        oc(o, '0');
+        if (p > 0) {
+            oc(o, '.');
+            for (j = 1; j <= p; j++) {
+                idx = e + j;
+                oc(o, idx >= 0 && idx < 17 ? d[idx] : '0');
+            }
+        }
+        return;
+    }
+    for (j = point - 1; j >= 0; j--) {
+        idx = e - j;
+        oc(o, idx >= 0 && idx < 17 ? d[idx] : '0');
+    }
+    if (p > 0) {
+        oc(o, '.');
+        for (j = 1; j <= p; j++) {
+            idx = e + j;
+            oc(o, idx >= 0 && idx < 17 ? d[idx] : '0');
+        }
+    }
+}
+static void nan16_body_e(Out *o, const char *d, int e, int p)
+{
+    int i, ex = e < 0 ? -e : e;
+    char eb[8]; int n = 0;
+    oc(o, d[0]);
+    if (p > 0) {
+        oc(o, '.');
+        for (i = 1; i <= p; i++) oc(o, i < 17 ? d[i] : '0');
+    }
+    oc(o, 'e');
+    oc(o, e < 0 ? '-' : '+');
+    if (ex >= 100) { eb[n++] = (char)('0' + (ex / 100) % 10); }
+    eb[n++] = (char)('0' + (ex / 10) % 10);
+    eb[n++] = (char)('0' + ex % 10);
+    for (i = 0; i < n; i++) oc(o, eb[i]);
+}
+static void nan16_strip_g(char *s)
+{
+    char *dot = strchr(s, '.'), *ep = strchr(s, 'e'), *p;
+    if (!dot) return;
+    p = ep ? ep : s + strlen(s);
+    while (p > dot + 1 && p[-1] == '0') p--;
+    if (p == dot + 1) p = dot;
+    if (*p == 0) return;
+    memmove(p, ep ? ep : "", strlen(ep ? ep : "") + 1);
+}
+static void nan16_fmt_double(Out *o, double d, int conv, int prec, int plus,
+                             int space, int left, int width, int zero, int alt)
+{
+    char digits[17], body[512];
+    int e, p, i, ns, neg, pos = 0;
+    Out tmp;
+    neg = d < 0.0 || (d == 0.0 && 1.0 / d < 0.0);
+    if (d != d) { os(o, "nan"); return; }
+    if (isinf(d)) {
+        char sign = neg ? '-' : plus ? '+' : space ? ' ' : 0;
+        if (sign) oc(o, sign);
+        os(o, "inf");
+        return;
+    }
+    d = fabs(d);
+    nan16_digits(d, digits, &e);
+    tmp.buf = body; tmp.cap = sizeof body; tmp.len = 0;
+    if (conv == 'e') {
+        p = prec < 0 ? 6 : prec;
+        ns = p + 1; if (ns > 17) ns = 17;
+        e = nan16_round(digits, e, ns);
+        nan16_body_e(&tmp, digits, e, p);
+    } else if (conv == 'f') {
+        p = prec < 0 ? 6 : prec;
+        ns = e + 1 + p; if (ns > 17) ns = 17;
+        e = nan16_round(digits, e, ns);
+        nan16_body_f(&tmp, digits, e, p);
+    } else {
+        p = prec < 0 ? 6 : prec; if (p == 0) p = 1;
+        ns = p; if (ns > 17) ns = 17;
+        e = nan16_round(digits, e, ns);
+        if (e < -4 || e >= p) {
+            nan16_body_e(&tmp, digits, e, p - 1);
+            if (!alt) nan16_strip_g(body);
+        } else {
+            int fp = p - (e + 1);
+            if (fp < 0) fp = 0;
+            nan16_body_f(&tmp, digits, e, fp);
+            if (!alt) nan16_strip_g(body);
+        }
+    }
+    body[tmp.len < sizeof body ? tmp.len : sizeof body - 1] = 0;
+    {
+        char sign = neg ? '-' : plus ? '+' : space ? ' ' : 0;
+        int blen = (int)strlen(body) + (sign ? 1 : 0);
+        if (!left && zero) {
+            if (sign) oc(o, sign);
+            for (i = blen; i < width; i++) oc(o, '0');
+            os(o, body);
+        } else {
+            if (!left) for (i = blen; i < width; i++) oc(o, ' ');
+            if (sign) oc(o, sign);
+            os(o, body);
+            if (left) for (i = blen; i < width; i++) oc(o, ' ');
+        }
+    }
+}
 static void oprintf(Out *o, const char *fmt, va_list ap)
 {
     while (*fmt) {
-        int width = 0, zero = 0, left = 0, lng = 0, prec = -1;
+        int width = 0, zero = 0, left = 0, lng = 0, prec = -1, alt = 0;
+        int plus = 0, space = 0;
         if (*fmt != '%') { oc(o, *fmt++); continue; }
         fmt++;
-        if (*fmt == '-') { left = 1; fmt++; }
-        if (*fmt == '0') { zero = 1; fmt++; }
-        while (isdigit((unsigned char)*fmt)) width = width * 10 + (*fmt++ - '0');
-        if (*fmt == '.') { fmt++; prec = 0; while (isdigit((unsigned char)*fmt)) prec = prec * 10 + (*fmt++ - '0'); }
+        for (;;) {
+            if (*fmt == '-') { left = 1; fmt++; }
+            else if (*fmt == '0') { zero = 1; fmt++; }
+            else if (*fmt == '+') { plus = 1; fmt++; }
+            else if (*fmt == ' ') { space = 1; fmt++; }
+            else if (*fmt == '#') { alt = 1; fmt++; }
+            else break;
+        }
+        if (*fmt == '*') {
+            width = va_arg(ap, int);
+            if (width < 0) { left = 1; width = -width; }
+            fmt++;
+        } else {
+            while (isdigit((unsigned char)*fmt)) width = width * 10 + (*fmt++ - '0');
+        }
+        if (*fmt == '.') {
+            fmt++;
+            if (*fmt == '*') {
+                prec = va_arg(ap, int);
+                if (prec < 0) prec = -1;   /* negative precision = omitted */
+                fmt++;
+            } else {
+                prec = 0;
+                while (isdigit((unsigned char)*fmt)) prec = prec * 10 + (*fmt++ - '0');
+            }
+        }
         while (*fmt == 'l') { lng++; fmt++; }
         if (*fmt == 'z') { lng = 2; fmt++; }
         if (*fmt == 'h') { fmt++; if (*fmt == 'h') fmt++; }
@@ -656,7 +1691,11 @@ static void oprintf(Out *o, const char *fmt, va_list ap)
             long long v = lng ? va_arg(ap, long long) : (long long)va_arg(ap, int);
             unsigned long long u;
             if (v < 0) { oc(o, '-'); u = (unsigned long long)(-v); }
-            else u = (unsigned long long)v;
+            else {
+                if (plus) oc(o, '+');
+                else if (space) oc(o, ' ');
+                u = (unsigned long long)v;
+            }
             onum(o, u, 10, width, zero, 0);
             break;
         }
@@ -679,24 +1718,18 @@ static void oprintf(Out *o, const char *fmt, va_list ap)
         case 'c': oc(o, va_arg(ap, int)); break;
         case 's': {
             const char *s = va_arg(ap, const char *);
-            int n = 0;
+            int n = 0, k;
             if (!s) s = "(null)";
             while (s[n] && (prec < 0 || n < prec)) n++;
-            if (!left) for (; n < width; width--) oc(o, ' ');
-            while (n--) oc(o, *s++);
+            if (!left) for (k = n; k < width; k++) oc(o, ' ');
+            for (k = 0; k < n; k++) oc(o, s[k]);
+            if (left) for (k = n; k < width; k++) oc(o, ' ');
             break;
         }
         case 'f': case 'e': case 'g': {
             double d = va_arg(ap, double);
-            long long ip = (long long)d;
-            double frac = d - (double)ip;
-            int i;
-            if (frac < 0.0) frac = -frac;
-            if (ip < 0) { oc(o, '-'); ip = -ip; }
-            onum(o, (unsigned long long)ip, 10, 0, 0, 0);
-            oc(o, '.');
-            for (i = 0; i < 6; i++) { frac *= 10.0; }
-            onum(o, (unsigned long long)frac, 10, 6, 1, 0);
+            nan16_fmt_double(o, d, fmt[-1], prec, plus, space, left,
+                             width, zero, alt);
             break;
         }
         case '%': oc(o, '%'); break;
@@ -745,47 +1778,412 @@ int printf(const char *fmt, ...)
     va_start(ap, fmt); r = vout(stdout, fmt, ap); va_end(ap);
     return r;
 }
-int scanf(const char *fmt, ...) { (void)fmt; return 0; }
-int sscanf(const char *s, const char *fmt, ...) { (void)s; (void)fmt; return 0; }
-int fscanf(FILE *fp, const char *fmt, ...) { (void)fp; (void)fmt; return 0; }
+/* A compact scanf family: integer/hex/octal/string/char conversions with
+   width and length modifiers, enough for SQLite's test1.c and Tcl probes. */
+int vsscanf(const char *s, const char *fmt, va_list ap)
+{
+    const char *p = s;
+    int assigned = 0;
+    while (*fmt) {
+        int suppress = 0, width = 0, lng = 0, base = 10, any = 0, neg = 0;
+        unsigned long long v = 0;
+        char conv;
+        const char *start;
+        if (isspace((unsigned char)*fmt)) {
+            while (isspace((unsigned char)*fmt)) fmt++;
+            while (isspace((unsigned char)*p)) p++;
+            continue;
+        }
+        if (*fmt != '%') {
+            if (*p != *fmt) break;
+            p++; fmt++; continue;
+        }
+        fmt++;
+        if (*fmt == '*') { suppress = 1; fmt++; }
+        while (isdigit((unsigned char)*fmt)) width = width * 10 + (*fmt++ - '0');
+        if (*fmt == 'h') { fmt++; if (*fmt == 'h') fmt++; }
+        else if (*fmt == 'l') { lng = 1; fmt++; if (*fmt == 'l') { lng = 2; fmt++; } }
+        else if (*fmt == 'z' || *fmt == 'j' || *fmt == 't') { lng = 2; fmt++; }
+        conv = *fmt++;
+        if (conv == '%') {
+            if (*p != '%') break;
+            p++; continue;
+        }
+        if (conv == 'n') {
+            if (!suppress) {
+                if (lng == 0) *va_arg(ap, int *) = (int)(p - s);
+                else if (lng == 1) *va_arg(ap, long *) = (long)(p - s);
+                else *va_arg(ap, long long *) = (long long)(p - s);
+            }
+            continue;
+        }
+        if (conv != 'c' && conv != '[')
+            while (isspace((unsigned char)*p)) p++;
+        if (!*p) break;
+        if (conv == 's' || conv == 'c') {
+            char *d = suppress ? 0 : va_arg(ap, char *);
+            unsigned n = 0, lim = (unsigned)width;
+            if (conv == 'c') {
+                if (!lim) lim = 1;
+                while (n < lim && *p) { if (d) d[n] = *p; n++; p++; }
+                if (n < lim) break;
+            } else {
+                while (*p && !isspace((unsigned char)*p) && (!lim || n < lim)) {
+                    if (d) d[n] = *p;
+                    n++; p++;
+                }
+                if (!n) break;
+                if (d) d[n] = 0;
+            }
+            if (!suppress) assigned++;
+            continue;
+        }
+        if (conv == 'd' || conv == 'i' || conv == 'u' || conv == 'x'
+            || conv == 'X' || conv == 'o') {
+            start = p;
+            if (conv == 'i') base = 0;
+            else if (conv == 'x' || conv == 'X') base = 16;
+            else if (conv == 'o') base = 8;
+            if (base == 10 || base == 0) {
+                if (*p == '+' || *p == '-') {
+                    neg = (*p == '-'); p++;
+                    if (width) width--;
+                }
+            }
+            if (base == 16 && p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) {
+                p += 2;
+                if (width) width -= 2;
+            }
+            if (base == 0) {
+                if (*p == '0') { base = 8; }
+                else base = 10;
+            }
+            while (*p) {
+                int c = (unsigned char)*p, d, used = (int)(p - start);
+                if (c >= '0' && c <= '9') d = c - '0';
+                else if (c >= 'a' && c <= 'f') d = c - 'a' + 10;
+                else if (c >= 'A' && c <= 'F') d = c - 'A' + 10;
+                else break;
+                if (d >= base) break;
+                if (width && used >= width) break;
+                v = v * (unsigned)base + (unsigned)d;
+                any = 1; p++;
+            }
+            if (!any) { p = start; break; }
+            if (neg) v = (unsigned long long)(-(long long)v);
+            if (!suppress) {
+                if (lng == 0) *va_arg(ap, int *) = (int)v;
+                else if (lng == 1) *va_arg(ap, long *) = (long)v;
+                else *va_arg(ap, long long *) = (long long)v;
+                assigned++;
+            }
+            continue;
+        }
+        break;
+    }
+    return assigned;
+}
+int sscanf(const char *s, const char *fmt, ...)
+{
+    va_list ap;
+    int r;
+    va_start(ap, fmt);
+    r = vsscanf(s, fmt, ap);
+    va_end(ap);
+    return r;
+}
+int fscanf(FILE *fp, const char *fmt, ...)
+{
+    char line[1024];
+    va_list ap;
+    int r;
+    if (!fgets(line, sizeof line, fp)) return EOF;
+    va_start(ap, fmt);
+    r = vsscanf(line, fmt, ap);
+    va_end(ap);
+    return r;
+}
+int scanf(const char *fmt, ...)
+{
+    char line[1024];
+    va_list ap;
+    int r;
+    if (!fgets(line, sizeof line, stdin)) return EOF;
+    va_start(ap, fmt);
+    r = vsscanf(line, fmt, ap);
+    va_end(ap);
+    return r;
+}
 
 /* ---------------------------------------------------------------- system */
 int stat(const char *name, struct stat *st)
 {
-    MemFile *f = mf_find(name);
-    if (!f) return -1;
+    char abs[VFS_NAME_MAX];
+    MemFile *f;
+    if (vfs_resolve(name, abs) < 0) return -1;
+    f = mf_find(abs);
+    if (!f) {
+        if (!mf_isdir_name(abs)) { errno = ENOENT; return -1; }
+        memset(st, 0, sizeof *st);
+        st->st_mode = S_IFDIR | 0755;
+        st->st_nlink = 2;
+        return 0;
+    }
     memset(st, 0, sizeof *st);
-    st->st_size = f->size;
-    st->st_mode = S_IFREG | 0644;
+    st->st_size = f->isdir ? 0 : (long)f->size;
+    st->st_mode = f->isdir ? (S_IFDIR | (f->mode & 0777))
+                           : (S_IFREG | (f->mode & 0777));
+    st->st_nlink = f->isdir ? 2 : 1;
     return 0;
+}
+int lstat(const char *name, struct stat *st)
+{
+    char abs[VFS_NAME_MAX];
+    MemFile *f;
+    if (vfs_abspath(name, abs) < 0) return -1;
+    f = mf_find(abs);
+    if (!f) {
+        if (!mf_isdir_name(abs)) { errno = ENOENT; return -1; }
+        memset(st, 0, sizeof *st);
+        st->st_mode = S_IFDIR | 0755;
+        st->st_nlink = 2;
+        return 0;
+    }
+    memset(st, 0, sizeof *st);
+    if (f->islink) {
+        st->st_mode = S_IFLNK | 0777;
+        st->st_size = (long)f->size;
+        st->st_nlink = 1;
+        return 0;
+    }
+    st->st_size = f->isdir ? 0 : (long)f->size;
+    st->st_mode = f->isdir ? (S_IFDIR | (f->mode & 0777))
+                           : (S_IFREG | (f->mode & 0777));
+    st->st_nlink = f->isdir ? 2 : 1;
+    return 0;
+}
+int chmod(const char *name, mode_t mode)
+{
+    char abs[VFS_NAME_MAX];
+    MemFile *f;
+    if (vfs_resolve(name, abs) < 0) return -1;
+    f = mf_find(abs);
+    if (!f) { errno = ENOENT; return -1; }
+    if (!f->owned) { errno = EPERM; return -1; }
+    f->mode = (unsigned)mode & 0777;
+    f->writable = (f->mode & 0222) != 0;
+    return 0;
+}
+int utimes(const char *name, const struct timeval times[2])
+{
+    (void)times;
+    return access(name, F_OK);
 }
 int fstat(int fd, struct stat *st)
 {
-    if (fd < 1 || fd > MAXFILES) return -1;
+    if (fd < FD_VFS_BASE || (unsigned)(fd - FD_VFS_BASE) >= vfs_cap) return -1;
     memset(st, 0, sizeof *st);
-    st->st_size = files[fd - 1].size;
-    st->st_mode = S_IFREG | 0644;
+    st->st_size = files[fd - FD_VFS_BASE].size;
+    st->st_mode = files[fd - FD_VFS_BASE].isdir
+        ? (S_IFDIR | (files[fd - FD_VFS_BASE].mode & 0777))
+        : (S_IFREG | (files[fd - FD_VFS_BASE].mode & 0777));
     return 0;
 }
-int mkdir(const char *name, mode_t mode) { (void)name; (void)mode; return 0; }
-char *getcwd(char *buf, size_t n) { if (n) { strncpy(buf, "/", n); buf[n - 1] = 0; } return buf; }
-int chdir(const char *p) { (void)p; return 0; }
-int access(const char *p, int m) { (void)m; return mf_find(p) ? 0 : -1; }
+int mkdir(const char *name, mode_t mode)
+{
+    char abs[VFS_NAME_MAX];
+    MemFile *f;
+    (void)mode;
+    if (vfs_abspath(name, abs) < 0) return -1;
+    if (mf_find(abs) || mf_isdir_name(abs)) { errno = EEXIST; return -1; }
+    f = mf_new(abs);
+    if (!f) { errno = ENOSPC; return -1; }
+    f->isdir = 1;
+    f->writable = 0;
+    f->mode = 0755;
+    return 0;
+}
+char *getcwd(char *buf, size_t n)
+{
+    if (!buf || n <= strlen(vfs_cwd)) { errno = ERANGE; return 0; }
+    strcpy(buf, vfs_cwd);
+    return buf;
+}
+int chdir(const char *p)
+{
+    char abs[VFS_NAME_MAX];
+    if (vfs_resolve(p, abs) < 0) return -1;
+    if (!mf_isdir_name(abs)) { errno = ENOENT; return -1; }
+    strcpy(vfs_cwd, abs);
+    return 0;
+}
+int access(const char *p, int m)
+{
+    char abs[VFS_NAME_MAX];
+    MemFile *f;
+    if (vfs_resolve(p, abs) < 0) return -1;
+    f = mf_find(abs);
+    if (!f) {
+        if (mf_isdir_name(abs)) return (m & X_OK) ? 0 : (m & W_OK) ? -1 : 0;
+        errno = ENOENT;
+        return -1;
+    }
+    if ((m & R_OK) && !(f->mode & 0444)) { errno = EACCES; return -1; }
+    if ((m & W_OK) && (!f->writable || !(f->mode & 0222))) { errno = EACCES; return -1; }
+    /* The guest VFS has no executable files.  Tcl's "file executable" and
+       test_binary_name() use this to skip CLI/shell tests explicitly. */
+    if ((m & X_OK) && !f->isdir) { errno = EACCES; return -1; }
+    return 0;
+}
+ssize_t readlink(const char *path, char *buf, size_t n)
+{
+    char abs[VFS_NAME_MAX];
+    MemFile *f;
+    size_t len;
+    if (vfs_abspath(path, abs) < 0) return -1;
+    f = mf_find(abs);
+    if (!f || !f->islink) { errno = EINVAL; return -1; }
+    len = f->size < n ? f->size : n;
+    memcpy(buf, f->data, len);
+    return (ssize_t)len;
+}
+int symlink(const char *target, const char *linkpath)
+{
+    char abs[VFS_NAME_MAX], parent[VFS_NAME_MAX];
+    const char *slash;
+    MemFile *f;
+    size_t plen;
+    if (!target || !*target) { errno = ENOENT; return -1; }
+    if (vfs_abspath(linkpath, abs) < 0) return -1;
+    if (mf_find(abs) || mf_isdir_name(abs)) { errno = EEXIST; return -1; }
+    slash = strrchr(abs, '/');
+    plen = slash ? (size_t)(slash - abs) : 0;
+    if (plen == 0) strcpy(parent, "/");
+    else { memcpy(parent, abs, plen); parent[plen] = 0; }
+    if (!mf_isdir_name(parent)) { errno = ENOENT; return -1; }
+    f = mf_new(abs);
+    if (!f) { errno = ENOSPC; return -1; }
+    f->size = (unsigned)strlen(target);
+    f->cap = f->size;
+    f->data = (unsigned char *)malloc(f->size + 1);
+    if (!f->data) { f->used = 0; return -1; }
+    memcpy(f->data, target, f->size + 1);
+    f->writable = 0;
+    f->islink = 1;
+    f->mode = 0777;
+    return 0;
+}
 int isatty(int fd) { (void)fd; return 0; }
 int getpid(void) { return 1; }
-char *realpath(const char *p, char *out) { if (out) { strcpy(out, p); return out; } return strdup(p); }
+char *realpath(const char *p, char *out)
+{
+    char abs[VFS_NAME_MAX], *r = out;
+    if (vfs_resolve(p, abs) < 0) return 0;
+    if (!r) r = (char *)malloc(strlen(abs) + 1);
+    if (!r) { errno = ENOMEM; return 0; }
+    strcpy(r, abs);
+    return r;
+}
 void *mmap(void *a, size_t n, int p, int f, int fd, off_t o)
 {
     (void)a; (void)n; (void)p; (void)f; (void)o;
-    if (fd >= 1 && fd <= MAXFILES && files[fd - 1].used) return files[fd - 1].data;
+    if (fd >= FD_VFS_BASE && (unsigned)(fd - FD_VFS_BASE) < vfs_cap && files[fd - FD_VFS_BASE].used)
+        return files[fd - FD_VFS_BASE].data;
     return (void *)-1;
 }
 int munmap(void *a, size_t n) { (void)a; (void)n; return 0; }
-int gettimeofday(struct timeval *tv, void *tz) { (void)tz; if (tv) { tv->tv_sec = 0; tv->tv_usec = 0; } return 0; }
-time_t time(time_t *t) { if (t) *t = 0; return 0; }
-clock_t clock(void) { return 0; }
-struct tm *localtime(const time_t *t) { (void)t; return 0; }
-struct tm *gmtime(const time_t *t) { (void)t; return 0; }
+/* The runner publishes monotonic time and executed steps at guest byte
+   0x03EFF010 (ms, steps low, steps high).  The x86_64/S1 kernel must publish
+   the same block.  0x03EFF01C accumulates virtual sleep time added by the
+   SQLite VFS xSleep (busy handlers); without it, nanosleep busy-spins on a
+   clock that only advances at runner slice boundaries. */
+static unsigned nan16_now_ms(void)
+{
+    return *(volatile unsigned *)0x03EFF010u
+         + *(volatile unsigned *)0x03EFF01Cu;
+}
+static long days_from_civil(int y, unsigned m, unsigned d)
+{
+    long era, yoe, doy, doe;
+    y -= m <= 2;
+    era = (y >= 0 ? y : y - 399) / 400;
+    yoe = y - era * 400;
+    doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1;
+    doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    return era * 146097 + doe - 719468;
+}
+static void civil_from_days(long z, int *yy, int *mm, int *dd)
+{
+    long era;
+    unsigned doe, yoe, doy, mp, d, m;
+    int y;
+    z += 719468;
+    era = (z >= 0 ? z : z - 146096) / 146097;
+    doe = (unsigned)(z - era * 146097);
+    yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    y = (int)(yoe + era * 400);
+    doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    mp = (5 * doy + 2) / 153;
+    d = doy - (153 * mp + 2) / 5 + 1;
+    m = mp + (mp < 10 ? 3 : (unsigned)-9);
+    y += (m <= 2);
+    *yy = y; *mm = (int)m; *dd = (int)d;
+}
+static struct tm *tm_from_time(time_t t)
+{
+    static struct tm out;
+    long days = (long)(t / 86400);
+    long rem = (long)(t % 86400);
+    int y, m, d;
+    if (rem < 0) { rem += 86400; days--; }
+    civil_from_days(days, &y, &m, &d);
+    out.tm_sec = (int)(rem % 60);
+    out.tm_min = (int)((rem / 60) % 60);
+    out.tm_hour = (int)(rem / 3600);
+    out.tm_mday = d;
+    out.tm_mon = m - 1;
+    out.tm_year = y - 1900;
+    out.tm_wday = (int)((days + 4) % 7);
+    if (out.tm_wday < 0) out.tm_wday += 7;
+    out.tm_yday = (int)(days - days_from_civil(y, 1, 1));
+    out.tm_isdst = 0;
+    return &out;
+}
+int gettimeofday(struct timeval *tv, void *tz)
+{
+    unsigned ms = nan16_now_ms();
+    (void)tz;
+    if (tv) { tv->tv_sec = (long)(ms / 1000u); tv->tv_usec = (long)(ms % 1000u) * 1000L; }
+    return 0;
+}
+time_t time(time_t *t)
+{
+    time_t s = (time_t)(nan16_now_ms() / 1000u);
+    if (t) *t = s;
+    return s;
+}
+clock_t clock(void) { return (clock_t)(nan16_now_ms() * 1000u); }
+int clock_gettime(clockid_t id, struct timespec *ts)
+{
+    unsigned ms = nan16_now_ms();
+    (void)id;
+    if (!ts) { errno = EINVAL; return -1; }
+    ts->tv_sec = (long)(ms / 1000u);
+    ts->tv_nsec = (long)(ms % 1000u) * 1000000L;
+    return 0;
+}
+int nanosleep(const struct timespec *req, struct timespec *rem)
+{
+    unsigned target, now;
+    if (!req) { errno = EINVAL; return -1; }
+    target = nan16_now_ms() + (unsigned)(req->tv_sec * 1000L + req->tv_nsec / 1000000L)
+           + (req->tv_nsec % 1000000L ? 1u : 0u);
+    do { now = nan16_now_ms(); } while (now < target);
+    if (rem) { rem->tv_sec = 0; rem->tv_nsec = 0; }
+    return 0;
+}
+struct tm *localtime(const time_t *t) { return tm_from_time(t ? *t : time(0)); }
+struct tm *gmtime(const time_t *t) { return tm_from_time(t ? *t : time(0)); }
 int setjmp(jmp_buf b) { (void)b; return 0; }
 void longjmp(jmp_buf b, int v) { (void)b; (void)v; exit(1); }
 int sem_init(sem_t *s, int p, unsigned v) { (void)p; s->v = v; return 0; }
@@ -804,6 +2202,10 @@ void setbuf(FILE *fp, char *b) { (void)fp; (void)b; }
 /* ---------------------------------------------------------------- math */
 double ldexp(double x, int e)
 {
+    if (e > 1023) e = 1023;
+    if (e < -1074) e = -1074;
+    while (e >= 32) { x = x * 4294967296.0; e -= 32; }
+    while (e <= -32) { x = x * (1.0 / 4294967296.0); e += 32; }
     while (e > 0) { x = x * 2.0; e--; }
     while (e < 0) { x = x * 0.5; e++; }
     return x;
@@ -825,13 +2227,17 @@ double fabs(double x) { return x < 0 ? -x : x; }
 long double fabsl(long double x) { return x < 0 ? -x : x; }
 double floor(double x)
 {
-    long long i = (long long)x;
+    long long i;
+    if (x >= 9223372036854775808.0 || x < -9223372036854775808.0) return x;
+    i = (long long)x;
     if ((double)i > x) i--;
     return (double)i;
 }
 double ceil(double x)
 {
-    long long i = (long long)x;
+    long long i;
+    if (x >= 9223372036854775808.0 || x < -9223372036854775808.0) return x;
+    i = (long long)x;
     if ((double)i < x) i++;
     return (double)i;
 }
@@ -839,6 +2245,8 @@ double fmod(double a, double b)
 {
     long long q;
     if (b == 0.0) return 0.0;
+    if (a >= 9223372036854775808.0 || a < -9223372036854775808.0)
+        return 0.0;
     q = (long long)(a / b);
     return a - (double)q * b;
 }
@@ -851,15 +2259,182 @@ double sqrt(double x)
     while (r != last) { last = r; r = (r + x / r) * 0.5; }
     return r;
 }
+
+#define NAN16_PI    0x1.921fb54442d18p+1
+#define NAN16_PIO2  0x1.921fb54442d18p+0
+#define NAN16_PIO4  0x1.921fb54442d18p-1
+#define NAN16_LN2   0x1.62e42fefa39efp-1
+#define NAN16_ILN2  0x1.71547652b82fep+0
+#define NAN16_SQ1_2 0x1.6a09e667f3bcdp-1
+#define NAN16_LN10  0x1.26bb1bbb55516p+1
+
+double trunc(double x)
+{
+    if (x >= 0x1.0000000000000p+63 || x < -0x1.0000000000000p+63) return x;
+    return (double)(long long)x;
+}
+double round(double x)
+{
+    if (x >= 0.0) return floor(x + 0.5);
+    return ceil(x - 0.5);
+}
+double copysign(double x, double y)
+{
+    union { double d; unsigned long long u; } v;
+    v.d = fabs(x);
+    if (y < 0.0 || (y == 0.0 && 1.0 / y < 0.0))
+        v.u |= 0x8000000000000000ULL;
+    return v.d;
+}
+double exp(double x)
+{
+    int k;
+    double r, r2, p;
+    if (x != x) return x;
+    if (x > 0x1.62e42fefa39efp+9) return 1.0 / 0.0;
+    if (x < -0x1.74910d52d3050p+9) return 0.0;
+    k = (int)floor(x * NAN16_ILN2 + (x >= 0.0 ? 0.5 : -0.5));
+    r = x - (double)k * NAN16_LN2;
+    r2 = r * r;
+    p = 1.0 + r + r2 * (0.5 + r * (0x1.5555555555555p-3 +
+        r * (0x1.5555555555555p-5 + r * (0x1.1111111111111p-7 +
+        r * (0x1.6c16c16c16c17p-10 + r * (0x1.a01a01a01a01ap-13 +
+        r * (0x1.a01a01a01a01ap-16 + r * (0x1.71de3a556c734p-19 +
+        r * (0x1.27e4fb7789f5cp-22 + r * (0x1.ae64567f544e4p-26 +
+        r * 0x1.1eed8eff8d898p-29))))))))));
+    return ldexp(p, k);
+}
+double log(double x)
+{
+    int e, n, neg = 0;
+    double m, z, z2, term, sum;
+    if (x != x) return x;
+    if (x < 0.0) return 0.0 / 0.0;
+    if (x == 0.0) return -1.0 / 0.0;
+    if (x == 1.0) return 0.0;
+    if (x < 1.0) { x = 1.0 / x; neg = 1; }
+    m = frexp(x, &e);
+    if (m < NAN16_SQ1_2) { m *= 2.0; e--; }
+    z = (m - 1.0) / (m + 1.0);
+    z2 = z * z;
+    sum = 1.0;
+    term = 1.0;
+    for (n = 3; n <= 41; n += 2) {
+        term *= z2;
+        sum += term / (double)n;
+    }
+    sum = 2.0 * z * sum + (double)e * NAN16_LN2;
+    return neg ? -sum : sum;
+}
+double log10(double x) { return log(x) / NAN16_LN10; }
+double log2(double x) { return log(x) / NAN16_LN2; }
 double pow(double x, double y)
 {
-    long long n = (long long)y;
-    double r = 1.0;
-    int neg = 0;
-    if ((double)n != y) return 0.0;
-    if (n < 0) { neg = 1; n = -n; }
-    while (n) { if (n & 1) r = r * x; x = x * x; n >>= 1; }
-    return neg ? 1.0 / r : r;
+    double ax, r;
+    long long n;
+    int isint;
+    if (y == 0.0) return 1.0;
+    if (x == 1.0) return 1.0;
+    if (y == 1.0) return x;
+    n = (long long)y;
+    isint = ((double)n == y && y < 0x1.0000000000000p+53 && y > -0x1.0000000000000p+53);
+    if (x == 0.0) {
+        if (y < 0.0) return 1.0 / 0.0;
+        return 0.0;
+    }
+    if (x < 0.0 && !isint) return 0.0 / 0.0;
+    ax = x < 0.0 ? -x : x;
+    r = exp(y * log(ax));
+    if (x < 0.0 && (n & 1)) r = -r;
+    return r;
+}
+static void sin_cos(double x, double *sp, double *cp)
+{
+    double y, r, r2, s, c;
+    int q;
+    y = fmod(x, 2.0 * NAN16_PI);
+    if (y > NAN16_PI) y -= 2.0 * NAN16_PI;
+    if (y < -NAN16_PI) y += 2.0 * NAN16_PI;
+    q = (int)floor(y / NAN16_PIO2 + 0.5);
+    r = y - (double)q * 0x1.921fb54442d18p+0 - (double)q * 0x1.1a62633145c07p-54;
+    r2 = r * r;
+    s = r * (1.0 + r2 * (-0x1.5555555555555p-3 + r2 *
+        (0x1.1111111111111p-7 + r2 * (-0x1.a01a01a01a01ap-13 + r2 *
+        (0x1.71de3a556c734p-19 + r2 * (-0x1.ae64567f544e4p-26 +
+        r2 * 0x1.6124613a86d0ap-33))))));
+    c = 1.0 + r2 * (-0.5 + r2 * (0x1.5555555555555p-5 + r2 *
+        (-0x1.6c16c16c16c17p-10 + r2 * (0x1.a01a01a01a01ap-16 + r2 *
+        (-0x1.27e4fb7789f5cp-22 + r2 * 0x1.1eed8eff8d898p-29)))));
+    q = ((q % 4) + 4) % 4;
+    if (q == 0) { *sp = s; *cp = c; }
+    else if (q == 1) { *sp = c; *cp = -s; }
+    else if (q == 2) { *sp = -s; *cp = -c; }
+    else { *sp = -c; *cp = s; }
+}
+double sin(double x) { double s, c; sin_cos(x, &s, &c); return s; }
+double cos(double x) { double s, c; sin_cos(x, &s, &c); return c; }
+double tan(double x) { double s, c; sin_cos(x, &s, &c); return s / c; }
+static double atan_small(double z)
+{
+    double z2 = z * z, term = z, sum = z;
+    int n;
+    for (n = 3; n <= 49; n += 2) {
+        term *= -z2;
+        sum += term / (double)n;
+    }
+    return sum;
+}
+double atan(double x)
+{
+    if (x != x) return x;
+    if (x < 0.0) return -atan(-x);
+    if (x > 1.0) return NAN16_PIO2 - atan_small(1.0 / x);
+    if (x > 0x1.a827999fcef31p-2)
+        return NAN16_PIO4 + atan_small((x - 1.0) / (x + 1.0));
+    return atan_small(x);
+}
+double atan2(double y, double x)
+{
+    if (x > 0.0) return atan(y / x);
+    if (x < 0.0) return y >= 0.0 ? atan(y / x) + NAN16_PI
+                                 : atan(y / x) - NAN16_PI;
+    if (y > 0.0) return NAN16_PIO2;
+    if (y < 0.0) return -NAN16_PIO2;
+    return 0.0;
+}
+double asin(double x)
+{
+    if (x > 1.0 || x < -1.0) return 0.0 / 0.0;
+    return atan2(x, sqrt(1.0 - x * x));
+}
+double acos(double x)
+{
+    if (x > 1.0 || x < -1.0) return 0.0 / 0.0;
+    return atan2(sqrt(1.0 - x * x), x);
+}
+double sinh(double x)
+{
+    double e = exp(x);
+    return (e - 1.0 / e) * 0.5;
+}
+double cosh(double x)
+{
+    double e = exp(x);
+    return (e + 1.0 / e) * 0.5;
+}
+double tanh(double x)
+{
+    double e;
+    if (x > 0x1.4000000000000p+4) return 1.0;
+    if (x < -0x1.4000000000000p+4) return -1.0;
+    e = exp(2.0 * x);
+    return (e - 1.0) / (e + 1.0);
+}
+double modf(double x, double *iptr)
+{
+    double ip = trunc(x);
+    if (iptr) *iptr = ip;
+    return x - ip;
 }
 int isnan(double x) { return x != x; }
 int isinf(double x) { return x > 1.7976931348623157e308 || x < -1.7976931348623157e308; }

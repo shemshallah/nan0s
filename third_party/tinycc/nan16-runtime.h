@@ -10,14 +10,32 @@
     "\n" \
     "u64 __nan16_udivmod(u64 n, u64 d, int want_rem)\n" \
     "{\n" \
-    "    u64 q = 0, r = 0, bit = 1ULL << 63;\n" \
-    "    int i;\n" \
+    "    u64 q = 0, r = n, dd;\n" \
+    "    int i, s = 0;\n" \
     "    if (d == 0) return 0;\n" \
-    "    for (i = 0; i < 64; i++) {\n" \
-    "        r = r << 1;\n" \
-    "        if (n & bit) r = r | 1;\n" \
-    "        if (r >= d) { r = r - d; q = q | bit; }\n" \
-    "        bit = bit >> 1;\n" \
+    "    if (d == 1) return want_rem ? 0 : n;\n" \
+    "    if (n < d) return want_rem ? n : 0;\n" \
+    "    if ((d >> 32) == 0) {\n" \
+    "        u32 dh = (u32)(n >> 32), dl = (u32)n, dv = (u32)d;\n" \
+    "        u32 qh, rh, ql = 0;\n" \
+    "        u64 rr;\n" \
+    "        if (dh == 0) {\n" \
+    "            if (want_rem) return (u64)(dl % dv);\n" \
+    "            return (u64)(dl / dv);\n" \
+    "        }\n" \
+    "        qh = dh / dv; rh = dh % dv; rr = rh;\n" \
+    "        for (i = 0; i < 32; i++) {\n" \
+    "            rr = (rr << 1) | (dl >> 31); dl <<= 1;\n" \
+    "            if (rr >= dv) { rr -= dv; ql |= 1U << (31 - i); }\n" \
+    "        }\n" \
+    "        if (want_rem) return rr;\n" \
+    "        return ((u64)qh << 32) | ql;\n" \
+    "    }\n" \
+    "    dd = d;\n" \
+    "    while ((dd & (1ULL << 63)) == 0) { dd <<= 1; s++; }\n" \
+    "    for (i = 0; i <= s; i++) {\n" \
+    "        if (r >= dd) { r -= dd; q |= 1ULL << (s - i); }\n" \
+    "        dd >>= 1;\n" \
     "    }\n" \
     "    return want_rem ? r : q;\n" \
     "}\n" \
@@ -45,9 +63,16 @@
     "    return neg ? (i64)((u64)0 - r) : (i64)r;\n" \
     "}\n" \
     "\n" \
-    "u64 __ashldi3(u64 a, int n) { while (n > 0) { a = a << 1; n--; } return a; }\n" \
-    "u64 __lshrdi3(u64 a, int n) { while (n > 0) { a = a >> 1; n--; } return a; }\n" \
-    "i64 __ashrdi3(i64 a, int n) { while (n > 0) { a = a >> 1; n--; } return a; }\n" \
+    "static void __nan16_badshift(int op, int n, u64 a)\n" \
+    "{\n" \
+    "    *(volatile u32 *)0x03D00000u = (u32)n;\n" \
+    "    *(volatile u32 *)0x03D00004u = (u32)a;\n" \
+    "    *(volatile u32 *)0x03D00008u = (u32)(a >> 32);\n" \
+    "    *(volatile u32 *)0x03D0000Cu = 0x53484654u | ((u32)op << 28);\n" \
+    "}\n" \
+    "u64 __ashldi3(u64 a, int n) { if (n < 0 || n >= 64) { __nan16_badshift(0, n, a); return 0; } if (n >= 32) { a = a << 32; n -= 32; } if (n >= 16) { a = a << 16; n -= 16; } if (n >= 8) { a = a << 8; n -= 8; } if (n >= 4) { a = a << 4; n -= 4; } if (n >= 2) { a = a << 2; n -= 2; } if (n) a = a << 1; return a; }\n" \
+    "u64 __lshrdi3(u64 a, int n) { if (n < 0 || n >= 64) { __nan16_badshift(1, n, a); return 0; } if (n >= 32) { a = a >> 32; n -= 32; } if (n >= 16) { a = a >> 16; n -= 16; } if (n >= 8) { a = a >> 8; n -= 8; } if (n >= 4) { a = a >> 4; n -= 4; } if (n >= 2) { a = a >> 2; n -= 2; } if (n) a = a >> 1; return a; }\n" \
+    "i64 __ashrdi3(i64 a, int n) { if (n < 0 || n >= 64) { __nan16_badshift(2, n, (u64)a); return 0; } if (n >= 32) { a = a >> 32; n -= 32; } if (n >= 16) { a = a >> 16; n -= 16; } if (n >= 8) { a = a >> 8; n -= 8; } if (n >= 4) { a = a >> 4; n -= 4; } if (n >= 2) { a = a >> 2; n -= 2; } if (n) a = a >> 1; return a; }\n" \
     "\n" \
     "/* ---- binary64 helpers ---- */\n" \
     "#define DSIGN(x) ((int)((x) >> 63))\n" \
@@ -367,7 +392,26 @@
     "    }\n" \
     "    return ((u64)sign << 63) | ((u64)(n + 1023) << 52) | frac;\n" \
     "}\n" \
-    "u64 __nan16_ull2d(u64 a) { return __nan16_ll2d(a & 0x7FFFFFFFFFFFFFFFULL); }\n" \
+    "u64 __nan16_ull2d(u64 v)\n" \
+    "{\n" \
+    "    int n = 63;\n" \
+    "    u64 p = 1ULL << 63, frac;\n" \
+    "    if (v == 0) return 0;\n" \
+    "    while (!(v & p)) { p >>= 1; n--; }\n" \
+    "    if (n <= 52) {\n" \
+    "        frac = (v << (52 - n)) & DMASK52;\n" \
+    "    } else {\n" \
+    "        int sh = n - 52;\n" \
+    "        u64 rem = v & ((1ULL << sh) - 1);\n" \
+    "        u64 half = 1ULL << (sh - 1);\n" \
+    "        frac = (v >> sh) & DMASK52;\n" \
+    "        if (rem > half || (rem == half && (frac & 1))) {\n" \
+    "            frac++;\n" \
+    "            if (frac == (1ULL << 52)) { frac = 0; n++; }\n" \
+    "        }\n" \
+    "    }\n" \
+    "    return ((u64)(n + 1023) << 52) | frac;\n" \
+    "}\n" \
     "\n" \
     "u64 __nan16_d2ll(u64 d)\n" \
     "{\n" \
