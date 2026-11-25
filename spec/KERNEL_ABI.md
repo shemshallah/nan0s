@@ -169,21 +169,26 @@ Later streams implement these in the NaN kernel and only append new numbers.
 | 10 | wait | pid | status/-err |
 | 11 | time | - | ticks |
 | 12 | share | pid, region, perms | 0/-err |
-| 13 | thread_create | entry, arg, stack | tid/-err |
+| 13 | thread_create | entry, stack, arg | tid/-err |
 | 14 | thread_join | tid | status/-err |
 | 15 | thread_exit | code | does not return |
 | 16 | mutex | op, id, timeout | 0/-err |
 | 17 | cond | op, id, timeout | 0/-err |
 | 18 | tls | index, value | old/-err |
-| 19 | (reserved) | - | - |
+| 19 | thread_detach | tid | 0/-err |
 | 20 | getpid | - | pid |
 | 21 | getppid | - | pid |
 | 22 | kill | pid, sig | 0/-err |
 | 23 | load_image (appended) | image_ptr | pid/-err |
 | 24 | sleep (appended) | ticks | 0 |
+| 25 | setpriority (appended) | pid, prio | 0/1/2 |
+| 26 | getpriority (appended) | pid | prio/-1 |
+| 27 | proc_count (appended) | - | live processes |
+| 28 | proc_limit (appended) | - | process slots |
 
-Numbers 0-18 and 20-22 are frozen; 19 is reserved. Sockets/loader calls
-append after 22.
+Numbers 0-18 and 20-24 are frozen; 19 is `thread_detach` in the current
+nansched/nanthr implementation.  25-28 are appended by `nansched.nas`.
+Sockets/loader calls append after 28.
 
 ## 8. Timer
 
