@@ -8338,7 +8338,9 @@ LD r2,r0,@fb_w
 SHL r2,r2,16
 LD r3,r0,@fb_h
 ADD r2,r2,r3
-ST r2,r1,4
+LD r4,r1,4
+CMP r2,r4
+ST[NE] r2,r1,4
 RET
 ; Callback receives absolute x,y and button state from existing kbd transport.
 g64_touch:
@@ -8366,6 +8368,10 @@ JMP @g64_done
 g64_dock:
 SUB r1,r1,r3
 MOVI r2,#TASK_PITCH
+MODU r3,r1,r2
+MOVI r4,#TASK_WIDTH
+CMP r3,r4
+JMP[GE] @g64_done
 DIVU r1,r1,r2
 CALL @wm_taskbar_select
 JMP @g64_done

@@ -13,6 +13,8 @@ const a=await snap();assert.ok(a[1]>=4,'native GUI needs multiple palette colors
 await p.locator('#type').fill('h');await p.locator('#enter').tap();
 await p.waitForTimeout(2000);
 const z=await snap();assert.notEqual(z[0],a[0],'native terminal must respond to mailbox input');
+await p.locator('#keys button').filter({hasText:/^F5$/}).tap();await p.waitForTimeout(1000);
+assert.notEqual((await snap())[0],z[0],'guest F5 opens its own Settings window');
 await p.screenshot({path:'wasm64-evidence.png',fullPage:true});
 console.log('PASS: native x86-64 boot, indexed framebuffer and terminal keyboard in real v86_64 WASM');
 }finally{await b.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

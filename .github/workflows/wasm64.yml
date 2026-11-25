@@ -31,8 +31,8 @@ jobs:
           cd /tmp/v86_64
           git checkout c394574477b57eadfc859f593b4aecb08fa37cb6
           rustup target add wasm32-unknown-unknown
-          make all
-          cp build/v86_all.js build/v86.wasm bios/seabios.bin bios/vgabios.bin "$GITHUB_WORKSPACE/docs/wasm64/"
+          make all build/v86-fallback.wasm
+          cp build/v86_all.js build/v86.wasm build/v86-fallback.wasm bios/seabios.bin bios/vgabios.bin "$GITHUB_WORKSPACE/docs/wasm64/"
       - name: Boot actual 64-bit browser guest and verify native input
         run: |
           npm install --no-save --package-lock=false playwright@1.51.1
@@ -50,10 +50,11 @@ jobs:
         run: |
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          printf '{"arch":"x86_64","browserGate":"pass","source":"%s"}\n' "$GITHUB_SHA" > docs/wasm64/verified.json
           git add -f docs/wasm64/
           git diff --cached --quiet && exit 0
           git commit -m "build: publish verified x86-64 WASM system"
           git fetch origin main
-          git diff --quiet HEAD^ origin/main -- src tools/s1_runner.sh tools/build_wasm64.sh docs/wasm64-player.js docs/wasm64.html || exit 1
+          git diff --quiet HEAD^ origin/main -- src tools/s1_runner.sh tools/build_wasm64.sh docs/wasm64-player.js docs/wasm64.html docs/wasm64-route.js tools/test_wasm64.cjs || exit 1
           git rebase origin/main
           git push origin HEAD:main
