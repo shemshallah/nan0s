@@ -10,7 +10,7 @@ const fs = require('node:fs');
       isMobile:true,hasTouch:true});
     const errors=[];
     page.on('pageerror', e => errors.push(String(e)));
-    await page.goto('http://127.0.0.1:8765/',{waitUntil:'domcontentloaded'});
+    await page.goto('http://127.0.0.1:8765/?arch=32',{waitUntil:'domcontentloaded'});
     const canvas=page.locator('#screen_container canvas');
     await page.waitForFunction(() => {
       const c=document.querySelector('#screen_container canvas');

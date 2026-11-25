@@ -72,6 +72,7 @@ ADD r1,r1,r2
 CALL @fb_init_mode
 CALL @kbd_init
 CALL @wm_init
+CALL @g64_init
 CALL @nfs_format
 LA r1,@fs_hello_path
 SHL r1,r1,2
@@ -121,12 +122,11 @@ ST r0,r0,@wm_redraw
 CALL @wm_draw_all
 CALL @g_bar
 g_nodraw:
+CALL @g64_mode
 LD r1,r0,@g_quit
 CMP r1,r0
 JMP[NE] @g_exit
-LD r1,r0,@wm_zn
-CMP r1,r0
-JMP[EQ] @g_exit
+; Empty desktop remains live; browser or keyboard can open a new terminal.
 CALL @kbd_poll
 CALL @kbd_get
 MOVI r4,0xFFFF
@@ -319,6 +319,13 @@ JMP[EQ] @gk_np
 CALL @st_pendkey
 JMP @gk_ret
 gk_np:
+MOVI r2,0x101
+CMP r1,r2
+JMP[NE] @gk_f1_done
+MOVI r1,0
+CALL @gui_open_new
+JMP @gk_ret
+gk_f1_done:
 MOVI r2,0x105
 CMP r1,r2
 JMP[NE] @gk_n5
@@ -8631,3 +8638,132 @@ fs_useinc_path:
 .str "/useinc.c"
 fs_useinc_src:
 .str "#include \"/inc.h\"\nint main(void){ printf(\"%d\\n\", add(20,22)); return 0; }\n"
+
+; Native S1 browser I/O metadata and click hit testing. Browser only supplies
+; physical input; window focus, geometry and dispatch belong to the guest.
+g64_init:
+LA r1,0xE8000
+ST r0,r1,1
+ST r0,r1,2
+ST r0,r1,3
+LA r2,0x4E363447
+ST r2,r1,0
+MOVI r2,@g64_touch
+ST r2,r0,@kb_touch_hook
+JMP @g64_mode
+g64_mode:
+LA r1,0xE8000
+LD r2,r0,@fb_w
+SHL r2,r2,16
+LD r3,r0,@fb_h
+ADD r2,r2,r3
+LD r4,r1,4
+CMP r2,r4
+ST[NE] r2,r1,4
+RET
+; Callback receives absolute x,y and button state from existing kbd transport.
+g64_touch:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r4,r0,@g64_btn
+ST r3,r0,@g64_btn
+CMP r3,r0
+JMP[EQ] @g64_done
+CMP r4,r0
+JMP[NE] @g64_done
+ST r1,r0,@g64_x
+ST r2,r0,@g64_y
+LD r3,r0,@fb_h
+MOVI r4,#TASKH
+SUB r3,r3,r4
+CMP r2,r3
+JMP[LT] @g64_find
+MOVI r3,#TASK_X
+CMP r1,r3
+JMP[GE] @g64_dock
+MOVI r1,0
+CALL @gui_open_new
+JMP @g64_done
+g64_dock:
+SUB r1,r1,r3
+MOVI r2,#TASK_PITCH
+MODU r3,r1,r2
+MOVI r4,#TASK_WIDTH
+CMP r3,r4
+JMP[GE] @g64_done
+DIVU r1,r1,r2
+CALL @wm_taskbar_select
+JMP @g64_done
+g64_find:
+LD r1,r0,@wm_zn
+ST r1,r0,@g64_idx
+g64_next:
+LD r1,r0,@g64_idx
+CMP r1,r0
+JMP[EQ] @g64_done
+SUB r1,r1,r13
+ST r1,r0,@g64_idx
+LA r2,#ZO
+ADD r2,r2,r1
+LD r1,r2,0
+ST r1,r0,@g64_id
+CALL @wm_wbase
+LD r2,r0,@g64_x
+LD r3,r1,#W_X
+CMP r2,r3
+JMP[LT] @g64_next
+SUB r2,r2,r3
+LD r4,r1,#W_W
+CMP r2,r4
+JMP[GE] @g64_next
+LD r3,r0,@g64_y
+LD r5,r1,#W_Y
+CMP r3,r5
+JMP[LT] @g64_next
+SUB r3,r3,r5
+LD r5,r1,#W_H
+CMP r3,r5
+JMP[GE] @g64_next
+MOVI r5,17
+CMP r3,r5
+JMP[GE] @g64_raise
+MOVI r5,#WM_CLOSE_X
+SUB r4,r4,r5
+CMP r2,r4
+JMP[LT] @g64_max
+LD r1,r0,@g64_id
+CALL @wm_close
+JMP @g64_done
+g64_max:
+MOVI r5,#WM_CTL_W
+SUB r4,r4,r5
+CMP r2,r4
+JMP[LT] @g64_min
+LD r1,r0,@g64_id
+CALL @wm_raise
+CALL @g_enlarge
+JMP @g64_done
+g64_min:
+SUB r4,r4,r5
+CMP r2,r4
+JMP[LT] @g64_raise
+LD r1,r0,@g64_id
+CALL @wm_minimize
+JMP @g64_done
+g64_raise:
+LD r1,r0,@g64_id
+CALL @wm_raise
+g64_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+g64_btn:
+.word 0
+g64_x:
+.word 0
+g64_y:
+.word 0
+g64_idx:
+.word 0
+g64_id:
+.word 0

@@ -227,6 +227,13 @@ else
   DRIVE=""
 fi
 
+if [ -n "${S1_EXPORT_DIR:-}" ]; then
+  mkdir -p "$S1_EXPORT_DIR"
+  cp "$T/image" "$S1_EXPORT_DIR/boot64.img"
+  if [ "$GDISK" -eq 1 ]; then cp "$T/guest.disk" "$S1_EXPORT_DIR/system64.img"; else cp "$T/guest.bin" "$S1_EXPORT_DIR/system64.img"; fi
+  exit 0
+fi
+
 rm -f "$T/com" "$T/dbg"
 if [ -n "$DUMPFB" ] || [ -n "$DUMPMEM" ]; then
   ( sleep "${S1_FB_DELAY:-8}"
