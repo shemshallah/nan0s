@@ -94,6 +94,11 @@ Raw-NaN gates, not oracle claims:
   Terminal window region to be drawn.
 - `tools/nanpipe_libc_gate.sh` — guest libc `pipe()/dup2()/read()/write()`
   over the NaN byte-pipe table; `PIPE PASS` on x86_64 S1.
+- `tools/nansched_gate.sh` — the kernel scheduler (`src/lib/nansched.nas`):
+  64-process nanproc table, 32 priority run levels, timer preemption,
+  yield/exit/spawn/wait/kill/sleep.  It installs through `nk_install_proc`;
+  `nankernel` keeps SVC 4..8 and delegates process SVCs.  `SCHED PASS`,
+  timer preemptions 14, C oracle == x86_64 S1.
 - `tools/nancli64_gate.sh` — a 64-bit text command line (mkdir/write/cat/ls/
   stat/truncate/rm/rmdir/help/exit) compiled to NaN and running on x86_64
   S1; every filesystem operation goes through the NaN POSIX table.
@@ -128,7 +133,10 @@ Raw-NaN gates, not oracle claims:
 - [x] NaN POSIX metadata (mkdir/stat/readdir/rmdir/access/truncate).
 - [x] SQLite persistence through NaN services.
 - [x] n16i executes on the bare machine.
-- [ ] KABI machine mechanics in the nan0s core.
+- [x] NaN process/thread kernel scheduler (64 processes, priorities,
+      preemption, sleep/wait/kill) installed via `nk_install_proc`.
+- [ ] KABI machine mechanics (SVC/trap/ports/regions) in the NaN-coded
+      64-bit core itself.
 - [ ] libc POSIX switched to NaN; C bodies deleted.
 - [ ] Suite as a NaN cartridge under `build/nan0s.img`.
 - [ ] C removed from normal operation; `s1_kabi.c`/`nan_cli` remain test only.

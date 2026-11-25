@@ -1,0 +1,1311 @@
+; nansched.nas - NaN/0S preemptive process scheduler (raw NaN16).
+;
+; This is the kernel scheduler for the existing nan0s kernel.  It owns the
+; process SVCs delegated by src/lib/nankernel.nas through nk_install_proc:
+;
+;   SVC  0 yield              -> 0
+;   SVC  1 exit(code)         -> does not return
+;   SVC  9 spawn(descriptor)  -> pid or 0
+;   SVC 10 wait(pid|0|-1)     -> exit status (blocks; pid 0/-1 = any child)
+;   SVC 20 getpid             -> pid
+;   SVC 21 getppid            -> ppid
+;   SVC 22 kill(pid, sig)     -> 0 / 1 bad pid / 2 already terminating
+;   SVC 24 sleep(ticks)       -> 0 after the wake tick
+;
+; nankernel.nas keeps SVC 4..8 for the NPAF file service.  The same kernel
+; entry dispatches both: boot installs this module with
+;
+;     LA r1,@nsch_svc
+;     CALL @nk_install_proc
+;
+; and the S1 timer vector calls the same kentry.  The scheduler is therefore
+; part of the running kernel, not a standalone demo image.
+;
+; ---------------------------------------------------------------------------
+; ABI / configuration
+;
+; Required kernel configuration (later .equ wins; defaults are the test map):
+;   NP_BASE    process table base (nanproc.nas), default 0x40000
+;   NP_VARS    nanproc variable block, default 0x50000
+;   NS_BASE    scheduler state block, default 0x48000
+;
+; NS_BASE must hold NS_BYTES words.  The layout below is fixed for
+; NS_MAX_PROCS=64 and NS_NPRIO=32:
+;   +0    32 run-queue pairs {head,tail}; entries are slot+1, 0 = empty
+;   +64   per-slot next link (slot+1)                      64 words
+;   +128  per-slot wait pid (0 = any child)                 64 words
+;   +192  per-slot wait kind (0 none, 1 sleep, 2 wait)      64 words
+;   +256  per-slot wake tick                                64 words
+;   +320  current pid
+;   +321  tick counter (timer IRQs)
+;   +322  current slice
+;   +323  quantum in ticks
+;   +324  next slot (scratch)
+;   +325  active trap-frame pointer
+;   +326  started flag
+;   +327  timer-IRQ preemption count
+;   +328  kernel scratch words 0..7
+;   +352  per-slot 24-word trap frames                      64*24 words
+;   +1888 per-slot region tables (8 entries + terminator)   64*36 words
+;   +4192 boot region table (3 entries)                     16 words
+;   NS_BYTES = 4208
+;
+; Process state is the nanproc state word (0 free, 1 ready, 2 running,
+; 3 blocked, 4 zombie, 5 dead).  The scheduler keeps nanproc authoritative:
+; run-queue membership is only a scheduling hint and every pick rechecks the
+; state.  Priorities are 0..NS_NPRIO-1, lower number = higher priority.
+;
+; Trap frame: exactly the frozen 24-word S1 frame from spec/KERNEL_ABI.md:
+; [0..15] r0..r15, [16] pc, [17] flags, [18] addr high, [19] cause,
+; [20] syscall, [21] status/return, [22] sp, [23] reserved.  A switch copies
+; the live frame from the port-configured kframe into NS_FRAMES[slot] and
+; copies the next process's frame back.  Region tables are copied to the S1
+; {base,nwords,kind,prot} shape per process and published on port 0x4E04.
+;
+; Spawn descriptor (word addresses; all regions are {base,nwords,kind,prot}):
+;   +0 entry pc        +1 initial sp       +2 priority 0..31
+;   +3 name/id         +4 region count 0..8
+;   +5 first region, then count*4 words
+; The image is not sealed: this module is the flat-image kernel scheduler
+; (spec/PROCESS.md section 3.2).  A sealed loader belongs above SVC 9.
+;
+; Kernel entry contract: nsch_svc(r1=frame) is called with in_kernel=1 and
+; owns the final SVCRET.  It never returns through its NaN caller.  Timer
+; IRQs arrive with cause=1; SVCs with cause=0.  Faults are a kernel bug and
+; halt with "!S".
+;
+; ABI conventions: r0=0, r13=1, r14=kernel stack, r15=link.  Public calls
+; preserve r13/r14; internal routines use a uniform 9-word frame:
+; [SP] link, [SP+1..8] locals, new SP = old SP+9.  Callees therefore start
+; their own frame at that SP and cannot overlap a caller's eight locals.
+; NP_MAX_PROCS may be lowered; it must not exceed NS_MAX_PROCS (64).
+; ---------------------------------------------------------------------------
+
+.equ NP_BASE      0x40000
+.equ NP_VARS      0x50000
+.equ NS_BASE      0x48000
+
+.include "nanproc.nas"
+
+.equ NS_MAX_PROCS  64
+.equ NS_NPRIO      32
+.equ NS_FRAME      9
+.equ NS_FRAME_NEG  -9
+.equ NS_QUANTUM_DEFAULT 4
+.equ NS_TICK_INTERVAL   16
+
+; S1 control ports (spec/KERNEL_ABI.md section 2).
+.equ NS_P_ENTRY    0x4E00
+.equ NS_P_FRAME    0x4E01
+.equ NS_P_TIMER    0x4E02
+.equ NS_P_KSTACK   0x4E03
+.equ NS_P_REGIONS  0x4E04
+.equ NS_P_LDS      0x4E07
+
+; Kernel-stack/frame words.  These match src/lib/nankernel.nas; the frame
+; port is the single frame the S1 saves on every trap.
+.equ NS_KFRAME     0x2F1000
+.equ NS_KSTACK     0x2F0000
+.equ NS_KMEMM      0x4000
+
+; Scheduler state offsets from NS_BASE.
+.equ NS_QUEUE      0
+.equ NS_LINK       64
+.equ NS_WAITPID    128
+.equ NS_WAITK      192
+.equ NS_WAKE       256
+.equ NS_CUR        320
+.equ NS_TICKS      321
+.equ NS_SLICE      322
+.equ NS_QUANTUM    323
+.equ NS_NEXT       324
+.equ NS_FP         325
+.equ NS_STARTED    326
+.equ NS_PREEMPT    327
+.equ NS_TMP0       328
+.equ NS_TMP1       329
+.equ NS_TMP2       330
+.equ NS_TMP3       331
+.equ NS_TMP4       332
+.equ NS_TMP5       333
+.equ NS_TMP6       334
+.equ NS_TMP7       335
+.equ NS_FRAMES     352
+.equ NS_REGT       1888
+.equ NS_BOOTTAB    4192
+.equ NS_BYTES      4208
+
+; Wait kinds.
+.equ NS_WK_NONE    0
+.equ NS_WK_SLEEP   1
+.equ NS_WK_WAIT    2
+
+; Sentinel for "no slot" (slot values are 0..63).
+.equ NS_NONE       0xFFFF
+
+; Boot region table spans.  Guest memory must be at least 0xA0000 words.
+; Entry 1 covers the nankernel stack/frame/hook block.
+.equ NS_BOOTMEM    0xA0000
+
+; ---------------------------------------------------------------------------
+; Public integration ABI for the existing nan0s kernel/boot:
+;   ns_init            initialise nanproc + scheduler, program S1 ports
+;   ns_svc(frame)      SVC/timer entry, owns SVCRET
+;   ns_start(pid|0)    enter the first process, owns SVCRET
+ns_init:
+  JMP @nsch_init
+ns_svc:
+  JMP @nsch_svc
+ns_start:
+  JMP @nsch_start
+
+; ---------------------------------------------------------------------------
+; nsch_init - initialise nanproc and the scheduler, then activate the S1 ABI.
+; No arguments.  Sets kframe/kstack/timer/regions and writes kentry last so
+; the ABI becomes live only after the boot region table is in place.
+nsch_init:
+  ST r15,r14,0
+  ADDI r14,r14,#NS_FRAME
+  CALL @np_init
+
+  ; zero the scheduler block
+  LA r3,#NS_BASE
+  MOVI r4,#NS_BYTES
+nsch_init_z:
+  ST r0,r3,0
+  ADD r3,r3,r13
+  SUB r4,r4,r13
+  CMP r4,r0
+  JMP[NE] @nsch_init_z
+
+  ; quantum and initial slice
+  LA r2,#NS_BASE
+  MOVI r1,#NS_QUANTUM_DEFAULT
+  ST r1,r2,#NS_QUANTUM
+  ST r1,r2,#NS_SLICE
+
+  ; boot region table: whole low image/tables/stacks (RWX), then the
+  ; nankernel stack/frame/hook block (RWX).  Terminator is the zero word
+  ; written by the clear loop.
+  LA r3,#NS_BASE
+  ADDI r3,r3,#NS_BOOTTAB
+  ST r0,r3,0
+  LA r1,#NS_BOOTMEM
+  ST r1,r3,1
+  ST r0,r3,2
+  MOVI r1,7
+  ST r1,r3,3
+  LA r1,#NS_KSTACK
+  ST r1,r3,4
+  MOVI r1,#NS_KMEMM
+  ST r1,r3,5
+  ST r0,r3,6
+  MOVI r1,7
+  ST r1,r3,7
+
+  ; kframe
+  MOVI r1,#NS_P_FRAME
+  LA r2,#NS_KFRAME
+  OUTL r2,r1
+  ; kernel stack
+  MOVI r1,#NS_P_KSTACK
+  LA r2,#NS_KSTACK
+  OUTL r2,r1
+  ; timer interval (instruction count; S1 reloads it on every IRQ)
+  MOVI r1,#NS_P_TIMER
+  MOVI r2,#NS_TICK_INTERVAL
+  OUTL r2,r1
+  ; boot region table
+  MOVI r1,#NS_P_REGIONS
+  LA r2,#NS_BASE
+  ADDI r2,r2,#NS_BOOTTAB
+  OUTL r2,r1
+  ; activate the ABI last
+  MOVI r1,#NS_P_ENTRY
+  LA r2,@kentry
+  OUTL r2,r1
+
+  MOVI r1,0
+  ADDI r14,r14,#NS_FRAME_NEG
+  LD r15,r14,0
+  RET
+
+; ---------------------------------------------------------------------------
+; nsch_svc - kernel SVC/timer entry.  r1 = 24-word trap frame pointer.
+; Owns SVCRET; never returns to the caller.
+nsch_svc:
+  ADD r10,r1,r0
+  LA r2,#NS_BASE
+  ST r10,r2,#NS_FP
+  LD r3,r10,19
+  CMP r3,r0
+  JMP[EQ] @nsch_svc_call
+  MOVI r4,1
+  CMP r3,r4
+  JMP[EQ] @nsch_svc_irq
+  ; A fault while the scheduler owns the trap is a kernel bug.
+  MOVI r1,33
+  PUTC r1
+  MOVI r1,83
+  PUTC r1
+  MOVI r1,10
+  PUTC r1
+  HALT
+
+nsch_svc_call:
+  LD r3,r10,20
+  LA r2,#NS_BASE
+  LD r4,r2,#NS_CUR
+  CMP r4,r0
+  JMP[NE] @nsch_dispatch
+  ; No process yet: the boot context starts the highest-priority ready one.
+  CMP r3,r0
+  JMP[NE] @nsch_svc_bad
+  MOVI r1,0
+  CALL @nsch_start
+  JMP @nsch_svc_bad
+
+nsch_dispatch:
+  CMP r3,r0
+  JMP[EQ] @nsch_svc_yield
+  MOVI r4,1
+  CMP r3,r4
+  JMP[EQ] @nsch_svc_exit
+  MOVI r4,9
+  CMP r3,r4
+  JMP[EQ] @nsch_svc_spawn
+  MOVI r4,10
+  CMP r3,r4
+  JMP[EQ] @nsch_svc_wait
+  MOVI r4,20
+  CMP r3,r4
+  JMP[EQ] @nsch_svc_getpid
+  MOVI r4,21
+  CMP r3,r4
+  JMP[EQ] @nsch_svc_getppid
+  MOVI r4,22
+  CMP r3,r4
+  JMP[EQ] @nsch_svc_kill
+  MOVI r4,23
+  CMP r3,r4
+  JMP[EQ] @nsch_svc_bad
+  MOVI r4,24
+  CMP r3,r4
+  JMP[EQ] @nsch_svc_sleep
+nsch_svc_bad:
+  LA r2,#NS_BASE
+  LD r2,r2,#NS_FP
+  LA r1,0xFFFFFFFF
+  ST r1,r2,21
+  SVCRET
+
+; ---------------------------------------------------------------------------
+; SVC 0 - yield: current -> ready tail, pick the highest ready.
+nsch_svc_yield:
+  LA r2,#NS_BASE
+  LD r10,r2,#NS_FP
+  ST r0,r10,21
+  LD r1,r2,#NS_CUR
+  MOVI r2,#NP_ST_READY
+  CALL @np_set_state
+  LA r2,#NS_BASE
+  LD r1,r2,#NS_CUR
+  CALL @nsch_slot
+  CALL @nsch_enqueue
+  JMP @nsch_sched_save_switch
+
+; ---------------------------------------------------------------------------
+; SVC 1 - exit(code).
+nsch_svc_exit:
+  LA r2,#NS_BASE
+  LD r10,r2,#NS_FP
+  LD r1,r10,1              ; status
+  ST r1,r2,#NS_TMP0
+  ; np_exit(current, status)
+  LA r2,#NS_BASE
+  LD r1,r2,#NS_CUR
+  LD r2,r2,#NS_TMP0
+  CALL @np_exit
+  ; wake parent waiters, then reap the zombie when a parent consumed it
+  LA r2,#NS_BASE
+  LD r1,r2,#NS_CUR
+  LD r2,r2,#NS_TMP0
+  CALL @nsch_wake_waiters
+  ; an orphan/dead process has no later waiter: reap it now
+  LA r2,#NS_BASE
+  LD r1,r2,#NS_CUR
+  CALL @np_lookup
+  CMP r1,r0
+  JMP[EQ] @nsch_sched_save_switch
+  LD r3,r1,#NP_E_STATE
+  MOVI r4,#NP_ST_DEAD
+  CMP r3,r4
+  JMP[NE] @nsch_sched_save_switch
+  LA r2,#NS_BASE
+  LD r1,r2,#NS_CUR
+  CALL @np_reap
+  JMP @nsch_sched_save_switch
+
+; ---------------------------------------------------------------------------
+; SVC 9 - spawn(descriptor).
+nsch_svc_spawn:
+  LA r2,#NS_BASE
+  LD r10,r2,#NS_FP
+  LD r3,r10,1              ; descriptor word address
+  LD r1,r2,#NS_CUR         ; ppid = current
+  ADD r2,r3,r0
+  CALL @nsch_spawn_desc
+  LA r2,#NS_BASE
+  LD r10,r2,#NS_FP
+  ST r1,r10,21
+  SVCRET
+
+; ---------------------------------------------------------------------------
+; SVC 10 - wait(pid|0|-1).
+nsch_svc_wait:
+  LA r2,#NS_BASE
+  LD r10,r2,#NS_FP
+  LD r3,r10,1              ; wanted pid
+  LA r4,0xFFFFFFFF
+  CMP r3,r4
+  MOVI[EQ] r3,0
+  ; np_wait(ppid=current, wanted)
+  ST r3,r2,#NS_TMP1
+  LD r1,r2,#NS_CUR
+  ADD r2,r3,r0
+  CALL @np_wait
+  CMP r1,r0
+  JMP[EQ] @nsch_wait_block
+  ; zombie child already available: copy status, then reap
+  LA r3,#NS_BASE
+  ST r1,r3,#NS_TMP0
+  ST r2,r3,#NS_TMP2
+  ADD r1,r1,r0
+  CALL @np_reap
+  LA r3,#NS_BASE
+  LD r10,r3,#NS_FP
+  LD r2,r3,#NS_TMP2
+  ST r2,r10,21
+  SVCRET
+nsch_wait_block:
+  ; record wait kind and target on the current slot
+  LA r2,#NS_BASE
+  LD r1,r2,#NS_CUR
+  CALL @nsch_slot
+  LA r2,#NS_BASE
+  ST r1,r2,#NS_TMP0
+  LD r3,r2,#NS_TMP1        ; wanted
+  ADDI r4,r2,#NS_WAITPID
+  ADD r4,r4,r1
+  ST r3,r4,0
+  ADDI r4,r2,#NS_WAITK
+  ADD r4,r4,r1
+  MOVI r3,#NS_WK_WAIT
+  ST r3,r4,0
+  ADDI r4,r2,#NS_WAKE
+  ADD r4,r4,r1
+  ST r0,r4,0
+  ; blocked
+  LA r2,#NS_BASE
+  LD r1,r2,#NS_CUR
+  MOVI r2,#NP_ST_BLOCKED
+  CALL @np_set_state
+  JMP @nsch_sched_save_switch
+
+; ---------------------------------------------------------------------------
+; SVC 20/21 - getpid/getppid.
+nsch_svc_getpid:
+  LA r2,#NS_BASE
+  LD r1,r2,#NS_CUR
+  LD r2,r2,#NS_FP
+  ST r1,r2,21
+  SVCRET
+nsch_svc_getppid:
+  LA r2,#NS_BASE
+  LD r1,r2,#NS_CUR
+  CALL @np_lookup
+  LD r1,r1,#NP_E_PPID
+  LA r2,#NS_BASE
+  LD r2,r2,#NS_FP
+  ST r1,r2,21
+  SVCRET
+
+; ---------------------------------------------------------------------------
+; SVC 22 - kill(pid, sig).
+nsch_svc_kill:
+  LA r2,#NS_BASE
+  LD r10,r2,#NS_FP
+  LD r1,r10,1
+  LD r2,r10,2
+  CALL @nsch_kill
+  LA r2,#NS_BASE
+  LD r10,r2,#NS_FP
+  ST r1,r10,21
+  SVCRET
+
+; ---------------------------------------------------------------------------
+; SVC 24 - sleep(ticks).
+nsch_svc_sleep:
+  LA r2,#NS_BASE
+  LD r10,r2,#NS_FP
+  LD r1,r10,1
+  CMP r1,r0
+  JMP[NE] @nsch_sleep_go
+  ST r0,r10,21
+  SVCRET
+nsch_sleep_go:
+  LA r2,#NS_BASE
+  LD r3,r2,#NS_TICKS
+  ADD r3,r3,r1
+  ST r3,r2,#NS_TMP1        ; wake tick
+  LD r1,r2,#NS_CUR
+  CALL @nsch_slot
+  LA r2,#NS_BASE
+  ST r1,r2,#NS_TMP0
+  LD r3,r2,#NS_TMP1
+  ADDI r4,r2,#NS_WAKE
+  ADD r4,r4,r1
+  ST r3,r4,0
+  ADDI r4,r2,#NS_WAITK
+  ADD r4,r4,r1
+  MOVI r3,#NS_WK_SLEEP
+  ST r3,r4,0
+  ADDI r4,r2,#NS_WAITPID
+  ADD r4,r4,r1
+  ST r0,r4,0
+  LD r1,r2,#NS_CUR
+  MOVI r2,#NP_ST_BLOCKED
+  CALL @np_set_state
+  JMP @nsch_sched_save_switch
+
+; ---------------------------------------------------------------------------
+; IRQ - tick, wake sleepers, preempt when the slice expires.
+nsch_svc_irq:
+  LA r2,#NS_BASE
+  LD r3,r2,#NS_CUR
+  CMP r3,r0
+  JMP[EQ] @nsch_irq_ret     ; boot context before the first process
+  CALL @nsch_tick
+  LA r2,#NS_BASE
+  LD r3,r2,#NS_SLICE
+  CMP r3,r0
+  JMP[NE] @nsch_irq_ret
+  CALL @nsch_preempt_current
+  JMP @nsch_sched_save_switch
+nsch_irq_ret:
+  SVCRET
+
+; ---------------------------------------------------------------------------
+; nsch_start - enter the first process.  r1 = pid, or 0 to pick the highest
+; ready process.  Called from the boot SVC 0 path or by a kernel boot stub.
+; Owns SVCRET.
+nsch_start:
+  ST r15,r14,0
+  ADDI r14,r14,#NS_FRAME
+  ST r1,r14,1
+  CMP r1,r0
+  JMP[EQ] @nsch_start_pick
+  CALL @nsch_slot
+  MOVI r2,#NS_NONE
+  CMP r1,r2
+  JMP[EQ] @nsch_start_dead
+  ; remove it from its ready queue if it is queued, then activate
+  CALL @nsch_remove_slot
+  LD r1,r14,1
+  CALL @nsch_slot
+  JMP @nsch_activate_slot
+nsch_start_pick:
+  CALL @nsch_pick
+  MOVI r2,#NS_NONE
+  CMP r1,r2
+  JMP[EQ] @nsch_start_dead
+  JMP @nsch_activate_slot
+nsch_start_dead:
+  MOVI r1,33
+  PUTC r1
+  MOVI r1,83
+  PUTC r1
+  MOVI r1,10
+  PUTC r1
+  HALT
+
+; ---------------------------------------------------------------------------
+; nsch_sched_save_switch - save the live kframe into the current slot and
+; switch to the next ready process.  Never returns.
+nsch_sched_save_switch:
+  ST r15,r14,0
+  ADDI r14,r14,#NS_FRAME
+  LA r2,#NS_BASE
+  LD r1,r2,#NS_CUR
+  CMP r1,r0
+  JMP[EQ] @nsch_ss_pick
+  CALL @nsch_slot
+  MOVI r2,#NS_NONE
+  CMP r1,r2
+  JMP[EQ] @nsch_ss_pick
+  ST r1,r14,1
+  CALL @nsch_frame_ptr
+  ST r1,r14,2
+  MOVI r1,#NS_P_FRAME
+  INL r2,r1
+  MOVI r3,24
+  LD r4,r14,2
+  BCOPY r4,r2,r3
+nsch_ss_pick:
+  CALL @nsch_pick
+  MOVI r2,#NS_NONE
+  CMP r1,r2
+  JMP[EQ] @nsch_ss_dead
+  JMP @nsch_activate_slot
+nsch_ss_dead:
+  HALT
+
+; ---------------------------------------------------------------------------
+; nsch_activate_slot - make slot r1 current and SVCRET into its frame.
+nsch_activate_slot:
+  ST r15,r14,0
+  ADDI r14,r14,#NS_FRAME
+  ST r1,r14,1
+  ; entry pointer
+  MOVI r2,#NP_ENTRY
+  MUL r2,r1,r2
+  LA r3,#NP_BASE
+  ADD r3,r3,r2
+  ST r3,r14,2
+  LD r1,r3,#NP_E_PID
+  ST r1,r14,3
+  ; ready (or blocked wake) -> running
+  MOVI r2,#NP_ST_RUNNING
+  CALL @np_set_state
+  LA r2,#NS_BASE
+  LD r1,r14,3
+  ST r1,r2,#NS_CUR
+  ; frame -> kframe
+  LD r1,r14,1
+  CALL @nsch_frame_ptr
+  ST r1,r14,4
+  LD r4,r14,4
+  MOVI r1,#NS_P_FRAME
+  INL r2,r1
+  MOVI r3,24
+  BCOPY r2,r4,r3
+  ; region table -> port
+  LD r1,r14,1
+  CALL @nsch_rt_ptr
+  MOVI r2,#NS_P_REGIONS
+  OUTL r1,r2
+  ; fresh quantum
+  LA r2,#NS_BASE
+  LD r3,r2,#NS_QUANTUM
+  ST r3,r2,#NS_SLICE
+  SVCRET
+
+; ---------------------------------------------------------------------------
+; nsch_preempt_current - running -> ready tail.
+nsch_preempt_current:
+  ST r15,r14,0
+  ADDI r14,r14,#NS_FRAME
+  LA r2,#NS_BASE
+  LD r3,r2,#NS_PREEMPT
+  ADD r3,r3,r13
+  ST r3,r2,#NS_PREEMPT
+  LA r2,#NS_BASE
+  LD r1,r2,#NS_CUR
+  MOVI r2,#NP_ST_READY
+  CALL @np_set_state
+  LA r2,#NS_BASE
+  LD r1,r2,#NS_CUR
+  CALL @nsch_slot
+  CALL @nsch_enqueue
+  ADDI r14,r14,#NS_FRAME_NEG
+  LD r15,r14,0
+  RET
+
+; ---------------------------------------------------------------------------
+; nsch_tick - one timer IRQ.  Increments ticks, wakes sleepers and decrements
+; the current slice.
+nsch_tick:
+  ST r15,r14,0
+  ADDI r14,r14,#NS_FRAME
+  LA r2,#NS_BASE
+  LD r3,r2,#NS_TICKS
+  ADD r3,r3,r13
+  ST r3,r2,#NS_TICKS
+  CALL @nsch_wake_sleepers
+  LA r2,#NS_BASE
+  LD r3,r2,#NS_SLICE
+  SUB r3,r3,r13
+  ST r3,r2,#NS_SLICE
+  ADDI r14,r14,#NS_FRAME_NEG
+  LD r15,r14,0
+  RET
+
+; ---------------------------------------------------------------------------
+; nsch_wake_sleepers - blocked sleepers whose wake tick has arrived become
+; ready.  A woken process with a higher priority than the current one forces
+; the slice to zero so the IRQ path switches immediately.
+nsch_wake_sleepers:
+  ST r15,r14,0
+  ADDI r14,r14,#NS_FRAME
+  ; current priority (0xFFFF if none)
+  LA r2,#NS_BASE
+  LD r1,r2,#NS_CUR
+  MOVI r3,#NS_NONE
+  ST r3,r14,2
+  CMP r1,r0
+  JMP[EQ] @nsch_ws_scan
+  CALL @np_lookup
+  CMP r1,r0
+  JMP[EQ] @nsch_ws_scan
+  LD r3,r1,#NP_E_PRIO
+  ST r3,r14,2
+nsch_ws_scan:
+  MOVI r1,0
+  ST r1,r14,1
+nsch_ws_loop:
+  LD r1,r14,1
+  MOVI r2,#NP_MAX_PROCS
+  CMP r1,r2
+  JMP[GE] @nsch_ws_done
+  ; entry = NP_BASE + slot*96
+  MOVI r2,#NP_ENTRY
+  MUL r2,r1,r2
+  LA r3,#NP_BASE
+  ADD r3,r3,r2
+  ST r3,r14,3
+  LD r4,r3,#NP_E_PID
+  CMP r4,r0
+  JMP[EQ] @nsch_ws_next
+  LD r5,r3,#NP_E_STATE
+  MOVI r6,#NP_ST_BLOCKED
+  CMP r5,r6
+  JMP[NE] @nsch_ws_next
+  ; wait kind must be sleep
+  LA r6,#NS_BASE
+  ADDI r6,r6,#NS_WAITK
+  ADD r6,r6,r1
+  LD r5,r6,0
+  MOVI r7,#NS_WK_SLEEP
+  CMP r5,r7
+  JMP[NE] @nsch_ws_next
+  ; wake tick
+  LA r6,#NS_BASE
+  ADDI r6,r6,#NS_WAKE
+  ADD r6,r6,r1
+  LD r5,r6,0
+  LA r6,#NS_BASE
+  LD r7,r6,#NS_TICKS
+  CMP r7,r5
+  JMP[LT] @nsch_ws_next
+  ; ready
+  LD r1,r3,#NP_E_PID
+  MOVI r2,#NP_ST_READY
+  CALL @np_set_state
+  LD r1,r14,1
+  CALL @nsch_enqueue
+  ; clear wait kind
+  LA r6,#NS_BASE
+  ADDI r6,r6,#NS_WAITK
+  LD r1,r14,1
+  ADD r6,r6,r1
+  ST r0,r6,0
+  ; higher priority than current forces a switch
+  LD r3,r14,3
+  LD r4,r3,#NP_E_PRIO
+  LD r5,r14,2
+  MOVI r6,#NS_NONE
+  CMP r5,r6
+  JMP[EQ] @nsch_ws_next
+  CMP r4,r5
+  JMP[GE] @nsch_ws_next
+  LA r6,#NS_BASE
+  ST r0,r6,#NS_SLICE
+nsch_ws_next:
+  LD r1,r14,1
+  ADD r1,r1,r13
+  ST r1,r14,1
+  JMP @nsch_ws_loop
+nsch_ws_done:
+  ADDI r14,r14,#NS_FRAME_NEG
+  LD r15,r14,0
+  RET
+
+; ---------------------------------------------------------------------------
+; nsch_wake_waiters - r1=child pid, r2=status.  Wake the parent blocked in
+; wait for this child (or for any child) and inject the status into its
+; saved frame.  Reap the zombie when a waiter consumed it.
+nsch_wake_waiters:
+  ST r15,r14,0
+  ADDI r14,r14,#NS_FRAME
+  ST r1,r14,1
+  ST r2,r14,2
+  ; child ppid
+  CALL @np_lookup
+  CMP r1,r0
+  JMP[EQ] @nsch_ww_done
+  LD r3,r1,#NP_E_PPID
+  ST r3,r14,3
+  ST r0,r14,4              ; woke flag
+  MOVI r3,0
+  ST r3,r14,5              ; slot
+nsch_ww_loop:
+  LD r3,r14,5
+  MOVI r4,#NP_MAX_PROCS
+  CMP r3,r4
+  JMP[GE] @nsch_ww_reap
+  ; entry ptr
+  MOVI r4,#NP_ENTRY
+  MUL r4,r3,r4
+  LA r5,#NP_BASE
+  ADD r5,r5,r4
+  ST r5,r14,6
+  LD r4,r5,#NP_E_PID
+  CMP r4,r0
+  JMP[EQ] @nsch_ww_next
+  ; must be blocked in wait
+  LD r6,r5,#NP_E_STATE
+  MOVI r7,#NP_ST_BLOCKED
+  CMP r6,r7
+  JMP[NE] @nsch_ww_next
+  LA r6,#NS_BASE
+  ADDI r6,r6,#NS_WAITK
+  ADD r6,r6,r3
+  LD r6,r6,0
+  MOVI r7,#NS_WK_WAIT
+  CMP r6,r7
+  JMP[NE] @nsch_ww_next
+  ; must be this child's parent
+  LD r6,r14,3
+  CMP r4,r6
+  JMP[NE] @nsch_ww_next
+  ; waitpid match: specific pid or 0 (any)
+  LA r6,#NS_BASE
+  ADDI r6,r6,#NS_WAITPID
+  ADD r6,r6,r3
+  LD r6,r6,0
+  CMP r6,r0
+  JMP[EQ] @nsch_ww_match
+  LD r7,r14,1
+  CMP r6,r7
+  JMP[NE] @nsch_ww_next
+nsch_ww_match:
+  ; wake: pid -> ready, enqueue
+  LD r1,r5,#NP_E_PID
+  MOVI r2,#NP_ST_READY
+  CALL @np_set_state
+  LD r1,r14,5
+  CALL @nsch_enqueue
+  ; frame[21]=status, frame[1]=status, frame[2]=child pid
+  LD r1,r14,5
+  CALL @nsch_frame_ptr
+  LD r2,r14,2
+  ST r2,r1,21
+  ST r2,r1,1
+  LD r2,r14,1
+  ST r2,r1,2
+  ; clear wait record
+  LA r6,#NS_BASE
+  ADDI r6,r6,#NS_WAITK
+  LD r1,r14,5
+  ADD r6,r6,r1
+  ST r0,r6,0
+  LA r6,#NS_BASE
+  ADDI r6,r6,#NS_WAITPID
+  ADD r6,r6,r1
+  ST r0,r6,0
+  MOVI r1,1
+  ST r1,r14,4
+nsch_ww_next:
+  LD r3,r14,5
+  ADD r3,r3,r13
+  ST r3,r14,5
+  JMP @nsch_ww_loop
+nsch_ww_reap:
+  LD r3,r14,4
+  CMP r3,r0
+  JMP[EQ] @nsch_ww_done
+  LD r1,r14,1
+  CALL @np_reap
+nsch_ww_done:
+  ADDI r14,r14,#NS_FRAME_NEG
+  LD r15,r14,0
+  RET
+
+; ---------------------------------------------------------------------------
+; nsch_kill - r1=pid, r2=sig -> r1=0/1/2.  Removes a ready victim from the
+; run queues and wakes waiters (status 128+sig from np_kill).
+nsch_kill:
+  ST r15,r14,0
+  ADDI r14,r14,#NS_FRAME
+  ST r1,r14,1
+  ST r2,r14,2
+  ; self?
+  LA r3,#NS_BASE
+  LD r3,r3,#NS_CUR
+  LD r4,r14,1
+  CMP r3,r4
+  JMP[EQ] @nsch_kill_self
+  LD r1,r14,1
+  LD r2,r14,2
+  CALL @np_kill
+  ST r1,r14,3
+  CMP r1,r0
+  JMP[NE] @nsch_kill_out
+  ; unlink from any run queue and clear wait metadata
+  LD r1,r14,1
+  CALL @nsch_remove_pid
+  LA r2,#NS_BASE
+  LD r1,r14,1
+  CALL @nsch_slot
+  MOVI r2,#NS_NONE
+  CMP r1,r2
+  JMP[EQ] @nsch_kill_out
+  ST r1,r14,4
+  LA r2,#NS_BASE
+  ADDI r2,r2,#NS_WAITK
+  ADD r2,r2,r1
+  ST r0,r2,0
+  LA r2,#NS_BASE
+  ADDI r2,r2,#NS_WAKE
+  ADD r2,r2,r1
+  ST r0,r2,0
+  ; status from the table
+  LD r1,r14,1
+  CALL @np_lookup
+  LD r2,r1,#NP_E_STATUS
+  ST r2,r14,5
+  LD r1,r14,1
+  LD r2,r14,5
+  CALL @nsch_wake_waiters
+nsch_kill_out:
+  LD r1,r14,3
+  ADDI r14,r14,#NS_FRAME_NEG
+  LD r15,r14,0
+  RET
+nsch_kill_self:
+  LD r2,r14,2
+  MOVI r3,128
+  ADD r2,r2,r3
+  ST r2,r14,5
+  ADD r1,r4,r0
+  CALL @np_exit
+  LD r1,r14,1
+  LD r2,r14,5
+  CALL @nsch_wake_waiters
+  JMP @nsch_sched_save_switch
+
+; ---------------------------------------------------------------------------
+; nsch_spawn_desc - r1=ppid, r2=descriptor -> r1=pid or 0.
+nsch_spawn_desc:
+  ST r15,r14,0
+  ADDI r14,r14,#NS_FRAME
+  ST r1,r14,1
+  ST r2,r14,2
+  LD r3,r2,0
+  ST r3,r14,3
+  LD r3,r2,1
+  ST r3,r14,4
+  LD r3,r2,2
+  ST r3,r14,5
+  LD r3,r2,3
+  ST r3,r14,6
+  LD r3,r2,4
+  MOVI r4,8
+  CMP r3,r4
+  JMP[LE] @nsch_sd_nreg
+  MOVI r3,8
+nsch_sd_nreg:
+  LA r4,#NS_BASE
+  ST r3,r4,#NS_TMP3
+  LD r3,r14,5
+  MOVI r4,#NS_NPRIO
+  CMP r3,r4
+  JMP[LT] @nsch_sd_prio
+  MOVI r3,#NS_NPRIO-1
+  ST r3,r14,5
+nsch_sd_prio:
+  LD r1,r14,1
+  LD r2,r14,6
+  MOVI r3,0
+  MOVI r4,0
+  CALL @np_create
+  CMP r1,r0
+  JMP[EQ] @nsch_sd_fail
+  LA r4,#NS_BASE
+  ST r1,r4,#NS_TMP0
+  CALL @nsch_slot
+  MOVI r2,#NS_NONE
+  CMP r1,r2
+  JMP[EQ] @nsch_sd_rollback
+  LA r4,#NS_BASE
+  ST r1,r4,#NS_TMP1
+  CALL @nsch_rt_ptr
+  LA r4,#NS_BASE
+  ST r1,r4,#NS_TMP4
+  MOVI r3,36
+nsch_sd_rtz:
+  ST r0,r1,0
+  ADD r1,r1,r13
+  SUB r3,r3,r13
+  CMP r3,r0
+  JMP[NE] @nsch_sd_rtz
+  LA r4,#NS_BASE
+  ST r0,r4,#NS_TMP2
+nsch_sd_loop:
+  LA r4,#NS_BASE
+  LD r3,r4,#NS_TMP2
+  LD r5,r4,#NS_TMP3
+  CMP r3,r5
+  JMP[GE] @nsch_sd_regions
+  LD r2,r14,2
+  MOVI r5,4
+  MUL r5,r3,r5
+  ADDI r2,r2,5
+  ADD r2,r2,r5
+  LD r6,r2,0
+  ST r6,r14,7
+  LD r6,r2,1
+  ST r6,r14,8
+  LD r6,r2,2
+  LA r4,#NS_BASE
+  ST r6,r4,#NS_TMP5
+  LD r6,r2,3
+  LA r4,#NS_BASE
+  ST r6,r4,#NS_TMP6
+  ; mirror into the per-slot S1 table before the nanproc call
+  LA r4,#NS_BASE
+  LD r2,r4,#NS_TMP4
+  LD r3,r4,#NS_TMP2
+  MOVI r5,4
+  MUL r3,r3,r5
+  ADD r2,r2,r3
+  LD r6,r14,7
+  ST r6,r2,0
+  LD r6,r14,8
+  ST r6,r2,1
+  LD r6,r4,#NS_TMP5
+  ST r6,r2,2
+  LD r6,r4,#NS_TMP6
+  ST r6,r2,3
+  ; np_region_add(pid, base, words, kind, prot)
+  LA r6,#NS_BASE
+  LD r1,r6,#NS_TMP0
+  LD r2,r14,7
+  LD r3,r14,8
+  LD r4,r6,#NS_TMP5
+  LD r5,r6,#NS_TMP6
+  CALL @np_region_add
+  CMP r1,r0
+  JMP[NE] @nsch_sd_rollback
+  LA r4,#NS_BASE
+  LD r3,r4,#NS_TMP2
+  ADD r3,r3,r13
+  ST r3,r4,#NS_TMP2
+  JMP @nsch_sd_loop
+nsch_sd_regions:
+  LA r4,#NS_BASE
+  LD r1,r4,#NS_TMP0
+  LD r2,r14,5
+  CALL @np_set_priority
+  LA r4,#NS_BASE
+  LD r1,r4,#NS_TMP0
+  MOVI r2,1
+  CALL @np_thread_add
+  LA r4,#NS_BASE
+  LD r1,r4,#NS_TMP0
+  CALL @np_lookup
+  LA r2,#NS_BASE
+  LD r3,r2,#NS_TICKS
+  ST r3,r1,#NP_E_START_TICK
+  LA r4,#NS_BASE
+  LD r1,r4,#NS_TMP1
+  LD r2,r14,3
+  LD r3,r14,4
+  CALL @nsch_init_frame
+  LA r4,#NS_BASE
+  LD r1,r4,#NS_TMP1
+  CALL @nsch_enqueue
+  LA r4,#NS_BASE
+  LD r1,r4,#NS_TMP0
+  JMP @nsch_sd_out
+nsch_sd_rollback:
+  LA r4,#NS_BASE
+  LD r1,r4,#NS_TMP0
+  CALL @np_region_clear
+  LA r4,#NS_BASE
+  LD r1,r4,#NS_TMP0
+  LA r2,0xFFFFFFFF
+  CALL @np_exit
+  LA r4,#NS_BASE
+  LD r1,r4,#NS_TMP0
+  CALL @np_reap
+nsch_sd_fail:
+  MOVI r1,0
+nsch_sd_out:
+  ADDI r14,r14,#NS_FRAME_NEG
+  LD r15,r14,0
+  RET
+
+; ---------------------------------------------------------------------------
+; nsch_init_frame - r1=slot, r2=entry, r3=sp.  Zero the 24-word frame and
+; set r13=1, sp, pc.
+nsch_init_frame:
+  ST r15,r14,0
+  ADDI r14,r14,#NS_FRAME
+  ST r1,r14,1
+  ST r2,r14,2
+  ST r3,r14,3
+  CALL @nsch_frame_ptr
+  ADD r6,r1,r0
+  MOVI r4,24
+  ADD r5,r6,r0
+nsch_if_z:
+  ST r0,r5,0
+  ADD r5,r5,r13
+  SUB r4,r4,r13
+  CMP r4,r0
+  JMP[NE] @nsch_if_z
+  MOVI r4,1
+  ST r4,r6,13
+  LD r4,r14,3
+  ST r4,r6,14
+  ST r4,r6,22
+  LD r4,r14,2
+  ST r4,r6,16
+  ADDI r14,r14,#NS_FRAME_NEG
+  LD r15,r14,0
+  RET
+
+; ---------------------------------------------------------------------------
+; nsch_pick - pop the highest-priority ready slot -> r1=slot or NS_NONE.
+nsch_pick:
+  ST r15,r14,0
+  ADDI r14,r14,#NS_FRAME
+  MOVI r2,0
+  ST r2,r14,1
+nsch_pick_loop:
+  LD r1,r14,1
+  CALL @nsch_dequeue_head
+  MOVI r2,#NS_NONE
+  CMP r1,r2
+  JMP[NE] @nsch_pick_out
+  LD r2,r14,1
+  ADD r2,r2,r13
+  ST r2,r14,1
+  MOVI r3,#NS_NPRIO
+  CMP r2,r3
+  JMP[LT] @nsch_pick_loop
+  MOVI r1,#NS_NONE
+nsch_pick_out:
+  ADDI r14,r14,#NS_FRAME_NEG
+  LD r15,r14,0
+  RET
+
+; ---------------------------------------------------------------------------
+; nsch_enqueue - append slot r1 to its priority queue.
+nsch_enqueue:
+  ; leaf
+  MOVI r2,#NP_ENTRY
+  MUL r3,r1,r2
+  LA r2,#NP_BASE
+  ADD r3,r2,r3
+  LD r4,r3,#NP_E_PRIO
+  MOVI r5,#NS_NPRIO
+  CMP r4,r5
+  JMP[LT] @nsch_eq_prio
+  MOVI r4,#NS_NPRIO-1
+nsch_eq_prio:
+  LA r5,#NS_BASE
+  ADDI r5,r5,#NS_QUEUE
+  SHL r4,r4,1
+  ADD r5,r5,r4              ; queue pair
+  ; link[slot] = 0
+  LA r6,#NS_BASE
+  ADDI r6,r6,#NS_LINK
+  ADD r6,r6,r1
+  ST r0,r6,0
+  ADD r7,r1,r13             ; encoded slot
+  LD r8,r5,1                ; tail
+  CMP r8,r0
+  JMP[EQ] @nsch_eq_empty
+  ; link[tail-1] = enc
+  SUB r8,r8,r13
+  LA r6,#NS_BASE
+  ADDI r6,r6,#NS_LINK
+  ADD r6,r6,r8
+  ST r7,r6,0
+  ST r7,r5,1
+  RET
+nsch_eq_empty:
+  ST r7,r5,0
+  ST r7,r5,1
+  RET
+
+; ---------------------------------------------------------------------------
+; nsch_dequeue_head - r1=priority level -> r1=slot or NS_NONE.
+nsch_dequeue_head:
+  ; leaf
+  LA r2,#NS_BASE
+  ADDI r2,r2,#NS_QUEUE
+  SHL r3,r1,1
+  ADD r2,r2,r3
+  LD r3,r2,0
+  CMP r3,r0
+  JMP[EQ] @nsch_dq_none
+  SUB r4,r3,r13             ; slot
+  LA r5,#NS_BASE
+  ADDI r5,r5,#NS_LINK
+  ADD r5,r5,r4
+  LD r6,r5,0                ; next enc
+  ST r6,r2,0
+  CMP r6,r0
+  JMP[NE] @nsch_dq_have
+  ST r0,r2,1
+nsch_dq_have:
+  ST r0,r5,0
+  ADD r1,r4,r0
+  RET
+nsch_dq_none:
+  MOVI r1,#NS_NONE
+  RET
+
+; ---------------------------------------------------------------------------
+; nsch_remove_pid r1=pid; nsch_remove_slot r1=slot.  Unlink from any level.
+nsch_remove_pid:
+  ST r15,r14,0
+  ADDI r14,r14,#NS_FRAME
+  ST r1,r14,1
+  CALL @nsch_slot
+  MOVI r2,#NS_NONE
+  CMP r1,r2
+  JMP[EQ] @nsch_rp_out
+  CALL @nsch_remove_slot
+nsch_rp_out:
+  ADDI r14,r14,#NS_FRAME_NEG
+  LD r15,r14,0
+  RET
+
+nsch_remove_slot:
+  ST r15,r14,0
+  ADDI r14,r14,#NS_FRAME
+  ST r1,r14,1
+  ADD r2,r1,r13
+  ST r2,r14,2              ; encoded target
+  MOVI r2,0
+  ST r2,r14,3              ; level
+nsch_rs_level:
+  LA r3,#NS_BASE
+  ADDI r3,r3,#NS_QUEUE
+  LD r4,r14,3
+  SHL r4,r4,1
+  ADD r3,r3,r4
+  LD r4,r3,0
+  CMP r4,r0
+  JMP[EQ] @nsch_rs_next
+  LD r5,r14,2
+  CMP r4,r5
+  JMP[EQ] @nsch_rs_head
+  ST r4,r14,4              ; previous encoded
+nsch_rs_prev:
+  LD r4,r14,4
+  SUB r5,r4,r13
+  LA r6,#NS_BASE
+  ADDI r6,r6,#NS_LINK
+  ADD r6,r6,r5
+  LD r5,r6,0
+  CMP r5,r0
+  JMP[EQ] @nsch_rs_next
+  LD r7,r14,2
+  CMP r5,r7
+  JMP[EQ] @nsch_rs_mid
+  ST r5,r14,4
+  JMP @nsch_rs_prev
+nsch_rs_mid:
+  ; link[prev] = link[slot]
+  LD r4,r14,4
+  SUB r4,r4,r13
+  LA r6,#NS_BASE
+  ADDI r6,r6,#NS_LINK
+  ADD r6,r6,r4
+  LD r5,r14,1
+  LA r7,#NS_BASE
+  ADDI r7,r7,#NS_LINK
+  ADD r7,r7,r5
+  LD r8,r7,0
+  ST r8,r6,0
+  ; tail fix
+  LD r8,r3,1
+  LD r9,r14,2
+  CMP r8,r9
+  JMP[NE] @nsch_rs_clear
+  LD r8,r14,4
+  ST r8,r3,1
+  JMP @nsch_rs_clear
+nsch_rs_head:
+  LD r5,r14,1
+  LA r6,#NS_BASE
+  ADDI r6,r6,#NS_LINK
+  ADD r6,r6,r5
+  LD r5,r6,0
+  ST r5,r3,0
+  CMP r5,r0
+  JMP[NE] @nsch_rs_clear
+  ST r0,r3,1
+nsch_rs_clear:
+  LD r5,r14,1
+  LA r6,#NS_BASE
+  ADDI r6,r6,#NS_LINK
+  ADD r6,r6,r5
+  ST r0,r6,0
+  JMP @nsch_rs_done
+nsch_rs_next:
+  LD r4,r14,3
+  ADD r4,r4,r13
+  ST r4,r14,3
+  MOVI r5,#NS_NPRIO
+  CMP r4,r5
+  JMP[LT] @nsch_rs_level
+nsch_rs_done:
+  ADDI r14,r14,#NS_FRAME_NEG
+  LD r15,r14,0
+  RET
+
+; ---------------------------------------------------------------------------
+; Address helpers.
+; nsch_slot r1=pid -> r1=slot or NS_NONE.
+nsch_slot:
+  ST r15,r14,0
+  ADDI r14,r14,#NS_FRAME
+  ST r1,r14,1
+  CALL @np_lookup
+  CMP r1,r0
+  JMP[EQ] @nsch_slot_bad
+  LA r2,#NP_BASE
+  SUB r1,r1,r2
+  MOVI r2,#NP_ENTRY
+  DIVU r1,r1,r2
+  JMP @nsch_slot_out
+nsch_slot_bad:
+  MOVI r1,#NS_NONE
+nsch_slot_out:
+  ADDI r14,r14,#NS_FRAME_NEG
+  LD r15,r14,0
+  RET
+
+; nsch_frame_ptr r1=slot -> r1=word address.
+nsch_frame_ptr:
+  MOVI r2,24
+  MUL r2,r1,r2
+  LA r1,#NS_BASE
+  ADDI r1,r1,#NS_FRAMES
+  ADD r1,r1,r2
+  RET
+
+; nsch_rt_ptr r1=slot -> r1=word address.
+nsch_rt_ptr:
+  MOVI r2,36
+  MUL r2,r1,r2
+  LA r1,#NS_BASE
+  ADDI r1,r1,#NS_REGT
+  ADD r1,r1,r2
+  RET
