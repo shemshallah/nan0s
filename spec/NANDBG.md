@@ -396,7 +396,7 @@ in the register words.
 The proof implements w0–w3; that is enough to show the type and the exact
 faulting word. `core.nas` includes `ndr.nas`, which adds w4–w6 from the decoded
 `a`/`b`/`d` registers and writes the FNV-1a/32 seal in w7. The log ring stores
-sixteen eight-word NDRs at 0x31000; each record is mirrored at 0x31100 with
+256 eight-word NDRs at 0x31000; each record is mirrored at 0x31800 with
 BSWAPM, and the monitor's `v` command verifies the newest pair.
 
 ### 4.3 The mirror pair
@@ -1252,8 +1252,8 @@ cart seal valid.
 ### P2 — records, history, protocol
 
 - [x] 8-word NDR with operands and seal; mirror pair storage.
-- [~] Flight-recorder ring (4096 PC entries; packed entry next) and log ring
-      (16 records; 256 target).
+- [x] Flight-recorder ring (4096 PC entries) and log ring (256 records).
+- [~] Packed flight entry (op/k/flags) and rolling seal.
 - [x] Bounded scalar undo ring (32 records, two writes each); `undo [n]`.
 - [x] Redo ring (32 records) with post-step state and write values; `redo [n]`.
 - [x] Cart checkpoint/restore: registers, PC, condition, call depth, 64K arena.

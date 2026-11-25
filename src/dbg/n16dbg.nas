@@ -215,7 +215,7 @@ cv_loop:
   ADD r4,r4,r8
   ADD r4,r4,r9
   LD r5,r4,0
-  LA r6,0x31100
+  LA r6,0x31800
   ADD r6,r6,r8
   ADD r6,r6,r9
   LD r7,r6,0

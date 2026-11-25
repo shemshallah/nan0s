@@ -6400,7 +6400,7 @@ MOVI r3,4
 tlg_cnt:
 ST r3,r0,@tlg_n
 SUB r3,r2,r3
-MOVI r4,15
+MOVI r4,255
 BOOL.8 r3,r3,r4
 ST r3,r0,@tlg_s
 tlg_l:
@@ -6492,7 +6492,7 @@ MOVI r2,10
 CALL @tdbg_ch
 LD r1,r0,@tlg_s
 ADD r1,r1,r13
-MOVI r2,15
+MOVI r2,255
 BOOL.8 r1,r1,r2
 ST r1,r0,@tlg_s
 LD r1,r0,@tlg_n
@@ -6581,7 +6581,7 @@ CALL #DBG_LOG
 LD r14,r0,@dbg_sp
 ST r1,r0,@tm_base
 SUB r1,r2,r13
-MOVI r2,15
+MOVI r2,255
 BOOL.8 r1,r1,r2
 SHL r1,r1,3
 ST r1,r0,@tm_off
@@ -6598,7 +6598,7 @@ ADD r1,r8,r0
 CALL #DBG_MEM_GETH
 LD r14,r0,@dbg_sp
 ST r1,r0,@tm_p
-LA r2,0x100
+LA r2,0x800
 LD r8,r0,@tm_base
 ADD r8,r8,r2
 LD r1,r0,@tm_off
