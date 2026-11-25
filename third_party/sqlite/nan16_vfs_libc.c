@@ -303,6 +303,7 @@ static int l_open(sqlite3_vfs *pVfs, const char *name, sqlite3_file *pFile,
 {
     NanLFile *f = (NanLFile *)pFile;
     int oflags = O_RDONLY, fd;
+    int outFlags = flags;
     char tmp[64];
     struct stat lst;
     (void)pVfs;
@@ -319,6 +320,22 @@ static int l_open(sqlite3_vfs *pVfs, const char *name, sqlite3_file *pFile,
         name = tmp;
         f->del = 1;
     }
+    /* A POSIX read-only open of a directory succeeds; the first read then
+       fails with EISDIR, which SQLite reports as SQLITE_IOERR_READ ("disk
+       I/O error").  The guest libc refuses open() on a directory outright,
+       so give the pager a read-only handle whose xRead reports the I/O
+       error.  This is what backup2-10. */
+    if (!(flags & (SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE))
+        && stat(name, &lst) == 0 && S_ISDIR(lst.st_mode)
+    ) {
+        f->readonly = 1;
+        f->fd = -1;
+        strncpy(f->path, name, sizeof f->path - 1);
+        f->path[sizeof f->path - 1] = 0;
+        if (pOutFlags) *pOutFlags = flags;
+        pFile->pMethods = &l_io;
+        return SQLITE_OK;
+    }
     if (flags & SQLITE_OPEN_READWRITE) oflags = O_RDWR;
     if (flags & SQLITE_OPEN_CREATE) oflags |= O_CREAT;
     if (flags & SQLITE_OPEN_DELETEONCLOSE) f->del = 1;
@@ -330,17 +347,15 @@ static int l_open(sqlite3_vfs *pVfs, const char *name, sqlite3_file *pFile,
         fd = open(name, O_RDONLY);
         if (fd >= 0) {
             f->readonly = 1;
-            if (pOutFlags) {
-                *pOutFlags = (flags & ~(SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE))
-                           | SQLITE_OPEN_READONLY;
-            }
+            outFlags = (flags & ~(SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE))
+                     | SQLITE_OPEN_READONLY;
         }
     }
     if (fd < 0) return SQLITE_CANTOPEN;
     f->fd = fd;
     strncpy(f->path, name, sizeof f->path - 1);
     f->path[sizeof f->path - 1] = 0;
-    if (pOutFlags) *pOutFlags = flags;
+    if (pOutFlags) *pOutFlags = outFlags;
     pFile->pMethods = &l_io;
     return SQLITE_OK;
 }
