@@ -1,4 +1,5 @@
-; NANIX GUI CARTRIDGE: desktop + overlapping windows, all NaN16.
+; NaN/0S GUI CARTRIDGE: desktop + overlapping windows, all NaN16.
+; The Terminal runs the NANIX native POSIX command layer.
 ; Programs: Terminal (virtual console), Sierpinski (stateless rule-90 pixel window),
 ; Monitor (double-endian timer lamps), Hex (live guest memory viewer).
 ; Keys (kbd.nas, 1024x768): TAB focus | F2 MOVE mode (arrows move, ENTER leaves) | F3 enlarge/restore | ESC close.
@@ -574,7 +575,7 @@ SUB r14,r14,r13
 LD r15,r14,0
 RET
 s_banner:
-.str "NANIX TERMINAL\nh = help\n> "
+.str "NaN/0S TERMINAL\nNANIX POSIX shell\nh = help\n> "
 ; ---- vc_putc: r1=id r2=char ----
 vc_putc:
 ST r15,r14,0
@@ -912,12 +913,15 @@ CALL @term_draw
 JMP @tk_ret
 tk_line_mode:
 CALL @fs_readline
-CALL @fs_dispatch
-CMP r1,r0
-JMP[EQ] @tk_enter_normal
+; End the echoed line before either the full-line dispatcher or the
+; single-letter legacy command runs.  This is the line discipline for the
+; NANIX POSIX shell inside the NaN/0S Terminal.
 LD r1,r0,@tk_id
 MOVI r2,10
 CALL @vc_putc
+CALL @fs_dispatch
+CMP r1,r0
+JMP[EQ] @tk_enter_normal
 LD r1,r0,@tk_id
 MOVI r2,@fs_s_prompt
 CALL @vc_puts
@@ -951,9 +955,6 @@ ADD r4,r4,r6
 tk_lc:
 ST r4,r0,@tk_cmd
 tk_docmd:
-LD r1,r0,@tk_id
-MOVI r2,10
-CALL @vc_putc
 LD r1,r0,@tk_id
 LD r4,r0,@tk_cmd
 CALL @term_cmd
@@ -1418,7 +1419,7 @@ tm_id:
 s_help:
 .str "h c v w b l m x t s n u f e q\nb browser l lattice m monitor x hex\nt term w count c clear v ver\ne C editor (.run/.demo)\ns settings n browser u utils\nf files (nsh) q quit gui\n"
 s_ver:
-.str "NANIX GUI r26\npure NaN16 wm\n"
+.str "NaN/0S GUI r26\npure NaN16 wm\nNANIX POSIX services\n"
 s_wins:
 .str "WINDOWS "
 s_guess_unk:
@@ -7602,6 +7603,21 @@ CALL @fs_prefix
 CMP r1,r0
 JMP[NE] @fs_d_mkdir
 LA r1,#FNB
+LA r2,@fs_s_rmdir
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @fs_d_rmdir
+LA r1,#FNB
+LA r2,@fs_s_truncate
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @fs_d_truncate
+LA r1,#FNB
+LA r2,@fs_s_stat
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @fs_d_stat
+LA r1,#FNB
 LA r2,@fs_s_rm
 CALL @fs_prefix
 CMP r1,r0
@@ -7616,6 +7632,16 @@ LA r2,@fs_s_pwd
 CALL @fs_prefix
 CMP r1,r0
 JMP[NE] @fs_d_pwd
+LA r1,#FNB
+LA r2,@fs_s_help
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @fs_d_help
+LA r1,#FNB
+LA r2,@fs_s_exit
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @fs_d_exit
 MOVI r1,0
 JMP @fs_disp_d
 fs_d_debug:
@@ -7633,13 +7659,99 @@ ADDI r1,r1,4
 CALL @fs_cc
 JMP @fs_disp_y
 fs_d_cat:
+; Load through the NANIX native POSIX service, not a private NFS walk.
 LA r1,#FNB
 ADDI r1,r1,4
-CALL @fs_cat
+CALL @fs_skipsp
+LA r2,#EXB
+MOVI r3,4095
+CALL @bare_fs_load
+LA r2,0xFFFFFFFF
+CMP r1,r2
+JMP[EQ] @fs_cat_nf
+LD r2,r0,@tk_id
+ST r1,r0,@fs_left
+LA r3,#EXB
+ST r3,r0,@fs_ptr
+ADD r3,r3,r1
+STB r0,r3,0
+fs_cat_l:
+LD r2,r0,@fs_left
+CMP r2,r0
+JMP[EQ] @fs_cat_e
+LD r1,r0,@fs_ptr
+LDB r2,r1,0
+ADD r1,r1,r13
+ST r1,r0,@fs_ptr
+LD r1,r0,@fs_left
+SUB r1,r1,r13
+ST r1,r0,@fs_left
+LD r1,r0,@tk_id
+CALL @vc_putc
+JMP @fs_cat_l
+fs_cat_nf:
+LD r1,r0,@tk_id
+MOVI r2,@fs_s_nofile
+CALL @vc_puts
+fs_cat_e:
+LD r1,r0,@tk_id
+MOVI r2,@fs_s_nl
+CALL @vc_puts
 JMP @fs_disp_y
 fs_d_write:
+; write PATH TEXT stores immediately; write PATH opens the editor.
 LA r1,#FNB
 ADDI r1,r1,6
+CALL @fs_skipsp
+ST r1,r0,@fs_pathp
+ADD r3,r1,r0
+fs_w_scan:
+LDB r2,r3,0
+CMP r2,r0
+JMP[EQ] @fs_w_editor
+MOVI r4,32
+CMP r2,r4
+JMP[EQ] @fs_w_split
+ADD r3,r3,r13
+JMP @fs_w_scan
+fs_w_split:
+STB r0,r3,0
+ADD r1,r3,r13
+CALL @fs_skipsp
+ST r1,r0,@fs_textp
+CALL @fs_strlen
+ST r1,r0,@fs_textlen
+; bare_fs_save -> nfs_write takes a word-aligned source pointer.
+LD r1,r0,@fs_textp
+LA r2,#EXB
+LD r3,r0,@fs_textlen
+fs_w_copy:
+CMP r3,r0
+JMP[EQ] @fs_w_copied
+LDB r4,r1,0
+STB r4,r2,0
+ADD r1,r1,r13
+ADD r2,r2,r13
+SUB r3,r3,r13
+JMP @fs_w_copy
+fs_w_copied:
+LD r1,r0,@fs_pathp
+LA r2,#EXB
+LD r3,r0,@fs_textlen
+CALL @bare_fs_save
+CMP r1,r0
+JMP[EQ] @fs_w_err
+LD r1,r0,@tk_id
+MOVI r2,@fs_s_saved
+CALL @vc_puts
+JMP @fs_disp_y
+fs_w_err:
+LD r1,r0,@tk_id
+MOVI r2,@fs_s_error
+CALL @vc_puts
+JMP @fs_disp_y
+fs_w_editor:
+LD r1,r0,@fs_pathp
 CALL @fs_write
 JMP @fs_disp_y
 fs_d_edit:
@@ -7650,28 +7762,230 @@ JMP @fs_disp_y
 fs_d_mkdir:
 LA r1,#FNB
 ADDI r1,r1,6
-MOVI r2,1
-CALL @nfs_create
-CALL @fs_created
+CALL @fs_skipsp
+CALL @bare_fs_mkdir
+CMP r1,r0
+JMP[NE] @fs_mk_err
+LD r1,r0,@tk_id
+MOVI r2,@fs_s_made
+CALL @vc_puts
+JMP @fs_disp_y
+fs_mk_err:
+LD r1,r0,@tk_id
+MOVI r2,@fs_s_error
+CALL @vc_puts
+JMP @fs_disp_y
+fs_d_rmdir:
+LA r1,#FNB
+ADDI r1,r1,6
+CALL @fs_skipsp
+CALL @bare_fs_rmdir
+CMP r1,r0
+JMP[NE] @fs_rmd_err
+LD r1,r0,@tk_id
+MOVI r2,@fs_s_gone
+CALL @vc_puts
+JMP @fs_disp_y
+fs_rmd_err:
+LD r1,r0,@tk_id
+MOVI r2,@fs_s_error
+CALL @vc_puts
 JMP @fs_disp_y
 fs_d_rm:
 LA r1,#FNB
 ADDI r1,r1,3
-CALL @nfs_delete
-CALL @fs_removed
+CALL @fs_skipsp
+CALL @bare_fs_remove
+CMP r1,r0
+JMP[NE] @fs_rm_err
+LD r1,r0,@tk_id
+MOVI r2,@fs_s_gone
+CALL @vc_puts
+JMP @fs_disp_y
+fs_rm_err:
+LD r1,r0,@tk_id
+MOVI r2,@fs_s_error
+CALL @vc_puts
+JMP @fs_disp_y
+fs_d_stat:
+LA r1,#FNB
+ADDI r1,r1,5
+CALL @fs_skipsp
+LA r2,@fs_statbuf
+CALL @bare_fs_stat
+CMP r1,r0
+JMP[NE] @fs_stat_err
+LD r1,r0,@fs_statbuf
+CMP r1,r0
+JMP[EQ] @fs_stat_file
+MOVI r2,@fs_s_dir
+JMP @fs_stat_typ
+fs_stat_file:
+MOVI r2,@fs_s_file
+fs_stat_typ:
+LD r1,r0,@tk_id
+CALL @vc_puts
+LD r1,r0,@tk_id
+MOVI r2,@fs_s_size
+CALL @vc_puts
+LA r1,@fs_statbuf
+ADD r1,r1,r13
+LD r5,r1,0
+CALL @fs_putdec
+LD r1,r0,@tk_id
+MOVI r2,@fs_s_mode
+CALL @vc_puts
+LA r1,@fs_statbuf
+MOVI r2,2
+ADD r1,r1,r2
+LD r5,r1,0
+CALL @fs_putdec
+LD r1,r0,@tk_id
+MOVI r2,10
+CALL @vc_putc
+JMP @fs_disp_y
+fs_stat_err:
+LD r1,r0,@tk_id
+MOVI r2,@fs_s_error
+CALL @vc_puts
+JMP @fs_disp_y
+fs_d_truncate:
+LA r1,#FNB
+ADDI r1,r1,9
+CALL @fs_skipsp
+ST r1,r0,@fs_pathp
+ADD r3,r1,r0
+fs_tr_scan:
+LDB r2,r3,0
+CMP r2,r0
+JMP[EQ] @fs_tr_err
+MOVI r4,32
+CMP r2,r4
+JMP[EQ] @fs_tr_split
+ADD r3,r3,r13
+JMP @fs_tr_scan
+fs_tr_split:
+STB r0,r3,0
+ADD r1,r3,r13
+CALL @fs_skipsp
+MOVI r5,0
+fs_tr_num:
+LDB r2,r1,0
+MOVI r4,48
+CMP r2,r4
+JMP[LT] @fs_tr_run
+MOVI r4,57
+CMP r2,r4
+JMP[GT] @fs_tr_run
+MOVI r4,10
+MUL r5,r5,r4
+ADDI r2,r2,-48
+ADD r5,r5,r2
+ADD r1,r1,r13
+JMP @fs_tr_num
+fs_tr_run:
+ST r5,r0,@fs_num
+LD r1,r0,@fs_pathp
+LD r2,r0,@fs_num
+CALL @bare_fs_truncate
+CMP r1,r0
+JMP[NE] @fs_tr_err
+LD r1,r0,@tk_id
+MOVI r2,@fs_s_made
+CALL @vc_puts
+JMP @fs_disp_y
+fs_tr_err:
+LD r1,r0,@tk_id
+MOVI r2,@fs_s_error
+CALL @vc_puts
 JMP @fs_disp_y
 fs_d_ls:
-CALL @fs_list
+; ls [PATH] uses the same native readdir service as the text shell.
+LA r1,#FNB
+ADDI r1,r1,3
+CALL @fs_skipsp
+LDB r2,r1,0
+CMP r2,r0
+JMP[NE] @fs_ls_have
+LA r1,@fs_s_slash
+fs_ls_have:
+CALL @fs_savepath
+ST r0,r0,@fs_i
+fs_ls_l:
+LA r1,#FNPATH
+LA r2,@fs_i
+LA r3,#FIPB
+MOVI r4,64
+LA r5,@fs_typ
+CALL @bare_fs_readdir
+CMP r1,r0
+JMP[EQ] @fs_ls_d
+LA r1,#FIPB
+CALL @fs_putb
+LD r1,r0,@fs_typ
+CMP r1,r0
+JMP[EQ] @fs_ls_nl
+LD r1,r0,@tk_id
+MOVI r2,47
+CALL @vc_putc
+fs_ls_nl:
+LD r1,r0,@tk_id
+MOVI r2,10
+CALL @vc_putc
+JMP @fs_ls_l
+fs_ls_d:
 JMP @fs_disp_y
 fs_d_pwd:
 LD r1,r0,@tk_id
 MOVI r2,@fs_s_root
 CALL @vc_puts
+JMP @fs_disp_y
+fs_d_help:
+LD r1,r0,@tk_id
+MOVI r2,@fs_s_commands
+CALL @vc_puts
+JMP @fs_disp_y
+fs_d_exit:
+LD r1,r0,@tk_id
+MOVI r2,@fs_s_bye
+CALL @vc_puts
+MOVI r1,1
+ST r1,r0,@g_quit
+JMP @fs_disp_y
 fs_disp_y:
 MOVI r1,1
 fs_disp_d:
 SUB r14,r14,r13
 LD r15,r14,0
+RET
+
+; fs_skipsp: r1=byte ptr -> first non-space byte
+fs_skipsp:
+LDB r2,r1,0
+MOVI r3,32
+CMP r2,r3
+JMP[EQ] @fs_sk_adv
+MOVI r3,9
+CMP r2,r3
+JMP[NE] @fs_sk_d
+fs_sk_adv:
+ADD r1,r1,r13
+JMP @fs_skipsp
+fs_sk_d:
+RET
+
+; fs_strlen: r1=byte ptr -> r1=length
+fs_strlen:
+ADD r3,r1,r0
+MOVI r1,0
+fs_sl_l:
+LDB r2,r3,0
+CMP r2,r0
+JMP[EQ] @fs_sl_d
+ADD r1,r1,r13
+ADD r3,r3,r13
+JMP @fs_sl_l
+fs_sl_d:
 RET
 
 fs_created:
@@ -7716,69 +8030,34 @@ SUB r14,r14,r13
 LD r15,r14,0
 RET
 
-fs_cat:
-ST r15,r14,0
-ADD r14,r14,r13
-CALL @nfs_data
-CMP r3,r0
-JMP[EQ] @fs_cat_nf
-SHL r1,r1,2
-ST r1,r0,@fs_ptr
-ST r2,r0,@fs_left
-fs_cat_l:
-LD r2,r0,@fs_left
-CMP r2,r0
-JMP[EQ] @fs_cat_d
-LD r1,r0,@fs_ptr
-LDB r2,r1,0
-ADD r1,r1,r13
-ST r1,r0,@fs_ptr
-LD r1,r0,@fs_left
-SUB r1,r1,r13
-ST r1,r0,@fs_left
-LD r1,r0,@tk_id
-CALL @vc_putc
-JMP @fs_cat_l
-fs_cat_d:
-JMP @fs_cat_e
-fs_cat_nf:
-LD r1,r0,@tk_id
-MOVI r2,@fs_s_nofile
-CALL @vc_puts
-fs_cat_e:
-SUB r14,r14,r13
-LD r15,r14,0
-RET
-
 fs_list:
-ST r15,r14,0
-ADD r14,r14,r13
+; Kept as the no-argument lister for callers that already use fs_list.
+LA r1,@fs_s_slash
+CALL @fs_savepath
 ST r0,r0,@fs_i
-fs_ls_l:
-LD r1,r0,@fs_i
-CALL @nfs_entry
+fs_list_l:
+LA r1,#FNPATH
+LA r2,@fs_i
+LA r3,#FIPB
+MOVI r4,64
+LA r5,@fs_typ
+CALL @bare_fs_readdir
 CMP r1,r0
-JMP[EQ] @fs_ls_nx
-ST r1,r0,@fs_ent
-ADDI r1,r1,#NF_E_PATH
-SHL r1,r1,2
+JMP[EQ] @fs_list_d
+LA r1,#FIPB
 CALL @fs_putb
+LD r1,r0,@fs_typ
+CMP r1,r0
+JMP[EQ] @fs_list_nl
 LD r1,r0,@tk_id
-MOVI r2,32
+MOVI r2,47
 CALL @vc_putc
-LD r1,r0,@fs_ent
-LD r5,r1,#NF_E_SIZE
-CALL @fs_putdec
+fs_list_nl:
 LD r1,r0,@tk_id
 MOVI r2,10
 CALL @vc_putc
-fs_ls_nx:
-LD r1,r0,@fs_i
-ADD r1,r1,r13
-ST r1,r0,@fs_i
-MOVI r2,#NFS_MAX
-CMP r1,r2
-JMP[LT] @fs_ls_l
+JMP @fs_list_l
+fs_list_d:
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -8012,6 +8291,34 @@ fs_s_gone:
 .str "removed\n"
 fs_s_nofile:
 .str "no file\n"
+fs_s_error:
+.str "error\n"
+fs_s_bye:
+.str "bye\n"
+fs_s_slash:
+.str "/"
+fs_s_nl:
+.str "\n"
+fs_s_stat:
+.str "stat "
+fs_s_rmdir:
+.str "rmdir "
+fs_s_truncate:
+.str "truncate "
+fs_s_help:
+.str "help"
+fs_s_exit:
+.str "exit"
+fs_s_file:
+.str "file"
+fs_s_dir:
+.str "dir"
+fs_s_size:
+.str " size="
+fs_s_mode:
+.str " mode="
+fs_s_commands:
+.str "commands: ls [PATH] | cat PATH | write PATH [TEXT] | mkdir PATH | rmdir PATH | rm PATH | stat PATH | truncate PATH N | pwd | help | exit\n"
 fs_s_saved:
 .str "saved\n"
 fs_s_savefail:
@@ -8020,6 +8327,18 @@ fs_s_noname:
 .str "no file name\n"
 fs_s_editmsg:
 .str "C editor: .run .save .demo .clear .quit\n> "
+fs_pathp:
+.word 0
+fs_textp:
+.word 0
+fs_textlen:
+.word 0
+fs_num:
+.word 0
+fs_typ:
+.word 0
+fs_statbuf:
+.word 0,0,0,0
 fs_i:
 .word 0
 fs_ent:

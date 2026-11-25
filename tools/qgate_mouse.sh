@@ -178,7 +178,7 @@ cp build/nan0s.img "$T/source.img"
   -display none -serial "file:$T/serial.txt" -monitor stdio \
   > "$T/monitor.log" 2> "$T/qemu.log"
 
-grep -q 'NANIX' "$T/serial.txt"
+grep -q 'NaN/0S' "$T/serial.txt"
 if grep -Eqi 'unknown command|invalid command|has not been found' "$T/monitor.log"; then
   echo "FAIL: QEMU monitor cannot inject virtual PS/2 mouse movement"
   tail -35 "$T/monitor.log"
@@ -219,8 +219,8 @@ central=(480,320,650,450)
 ab=changed(a,b,central)
 bc=changed(b,c,central)
 print(f"NaN16 PS/2 mouse framebuffer: initial->moved {ab} pixels, moved->returned {bc} pixels")
-assert ab>30, "Moving real PS/2 mouse did not change NANIX framebuffer"
-assert bc>30, "Second PS/2 movement did not redraw NANIX framebuffer"
+assert ab>30, "Moving real PS/2 mouse did not change NaN/0S framebuffer"
+assert bc>30, "Second PS/2 movement did not redraw NaN/0S framebuffer"
 launcher_region=(178,115,835,550)
 opened=changed(hover,clicked,launcher_region)
 print(f"NaN16 taskbar launcher click: {opened} pixels changed in native app-grid region")

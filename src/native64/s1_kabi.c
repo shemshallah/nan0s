@@ -215,14 +215,24 @@ static S1 s;
  * cartridge with no input still halts deterministically. */
 extern const uint32_t s1_keys_len __attribute__((weak));
 extern const unsigned char s1_keys_data[] __attribute__((weak));
+#ifndef S1_GUEST_KEY_DELAY
+#define S1_GUEST_KEY_DELAY 0
+#endif
 static uint32_t key_pos, key_count;
+static uint64_t key_release, key_now;
+static uint32_t key_staged(void) {
+  return key_now >= key_release ? key_count : 0;
+}
 static void key_reset(void) {
+  key_release = S1_GUEST_KEY_DELAY;
+  key_now = 0;
   if (&s1_keys_len == 0 || &s1_keys_data == 0) { key_pos = key_count = 0; return; }
   key_pos = 0;
   key_count = s1_keys_len;
 }
 static uint32_t key_pop(void) {
-  if (key_pos >= key_count) return 0;
+  uint32_t avail = key_staged();
+  if (key_pos >= avail) return 0;
   return s1_keys_data[key_pos++];
 }
 
@@ -442,7 +452,7 @@ static uint32_t s1_run(uint64_t budget) {
   uint32_t pc = s.pc;
   uint64_t done = 0;
   while (done < budget) {
-    done++; s.steps++;
+    done++; s.steps++; key_now = s.steps;
 #ifdef S1_GUEST
     if ((s.steps & 1023u) == 0) guest_publish_time();
 #endif
@@ -507,7 +517,7 @@ static uint32_t s1_run(uint64_t budget) {
     case 0x12: s.r[d] = key_pop(); break;
     case 0x18: s.r[d] = disp_vmode == 1 ? 0x1300C800u : 0x00031950u; break;
     case 0x19: { uint32_t v = s.r[d];
-      if (v >= 0xFFFF0000u) { key_pos = key_count; }       /* raw keyboard */
+      if (v >= 0xFFFF0000u) { key_pos = key_staged(); } /* raw keyboard */
       else if (v >= 0x10000u) {
         disp_vmode = 1; disp_fbw = v >> 16; disp_fbh = v & 0xFFFFu;
         disp_fbtot = disp_fbw * disp_fbh;

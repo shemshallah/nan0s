@@ -1,4 +1,4 @@
-; NANIX MUSEUM - round 18. Exhibit cartridge system.
+; NaN/0S MUSEUM - round 18. Exhibit cartridge system.
 
 .org 0
 JMP @sh_cold
@@ -73,17 +73,20 @@ NOP
 
 .org 512
 sh_cold:
-; NANIX OS banner.  No museum menu: vectors are installed by shell_entry,
-; then the GUI desktop (boot cart) or the text shell starts.
+; NaN/0S OS banner.  No museum menu: vectors are installed by shell_entry,
+; then the GUI desktop (boot cart) or the text shell starts.  The NANIX
+; native POSIX replacement layer is the command line inside the Terminal.
 MOVI r1,78
 PUTC r1
-MOVI r1,65
+MOVI r1,97
 PUTC r1
 MOVI r1,78
 PUTC r1
-MOVI r1,73
+MOVI r1,47
 PUTC r1
-MOVI r1,88
+MOVI r1,48
+PUTC r1
+MOVI r1,83
 PUTC r1
 MOVI r1,13
 PUTC r1

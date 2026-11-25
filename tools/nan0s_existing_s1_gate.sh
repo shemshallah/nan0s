@@ -32,7 +32,7 @@ if [ -z "$COM" ]; then
     echo "nan0s_existing: FAIL (no COM1 capture)"
     tail -5 "$T/run.err"; exit 1
 fi
-if ! grep -q 'NANIX' "$COM"; then
+if ! grep -q 'NaN/0S' "$COM"; then
     echo "nan0s_existing: FAIL (real system banner missing)"
     head -10 "$COM" | cat -v; exit 1
 fi
@@ -49,7 +49,7 @@ if ! sh tools/s1_runner.sh --img "$T/guest.bin" \
 fi
 tr -d '\r' < "$T/cli.out" > "$T/cli.lf"
 for want in \
-    'NANIX text shell - POSIX command line' \
+    'NaN/0S text shell - NANIX POSIX command line' \
     'nan0s> mkdir /k' 'ok' \
     'nan0s> write /k/a hi' \
     'nan0s> cat /k/a' 'hi' \

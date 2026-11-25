@@ -57,7 +57,7 @@ cp build/nan0s.img "$T/ide.img"
     cat "$T/error.txt"
     exit 1
   }
-grep -q 'NANIX' "$T/com1.txt"
+grep -q 'NaN/0S' "$T/com1.txt"
 python3 - "$T" <<'PY'
 import pathlib
 import sys

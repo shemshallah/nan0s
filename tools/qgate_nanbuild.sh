@@ -86,8 +86,8 @@ cp "$T/output.img" "$T/second-stage-ide.img"
   -drive format=raw,if=ide,index=0,file="$T/second-stage-ide.img" \
   -display none -serial "file:$T/reboot-serial.txt" -monitor stdio \
   > "$T/reboot-monitor.log" 2> "$T/reboot-qemu.log"
-grep -q 'NANIX' "$T/reboot-serial.txt"
+grep -q 'NaN/0S' "$T/reboot-serial.txt"
 test -s "$T/reboot.ppm"
 dimensions=$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 "$T/reboot.ppm")
 test "$dimensions" = "1024,768"
-echo "PASS: raw NaN16 created a complete, verified, independently bootable NANIX replica"
+echo "PASS: raw NaN16 created a complete, verified, independently bootable NaN/0S replica"

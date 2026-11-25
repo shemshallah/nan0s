@@ -29,7 +29,7 @@ cp build/nan0s.img "$T/disk.img"
     -drive format=raw,if=ide,file="$T/disk.img" \
     -display none -serial "file:$T/com1.txt" -monitor stdio \
     >"$T/mon.txt" 2>"$T/err" || true
-grep -q "NANIX" "$T/com1.txt" || { echo "qgate_gui: banner MISSING"; exit 1; }
+grep -q "NaN/0S" "$T/com1.txt" || { echo "qgate_gui: banner MISSING"; exit 1; }
 wh=$(cat "$T/wh" 2>/dev/null || true)
 [ "$wh" = "1024,768" ] || { echo "qgate_gui: GUI framebuffer missing (got ${wh:-none})"; exit 1; }
 echo "qgate_gui: PASS (x86 GUI + ATA guest loader)"

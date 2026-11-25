@@ -2,7 +2,7 @@
 # tools/s1_runner.sh - x86_64 bare-metal S1 runner with the gate CLI.
 #
 #   --img FILE [--mem MB] [--steps N] [--serial]
-#   [--keys TEXT] [--guest-input FILE] [--dump-fb FILE]
+#   [--keys TEXT] [--key-delay STEPS] [--guest-input FILE] [--dump-fb FILE] [--dump-mem ADDR:SIZE:FILE]
 #   [--guest-script PATH] [--guest-stdout FILE] [--guest-stderr FILE]
 #   [--peek 'ADDR[:LEN],...']
 #
@@ -17,10 +17,10 @@ export LC_ALL=C
 ROOT=$(pwd)
 
 usage() {
-  echo "usage: $0 --img FILE [--mem MB] [--steps N] [--serial] [--keys TEXT] [--guest-input FILE] [--dump-fb FILE] [--guest-script PATH] [--guest-stdout FILE] [--guest-stderr FILE] [--peek 'ADDR[:LEN][,ADDR[:LEN]...]']" >&2
+  echo "usage: $0 --img FILE [--mem MB] [--steps N] [--serial] [--keys TEXT] [--key-delay STEPS] [--guest-input FILE] [--dump-fb FILE] [--dump-mem ADDR:SIZE:FILE] [--guest-script PATH] [--guest-stdout FILE] [--guest-stderr FILE] [--peek 'ADDR[:LEN][,ADDR[:LEN]...]']" >&2
   exit 2
 }
-IMG=""; MEM_MB=128; STEPS=50000000; SERIAL=0; GOUT=""; GERR=""; PEEK=""; GSCRIPT=""; KEYS=""; GINPUT=""; DUMPFB=""
+IMG=""; MEM_MB=128; STEPS=50000000; SERIAL=0; GOUT=""; GERR=""; PEEK=""; GSCRIPT=""; KEYS=""; GINPUT=""; DUMPFB=""; DUMPMEM=""; KEYDELAY=0
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --img) [ "$#" -ge 2 ] || usage; IMG=$2; shift 2 ;;
@@ -28,8 +28,10 @@ while [ "$#" -gt 0 ]; do
     --steps) [ "$#" -ge 2 ] || usage; STEPS=$2; shift 2 ;;
     --serial) SERIAL=1; shift ;;
     --keys) [ "$#" -ge 2 ] || usage; KEYS=$2; shift 2 ;;
+    --key-delay) [ "$#" -ge 2 ] || usage; KEYDELAY=$2; shift 2 ;;
     --guest-input) [ "$#" -ge 2 ] || usage; GINPUT=$2; shift 2 ;;
     --dump-fb) [ "$#" -ge 2 ] || usage; DUMPFB=$2; shift 2 ;;
+    --dump-mem) [ "$#" -ge 2 ] || usage; DUMPMEM=$2; shift 2 ;;
     --guest-script) [ "$#" -ge 2 ] || usage; GSCRIPT=$2; shift 2 ;;
     --guest-stdout) [ "$#" -ge 2 ] || usage; GOUT=$2; shift 2 ;;
     --guest-stderr) [ "$#" -ge 2 ] || usage; GERR=$2; shift 2 ;;
@@ -186,7 +188,7 @@ clang --target=x86_64-none-elf -c src/native64/s1_boot.S -o "$T/boot.o"
 clang --target=x86_64-none-elf -std=gnu99 -O3 -Wall -Wextra -ffp-contract=off -fno-fast-math \
   -ffreestanding -fno-builtin -fno-stack-protector -mno-red-zone \
   -DS1_GUEST -DS1_GUEST_MEM="$WORDS" -DS1_GUEST_STEPS="$STEPS" \
-  -DS1_GUEST_ZERO_WORDS="$SAFE" $STACK_DEF \
+  -DS1_GUEST_ZERO_WORDS="$SAFE" -DS1_GUEST_KEY_DELAY="$KEYDELAY" $STACK_DEF \
   -c src/native64/s1_kabi.c -o "$T/s1.o"
 python3 - "$GSCRIPT" "$T/script.S" <<'PY'
 import sys
@@ -226,9 +228,18 @@ else
 fi
 
 rm -f "$T/com" "$T/dbg"
-if [ -n "$DUMPFB" ]; then
+if [ -n "$DUMPFB" ] || [ -n "$DUMPMEM" ]; then
   ( sleep "${S1_FB_DELAY:-8}"
-    printf 'pmemsave 0x10000000 0x300000 "%s"\nquit\n' "$DUMPFB" ) | \
+    if [ -n "$DUMPFB" ]; then
+      printf 'pmemsave 0x10000000 0x300000 "%s"\n' "$DUMPFB"
+    fi
+    if [ -n "$DUMPMEM" ]; then
+      printf 'pmemsave %s %s "%s"\n' \
+        "$(printf '%s' "$DUMPMEM" | cut -d: -f1)" \
+        "$(printf '%s' "$DUMPMEM" | cut -d: -f2)" \
+        "$(printf '%s' "$DUMPMEM" | cut -s -d: -f3-)"
+    fi
+    printf 'quit\n' ) | \
   timeout "${S1_QEMU_TIMEOUT:-600}" "$QEMU_BIN" -m "$QMEM" $QEMU_ACCEL \
     -drive format=raw,if=floppy,file="$T/image" $DRIVE -boot a \
     -device isa-debug-exit,iobase=0xf4,iosize=0x04 \

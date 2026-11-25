@@ -53,7 +53,7 @@ cp build/nan0s.img "$T/hda.img"
   -drive format=raw,if=floppy,file=build/nan0s.img \
   -drive format=raw,if=ide,file="$T/hda.img" \
   -display none -serial "file:$T/serial" -monitor stdio >"$T/monitor" 2>"$T/qemu"
-grep -q 'NANIX' "$T/serial"
+grep -q 'NaN/0S' "$T/serial"
 ! grep -Eqi 'unknown command|invalid command' "$T/monitor"
 python3 - "$T" <<'PY'
 from pathlib import Path

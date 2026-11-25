@@ -1,5 +1,10 @@
 # NaN-only execution boundary
 
+Naming: **NaN/0S** is the operating system and desktop.  **NANIX** is its
+native POSIX replacement layer: the raw-NaN16 command line, filesystem
+metadata, process control and service ABI that replace the C libc POSIX
+surface for normal operation.
+
 Status: 2026-11-25. `nan-only-suite` and its POSIX metadata follow-up are
 merged into `nan0s/main`; main is canonical. This document is authoritative
 for what may be C and what must be raw NaN16.
@@ -27,7 +32,7 @@ tools/mkall.sh  ->  build/nan0s.img
 ```
 
 `sh tools/qgate.sh` boots that image on bare x86 (QEMU) and requires the
-`NANIX` banner on COM1.  The default boot is the GUI desktop; `qgate_gui`
+`NaN/0S` banner on COM1.  The default boot is the GUI desktop; `qgate_gui`
 checks the 1024x768 framebuffer.  A pending ESC at cold boot enters the text
 shell (no museum menu); the GUI/museum code is legacy, not the boot path.  The upgraded machine target is **x86_64 S1**
 (`tools/s1_runner.sh`); `tools/nan0s_guest_gate.sh` runs a NaN guest on it by
@@ -90,8 +95,11 @@ Raw-NaN gates, not oracle claims:
   transcript is checked.  This is the upgraded existing system, not a
   separate CLI.
 - `tools/nan0s_gui64_gate.sh` — boots the same OS guest on x86_64 S1, dumps
-  the 1024x768 8bpp framebuffer, and requires the GUI desktop and the
-  Terminal window region to be drawn.
+  the 1024x768 8bpp framebuffer and the Terminal's private character buffer,
+  and requires the GUI desktop plus a full NANIX POSIX command transcript
+  (mkdir/write/cat/ls/stat/truncate/rm/rmdir) through `bare_fs_*`.  The
+  Terminal keyboard path is driven with delayed PS/2 make codes so the
+  command line runs after `kbd_init`.
 - `tools/nanpipe_libc_gate.sh` — guest libc `pipe()/dup2()/read()/write()`
   over the NaN byte-pipe table; `PIPE PASS` on x86_64 S1.
 - `tools/nansched_gate.sh` — the kernel scheduler (`src/lib/nansched.nas`):
