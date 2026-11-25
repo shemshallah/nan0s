@@ -11,7 +11,7 @@
 ;   np_read  r1=id r2=dst byte ptr r3=len -> r1=bytes read (0 = empty/EOF)
 ;   np_close r1=id       -> r1=0
 .equ NPIPE_MAX  8
-.equ NPIPE_BASE 0x240000
+.equ NPIPE_BASE 0x2C0000
 .equ NPIPE_CAP  4096
 .equ NPIPE_SZ   1028
 .equ NP_W_ID    0xF0780
