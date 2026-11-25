@@ -1,6 +1,7 @@
 # NaN-only execution boundary
 
-Status: 2026-11-25, branch `nan-only-suite`.  This document is authoritative
+Status: 2026-11-25. `nan-only-suite` and its POSIX metadata follow-up are
+merged into `nan0s/main`; main is canonical. This document is authoritative
 for what may be C and what must be raw NaN16.
 
 ## The rule

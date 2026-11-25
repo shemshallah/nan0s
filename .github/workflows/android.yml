@@ -52,6 +52,7 @@ jobs:
           rc=0; sh tools/nic_gate.sh || rc=$?; if [ "$rc" -ne 0 ] && [ "$rc" -ne 77 ]; then exit "$rc"; fi
           sh tools/ata_rw_gate.sh || exit 1
           sh tools/raw_only_gate.sh || exit 1
+          sh tools/xgold_gate.sh || exit 1
           sh tools/lds_gate.sh || exit 1
           sh tools/kabi_gate.sh || exit 1
           sh tools/kabi_proc_gate.sh || exit 1
@@ -61,6 +62,15 @@ jobs:
           sh tools/kabi_sleep_gate.sh || exit 1
           sh tools/kabi_kill_gate.sh || exit 1
           sh tools/s1_guest_gate.sh || exit 1
+          NANPROC_RUNNER=tools/s1_runner.sh sh tools/nanproc_gate.sh || exit 1
+          NANTHR_X64_RUNNER=tools/s1_image_runner.sh sh tools/nanthr_gate.sh --require-x64 || exit 1
+          sh tools/cbare_gate.sh || exit 1
+          sh tools/cbare_fs_gate.sh || exit 1
+          sh tools/cbare_sqlite_gate.sh || exit 1
+          sh tools/nfs2_capacity_gate.sh || exit 1
+          sh tools/nanfs_svc_gate.sh || exit 1
+          sh tools/n16i_s1_gate.sh || exit 1
+          sh tools/nanfs_meta_gate.sh || exit 1
           sh tools/ncc_lex.sh || exit 1
           sh tools/ncc_m1.sh || exit 1
           sh tools/ncc_m2.sh || exit 1
