@@ -50,7 +50,7 @@ struct nan_vm {
   uint32_t dirty, frame, tick_last, tick_same;
   /* Kernel ABI v0.1 state (spec/KERNEL_ABI.md). */
   uint32_t kentry, kframe, ktimer, ktimer_left;
-  uint32_t kstack, kregions, ktcb;
+  uint32_t kstack, kregions, ktcb, kdata;
   uint32_t kin, ktimer_pending, ktrap_pending;
   nan_trace_fn trace; void *trace_ctx;
   nan_port_fn portlog; void *portlog_ctx;

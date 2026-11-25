@@ -204,7 +204,7 @@ static uint32_t fp_unary(uint32_t A, int op) {
 typedef struct {
   uint32_t r[16], pc, k, halted;
   uint64_t steps;
-  uint32_t kentry, kframe, ktimer, ktimer_left, kstack, kregions, ktcb;
+  uint32_t kentry, kframe, ktimer, ktimer_left, kstack, kregions, ktcb, kdata;
   uint32_t kin, ktimer_pending, ktrap_pending;
 } S1;
 static S1 s;
@@ -216,6 +216,7 @@ enum { TF_PC = 16, TF_K = 17, TF_ADDRH = 18, TF_CAUSE = 19,
 
 static void s1_reset(void) {
   for (uint32_t i = 0; i < S1_GUEST_ZERO_WORDS; i++) MEM[i] = 0;
+  s.kdata = 0xF0000u;
   for (int i = 0; i < 16; i++) s.r[i] = 0;
   s.pc = 0; s.k = 0; s.halted = 0; s.steps = 0;
   s.kentry = s.kframe = s.kstack = s.kregions = s.ktcb = UNSET;
@@ -319,6 +320,7 @@ static void port_out(uint16_t port, uint32_t v) {
   case 0x4E03: s.kstack = v; break;
   case 0x4E04: s.kregions = v; break;
   case 0x4E05: s.ktcb = v; break;
+  case 0x4E07: s.kdata = v; break;
   case 0x3F8: serial_putc((char)v); break;
   default: break;
   }
@@ -332,6 +334,7 @@ static uint32_t port_in(uint16_t port) {
   case 0x4E03: return s.kstack;
   case 0x4E04: return s.kregions;
   case 0x4E05: return s.ktcb;
+  case 0x4E07: return s.kdata;
   default: return 0xFFFFFFFFu;
   }
 }
@@ -462,11 +465,11 @@ static uint32_t s1_run(uint64_t budget) {
     case 0x16: if (s.kregions != UNSET && !s.kin &&
                    !region_range(A, 1, PROT_W)) S1_VECTOR(CAUSE_FAULT, at, A);
       MEM[A & MEM_MASK] = mkword(s.r[d], (int)(B & 15u)); break;
-    case 0x1C: { uint32_t ad = 0xF0000u + imm;
+    case 0x1C: { uint32_t ad = s.kdata + imm;
       if (s.kregions != UNSET && !s.kin &&
           !region_range(ad, 1, PROT_R)) S1_VECTOR(CAUSE_FAULT, at, ad);
       s.r[d] = word_payload(ad); break; }
-    case 0x1D: { uint32_t ad = 0xF0000u + imm;
+    case 0x1D: { uint32_t ad = s.kdata + imm;
       if (s.kregions != UNSET && !s.kin &&
           !region_range(ad, 1, PROT_W)) S1_VECTOR(CAUSE_FAULT, at, ad);
       MEM[ad & MEM_MASK] = mkword(s.r[d], 10); break; }
@@ -535,7 +538,7 @@ static uint32_t s1_run(uint64_t budget) {
     case 0x38: pc = p & 0xFFFFFFu; break;
     case 0x39: s.r[15] = pc; pc = p & 0xFFFFFFu; break;
     case 0x43: { uint16_t po = (uint16_t)(A & 0xFFFFu);
-      if (s.kentry != UNSET && !s.kin && po >= 0x4E00u && po <= 0x4E06u)
+      if (s.kentry != UNSET && !s.kin && po >= 0x4E00u && po <= 0x4E07u)
         S1_VECTOR(CAUSE_FAULT, at, po);
       port_out(po, s.r[d]); break; }
     case 0x44: { uint32_t reg[4] = {0, 0, 0, 0};
@@ -669,6 +672,7 @@ static void t_ports(void) {
   eq(s.kentry, ENTRY, "entry port"); eq(s.kframe, FRAME, "frame port");
   eq(s.ktimer, 16, "timer port"); eq(s.kstack, KSTACK, "stack port");
   eq(s.kregions, UNSET, "regions port"); eq(s.ktcb, TCB, "tcb port");
+  eq(s.kdata, 0xF0000u, "data port default");
   eq(s.r[3], 0, "status port");
 }
 

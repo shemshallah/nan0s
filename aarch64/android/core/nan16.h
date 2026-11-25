@@ -29,6 +29,7 @@ enum {
   NAN_KABI_PORT_REGIONS = 0x4E04, /* region table word address            */
   NAN_KABI_PORT_TCB     = 0x4E05, /* current TCB word address             */
   NAN_KABI_PORT_STATUS  = 0x4E06, /* INL: bit0 timer pending, bit1 trap   */
+  NAN_KABI_PORT_DATA    = 0x4E07, /* LDS/STS window base (default 0xF0000) */
   NAN_KABI_STATUS_TIMER = 1u,
   NAN_KABI_STATUS_TRAP  = 2u,
   NAN_KABI_UNSET        = 0xFFFFFFFFu

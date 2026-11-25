@@ -69,8 +69,8 @@ region table.
 - One global region table and one trap frame are still enough for a single
   runnable process. Multiple processes need per-process frames plus a
   kernel context switch that swaps `0x4E01`, `0x4E04` and the TCB port.
-- The `LDS`/`STS` high-data window is still fixed at `0xF0000`. The planned
-  data-base port turns that window into a per-process 64K scratch mapping so
-  the compiler runtime can be isolated without changing `nmk` output.
+- The `LDS`/`STS` window base is now control port `0x4E07` (default
+  `0xF0000`). A kernel can therefore point each process at its own mapped
+  64K scratch window while `nmk` keeps emitting window-relative offsets.
 - Far code is already encoded by `JMPF`/`CALLF`; the remaining work is a
   loader that maps multiple code extents and selects a code base per process.
