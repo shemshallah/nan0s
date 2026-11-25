@@ -12,8 +12,7 @@
 #   NAN16_CLI                       runner (default aarch64/android/nan_cli)
 #   NAN16_SUITE_MEM                 guest MiB (default 256)
 #   NAN16_SUITE_CHECKPOINT_SECONDS  checkpoint interval (default 60)
-#   NAN16_CLOCK                     --clock value, e.g. steps:100000 to map
-#                                   virtual milliseconds to real execution
+#   NAN16_CLOCK                     guest clock (default steps:100000)
 set -eu
 cd "$(dirname "$0")/.."
 ROOT=$(pwd)
@@ -28,7 +27,11 @@ OUT=${4:-$(dirname "$CKPT")}
 CLI=${NAN16_CLI:-$ROOT/aarch64/android/nan_cli}
 MEM=${NAN16_SUITE_MEM:-256}
 EVERY=${NAN16_SUITE_CHECKPOINT_SECONDS:-60}
-CLOCK=${NAN16_CLOCK:-}
+# The portable core executes roughly 100M steps/s.  Mapping one virtual
+# millisecond to 100k steps keeps busy-handler/checkpoint timing predicates
+# (busy2, wal.test) meaningful; the old 1k default ran the guest clock 100x
+# too fast.  --clock is a nan_cli option, so allow it to be overridden.
+CLOCK=${NAN16_CLOCK:-steps:100000}
 [ -x "$CLI" ] || { echo "suite: no runner $CLI" >&2; exit 1; }
 [ -f "$BASE" ] || { echo "suite: no base image $BASE" >&2; exit 1; }
 mkdir -p "$OUT"
