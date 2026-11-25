@@ -87,6 +87,11 @@ Raw-NaN gates, not oracle claims:
 - `tools/nanpipe_gate.sh` — a 4 KiB NaN byte pipe (open/write/read/wrap/
   close).  This is the storage primitive for POSIX `pipe()`/`dup2()` and
   shell pipelines; the libc/shell wiring is the next step.
+- `kabi_spawn` / `kabi_sched` / `kabi_sleep` / `kabi_kill` — mechanism
+  proofs for the process SVCs on x86_64 S1.  These are **not** the final
+  scheduler; they use a small demo table.  The kernel scheduler is
+  `src/lib/nansched.nas` and is installed through `nk_install_proc` in
+  `nankernel.nas` (process SVCs 0/1/9/10/20/21/22/23/24).
 
 ## Remaining integration work
 
