@@ -24,6 +24,7 @@
 	VAR FLAGM,4,0x8040
 	VAR STEPS,4,0x8044
 	VAR MAXS,4,0x8048
+	VAR DATAB,4,0x80CC
 	VAR T0,4,0x804C
 	VAR KB,4,0x8050
 	VAR OB,4,0x8054
@@ -34,6 +35,7 @@ heads:	.word 0x7FF1,0xFFF1,0x7FF8,0xFFF8
 _start:
 	.ifdef BARE
 	cld
+	movl $0xF0000,DATAB
 	movl $0x7FFFFFFF,MAXS
 	movl $1,FLAGM
 	movl $0,STEPS
@@ -47,6 +49,7 @@ _start:
 	rep movsl
 	xor %esi,%esi
 	.else
+	movl $0xF0000,DATAB
 	movl $200000000,MAXS
 	movl $1,FLAGM
 	mov 12(%esp),%esi          # argv[2] = optional step cap (decimal)
@@ -240,12 +243,12 @@ h_st:	movzwl %ax,%eax
 	call putw
 	jmp loop
 h_lds:	movzwl %ax,%eax
-	add $0xF0000,%eax
+	add DATAB,%eax
 	and $MASK,%eax
 	mov G+2(,%eax,8),%ebx
 	jmp st
 h_sts:	movzwl %ax,%eax
-	add $0xF0000,%eax
+	add DATAB,%eax
 	and $MASK,%eax
 	mov R(%ebp),%ebx
 	mov $10,%ecx
@@ -420,7 +423,11 @@ h_inw: xor %ebx,%ebx
 	jmp st
 h_outw: jmp loop
 h_outsw: jmp loop
-h_outl: jmp loop
+h_outl: cmp $0x4E07,%ecx
+	jne 1f
+	mov R(%ebp),%eax
+	mov %eax,DATAB
+1:	jmp loop
 
 # ---- NaNVM1 integer ops ----
 h_mul:	mov %ecx,%ebx
