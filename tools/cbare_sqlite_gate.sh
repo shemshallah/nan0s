@@ -12,7 +12,7 @@ T="${TMPDIR:-/tmp}/cbarsql.$$"; mkdir -p "$T"
 trap 'rm -rf "$T"' EXIT
 CC=${HOST_CC:-cc}; TT=third_party/tinycc
 SQL=third_party/sqlite; LIBC=third_party/nan16-libc
-CLI=aarch64/android/nan_cli
+CLI=${CBARE_SQLITE_RUNNER:-aarch64/android/nan_cli}
 [ -x "$CLI" ] || (cd aarch64/android && make -s nan_cli)
 STEPS=${NANFS_SQLITE_STEPS:-400000000}
 BASE=2621440
