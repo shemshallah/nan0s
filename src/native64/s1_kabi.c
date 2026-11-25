@@ -873,6 +873,7 @@ void s1_main(void) {
   serial_puts("NAN0S S1 KABI x86_64\n");
   t_svc();
   t_ports();
+  t_port_locked();
   t_timer();
   t_regions();
   t_bounds();
