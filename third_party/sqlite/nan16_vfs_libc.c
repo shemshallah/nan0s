@@ -573,16 +573,28 @@ static unsigned int l_now_ms(void)
 {
     return *(volatile unsigned int *)0x03EFF010u;
 }
+/* Test hook: date.test sets sqlite_current_time through a Tcl link to fake
+   the wall clock (os_unix.c uses the same variable). */
+extern int sqlite3_current_time;
 static int l_currenttime(sqlite3_vfs *pVfs, double *pTime)
 {
     (void)pVfs;
-    *pTime = 2440587.5 + ((double)l_now_ms() / 1000.0) / 86400.0;
+    if (sqlite3_current_time) {
+        *pTime = 2440587.5 + (double)sqlite3_current_time / 86400.0;
+    } else {
+        *pTime = 2440587.5 + ((double)l_now_ms() / 1000.0) / 86400.0;
+    }
     return SQLITE_OK;
 }
 static int l_currenttimeint64(sqlite3_vfs *pVfs, sqlite3_int64 *pTime)
 {
     (void)pVfs;
-    *pTime = (sqlite3_int64)l_now_ms();
+    if (sqlite3_current_time) {
+        *pTime = 1000LL * (sqlite3_int64)sqlite3_current_time
+               + 210866760000000LL;
+    } else {
+        *pTime = (sqlite3_int64)l_now_ms() + 210866760000000LL;
+    }
     return SQLITE_OK;
 }
 static int l_getlasterror(sqlite3_vfs *pVfs, int nBuf, char *zBuf)
