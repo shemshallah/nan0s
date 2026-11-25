@@ -97,6 +97,8 @@ $CC -std=gnu99 -O2 -DTCC_TARGET_NAN16 -DONE_SOURCE -I"$TT" "$TT/tcc.c" \
 
 echo "tcl_testfixture: adapt lock_common for no fork/exec"
 python3 tools/nan16_patch_lock_common.py "$SQLITE_SRC/test/lock_common.tcl"
+echo "tcl_testfixture: bound sqlite_dbdata payloads to the input db size"
+python3 tools/nan16_patch_recover_dbdata.py "$SQLITE_SRC/ext/recover/dbdata.c"
 
 echo "tcl_testfixture: pack official VFS"
 python3 tools/nan16_suite_pack.py "$T/suite.n16pack" \
