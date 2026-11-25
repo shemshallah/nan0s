@@ -6517,6 +6517,80 @@ tnr_i:
 tnr_v:
 .word 0
 
+; ---- mirror: verify the newest primary/twin pair ----
+tdbg_mirror:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r14,r0,@dbg_sp
+CALL #DBG_LOG
+LD r14,r0,@dbg_sp
+ST r1,r0,@tm_base
+SUB r1,r2,r13
+MOVI r2,15
+BOOL.8 r1,r1,r2
+SHL r1,r1,3
+ST r1,r0,@tm_off
+MOVI r1,0
+ST r1,r0,@tm_i
+tm_l:
+LD r8,r0,@tm_base
+LD r1,r0,@tm_off
+ADD r8,r8,r1
+LD r1,r0,@tm_i
+ADD r8,r8,r1
+ST r14,r0,@dbg_sp
+ADD r1,r8,r0
+CALL #DBG_MEM_GETH
+LD r14,r0,@dbg_sp
+ST r1,r0,@tm_p
+LA r2,0x100
+LD r8,r0,@tm_base
+ADD r8,r8,r2
+LD r1,r0,@tm_off
+ADD r8,r8,r1
+LD r1,r0,@tm_i
+ADD r8,r8,r1
+ST r14,r0,@dbg_sp
+ADD r1,r8,r0
+CALL #DBG_MEM_GETH
+LD r14,r0,@dbg_sp
+ST r1,r0,@tm_m
+LA r4,@tm_scratch
+ST r1,r4,0
+BSWAPM r4,0
+LD r2,r4,0
+LD r1,r0,@tm_p
+CMP r2,r1
+JMP[NE] @tm_bad
+LD r1,r0,@tm_i
+ADD r1,r1,r13
+ST r1,r0,@tm_i
+MOVI r2,8
+CMP r1,r2
+JMP[LT] @tm_l
+MOVI r2,@s_tdbg_mok
+CALL @tdbg_str
+JMP @tm_done
+tm_bad:
+MOVI r2,@s_tdbg_mbad
+CALL @tdbg_str
+tm_done:
+SUB r14,r14,r13
+LD r15,r14,0
+JMP @tdbg_done
+tm_base:
+.word 0
+tm_off:
+.word 0
+tm_i:
+.word 0
+tm_p:
+.word 0
+tm_m:
+.word 0
+tm_scratch:
+.word 0
+
 ; ---- hist: newest eight program counters ----
 tdbg_hist:
 ST r15,r14,0
@@ -7663,6 +7737,11 @@ CALL @fs_prefix
 CMP r1,r0
 JMP[NE] @tdbg_serial_cmd
 LA r1,#FNB
+LA r2,@s_tdbg_mirror
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @tdbg_mirror
+LA r1,#FNB
 LA r2,@s_tdbg_ndr
 CALL @fs_prefix
 CMP r1,r0
@@ -8164,11 +8243,11 @@ s_dbg_loaded:
 s_dbg_nocart:
 .str "no cart\n"
 s_tdbg_banner:
-.str "NANDBG TERMINAL MONITOR\ncarts load <id> step next finish run regs break watch bpts wpts mem [addr] dis [addr] screen serial log ndr hist stack types goto bp wp undo [n] redo [n] setr setm setw setc checkpoint restore reset pc quit\n"
+.str "NANDBG TERMINAL MONITOR\ncarts load <id> step next finish run regs break watch bpts wpts mem [addr] dis [addr] screen serial log ndr mirror hist stack types goto bp wp undo [n] redo [n] setr setm setw setc checkpoint restore reset pc quit\n"
 s_tdbg_prompt:
 .str "> "
 s_tdbg_help:
-.str "carts load <id> step next finish run regs break watch bpts wpts mem [addr] dis [addr] screen serial log ndr hist stack types goto bp wp undo [n] redo [n] setr setm setw setc checkpoint restore reset pc quit"
+.str "carts load <id> step next finish run regs break watch bpts wpts mem [addr] dis [addr] screen serial log ndr mirror hist stack types goto bp wp undo [n] redo [n] setr setm setw setc checkpoint restore reset pc quit"
 s_tdbg_carts:
 .str "carts"
 s_tdbg_load:
@@ -8199,6 +8278,12 @@ s_tdbg_next:
 .str "next"
 s_tdbg_finish:
 .str "finish"
+s_tdbg_mirror:
+.str "mirror"
+s_tdbg_mok:
+.str "MIRROR OK\n"
+s_tdbg_mbad:
+.str "MIRROR BAD\n"
 s_tdbg_ndr:
 .str "ndr"
 s_tdbg_log:
