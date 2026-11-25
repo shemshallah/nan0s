@@ -650,6 +650,7 @@
 
 ; ------------------------------------------------------------------ compiler state
 ; Kept below word 65536 so ST/LD can use the 16-bit immediate form directly.
+; Low scratch ABI: words 0xF0000.., above the 64K GUI cartridge.
 .equ W_IRPC     0xF0000
 .equ W_SYMUSED  0xF0001
 .equ W_GLOBUSED 0xF0002
