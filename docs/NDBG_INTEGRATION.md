@@ -30,7 +30,7 @@ The Silver Slate terminal now has a wired `debug` monitor:
 ```text
 > debug
 NANDBG TERMINAL MONITOR
-carts load <id> step next finish run regs log ndr mirror hist stack types break watch bpts wpts bp wp goto mem [addr] dis [addr] screen serial setr setm setw setc undo [n] redo [n] checkpoint restore reset pc quit
+carts load <id> step next finish run regs log ndr mirror hist stack types poison verify break watch bpts wpts bp wp goto mem [addr] dis [addr] screen serial setr setm setw setc undo [n] redo [n] checkpoint restore reset pc quit
 > carts
 1 Baby
 2 PUTC
@@ -54,6 +54,10 @@ no log
 NDR 20000000 00002003 7F000000 0000000F 00000000 00000000 00000000 47997CA3
 > mirror
 MIRROR OK
+> poison 3000 4 dead
+POISON 3000/0004
+> verify 3000 4 dead
+VERIFY OK
 > hist
 HIST 0000 0000 0000 0000 0000 0000 2000 2001
 > stack
@@ -123,7 +127,7 @@ HELLO
 `tools/ndbg_term.sh` gates the path, including the sealed-cart catalog and
 `load <id>`. `next` and `finish` use the resident shadow stack: `next` steps over a CALL
 and `finish` runs out of the current frame. `log` prints the newest typed
-records with A/B/D operands and seal, `ndr` the latest eight-word record, `mirror` verifies its twin, `hist` the newest eight PCs, `stack` the shadow frames, and `types`
+records with A/B/D operands and seal, `ndr` the latest eight-word record, `mirror` verifies its twin, `poison`/`verify` fill and check a class-15 range, `hist` the newest eight PCs, `stack` the shadow frames, and `types`
 the live 4x4 type matrix. `bp <hex>`/`wp <hex>` toggle table entries and
 print `BP=... +`/`-` or `W=... +`/`-`; `goto <hex>` moves the PC and invalidates
 the time-travel rings. `mem [addr]` and `dis [addr]` accept an optional base,
