@@ -95,6 +95,9 @@ grep -q 'TCC_TARGET_NAN16' "$TT/config.h" || \
 $CC -std=gnu99 -O2 -DTCC_TARGET_NAN16 -DONE_SOURCE -I"$TT" "$TT/tcc.c" \
     -o "$T/tcc0" -lm -ldl
 
+echo "tcl_testfixture: adapt lock_common for no fork/exec"
+python3 tools/nan16_patch_lock_common.py "$SQLITE_SRC/test/lock_common.tcl"
+
 echo "tcl_testfixture: pack official VFS"
 python3 tools/nan16_suite_pack.py "$T/suite.n16pack" \
     --tree "$SQLITE_SRC/test=/sqlite/test" \
