@@ -323,6 +323,19 @@ static int l_open(sqlite3_vfs *pVfs, const char *name, sqlite3_file *pFile,
     if (flags & SQLITE_OPEN_CREATE) oflags |= O_CREAT;
     if (flags & SQLITE_OPEN_DELETEONCLOSE) f->del = 1;
     fd = open(name, oflags, 0644);
+    if (fd < 0 && (flags & SQLITE_OPEN_READWRITE) && errno == EACCES) {
+        /* Match unixOpen(): if read-write access is denied, retry read-only
+           and tell the caller.  Writes then fail with SQLITE_READONLY
+           instead of the open failing with CANTOPEN (backup2-6). */
+        fd = open(name, O_RDONLY);
+        if (fd >= 0) {
+            f->readonly = 1;
+            if (pOutFlags) {
+                *pOutFlags = (flags & ~(SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE))
+                           | SQLITE_OPEN_READONLY;
+            }
+        }
+    }
     if (fd < 0) return SQLITE_CANTOPEN;
     f->fd = fd;
     strncpy(f->path, name, sizeof f->path - 1);

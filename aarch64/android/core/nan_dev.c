@@ -179,6 +179,15 @@ static uint32_t port_in(nan_vm *v, uint32_t port, int size) {
   case 0x3DA: v->retrace ^= 8; return v->retrace;
   case 0x3FD: return 0x60;
   case 0x61: return v->p61;
+  case NAN_KABI_PORT_STATUS:
+    return (v->ktimer_pending ? NAN_KABI_STATUS_TIMER : 0u) |
+           (v->ktrap_pending ? NAN_KABI_STATUS_TRAP : 0u);
+  case NAN_KABI_PORT_ENTRY: return v->kentry;
+  case NAN_KABI_PORT_FRAME: return v->kframe;
+  case NAN_KABI_PORT_TIMER: return v->ktimer;
+  case NAN_KABI_PORT_KSTACK: return v->kstack;
+  case NAN_KABI_PORT_REGIONS: return v->kregions;
+  case NAN_KABI_PORT_TCB: return v->ktcb;
   case 0xCFC: case 0xCFD: case 0xCFE: case 0xCFF: {
     uint32_t c = pci_cfg(v->pci_addr); if (c == 0xFFFFFFFFu) return size == 2 ? 0xFFFF : 0xFF;
     return (c >> ((port & 3) * 8)) & (size == 2 ? 0xFFFFu : 0xFFu); }
@@ -208,6 +217,13 @@ static void port_out(nan_vm *v, uint32_t port, uint32_t val, int size) {
     v->pit_phase ^= 1; break;
   case 0x61: v->p61 = (uint8_t)val; break;
   case 0x3F8: nan_ser_putc(v, (uint8_t)val); break;
+  /* Kernel ABI v0.1 control ports: all values are guest WORD addresses. */
+  case NAN_KABI_PORT_ENTRY:   v->kentry = val; break;
+  case NAN_KABI_PORT_FRAME:   v->kframe = val; break;
+  case NAN_KABI_PORT_TIMER:   v->ktimer = val; v->ktimer_left = val; break;
+  case NAN_KABI_PORT_KSTACK:  v->kstack = val; break;
+  case NAN_KABI_PORT_REGIONS: v->kregions = val; break;
+  case NAN_KABI_PORT_TCB:     v->ktcb = val; break;
   case 0xCF8: if (size == 4) v->pci_addr = val; break;
   case 0x1F0: if (size == 2 && ata_present(v) && a->mode == 2) {
       a->buf[a->pos++] = (uint16_t)val;

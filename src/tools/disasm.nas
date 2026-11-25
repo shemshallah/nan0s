@@ -567,6 +567,12 @@ t_ops:
 .str "DP4B   "
 .word 76,801
 .str "VDP4B4 "
+.word 77,33
+.str "INL    "
+.word 78,4
+.str "SVC    "
+.word 79,0
+.str "SVCRET "
 .word 80,1
 .str "VZERO  "
 .word 81,33

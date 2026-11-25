@@ -9,6 +9,7 @@ node_modules/
 aarch64/android/nan_cli
 aarch64/android/tests/test_core
 aarch64/android/tests/test_core_asan
+aarch64/android/tests/test_kernel_abi
 aarch64/android/app/build/
 aarch64/android/build/
 aarch64/android/.gradle/

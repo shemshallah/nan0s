@@ -16,6 +16,7 @@ Flags: BOOL Z=res==0,L=0 ; ADD L=carry ; SUB L=borrow ; SHL/SHR Z,L=0 ; CMP Z=(a
 00 BOOL d,a,b (n = function, bitwise on 32 lanes) | 01 MOVI d,imm | 02 MOVHI d,imm (upper 16) | 03 ADD | 04 SUB | 05 SHL d,a,imm5 | 06 SHR d,a,imm5 | 07 CMP a,b
 08 LD d,a,imm (payload of mem[r[a]+imm]) | 09 ST d,a,imm (writes +q/+q word) | 0A JMP imm | 0B CALL imm (r15=pc) | 0C RET | 0D JMPR a | 0F NOP
 10 VPOKE d,a (cell r[a] <- r[d]) | 11 VPEEK d,a | 12 KEY d (blocking) | 13 TICK d | 14 BSWAPM a,imm (reverse 8 bytes of word) | 15 PUTC d (BIOS teletype) | 16 STW d,a,b (mem[r[a]] = word(class r[b]&15, payload r[d])) | 17 LDN d,a,imm (class nibble, FFFFFFFF if gate fails) | 18 DISPQ d (r[d]=mode<<16|rows<<8|cols) | 19 DISPSET d (BIOS mode r[d]&255) | 1A KEYQ d (non-blocking key, 0 if none) | 1B BEEP d | FF HALT. Others: bad-op trap.
-Traps print !G<pc> (gate) or !O<pc> (bad op) and halt.
+Kernel ABI v1 ops: 4D INL d,a (32-bit port read) | 4E SVC imm (syscall trap) | 4F SVCRET (restore trap frame). Full encoding, ports, trap frame and region format: `spec/KERNEL_ABI.md`.
+Traps print !G<pc> (gate), !O<pc> (bad op) or !K<pc> (kernel ABI configuration error) and halt.
 ## Known prototype discrepancy
 The Lattice HTML maps header bits m=(Qn,Sn,Qf,Sf) to n through PERM=[0,1,2,3,8,9,10,11,4,5,6,7,12..15]; the 16-operand HTML (and this spec) use identity. Same word is a different function in the two pages. Spec follows the 16-operand page. Lattice needs PERM removed before it can run NaN/0S words.

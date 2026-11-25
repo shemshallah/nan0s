@@ -9,13 +9,14 @@ nan_cli: $(SRC) tools/nan_cli.c core/*.h core/*.inc
 # any other volume from Android storage). Seed content = the nfix fixpoint source.
 volume:
 	sh ../../tools/nmkfs.sh src/tests/nfix_test.nas aarch64/android/app/src/main/assets/disk.nanfs
-test: tests/test_core tests/test_nannet_driver
+test: tests/test_core tests/test_nannet_driver tests/test_kernel_abi
 	./tests/test_core
 	./tests/test_nannet_driver
+	./tests/test_kernel_abi
 tests/test_core: $(SRC) tests/test_core.c core/*.h core/*.inc
 	$(CC) $(CFLAGS) $(SRC) tests/test_core.c -o $@ -lm
 clean:
-	rm -f nan_cli tests/test_core tests/test_core_asan tests/test_nannet_driver
+	rm -f nan_cli tests/test_core tests/test_core_asan tests/test_nannet_driver tests/test_kernel_abi
 asan: $(SRC) tests/test_core.c core/*.h core/*.inc
 	$(CC) -std=gnu99 -O1 -g -Wno-misleading-indentation -fsanitize=address,undefined -fno-sanitize-recover=undefined -ffp-contract=off $(SRC) tests/test_core.c -o tests/test_core_asan -lm
 	./tests/test_core_asan
@@ -29,3 +30,5 @@ seals: nan_cli
 
 tests/test_nannet_driver: $(SRC) tests/test_nannet_driver.c core/*.h core/*.inc
 	$(CC) $(CFLAGS) $(SRC) tests/test_nannet_driver.c -o $@ -lm
+tests/test_kernel_abi: $(SRC) tests/test_kernel_abi.c core/*.h core/*.inc
+	$(CC) $(CFLAGS) $(SRC) tests/test_kernel_abi.c -o $@ -lm

@@ -71,15 +71,15 @@ Status legend: **done**, **partial**, **planned**.
 
 | # | Component | Current | Needed for Tcl/SQLite |
 | - | --- | --- | --- |
-| S1.1 | Trap/SVC gate, trap frame, kernel entry | planned; opcode conflict to resolve (`0x39` is far CALL today) | syscalls, faults, preemption |
-| S1.2 | Timer/PIT, IRQ0, pending bit | planned; only `TICK` read exists | preemptive threads, `after`/timeouts |
-| S1.3 | Region table + per-access checks | planned | process isolation, fork/exec |
+| S1.1 | Trap/SVC gate, trap frame, kernel entry | **frozen v0.1** (`spec/KERNEL_ABI.md`); C oracle + x86_64 ABI slice + flat/large cartridge runner + Tcl milestone 1 product PASS; filesystem/sealed loader pending | syscalls, faults, preemption |
+| S1.2 | Timer/PIT, IRQ0, pending bit | instruction-timer vector in C oracle + x86_64 slice; hardware PIT/IRQ0 pending | preemptive threads, `after`/timeouts |
+| S1.3 | Region table + per-access checks | software checks in C oracle + x86_64 slice; per-process tables pending | process isolation, fork/exec |
 | S1.4 | Atomics/fences | opcodes partly present | mutexes, thread-safe SQLite |
 | S1.5 | Port I/O/DEV boundary | partial (`0x3E-0x44`) | ATA, NIC, console, timer |
 | K1 | Memory regions, page-frame/buddy allocator | nalloc/nalloc64 done in NaN; region layer planned | per-process heaps |
 | K2 | Process table, lifecycle, spawn/wait/exit | planned | `fork`/`exec`, tests |
-| K3 | Thread table, scheduler, context switch | planned | Tcl threads, SQLite THREADSAFE=1 |
-| K4 | Mutex/cond/semaphore, TLS | planned (C11 stubs only) | pthread/Tcl |
+| K3 | Thread table, scheduler, context switch | partial: NaN TCB/scheduler/frame path gated on oracle (`spec/THREADS.md`); x86_64 S1 vector pending | Tcl threads, SQLite THREADSAFE=1 |
+| K4 | Mutex/cond/semaphore, TLS | partial: mutex/cond/TLS in `nanthr.nas`; semaphore/barrier and S1 wiring pending | pthread/Tcl |
 | K5 | Signals, alarm, timers, process groups | planned | Tcl `after`, SQLite crash tests |
 | K6 | NaNFS read/write, directories, rename/unlink/stat | read exists; write planned | Tcl `file`, SQLite temp DBs |
 | K7 | Console/terminal, stdin/stdout/stderr, tty | serial/text plane exists; POSIX tty planned | Tcl channels, test output |
@@ -107,9 +107,9 @@ Status legend: **done**, **partial**, **planned**.
 | Q3 | Official harness capability detection/skips | native run works | testrunner |
 | Q4 | `test/*.test` corpus on guest filesystem | not vendored | 1,199 files |
 | C1 | tcc1 raw-source/VFS input compile (no host `.i`) | **done** (`tcc_nan16_rawcc`) | Tcl/SQLite on VM |
-| C1b | tcc1 builds its own libtcc from raw source via VFS | planned (image still uses host libtcc.i) | final bare-metal image |
-| C2 | tcc1 build of Tcl/testfixture | planned | final image |
-| C3 | tcc1==tcc2 fixpoint after C1/C2 | **done** at 2,529,728 bytes after C1 (SHA-256 `32c3b8e8...`); rerun after C2 | final proof |
+| C1b | tcc1 builds its own libtcc from raw source via VFS | **done** (`tcc_nan16_selfbuild`: R = 1,940,000 bytes, raw `test.c` -> 42) | final bare-metal image |
+| C2 | tcc1 build of Tcl/testfixture | raw SQLite-on-R probe **done** (byte-identical to tcc0); Tcl/testfixture build planned | final image |
+| C3 | tcc1==tcc2 fixpoint after C1/C2 | **done** at 1,904,656 bytes after C1 (SHA-256 `76ae1eeb...`); rerun after C2 | final proof |
 | V1 | Deterministic gates for each layer | partial | CI |
 | V2 | Official result archive + exact counts | planned | proof |
 
@@ -117,20 +117,29 @@ Status legend: **done**, **partial**, **planned**.
 
 ### P0 — x86_64 S1 and kernel foundation
 
-- [ ] Bring the x86_64 S1 to the same op/feature baseline as the C oracle
+- [~] Bring the x86_64 S1 to the same op/feature baseline as the C oracle
       (ports, timer, trap frames, region checks, device windows) and make
       `qgate_x86_64` the acceptance path; the C core only cross-checks.
-- [ ] Resolve the `0x39` opcode conflict: keep far `CALL` and assign a new
-      SVC/trap opcode (candidate: an unused v1 slot), update
-      `spec/NANVM_SPEC.md` and all encoders/decoders.
-- [ ] Implement S1 trap frames: save r0-r15/pc/flags/ADDRH at fixed offsets;
+      Landed: `src/native64/s1_kabi.c` ABI-mechanics slice + floppy and IDE
+      large-cartridge loaders (21.3 MB Tcl tclsh PASS) + scalar FP ops +
+      `tools/kabi64_gate.sh` / `tools/s1_guest_gate.sh` /
+      `tools/s1_runner.sh` gate CLI.
+      Missing: vector ops not needed by tclsh, sealed/filesystem loader,
+      devices.
+- [x] Resolve the `0x39` opcode conflict: keep far `CALL` and assign a new
+      SVC/trap opcode. Frozen: 0x4E SVC, 0x4F SVCRET, 0x4D INL; see
+      `spec/KERNEL_ABI.md`.
+- [~] Implement S1 trap frames: save r0-r15/pc/flags/ADDRH at fixed offsets;
       kernel entry from a vector; return path restores a chosen frame.
+      Done in the C oracle and the x86_64 slice; scheduler/TCB wiring is next.
 - [ ] Implement SVC dispatch, `yield`, `exit`, `spawn`, `wait`, memory
       region map/query, file descriptors.
-- [ ] Implement region checks for every load/store/byte/block access and
-      guarded stack growth.
-- [ ] Implement timer IRQ0/pending bit and preemptive vectoring; keep
-      `TICK` deterministic for tests.
+- [~] Implement region checks for every load/store/byte/block access and
+      guarded stack growth. Done for all memory-touching ops in the C oracle
+      and the implemented x86_64 op subset; guarded stack growth pending.
+- [~] Implement timer IRQ0/pending bit and preemptive vectoring; keep
+      `TICK` deterministic for tests. Instruction-timer vector landed in the
+      C oracle and x86_64 slice; hardware PIT/IRQ0 pending.
 - [ ] Implement atomics/fences and a kernel trap-safe critical section.
 - [ ] Add `qgate`/`kern` tests for trap frames, nested traps, region faults,
       timer preemption, and syscall ABI.
@@ -219,7 +228,9 @@ Status legend: **done**, **partial**, **planned**.
       (`NAN16_VFS_INIT_CAP`, optional `NAN16_VFS_MAXFILES`), linear pack
       registration, 5,000-file capacity gate. The real 2,133-file suite is
       within the tested range; no host filesystem in the product path.
-      Remaining: run the actual suite archive through the loader on x86_64 S1.
+      `tools/tcc_nan16_vfs_pack.sh` also registers a real 2,133-file pack and
+      reads the last entry back. Remaining: run the actual suite archive
+      through the loader on x86_64 S1.
 - [ ] Full `testfixture` build with the official flags, THREADSAFE=1, all
       extensions and test hooks; guest VFS on NaNFS.
 - [ ] Port `tester.tcl` capability probes and the test runner; no host

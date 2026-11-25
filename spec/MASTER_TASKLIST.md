@@ -122,6 +122,13 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done and gated.
 - [ ] Backend skeleton for a real GPU and a software fallback.
 
 ## P0.5 SMP and concurrency
+- [~] NaN thread subsystem: TCB/trap frame, ready queue, round-robin quantum,
+      preemption hook, join/detach, mutex, cond, TLS and atomics boundary in
+      `src/lib/nanthr.nas`; contract in `spec/THREADS.md`, exact gate in
+      `tools/nanthr_gate.sh`.  The C core is the oracle; the same image has an
+      S1 frame entry (`nthr_syscall_dispatch`) and timer hook
+      (`nthr_preempt`).  Remaining: x86_64 S1 SVC/timer vector wiring and
+      per-core queues/work stealing.
 - [ ] AP bring-up (INIT/SIPI), per-core GDT/TSS/IDT/stacks.
 - [ ] Per-core run queues and scheduler; preemption.
 - [ ] Atomic load/store/RMW, fences, CAS, fetch-add; exact memory model.

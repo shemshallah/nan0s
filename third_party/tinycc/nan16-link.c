@@ -43,6 +43,12 @@ void nan16_add_reloc(int pos, Sym *sym, int addend)
     nan_nrelocs++;
 }
 
+void nan16_reset_link_state(void)
+{
+    nan_nrelocs = 0;
+    nan_naddr_relocs = 0;
+}
+
 void nan16_add_addr_reloc(int lo, int hi, Sym *sym, int addend)
 {
     if (nocode_wanted) return;
@@ -185,12 +191,23 @@ static int nan16_audit_text(Section *text, int pre, int text_words)
     return 0;
 }
 
+/* The guest stack grows upward from SP.  SP historically started at word
+   0x300000 (guest byte 0x00c00000), which leaves the low 0x00c00000 bytes for
+   the compiler image.  A large image can grow past that point; if SP is left
+   at 0x300000 the first stack frames overwrite .data/.bss (WAL-enabled
+   testfixture: image end 0xc0be84).  Keep the historical minimum, but put SP
+   just above the image when the image is larger.  The pack starts at guest
+   byte 0x01000000 (word 0x400000), so require a little stack room below it. */
+#define NAN16_SP_MIN_WORD    0x300000u
+#define NAN16_PACK_BASE_WORD 0x400000u
+#define NAN16_STACK_MIN_WORD 0x1000u
+
 int nan16_output_file(TCCState *s1, const char *filename)
 {
     Section *text = find_section(s1, ".text");
     Section *ds[4], *bss = find_section(s1, ".bss");
     int dbase[4], nd = 0, i, j;
-    int main_sym, has_main = 0, pre, text_words, total_words;
+    int main_sym, has_main = 0, pre, text_words, total_words, sp_word;
     FILE *f;
 
     if (!text) text = s1->sections[0];
@@ -207,25 +224,48 @@ int nan16_output_file(TCCState *s1, const char *filename)
     pre = has_main ? 7 : 0;
 
     text_words = pre + (text->data_offset + 7) / 8;
-    if (getenv("NAN16_MAP")) {
-        int nsym = s1->symtab->data_offset / sizeof(ElfSym);
-        Section *strtab = s1->symtab->link;
-        for (i = 1; i < nsym; i++) {
-            ElfSym *e = &((ElfSym *)s1->symtab->data)[i];
-            if (e->st_shndx && e->st_shndx < s1->nb_sections
-                && s1->sections[e->st_shndx] == text
-                && strtab && e->st_name < strtab->data_offset) {
-                const char *nm = (char *)strtab->data + e->st_name;
-                if (nm[0])
-                    fprintf(stderr, "MAP %u %s\n",
-                            (unsigned)(e->st_value / 8 + pre), nm);
-            }
-        }
-    }
     total_words = text_words;
     for (i = 0; i < nd; i++) {
         dbase[i] = total_words;
         if (ds[i]) total_words += (ds[i]->data_offset + 3) / 4;
+    }
+    sp_word = (total_words + 15) & ~15;
+    if (sp_word < (int)NAN16_SP_MIN_WORD)
+        sp_word = NAN16_SP_MIN_WORD;
+    if (sp_word + (int)NAN16_STACK_MIN_WORD > (int)NAN16_PACK_BASE_WORD) {
+        fprintf(stderr, "nan16: image ends at word %d (guest %#x); no room "
+                "for a stack below the pack at word %#x\n",
+                total_words, (unsigned)total_words * 4,
+                (unsigned)NAN16_PACK_BASE_WORD);
+        return -1;
+    }
+    if (getenv("NAN16_MAP")) {
+        int nsym = s1->symtab->data_offset / sizeof(ElfSym);
+        Section *strtab = s1->symtab->link;
+        fprintf(stderr, "MAPS text=%d words=%d sp=%d d=%d,%d,%d,%d\n",
+                text_words, total_words, sp_word,
+                dbase[0], dbase[1], dbase[2], dbase[3]);
+        for (i = 1; i < nsym; i++) {
+            ElfSym *e = &((ElfSym *)s1->symtab->data)[i];
+            Section *sec;
+            const char *nm;
+            int d;
+            if (!e->st_shndx || e->st_shndx >= s1->nb_sections) continue;
+            if (!strtab || e->st_name >= strtab->data_offset) continue;
+            nm = (char *)strtab->data + e->st_name;
+            if (!nm[0]) continue;
+            sec = s1->sections[e->st_shndx];
+            if (sec == text) {
+                fprintf(stderr, "MAP %u %s\n",
+                        (unsigned)(e->st_value / 8 + pre), nm);
+                continue;
+            }
+            for (d = 0; d < nd; d++)
+                if (ds[d] == sec) break;
+            if (d < nd)
+                fprintf(stderr, "MAPD %u %s\n",
+                        (unsigned)(dbase[d] * 4 + e->st_value), nm);
+        }
     }
 
     if (pre) nan16_shift_jumps(text, pre);
@@ -349,8 +389,9 @@ int nan16_output_file(TCCState *s1, const char *filename)
     if (!f) return -1;
     if (has_main) {
         int mword = ((ElfSym *)s1->symtab->data)[main_sym].st_value / 8 + pre;
-        nan16_write_word(f, nan16_mkword(0x01E00000u, 15));
-        nan16_write_word(f, nan16_mkword(0x02E00030u, 15));
+        nan16_write_word(f, nan16_mkword(0x01E00000u | (sp_word & 0xFFFF), 15));
+        nan16_write_word(f, nan16_mkword(0x02E00000u
+                                        | ((sp_word >> 16) & 0xFFFF), 15));
         nan16_write_word(f, nan16_mkword(0x01A00000u | (mword & 0xFFFF), 15));
         nan16_write_word(f, nan16_mkword(0x02A00000u | ((mword >> 16) & 0xFFFF), 15));
         nan16_write_word(f, nan16_mkword(0x2C0A0000u, 15));

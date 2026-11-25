@@ -156,6 +156,11 @@ static NanJump *nan_jumps;
 static int nan_jump_cap;
 static int nan_njumps;
 
+void nan16_reset_jumps(void)
+{
+    nan_njumps = 0;
+}
+
 static int nan_jump_new(int pos, int next)
 {
     if (nocode_wanted) return 0;
