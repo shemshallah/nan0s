@@ -228,3 +228,8 @@ mk_cmt:
   MOVI r1,32
   PUTC r1
   RET
+
+; output hook required by the shared disassembler
+dis_out:
+  PUTC r9
+  RET

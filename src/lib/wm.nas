@@ -5,7 +5,7 @@
 ; Each window owns an 8192-word private buffer at 0x40000 + id*8192 (up to 128 cols x 64 rows of cells).
 ; Kind table @kt: 4 words per kind = init, draw, key, tick (code addresses, called by CALLR).
 ;   init(r1=id)  draw(r1=id) body redraw  key(r1=id,r3=key)  tick(r1=id)
-; Geometry: border 1px, title bar 15px at y+1, body origin (x+2, y+18), body size (w-4, h-20).
+; Geometry: silver bevel, title cap, body origin (x+2,y+18), safe body size (w-4,h-24).
 .equ WT 0x58000
 .equ WTL 0x8000
 .equ WTH 5
@@ -39,18 +39,68 @@
 .equ W_SW 18
 .equ W_SH 19
 .equ C_DESK 18
-.equ C_BAR 0
-.equ C_FOC 3
-.equ C_BLUR 8
+.equ C_BAR 28
+.equ C_FOC 30
+.equ C_BLUR 31
 .equ C_TITLE_F 1
 .equ C_TITLE_B 8
-.equ C_BODY 0
+.equ C_BODY 29
 .equ C_TXT 15
 .equ C_YEL 14
 .equ C_CLOSE 4
 .equ C_ENL 2
+.equ C_SHADOW 21
+.equ C_SHADOW_NEAR 22
+.equ C_CHROME 23
+.equ C_CHROME_IDLE 24
+.equ C_CHROME_EDGE 25
+.equ C_CONTROL 26
+.equ C_CONTROL_CLOSE 27
+.equ C_DOCK 28
+.equ C_SURFACE 19
+.equ C_DIVIDER 8
+.equ C_ACCENT 30
+.equ C_TASK 23
+.equ C_INACTIVE 24
+.equ C_SILVER_HI 30
+.equ C_SILVER_LO 31
+.equ C_BEVEL_DARK 32
+.equ C_BEVEL_LIGHT 33
+.equ C_DOCK_EDGE 35
+.equ C_TITLE_LO 36
+.equ TASKH 29
+.equ TASK_X 144
+.equ TASK_PITCH 110
+.equ TASK_WIDTH 100
+.equ TASK_LABEL_MAX 10
+.equ WM_MIN 2
+.equ WM_CLOSE_X 24
+.equ WM_CTL_W 24
+.equ WM_MAX_X 48
+.equ WM_MIN_X 72
 ; ---- rect (clipped to the screen): r1=x r2=y r3=w r4=h r5=colour ; clobbers r1-r8 ----
 wm_rect:
+; Reject empty rectangles and clip signed origins before forming a VRAM address.
+CMP r3,r0
+RET[LE]
+CMP r4,r0
+RET[LE]
+SHR r6,r1,31
+CMP r6,r0
+JMP[EQ] @wr_left_ok
+ADD r3,r3,r1
+MOVI r1,0
+wr_left_ok:
+SHR r6,r2,31
+CMP r6,r0
+JMP[EQ] @wr_top_ok
+ADD r4,r4,r2
+MOVI r2,0
+wr_top_ok:
+CMP r3,r0
+RET[LE]
+CMP r4,r0
+RET[LE]
 LD r6,r0,@fb_w
 CMP r1,r6
 RET[GE]
@@ -67,9 +117,20 @@ CMP r7,r6
 JMP[LE] @wr_yok
 SUB r4,r6,r2
 wr_yok:
+CMP r3,r0
+RET[LE]
+CMP r4,r0
+RET[LE]
+ST r15,r0,@wr_damage_ret
+ST r5,r0,@wr_damage_color
+CALL @fb_damage
+LD r5,r0,@wr_damage_color
+LD r15,r0,@wr_damage_ret
 LD r6,r0,@fb_w
 MUL r6,r2,r6
 ADD r6,r6,r1
+LD r7,r0,@fb_scene_offset
+ADD r6,r6,r7
 wr_loop:
 CMP r4,r0
 RET[EQ]
@@ -78,6 +139,113 @@ LD r7,r0,@fb_w
 ADD r6,r6,r7
 SUB r4,r4,r13
 JMP @wr_loop
+wr_damage_ret:
+.word 0
+wr_damage_color:
+.word 0
+; Native circular silhouettes: 8px nominal radius on full panels,
+; 5px nominal radius on title caps and controls. Symmetric scanline spans,
+; no background erasure, and all writes pass through clipped wm_rect.
+; r1=x r2=y r3=w r4=h r5=color; preserves r9-r14.
+wm_round:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,@rr_x
+ST r2,r0,@rr_y
+ST r3,r0,@rr_w
+ST r4,r0,@rr_h
+ST r5,r0,@rr_c
+MOVI r6,8
+CMP r3,r6
+JMP[LE] @rr_plain
+MOVI r6,6
+CMP r4,r6
+JMP[LE] @rr_plain
+MOVI r6,20
+CMP r3,r6
+JMP[LT] @rr_small
+CMP r4,r6
+JMP[LT] @rr_small
+MOVI r6,6
+MOVI r7,@rr_large_profile
+JMP @rr_profile
+rr_small:
+MOVI r6,3
+MOVI r7,@rr_small_profile
+rr_profile:
+ST r6,r0,@rr_n
+ST r7,r0,@rr_profile_ptr
+ADD r2,r2,r6
+SHL r6,r6,1
+SUB r4,r4,r6
+CALL @wm_rect
+ST r0,r0,@rr_i
+rr_band:
+LD r6,r0,@rr_i
+LD r7,r0,@rr_n
+CMP r6,r7
+JMP[GE] @rr_done
+LD r7,r0,@rr_profile_ptr
+ADD r7,r7,r6
+LD r7,r7,0
+ST r7,r0,@rr_inset
+LD r1,r0,@rr_x
+ADD r1,r1,r7
+LD r2,r0,@rr_y
+ADD r2,r2,r6
+LD r3,r0,@rr_w
+SHL r7,r7,1
+SUB r3,r3,r7
+MOVI r4,1
+LD r5,r0,@rr_c
+CALL @wm_rect
+LD r7,r0,@rr_inset
+LD r1,r0,@rr_x
+ADD r1,r1,r7
+LD r2,r0,@rr_y
+LD r6,r0,@rr_h
+ADD r2,r2,r6
+LD r6,r0,@rr_i
+SUB r2,r2,r6
+SUB r2,r2,r13
+LD r3,r0,@rr_w
+SHL r7,r7,1
+SUB r3,r3,r7
+MOVI r4,1
+LD r5,r0,@rr_c
+CALL @wm_rect
+LD r6,r0,@rr_i
+ADD r6,r6,r13
+ST r6,r0,@rr_i
+JMP @rr_band
+rr_plain:
+CALL @wm_rect
+rr_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+rr_large_profile:
+.word 6,4,3,2,1,1
+rr_small_profile:
+.word 4,2,1
+rr_x:
+.word 0
+rr_y:
+.word 0
+rr_w:
+.word 0
+rr_h:
+.word 0
+rr_c:
+.word 0
+rr_n:
+.word 0
+rr_i:
+.word 0
+rr_profile_ptr:
+.word 0
+rr_inset:
+.word 0
 ; ---- puthex: r1=x r2=y r3=value r4=ndigits r5=colour ; clobbers r1-r9 ----
 wm_puthex:
 ST r15,r14,0
@@ -156,6 +324,15 @@ MOVI r2,0
 MOVI r3,256
 BFILL r1,r2,r3
 ST r0,r0,@wm_zn
+ST r0,r0,@wm_tick_overlay
+ST r0,r0,@wm_notice_ticks
+ST r0,r0,@wm_theme
+MOVI r1,#C_DESK
+ST r1,r0,@wm_theme_desk
+MOVI r1,#C_ACCENT
+ST r1,r0,@wm_theme_accent
+MOVI r1,#C_TITLE_F
+ST r1,r0,@wm_theme_title
 RET
 ; ---- wm_kcall: r1=id r2=slot r3=arg ; dispatch to the window kind ----
 wm_kcall:
@@ -236,11 +413,26 @@ wm_raise:
 ST r15,r14,0
 ADD r14,r14,r13
 ST r1,r0,@rz_id
+; Never insert a closed or out-of-range slot into the visible stack.
+MOVI r2,#MAXW
+CMP r1,r2
+JMP[GE] @rz_done
+CALL @wm_wbase
+LD r2,r1,#W_ALIVE
+CMP r2,r0
+JMP[EQ] @rz_done
+; Raising a live minimized window also restores its visibility flag.
+LD r2,r1,#W_FLAGS
+MOVI r3,0xFFFD
+BOOL.8 r2,r2,r3
+ST r2,r1,#W_FLAGS
+LD r1,r0,@rz_id
 CALL @wm_zremove
 LD r1,r0,@rz_id
 CALL @wm_zpush
 MOVI r1,1
 ST r1,r0,@wm_redraw
+rz_done:
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -356,6 +548,7 @@ CALL @wm_zremove
 LD r1,r0,@wcl_id
 CALL @wm_wbase
 ST r0,r1,#W_ALIVE
+ST r0,r1,#W_FLAGS
 MOVI r1,1
 ST r1,r0,@wm_redraw
 SUB r14,r14,r13
@@ -363,14 +556,32 @@ LD r15,r14,0
 RET
 wcl_id:
 .word 0
-; ---- wm_covered: r1=id -> r1=1 if a higher window overlaps it ----
+; ---- wm_covered: r1=id -> 1 if unsafe to paint directly (hidden/dead/overlapped/modal) ----
 wm_covered:
 ST r1,r0,@cv_id
+LD r2,r0,@wm_tick_overlay
+CMP r2,r0
+JMP[NE] @cv_yes
+MOVI r2,#MAXW
+CMP r1,r2
+JMP[GE] @cv_yes
+SHL r3,r1,5
+MOVI r4,#WTL
+MOVHI r4,#WTH
+ADD r3,r3,r4
+LD r4,r3,#W_ALIVE
+CMP r4,r0
+JMP[EQ] @cv_yes
+LD r4,r3,#W_FLAGS
+MOVI r5,#WM_MIN
+BOOL.8 r4,r4,r5
+CMP r4,r0
+JMP[NE] @cv_yes
 LD r2,r0,@wm_zn
 MOVI r3,0
 cv_find:
 CMP r3,r2
-JMP[GE] @cv_no
+JMP[GE] @cv_yes
 MOVI r4,#ZOL
 MOVHI r4,#ZOH
 ADD r4,r4,r3
@@ -412,6 +623,8 @@ CMP r9,r10
 JMP[LE] @cv_next
 LD r11,r5,#W_W
 ADD r11,r10,r11
+MOVI r12,6
+ADD r11,r11,r12
 CMP r11,r8
 JMP[LE] @cv_next
 LD r8,r7,#W_Y
@@ -422,13 +635,18 @@ CMP r9,r10
 JMP[LE] @cv_next
 LD r11,r5,#W_H
 ADD r11,r10,r11
+MOVI r12,6
+ADD r11,r11,r12
 CMP r11,r8
 JMP[LE] @cv_next
+cv_yes:
 MOVI r1,1
 RET
 cv_no:
 MOVI r1,0
 RET
+wm_tick_overlay:
+.word 0
 cv_id:
 .word 0
 cv_j:
@@ -472,6 +690,8 @@ ST r5,r1,#W_X
 LD r4,r0,@fb_h
 MOVI r6,#TOPH
 SUB r4,r4,r6
+MOVI r7,#TASKH
+SUB r4,r4,r7
 LD r5,r0,@en_fh
 CMP r5,r0
 JMP[EQ] @en_h
@@ -482,6 +702,8 @@ en_h:
 ST r4,r1,#W_H
 LD r5,r0,@fb_h
 SUB r5,r5,r6
+MOVI r7,#TASKH
+SUB r5,r5,r7
 SUB r5,r5,r4
 SHR r5,r5,1
 ADD r5,r5,r6
@@ -509,7 +731,7 @@ en_fh:
 .word 0
 en_b:
 .word 0
-; ---- wm_draw_window: r1=id (border, 15px title bar, enlarge + close boxes, then the app's draw). UNTESTED (r25 WIP) ----
+; ---- wm_draw_window: r1=id native modern frame, active accents, soft shadow. ----
 wm_draw_window:
 ST r15,r14,0
 ADD r14,r14,r13
@@ -525,90 +747,156 @@ ST r3,r0,@dw_foc
 LD r1,r0,@dw_id
 CALL @wm_wbase
 ST r1,r0,@dw_b
+; Layered rounded depth; every pixel is guest-native.
+; The existing rect routine clips at the screen edge.
+LD r1,r0,@dw_b
+LD r2,r1,#W_Y
+MOVI r6,6
+ADD r2,r2,r6
+LD r3,r1,#W_W
+LD r4,r1,#W_H
+LD r1,r1,#W_X
+ADD r1,r1,r6
+MOVI r5,#C_SHADOW
+CALL @wm_round
+LD r1,r0,@dw_b
+LD r2,r1,#W_Y
+MOVI r6,3
+ADD r2,r2,r6
+LD r3,r1,#W_W
+LD r4,r1,#W_H
+LD r1,r1,#W_X
+ADD r1,r1,r6
+MOVI r5,#C_SHADOW_NEAR
+CALL @wm_round
+LD r1,r0,@dw_b
 LD r2,r1,#W_Y
 LD r3,r1,#W_W
 LD r4,r1,#W_H
 LD r1,r1,#W_X
 LD r5,r0,@dw_foc
-MOVI r6,#C_BLUR
+MOVI r6,#C_CHROME_EDGE
 CMP r5,r0
 JMP[EQ] @dw_bc
-MOVI r6,#C_FOC
+MOVI r6,#C_SILVER_HI
 dw_bc:
 ADD r5,r6,r0
-CALL @wm_rect
+CALL @wm_round
+; Silver outline then a continuous window-background inset. The title
+; begins at x+3,y+3: two native pixels of slate between silver and blue.
 LD r9,r0,@dw_b
 LD r1,r9,#W_X
 ADD r1,r1,r13
 LD r2,r9,#W_Y
 ADD r2,r2,r13
 LD r3,r9,#W_W
-SUB r3,r3,r13
-SUB r3,r3,r13
-MOVI r4,#TB
+MOVI r6,2
+SUB r3,r3,r6
+LD r4,r9,#W_H
+SUB r4,r4,r6
+MOVI r5,#C_BODY
+CALL @wm_round
+; Rounded inset title cap. Focus is expressed through silver brightness,
+; not a cyan or green rail. All app content uses the same slate surface.
+LD r9,r0,@dw_b
+LD r1,r9,#W_X
+MOVI r6,3
+ADD r1,r1,r6
+LD r2,r9,#W_Y
+ADD r2,r2,r6
+LD r3,r9,#W_W
+MOVI r6,6
+SUB r3,r3,r6
+MOVI r4,14
 LD r5,r0,@dw_foc
-MOVI r6,#C_TITLE_B
+MOVI r6,#C_CHROME_IDLE
 CMP r5,r0
 JMP[EQ] @dw_tc
-MOVI r6,#C_TITLE_F
+MOVI r6,#C_CHROME
 dw_tc:
 ADD r5,r6,r0
-CALL @wm_rect
+CALL @wm_round
+; Subtle bevel highlight follows the flat portion of the curved cap.
 LD r9,r0,@dw_b
 LD r1,r9,#W_X
-ADD r1,r1,r13
+MOVI r6,8
+ADD r1,r1,r6
 LD r2,r9,#W_Y
-MOVI r3,16
-ADD r2,r2,r3
+MOVI r6,3
+ADD r2,r2,r6
 LD r3,r9,#W_W
-SUB r3,r3,r13
-SUB r3,r3,r13
-LD r4,r9,#W_H
-MOVI r5,17
-SUB r4,r4,r5
-MOVI r5,#C_BODY
+MOVI r6,16
+SUB r3,r3,r6
+MOVI r4,1
+MOVI r5,#C_BEVEL_LIGHT
 CALL @wm_rect
+dw_noaccent:
+; Display a stable slot number before the title. Two Terminal windows
+; are now distinguishable, so closing one cannot look like it returned.
 LD r9,r0,@dw_b
 LD r1,r9,#W_X
-MOVI r5,5
+MOVI r5,8
 ADD r1,r1,r5
 LD r2,r9,#W_Y
-MOVI r5,2
+MOVI r5,4
 ADD r2,r2,r5
-MOVI r3,@s_nan0s
-MOVI r4,#C_YEL
-CALL @fb_text7
+LD r3,r0,@dw_id
+MOVI r5,49
+ADD r3,r3,r5
+MOVI r4,#C_CHROME_EDGE
+CALL @fb_char7
 LD r9,r0,@dw_b
 LD r1,r9,#W_X
-MOVI r5,58
+MOVI r5,22
 ADD r1,r1,r5
 LD r2,r9,#W_Y
-MOVI r5,2
+MOVI r5,4
 ADD r2,r2,r5
 LD r3,r9,#W_TITLE
+LD r5,r9,#W_X
+LD r6,r9,#W_W
+ADD r5,r5,r6
+MOVI r6,75
+SUB r5,r5,r6
+ST r5,r0,@t7_clip
 MOVI r4,#C_TXT
 CALL @fb_text7
+ST r0,r0,@t7_clip
 LD r9,r0,@dw_b
 LD r1,r9,#W_X
 LD r3,r9,#W_W
 ADD r1,r1,r3
-MOVI r5,16
+MOVI r5,#WM_CLOSE_X
 SUB r1,r1,r5
 LD r2,r9,#W_Y
-MOVI r5,2
+MOVI r5,4
 ADD r2,r2,r5
-MOVI r3,13
-MOVI r4,13
-MOVI r5,#C_CLOSE
-CALL @wm_rect
+MOVI r3,18
+MOVI r4,12
+MOVI r5,#C_SILVER_LO
+CALL @wm_round
 LD r9,r0,@dw_b
 LD r1,r9,#W_X
 LD r3,r9,#W_W
 ADD r1,r1,r3
-MOVI r5,13
+MOVI r5,#WM_CLOSE_X
+SUB r1,r1,r5
+ADD r1,r1,r13
+LD r2,r9,#W_Y
+MOVI r5,5
+ADD r2,r2,r5
+MOVI r3,16
+MOVI r4,10
+MOVI r5,#C_CONTROL_CLOSE
+CALL @wm_round
+LD r9,r0,@dw_b
+LD r1,r9,#W_X
+LD r3,r9,#W_W
+ADD r1,r1,r3
+MOVI r5,19
 SUB r1,r1,r5
 LD r2,r9,#W_Y
-MOVI r5,3
+MOVI r5,4
 ADD r2,r2,r5
 MOVI r3,120
 MOVI r4,#C_TXT
@@ -617,30 +905,102 @@ LD r9,r0,@dw_b
 LD r1,r9,#W_X
 LD r3,r9,#W_W
 ADD r1,r1,r3
-MOVI r5,31
+MOVI r5,#WM_MAX_X
 SUB r1,r1,r5
 LD r2,r9,#W_Y
-MOVI r5,2
+MOVI r5,4
 ADD r2,r2,r5
-MOVI r3,13
-MOVI r4,13
-MOVI r5,#C_ENL
-CALL @wm_rect
+MOVI r3,18
+MOVI r4,12
+MOVI r5,#C_SILVER_LO
+CALL @wm_round
 LD r9,r0,@dw_b
 LD r1,r9,#W_X
 LD r3,r9,#W_W
 ADD r1,r1,r3
-MOVI r5,28
+MOVI r5,#WM_MAX_X
+SUB r1,r1,r5
+ADD r1,r1,r13
+LD r2,r9,#W_Y
+MOVI r5,5
+ADD r2,r2,r5
+MOVI r3,16
+MOVI r4,10
+MOVI r5,#C_CONTROL
+CALL @wm_round
+LD r9,r0,@dw_b
+LD r1,r9,#W_X
+LD r3,r9,#W_W
+ADD r1,r1,r3
+MOVI r5,43
 SUB r1,r1,r5
 LD r2,r9,#W_Y
-MOVI r5,3
+MOVI r5,4
 ADD r2,r2,r5
 MOVI r3,43
+MOVI r4,#C_TXT
+CALL @fb_char7
+; Minimize control at x+w-46, matching raw PS/2 hit testing. The
+; existing maximize (x+w-31) and close (x+w-16) are unchanged.
+LD r9,r0,@dw_b
+LD r1,r9,#W_X
+LD r3,r9,#W_W
+ADD r1,r1,r3
+MOVI r5,#WM_MIN_X
+SUB r1,r1,r5
+LD r2,r9,#W_Y
+MOVI r5,4
+ADD r2,r2,r5
+MOVI r3,18
+MOVI r4,12
+MOVI r5,#C_SILVER_LO
+CALL @wm_round
+LD r9,r0,@dw_b
+LD r1,r9,#W_X
+LD r3,r9,#W_W
+ADD r1,r1,r3
+MOVI r5,#WM_MIN_X
+SUB r1,r1,r5
+ADD r1,r1,r13
+LD r2,r9,#W_Y
+MOVI r5,5
+ADD r2,r2,r5
+MOVI r3,16
+MOVI r4,10
+MOVI r5,#C_CONTROL
+CALL @wm_round
+LD r9,r0,@dw_b
+LD r1,r9,#W_X
+LD r3,r9,#W_W
+ADD r1,r1,r3
+MOVI r5,67
+SUB r1,r1,r5
+LD r2,r9,#W_Y
+MOVI r5,4
+ADD r2,r2,r5
+MOVI r3,45
 MOVI r4,#C_TXT
 CALL @fb_char7
 LD r1,r0,@dw_id
 MOVI r2,1
 CALL @wm_kcall
+; Corner resize grip: Shift+F2 then arrow keys changes geometry. Drawn
+; after app contents, in the frame, so the affordance remains visible.
+LD r9,r0,@dw_b
+LD r1,r9,#W_X
+LD r3,r9,#W_W
+ADD r1,r1,r3
+MOVI r5,12
+SUB r1,r1,r5
+LD r2,r9,#W_Y
+LD r4,r9,#W_H
+ADD r2,r2,r4
+MOVI r5,7
+SUB r2,r2,r5
+MOVI r3,8
+MOVI r4,2
+MOVI r5,#C_CHROME_EDGE
+CALL @wm_rect
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -652,11 +1012,17 @@ dw_b:
 .word 0
 s_nan0s:
 .str "NaN/0S"
-; ---- wm_draw_all: desktop + top bar + every window bottom to top. UNTESTED (r25 WIP) ----
+s_dock:
+.str "NaN/0S  |  APPS"
+s_dock_window:
+.str "WINDOW"
+s_notice:
+.str "NaN/0S  |  NATIVE WINDOW MANAGER"
+; ---- wm_draw_all: desktop, windows and native taskbar ----
 wm_draw_all:
 ST r15,r14,0
 ADD r14,r14,r13
-MOVI r1,#C_DESK
+LD r1,r0,@wm_theme_desk
 CALL @fb_clear
 MOVI r1,0
 MOVI r2,0
@@ -678,8 +1044,13 @@ MOVI r3,@s_hint2
 da_hl:
 MOVI r1,64
 MOVI r2,2
+LD r5,r0,@fb_w
+MOVI r6,148
+SUB r5,r5,r6
+ST r5,r0,@t7_clip
 MOVI r4,#C_TXT
 CALL @fb_text7
+ST r0,r0,@t7_clip
 ST r0,r0,@da_i
 da_loop:
 LD r1,r0,@da_i
@@ -696,15 +1067,554 @@ ADD r1,r1,r13
 ST r1,r0,@da_i
 JMP @da_loop
 da_done:
+CALL @wm_draw_taskbar
 SUB r14,r14,r13
 LD r15,r14,0
 RET
+
+; Taskbar is drawn in the guest framebuffer after all windows. Each
+; visible or minimized app occupies its stable slot (8 windows max).
+; The focused slot receives the vivid accent; hidden windows are dimmed.
+wm_draw_taskbar:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r2,r0,@fb_h
+MOVI r3,#TASKH
+SUB r2,r2,r3
+ST r2,r0,@wd_y
+MOVI r1,0
+LD r3,r0,@fb_w
+MOVI r4,#TASKH
+MOVI r5,#C_DOCK_EDGE
+CALL @wm_round
+MOVI r1,1
+LD r2,r0,@wd_y
+ADD r2,r2,r13
+LD r3,r0,@fb_w
+MOVI r6,2
+SUB r3,r3,r6
+MOVI r4,#TASKH
+SUB r4,r4,r6
+MOVI r5,#C_DOCK
+CALL @wm_round
+MOVI r1,4
+LD r2,r0,@wd_y
+MOVI r3,9
+ADD r2,r2,r3
+MOVI r3,@s_dock
+MOVI r4,#C_YEL
+CALL @fb_text7
+MOVI r1,0
+ST r1,r0,@wd_i
+wd_loop:
+LD r1,r0,@wd_i
+MOVI r2,#MAXW
+CMP r1,r2
+JMP[GE] @wd_done
+CALL @wm_wbase
+LD r2,r1,#W_ALIVE
+CMP r2,r0
+JMP[EQ] @wd_next
+ST r1,r0,@wd_b
+; Shared taskbar geometry: 100px buttons, 10px gaps, stable slot IDs.
+LD r6,r0,@wd_i
+MOVI r7,#TASK_PITCH
+MUL r6,r6,r7
+MOVI r7,#TASK_X
+ADD r6,r6,r7
+ST r6,r0,@wd_x
+LD r1,r0,@fb_w
+MOVI r2,#TASK_WIDTH
+ADD r2,r2,r6
+CMP r2,r1
+JMP[GT] @wd_done
+LD r1,r0,@wd_b
+LD r2,r1,#W_FLAGS
+MOVI r3,2
+BOOL.8 r2,r2,r3
+MOVI r5,#C_INACTIVE
+CMP r2,r0
+JMP[NE] @wd_frame
+LD r1,r0,@wd_i
+CALL @wm_top
+LD r2,r0,@wd_i
+CMP r1,r2
+JMP[NE] @wd_frame
+MOVI r5,#C_FOC
+wd_frame:
+LD r1,r0,@wd_x
+LD r2,r0,@wd_y
+MOVI r3,4
+ADD r2,r2,r3
+MOVI r3,#TASK_WIDTH
+MOVI r4,21
+CALL @wm_round
+LD r1,r0,@wd_x
+ADD r1,r1,r13
+LD r2,r0,@wd_y
+MOVI r3,5
+ADD r2,r2,r3
+MOVI r3,#TASK_WIDTH
+MOVI r6,2
+SUB r3,r3,r6
+MOVI r4,19
+MOVI r5,#C_CHROME_IDLE
+CALL @wm_round
+; Center ID + space + title as one measured label (7px ink, 8px pitch).
+; Limit to ten title glyphs so even long names fit the 100px button.
+LD r1,r0,@wd_b
+LD r10,r1,#W_TITLE
+MOVI r11,0
+MOVI r12,0
+MOVI r8,0
+wd_measure:
+MOVI r7,#TASK_LABEL_MAX
+CMP r8,r7
+JMP[GE] @wd_measured
+CALL @fb_nextbyte
+CMP r6,r0
+JMP[EQ] @wd_measured
+MOVI r7,10
+CMP r6,r7
+JMP[EQ] @wd_measured
+ADD r8,r8,r13
+JMP @wd_measure
+wd_measured:
+ST r8,r0,@wd_len
+MOVI r7,2
+ADD r8,r8,r7
+SHL r8,r8,3
+SUB r8,r8,r13
+MOVI r7,#TASK_WIDTH
+SUB r7,r7,r8
+SHR r7,r7,1
+LD r1,r0,@wd_x
+ADD r1,r1,r7
+ST r1,r0,@wd_label_x
+LD r2,r0,@wd_y
+MOVI r4,9
+ADD r2,r2,r4
+LD r3,r0,@wd_i
+MOVI r4,49
+ADD r3,r3,r4
+MOVI r4,#C_CHROME_EDGE
+CALL @fb_char7
+LD r1,r0,@wd_b
+LD r3,r1,#W_TITLE
+LD r1,r0,@wd_label_x
+MOVI r4,16
+ADD r1,r1,r4
+LD r2,r0,@wd_y
+MOVI r4,9
+ADD r2,r2,r4
+LD r5,r0,@wd_len
+SHL r5,r5,3
+ADD r5,r1,r5
+ST r5,r0,@t7_clip
+MOVI r4,#C_TXT
+CALL @fb_text7
+ST r0,r0,@t7_clip
+wd_next:
+LD r1,r0,@wd_i
+ADD r1,r1,r13
+ST r1,r0,@wd_i
+JMP @wd_loop
+wd_done:
+LD r1,r0,@wm_notice_ticks
+CMP r1,r0
+JMP[EQ] @wd_ret
+; Compact toast above taskbar. Notification text uses a fixed in-guest
+; string, so no host-side DOM or notifications are needed.
+MOVI r1,18
+LD r2,r0,@wd_y
+MOVI r3,33
+SUB r2,r2,r3
+MOVI r3,330
+MOVI r4,28
+MOVI r5,#C_CHROME_EDGE
+CALL @wm_round
+MOVI r1,19
+LD r2,r0,@wd_y
+MOVI r3,32
+SUB r2,r2,r3
+MOVI r3,328
+MOVI r4,26
+MOVI r5,#C_CHROME
+CALL @wm_round
+MOVI r1,24
+LD r2,r0,@wd_y
+MOVI r3,29
+SUB r2,r2,r3
+MOVI r3,@s_notice
+MOVI r4,#C_TXT
+CALL @fb_text7
+wd_ret:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+wd_i:
+.word 0
+wd_x:
+.word 0
+wd_len:
+.word 0
+wd_label_x:
+.word 0
+wd_y:
+.word 0
+wd_b:
+.word 0
+wm_notice_ticks:
+.word 0
+wm_theme:
+.word 0
+wm_theme_desk:
+.word 18
+wm_theme_accent:
+.word 11
+wm_theme_title:
+.word 1
+; Shift+F5 guest-native theme cycling: Midnight, Ember, Ocean.
+wm_theme_toggle:
+LD r1,r0,@wm_theme
+ADD r1,r1,r13
+MOVI r2,3
+CMP r1,r2
+JMP[LT] @wm_theme_apply
+MOVI r1,0
+wm_theme_apply:
+ST r1,r0,@wm_theme
+MOVI r2,18
+MOVI r3,11
+MOVI r4,1
+CMP r1,r0
+JMP[EQ] @wm_theme_store
+MOVI r5,1
+CMP r1,r5
+JMP[NE] @wm_theme_ocean
+MOVI r2,20
+MOVI r3,13
+MOVI r4,5
+JMP @wm_theme_store
+wm_theme_ocean:
+MOVI r2,1
+MOVI r3,14
+MOVI r4,3
+wm_theme_store:
+ST r2,r0,@wm_theme_desk
+ST r3,r0,@wm_theme_accent
+ST r4,r0,@wm_theme_title
+MOVI r1,1
+ST r1,r0,@wm_redraw
+RET
+
+; wm_notice: r1=duration in tick periods, zero means 15 cycles.
+wm_notice:
+CMP r1,r0
+JMP[NE] @wn_store
+MOVI r1,15
+wn_store:
+ST r1,r0,@wm_notice_ticks
+MOVI r2,1
+ST r2,r0,@wm_redraw
+RET
+
+; wm_minimize: r1=window id. Preserve app state and buffers while removing
+; the window from z-order; an empty desktop remains usable.
+wm_minimize:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,@wm_min_id
+MOVI r2,#MAXW
+CMP r1,r2
+JMP[GE] @wm_min_done
+CALL @wm_wbase
+LD r2,r1,#W_ALIVE
+CMP r2,r0
+JMP[EQ] @wm_min_done
+LD r2,r1,#W_FLAGS
+MOVI r3,2
+BOOL.14 r2,r2,r3
+ST r2,r1,#W_FLAGS
+LD r1,r0,@wm_min_id
+CALL @wm_zremove
+MOVI r1,1
+ST r1,r0,@wm_redraw
+wm_min_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+wm_min_id:
+.word 0
+
+; wm_taskbar_select: r1 is a stable window slot. A click on another
+; taskbar window raises it; a click on the already-focused window hides that
+; window and exposes the one directly underneath. No window is closed.
+; The last visible app may also be minimized and restored through the dock.
+wm_taskbar_select:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,@wts_id
+MOVI r2,#MAXW
+CMP r1,r2
+JMP[GE] @wts_done
+CALL @wm_wbase
+LD r2,r1,#W_ALIVE
+CMP r2,r0
+JMP[EQ] @wts_done
+LD r1,r0,@wts_id
+CALL @wm_top
+LD r2,r0,@wts_id
+CMP r1,r2
+JMP[NE] @wts_raise
+ADD r1,r2,r0
+CALL @wm_minimize
+JMP @wts_done
+wts_raise:
+LD r1,r0,@wts_id
+CALL @wm_activate_slot
+wts_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+wts_id:
+.word 0
+
+; wm_activate_slot: r1=0..7 stable taskbar slot, restore if minimized,
+; then raise and focus. Use Ctrl+1..8 so window switching never relies on mouse.
+wm_activate_slot:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,@was_id
+MOVI r2,#MAXW
+CMP r1,r2
+JMP[GE] @was_done
+CALL @wm_wbase
+LD r2,r1,#W_ALIVE
+CMP r2,r0
+JMP[EQ] @was_done
+LD r2,r1,#W_FLAGS
+MOVI r3,0xFFFD
+BOOL.8 r2,r2,r3
+ST r2,r1,#W_FLAGS
+LD r1,r0,@was_id
+CALL @wm_raise
+was_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+was_id:
+.word 0
+
+; wm_restore_minimized: restore the most recently indexed live minimized slot.
+wm_restore_minimized:
+ST r15,r14,0
+ADD r14,r14,r13
+MOVI r8,0
+wm_rm_loop:
+CMP r8,r0
+JMP[LT] @wm_rm_done
+MOVI r1,#MAXW
+CMP r8,r1
+JMP[GE] @wm_rm_done
+ADD r1,r8,r0
+CALL @wm_wbase
+LD r2,r1,#W_ALIVE
+CMP r2,r0
+JMP[EQ] @wm_rm_next
+LD r2,r1,#W_FLAGS
+MOVI r3,2
+BOOL.8 r4,r2,r3
+CMP r4,r0
+JMP[EQ] @wm_rm_next
+MOVI r3,0xFFFD
+BOOL.8 r2,r2,r3
+ST r2,r1,#W_FLAGS
+ADD r1,r8,r0
+CALL @wm_raise
+JMP @wm_rm_done
+wm_rm_next:
+ADD r8,r8,r13
+JMP @wm_rm_loop
+wm_rm_done:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; wm_snap: r1=id r2=0 left / 1 right; full 50% tiling.
+; Uses the same guest-managed geometry as wm_enlarge; does not alter app data.
+wm_snap:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,@ws_id
+ST r2,r0,@ws_side
+CALL @wm_wbase
+LD r4,r1,#W_FLAGS
+MOVI r5,1
+BOOL.8 r6,r4,r5
+CMP r6,r0
+JMP[EQ] @ws_normal
+LD r5,r1,#W_SX
+ST r5,r1,#W_X
+LD r5,r1,#W_SY
+ST r5,r1,#W_Y
+LD r5,r1,#W_SW
+ST r5,r1,#W_W
+LD r5,r1,#W_SH
+ST r5,r1,#W_H
+ST r0,r1,#W_FLAGS
+ws_normal:
+LD r4,r0,@fb_w
+SHR r4,r4,1
+MOVI r5,6
+SUB r4,r4,r5
+ST r4,r1,#W_W
+LD r5,r0,@ws_side
+CMP r5,r0
+JMP[EQ] @ws_left
+LD r5,r0,@fb_w
+SHR r5,r5,1
+MOVI r6,3
+ADD r5,r5,r6
+JMP @ws_x
+ws_left:
+MOVI r5,3
+ws_x:
+ST r5,r1,#W_X
+MOVI r5,#TOPH
+MOVI r6,4
+ADD r5,r5,r6
+ST r5,r1,#W_Y
+LD r5,r0,@fb_h
+MOVI r6,#TASKH
+SUB r5,r5,r6
+MOVI r6,#TOPH
+SUB r5,r5,r6
+MOVI r6,8
+SUB r5,r5,r6
+ST r5,r1,#W_H
+MOVI r1,1
+ST r1,r0,@wm_redraw
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+ws_id:
+.word 0
+ws_side:
+.word 0
+
+; wm_tile: arrange all non-minimized, visible windows in a 2-column grid.
+wm_tile:
+ST r15,r14,0
+ADD r14,r14,r13
+; One window gets the whole work area. Otherwise distribute into 2 columns
+; and ceil(n/2) rows, not a fixed 2x4 grid that wastes most of the screen.
+LD r1,r0,@wm_zn
+MOVI r2,1
+CMP r1,r2
+JMP[NE] @wt_two_cols
+MOVI r2,1
+JMP @wt_cols_set
+wt_two_cols:
+MOVI r2,2
+wt_cols_set:
+ST r2,r0,@wt_cols
+LD r3,r0,@fb_w
+DIV r3,r3,r2
+ST r3,r0,@wt_w
+LD r1,r0,@wm_zn
+ADD r1,r1,r2
+SUB r1,r1,r13
+DIV r1,r1,r2
+MOVI r3,1
+CMP r1,r3
+JMP[GE] @wt_rows
+MOVI r1,1
+wt_rows:
+LD r3,r0,@fb_h
+MOVI r4,54
+SUB r3,r3,r4
+DIV r3,r3,r1
+ST r3,r0,@wt_h
+ST r0,r0,@wt_i
+wt_loop:
+LD r2,r0,@wt_i
+LD r3,r0,@wm_zn
+CMP r2,r3
+JMP[GE] @wt_done
+MOVI r4,#ZOL
+MOVHI r4,#ZOH
+ADD r4,r4,r2
+LD r1,r4,0
+CALL @wm_wbase
+; Compute cell x from index modulo columns, row from index / columns.
+LD r2,r0,@wt_i
+LD r3,r0,@wt_cols
+DIV r4,r2,r3
+MUL r4,r4,r3
+SUB r4,r2,r4
+LD r5,r0,@wt_w
+MUL r4,r4,r5
+MOVI r6,4
+ADD r4,r4,r6
+ST r4,r1,#W_X
+LD r2,r0,@wt_i
+LD r3,r0,@wt_cols
+DIV r2,r2,r3
+LD r5,r0,@wt_h
+MUL r2,r2,r5
+MOVI r6,#TOPH
+ADD r2,r2,r6
+MOVI r6,4
+ADD r2,r2,r6
+ST r2,r1,#W_Y
+LD r5,r0,@wt_w
+MOVI r6,8
+SUB r5,r5,r6
+ST r5,r1,#W_W
+LD r5,r0,@wt_h
+MOVI r6,4
+SUB r5,r5,r6
+ST r5,r1,#W_H
+ST r0,r1,#W_FLAGS
+LD r2,r0,@wt_i
+ADD r2,r2,r13
+ST r2,r0,@wt_i
+JMP @wt_loop
+wt_done:
+MOVI r1,1
+ST r1,r0,@wm_redraw
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+wt_cols:
+.word 0
+wt_w:
+.word 0
+wt_h:
+.word 0
+wt_i:
+.word 0
+
+; Periodic self-expiring toast; only invalidate when its lifetime ends.
+wm_notice_tick:
+LD r1,r0,@wm_notice_ticks
+CMP r1,r0
+RET[EQ]
+SUB r1,r1,r13
+ST r1,r0,@wm_notice_ticks
+CMP r1,r0
+RET[NE]
+MOVI r1,1
+ST r1,r0,@wm_redraw
+RET
+
 da_i:
 .word 0
 s_hint:
-.str "TAB FOCUS  F2 MOVE  F3 ENLARGE  F5 SETTINGS  F6 NANNET  F7 SYSTEM  ESC CLOSE"
+.str "F1 APPS F2 MOVE SHIFT+F2 SIZE F3 MAX F4 DIALOG F5 SET F8 MIN F9 TILE F10/11 SNAP F12 REST"
 s_hint2:
-.str "F2 MOVE  F3 FIT  F5 SET  F6 NET  F7 SYS"
+.str "F1 APPS F2 MOVE F3 MAX F8 MIN F9 TILE"
 wm_zn:
 .word 0
 wm_redraw:

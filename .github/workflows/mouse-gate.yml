@@ -1,0 +1,47 @@
+name: NaN16 PS2 mouse framebuffer verification
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/lib/mouse.nas"
+      - "src/lib/shell.nas"
+      - "src/lib/wm.nas"
+      - "src/exhibits/gui_cart.nas"
+      - "tools/qgate_mouse.sh"
+      - "tools/qgate_close_x.sh"
+      - "tools/qgate_monitor.sh"
+      - ".github/workflows/mouse-gate.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: nan0s-ps2-mouse-gate
+  cancel-in-progress: true
+jobs:
+  ps2-mouse:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install emulator and native assembler tools
+        run: |
+          set -e
+          export DEBIAN_FRONTEND=noninteractive
+          timeout 65s sudo apt-get -o Acquire::Retries=0 -o Acquire::http::Timeout=15 update
+          timeout 120s sudo apt-get install -y --no-install-recommends gawk xxd qemu-system-x86
+      - name: Build whole native NaN16 boot image
+        run: sh tools/build.sh
+      - name: Inject PS2 AUX movement into a booted NaN16 desktop and compare framebuffers
+        run: sh tools/qgate_mouse.sh
+      - name: Physically click raw NaN16 title-bar X and verify desktop survives
+        run: sh tools/qgate_close_x.sh
+
+      - name: Verify system monitor does not paint over foreground, minimize or close
+        run: sh tools/qgate_monitor.sh
+      - name: Retain verified boot image for deployment
+        uses: actions/upload-artifact@v4
+        with:
+          name: nan0s-monitor-verified-image
+          path: |
+            docs/nan0s.img
+            src/nan/gui_cart.nan

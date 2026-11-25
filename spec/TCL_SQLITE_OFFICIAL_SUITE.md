@@ -1,18 +1,19 @@
 # Tcl + SQLite official suite on NaN: OS/Tcl port checklist
 
-Status: **foundation running**. Target: run SQLite 3.54.1's official Tcl
-test suite (`test/*.test`, 1,199 files / 489,129 lines) against the NaN16
-SQLite port, with `testfixture` and Tcl built by **tcc1/tcc2 on the VM**.
-Everything above the S1 machine boundary is NaN code (Tcl/SQLite/libc are C
-compiled to NaN16; kernel services are NaN16). No host libc, host process,
-host filesystem or host Tcl is allowed in the execution path.
+Status: **first official test green on product S1**. Target: run SQLite
+3.54.1's official Tcl test suite (`test/*.test`, 1,199 files / 489,129 lines)
+against the NaN16 SQLite port, with `testfixture` and Tcl built by
+**tcc1/tcc2 on the VM**. Everything above the S1 machine boundary is NaN code
+(Tcl/SQLite/libc are C compiled to NaN16; kernel services are NaN16). No host
+libc, host process, host filesystem or host Tcl is allowed in the execution
+path.
 
-Current foundations: the x86_64 S1 boots and runs flat guest cartridges
-(console/NFS2/VFS/time gates pass with `tools/s1_runner.sh`); Tcl 9.0.3
-milestone 1 runs a 110-command tclsh with real `init.tcl`/clock on the guest
-VFS (oracle, pending S1 FP/vector ops); the 2,133-file N16PACK1 suite pack
-registers with the dynamic VFS. Testfixture, threads, sockets, `exec` and
-the official run remain.
+Current state: the x86_64 S1 runs the 21.3 MB tclsh and the 85.2 MB official
+testfixture from ATA-loaded flat cartridges. `select1.test` gives **199 tests,
+0 errors, 0 omitted** on both the C-core oracle and the S1 product runner.
+Tcl 9.0.3 has real `init.tcl`/clock/msgcat/OO/file channels; SQLite/Tcl are
+single-threaded. Next: `veryquick.test`/`quick.test`, then the 1,199-file
+sweep, thread-safe builds, `exec`/sockets/load and the tcc1-built final image.
 
 This is deliberately larger than the SQLite amalgamation port. Tcl 9.0.3 is
 262,209 lines in 112 `generic/*.c` files; `testfixture` adds the SQLite test
@@ -194,9 +195,9 @@ Status legend: **done**, **partial**, **planned**.
       replaces the Unix port (`TCL_THREADS=0`, real init.tcl/clock/msgcat).
       Milestone 1: `tools/tcl_nan16_port_gate.sh` builds tclsh with tcc0 and
       runs `/test.tcl` from the guest VFS; 110 commands after real `Tcl_Init`,
-      exact stdout `hello 42` / `2`. Integration cartridge 21,278,520 bytes,
-      SHA-256 `d95de99d80fd0e36d3ed8b712b01b3e39aac0d2cf9dae31b923f2b5fcbe3440c`.
-      Oracle only: the S1 interpreter still lacks FP/vector ops.
+      exact stdout `hello 42` / `2`. **x86_64 S1 product PASS**: 21,383,808-byte
+      cartridge, SHA-256 `288eae147caa361576b350eba214196b2c6714c540e30322d74f017cf2fbd0b5`,
+      exact stdout, main=0.
 - [x] Channel drivers: console and VFS files (open/read/write/seek/truncate,
       relative paths, implicit dirs). Pipes/sockets remain explicit errors.
 - [~] Notifier/event loop: timers, `after`, `update`, `vwait` work; VFS file
@@ -209,8 +210,23 @@ Status legend: **done**, **partial**, **planned**.
 - [~] Tcl builds with tcc0; tcc1/tcc2 build still pending.
 - [x] Guest console capture: fixed stdout/stderr control block at
       `0x03EFF000`, `nan_cli --guest-stdout/--guest-stderr`, exact console gate.
-- [x] x86_64 S1 product runner: `tools/s1_runner.sh` passes console, NFS2,
-      VFS dirs/paths/capacity and time gates; guest FP/vector ops are next.
+- [x] x86_64 S1 product runner: `tools/s1_runner.sh` passes tclsh, console,
+      NFS2, VFS dirs/paths/capacity and time gates; the S1 also loads a
+      21,266,432-byte cartridge byte-exactly through ATA PIO and implements
+      scalar FP 0x30–0x37/0x46–0x48. Vector/display/device ops remain.
+- [x] Guest testfixture selector: `--guest-script PATH` writes u32 length at
+      `0x03EFF020` and up to 255 bytes at `0x03EFF024` before the cartridge
+      starts, distinct from stdout/stderr at `0x03EFF000`.
+- [x] Aggregates run in one guest process. `nan_cli --steps 0/unlimited`
+      keeps a 64-bit step counter and runs until HALT; `--checkpoint FILE
+      --checkpoint-every S` writes an atomic sparse `NAN1` snapshot of guest
+      memory and CPU state (also on SIGINT/SIGTERM, exit 75), and `--img`
+      accepts that snapshot to resume. The console buffer and guest VFS are
+      in guest memory, so output and filesystem state survive a host restart.
+      `tools/nan16_suite_resume.sh` loops base cartridge -> checkpoint until
+      HALT; `nan_cli --checkpoint` plus SIGUSR1 dumps live console progress.
+- [x] `tools/s1_runner.sh --steps unlimited` passes `UINT64_MAX` to the
+      64-bit S1 guest loop; QEMU wall time is controlled by `S1_QEMU_TIMEOUT`.
 
 ### P4 — SQLite testfixture and official suite
 
@@ -231,14 +247,62 @@ Status legend: **done**, **partial**, **planned**.
       `tools/tcc_nan16_vfs_pack.sh` also registers a real 2,133-file pack and
       reads the last entry back. Remaining: run the actual suite archive
       through the loader on x86_64 S1.
-- [ ] Full `testfixture` build with the official flags, THREADSAFE=1, all
-      extensions and test hooks; guest VFS on NaNFS.
-- [ ] Port `tester.tcl` capability probes and the test runner; no host
-      `exec`/`file` dependencies.
-- [ ] Run `select1`, `quick`, `veryquick`, then all 1,199 `.test` files;
-      archive exact pass/skip/error counts.
-- [ ] Fix every compiler/libc/kernel defect; no SQLite field-size or page
-      workarounds.
+- [~] Full `testfixture` build with the official flags, THREADSAFE=1, all
+      extensions and test hooks; guest VFS on NaNFS. The current product
+      fixture is tcc0-built with the official `TESTFIXTURE_FLAGS`,
+      `SQLITE_THREADSAFE=0`, all static TESTSRC extensions and the ext test
+      tree; 96,065,960 bytes, SHA-256
+      `4f4c0d53efebe94c2c26bc65c75b45353b09e0b22ebd733a978eca39dc137a28`,
+      run with `--mem 384` and a 288 MiB guest heap.  WAL is enabled; the
+      large-image startup crash was a fixed-SP overlap, fixed by
+      `SP=max(0x300000,align16(total_words))`.  The fixture advertises
+      `POWERSAFE_OVERWRITE` (no sector-padding duplicate frames) and
+      `SUBPAGE_READ`.
+- [x] Port `tester.tcl` capability probes and the test runner; the official
+      `tester.tcl`/`tcltest`/`permutations` path is used unchanged.  Test
+      support patches are limited to the no-pipe multi-client probe in
+      `lock_common.tcl` (`tools/nan16_patch_lock_common.py`, runs the
+      same-interpreter `tn==2` variant) and a `dbdata.c` payload bound that
+      clamps a corrupt declared record size to the input database size
+      (`tools/nan16_patch_recover_dbdata.py`).  Both are applied by the
+      fixture gate and documented; SQLite field/page layouts are unchanged.
+- [x] Run `select1`: **199 tests, 0 errors** on the C-core oracle and on the
+      x86_64 S1 product runner (`tools/nan16_testfixture_gate.sh`); 0 omitted.
+- [x] Official module slices on the final fixture: `attach` **0/113**,
+      `attach2` **0/71**, `ext/expert/expert1` **0/69**, `badutf2` **0/42**,
+      `exec` **0/4**, `atof1` **0/40,006** (92.18B steps),
+      `ext/recover/recoverpgsz` **0/89**, `backup2` **0/16**,
+      `busy2` **0/15** (calibrated clock), `date` **0/1,749**, `cache`
+      **0/190**, `capi3` **0/249**, `chunksize` **0/7**, `cksumvfs`
+      **0/13** (76.3B steps), `recovercorrupt3` **0/7**, and `wal`
+      **3/518** whose only failures are the `launch_testfixture`
+      child-process cases `wal-20.2/20.3/20.4`.  `symlink` is **1/39**
+      (only the `exec ln -s` loop case).
+- [~] Run `veryquick` in one process with unlimited steps and a periodic
+      `NAN1` checkpoint (`tools/nan16_suite_resume.sh`).  A previous run
+      reached 431B steps and reproduced 51 failures (42 recover, 27 avtrans
+      sync counters, backup2/attach) before aborting at busy2's child-pipe
+      launch; those causes are fixed.  A WAL-disabled checkpointed run
+      reached 96,066,000,000 steps with 0 failures before being stopped.
+      A fresh run now uses `product-final.bin` (`4f4c0d53`) with the
+      calibrated clock (`NAN16_CLOCK=steps:100000`), `--mem 384`, unlimited
+      steps and 30-second checkpoints.  The 1000-error cap hit in the
+      earlier `564121aa` run was date4's `strftime` shim, now fixed.  A later
+      run reached 585B steps in cksumvfs with no failures before being
+      paused for the recover/cksum fixes.  Remaining capability gaps:
+      child `testfixture` processes/pipes (`launch_testfixture`, shell
+      tests, crash8) and `exec`.
+- [ ] Run `quick`, `full`/`all`, then the complete `.test` corpus; archive
+      exact pass/skip/error counts.
+- [x] Fix every traced compiler/libc/kernel defect without SQLite
+      field-size or page workarounds: the WAL startup halt was fixed-SP
+      overlap, recoverpgsz was a libc write-hole, backup2 was readonly
+      `pOutFlags`/directory-open semantics, and WAL frame doubling was the
+      missing PSOW capability.  No SQLite field or page-size changes.
+- [ ] Child processes/pipes and `exec` remain unavailable; classify every
+      resulting test as an explicit capability skip (shell tests,
+      `launch_testfixture` cases, `symlink-1.3`).
+- [ ] Enable real Tcl/SQLite threads and rerun with `THREADSAFE=1`.
 - [ ] Re-run the native reference on the same tree for differential results.
 
 ### P4 source manifest (SQLite 3.54.1)

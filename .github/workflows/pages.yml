@@ -1,0 +1,95 @@
+name: Verify NaN/0S full-system browser demo
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "tools/**"
+      - "x86/**"
+      - "build/**"
+      - "docs/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nan0s-browser-verify
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Build and boot-test full NaN/0S
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout current system sources
+        uses: actions/checkout@v4
+
+      - name: Check Android phone keyboard forwarding
+        run: node tools/test_wasm_keyboard.cjs
+
+      - name: Guard n / b guest command routing and browser window ID
+        run: node tools/test_gui_commands.cjs
+
+      - name: Install system-image build and boot-test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gawk xxd qemu-system-x86 ffmpeg
+
+      - name: Build current complete guest image
+        id: build_guest
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh tools/build.sh
+          cmp build/nan0s.img docs/nan0s.img
+
+      - name: Verify complete image and browser launcher
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s docs/index.html
+          test -s docs/nan0s.img
+          test -f docs/.nojekyll
+          grep -q 'hda: { buffer: ideImage }' docs/index.html
+          grep -q 'fda: { buffer: image }' docs/index.html
+          grep -q 'boot_order: 0x321' docs/index.html
+          grep -q 'v86.wasm' docs/index.html
+          test "$(stat -c %s docs/nan0s.img)" -ge 1474560
+          test "$(dd if=docs/nan0s.img bs=1 skip=510 count=2 status=none | od -An -tx1 | tr -d ' \n')" = "55aa"
+          echo "Full system image, two-disk WASM boot and floppy signature: PASS"
+          sha256sum build/nan0s.img docs/nan0s.img
+
+      - name: Verify native full-system GUI and ATA loader
+        shell: bash
+        run: sh tools/qgate_gui.sh
+
+      - name: Verify n / b commands remain responsive in QEMU
+        shell: bash
+        run: sh tools/qgate_gui_commands.sh
+
+      - name: Boot actual WASM desktop in mobile Chromium
+        if: ${{ !cancelled() && steps.build_guest.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-save --package-lock=false playwright@1.51.1
+          npx playwright install --with-deps chromium
+          python3 -m http.server 8765 --directory docs > /tmp/nan0s-web.log 2>&1 &
+          server=$!
+          trap 'kill "$server" || true' EXIT
+          node tools/test_wasm_desktop.cjs
+      - name: Preserve browser framebuffer evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-mobile-desktop-evidence
+          path: browser-evidence/
+          if-no-files-found: warn
+
+      # GitHub Pages is configured to publish main/docs directly. Its existing
+      # 'pages build and deployment' workflow publishes the checked-in full image.
+      # Avoid actions/deploy-pages here: that parallel deployment conflicted with
+      # the branch publisher and failed artifact discovery.

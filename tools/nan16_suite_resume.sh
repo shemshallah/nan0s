@@ -12,7 +12,7 @@
 #   NAN16_CLI                       runner (default aarch64/android/nan_cli)
 #   NAN16_SUITE_MEM                 guest MiB (default 256)
 #   NAN16_SUITE_CHECKPOINT_SECONDS  checkpoint interval (default 60)
-#   NAN16_CLOCK                     guest clock, e.g. steps:100000 (default)
+#   NAN16_CLOCK                     guest clock (default steps:100000)
 set -eu
 cd "$(dirname "$0")/.."
 ROOT=$(pwd)

@@ -11,6 +11,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install gate tools
+        working-directory: .
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gawk qemu-system-x86 clang lld llvm
       - name: Build the current NaN16 system image and APK assets
         working-directory: .
         run: sh tools/build.sh
@@ -46,6 +51,16 @@ jobs:
           sh tools/browser_gate.sh || exit 1
           rc=0; sh tools/nic_gate.sh || rc=$?; if [ "$rc" -ne 0 ] && [ "$rc" -ne 77 ]; then exit "$rc"; fi
           sh tools/ata_rw_gate.sh || exit 1
+          sh tools/raw_only_gate.sh || exit 1
+          sh tools/lds_gate.sh || exit 1
+          sh tools/kabi_gate.sh || exit 1
+          sh tools/kabi_proc_gate.sh || exit 1
+          sh tools/kabi_sched_gate.sh || exit 1
+          sh tools/kabi_spawn_gate.sh || exit 1
+          sh tools/kabi_load_gate.sh || exit 1
+          sh tools/kabi_sleep_gate.sh || exit 1
+          sh tools/kabi_kill_gate.sh || exit 1
+          sh tools/s1_guest_gate.sh || exit 1
           sh tools/ncc_lex.sh || exit 1
           sh tools/ncc_m1.sh || exit 1
           sh tools/ncc_m2.sh || exit 1

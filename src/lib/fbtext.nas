@@ -13,9 +13,16 @@ JMP @f7_ok
 f7_q:
 MOVI r3,63
 f7_ok:
+ST r3,r0,@f7_ascii
 ST r1,r0,@f7_x
 ST r2,r0,@f7_y
 ST r4,r0,@f7_c
+ST r15,r0,@f7_damage_ret
+MOVI r3,7
+MOVI r4,11
+CALL @fb_damage
+LD r15,r0,@f7_damage_ret
+LD r3,r0,@f7_ascii
 MOVI r5,32
 SUB r3,r3,r5
 MOVI r5,11
@@ -25,6 +32,15 @@ ADD r5,r5,r3
 ST r5,r0,@f7_tab
 MOVI r6,0
 f7_row:
+; Bound every row before calculating the linear framebuffer address.
+LD r9,r0,@f7_y
+ADD r9,r9,r6
+SHR r10,r9,31
+CMP r10,r0
+JMP[NE] @f7_nextrow
+LD r10,r0,@fb_h
+CMP r9,r10
+JMP[GE] @f7_done
 MOVI r7,11
 CMP r6,r7
 JMP[GE] @f7_done
@@ -39,16 +55,31 @@ LD r10,r0,@fb_w
 MUL r9,r9,r10
 LD r10,r0,@f7_x
 ADD r9,r9,r10
+LD r10,r0,@fb_scene_offset
+ADD r9,r9,r10
 MOVI r11,64
+LD r10,r0,@f7_x
+ST r10,r0,@f7_colx
 f7_col:
 CMP r11,r0
 JMP[EQ] @f7_nextrow
+LD r10,r0,@f7_colx
+SHR r12,r10,31
+CMP r12,r0
+JMP[NE] @f7_skip
+LD r12,r0,@fb_w
+CMP r10,r12
+JMP[GE] @f7_nextrow
 BOOL.8 r12,r8,r11
 CMP r12,r0
 JMP[EQ] @f7_skip
 LD r4,r0,@f7_c
-VPOKE r4,r9
+; Single-pixel block fill also works in the offscreen scene.
+FBFILL r13,r9,r4
 f7_skip:
+LD r10,r0,@f7_colx
+ADD r10,r10,r13
+ST r10,r0,@f7_colx
 ADD r9,r9,r13
 SHR r11,r11,1
 JMP @f7_col
@@ -57,6 +88,12 @@ ADD r6,r6,r13
 JMP @f7_row
 f7_done:
 RET
+f7_damage_ret:
+.word 0
+f7_ascii:
+.word 0
+f7_colx:
+.word 0
 f7_x:
 .word 0
 f7_y:

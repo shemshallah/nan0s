@@ -105,3 +105,8 @@ there together with the Silver Slate terminal monitor: sealed-cart
 `carts`/`load`, `mem [addr]`, `dis [addr]`, captured `screen`/`serial`, typed
 setters, multi-level `undo [n]`/`redo [n]`, and checkpoint/restore. The richer pane remains in this
 repository.
+
+> **NaN/0S integration:** this directory ships with NaN/0S. `tools/ndbg.sh`,
+> `ndbg_diff.sh`, `ndbg_mon.sh`, and `ndbg_img.sh` are the integrated gates.
+> The desktop pane front end lives in `shemshallah/ndbg`; the Silver Slate port
+> is pending.

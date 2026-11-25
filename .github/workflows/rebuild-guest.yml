@@ -1,0 +1,106 @@
+name: Publish rebuilt NaN/0S guest image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/exhibits/gui_cart.nas"
+      - "src/lib/**"
+      - "tools/build.sh"
+      - ".github/workflows/rebuild-guest.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nan0s-guest-image-publisher
+  # A new source revision supersedes an obsolete publishing run.
+  cancel-in-progress: true
+
+jobs:
+  rebuild:
+    name: Rebuild guest, test native boot, update published image
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: true
+
+      - name: Install only missing image-build and QEMU test tools (bounded)
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          missing=()
+          for tool in gawk xxd qemu-system-i386 ffprobe; do
+            command -v "$tool" >/dev/null 2>&1 || missing+=("$tool")
+          done
+          if (("${#missing[@]}" == 0)); then
+            echo "Required tooling already present; skipping apt entirely."
+          else
+            echo "Missing tooling: ${missing[*]}"
+            export DEBIAN_FRONTEND=noninteractive
+            timeout 65s sudo apt-get -o Acquire::Retries=0               -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 update
+            timeout 105s sudo apt-get -o Dpkg::Use-Pty=0 install               --no-install-recommends -y gawk xxd qemu-system-x86 ffmpeg
+          fi
+          for tool in gawk xxd qemu-system-i386 ffprobe; do
+            command -v "$tool" >/dev/null || { echo "::error::Missing $tool"; exit 1; }
+          done
+
+      - name: Rebuild GUI from source and regenerate full-system image
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh tools/build.sh
+          cmp build/nan0s.img docs/nan0s.img
+          test "$(stat -c %s docs/nan0s.img)" -ge 1474560
+
+      - name: Validate native full GUI and IDE loader
+        shell: bash
+        run: sh tools/qgate_gui.sh
+
+      - name: Commit generated artifacts to main for GitHub Pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -u -- src/nan/gui_cart.nan build/nan0s.img docs/nan0s.img aarch64/android/app/src/main/assets/nan0s.img
+          if git diff --cached --quiet; then
+            echo "Generated image already matches source."
+            exit 0
+          fi
+          git diff --cached --stat
+          git commit -m "build: publish guest GUI fix and synchronized WASM image"
+          # Modern-WM development may advance main while QEMU tests run.
+          # Never publish a stale boot image built from older NaN16 sources.
+          # If only unrelated docs/tests advanced, replay the generated image
+          # commit on the new tip and attempt an ordinary fast-forward push.
+          # There is NO force push, reset of remote main, or binary overwrite.
+          for attempt in 1 2 3; do
+            git fetch origin main
+            if ! git diff --quiet HEAD^ origin/main -- \
+              src/exhibits/gui_cart.nas src/lib tools/build.sh; then
+              echo "A newer NaN16 source is on main; this obsolete image must not publish."
+              exit 0
+            fi
+            # build.sh also regenerates ancillary tracked files that are not
+            # published by this job. Discard ONLY those uncommitted scratch
+            # changes in the disposable CI checkout before a safe rebase.
+            git reset --hard HEAD
+            if ! git rebase origin/main; then
+              git rebase --abort || true
+              echo "Generated image could not safely rebase; skipping obsolete publisher."
+              exit 0
+            fi
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            echo "Concurrent push during attempt $attempt; fetching latest source..."
+          done
+          echo "::error::Publisher encountered three concurrent push races."
+          exit 1

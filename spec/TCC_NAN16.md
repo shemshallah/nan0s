@@ -1,7 +1,10 @@
 # TCC -> NaN16: self-hosting and the verified compiler chain
 
-Status: P0.7, **tcc1 and tcc2 reached** (byte-identical fixpoint).
-SQLite 3.54.1 is vendored and runs as a raw NaN16 cartridge. TCC source is
+Status: P0.7, **tcc1 and tcc2 reached** (byte-identical fixpoint), and the
+**raw-source tcc1 self-build (C1b) is reached**: the self-hosted compiler reads
+raw `libtcc.c` and its headers from an N16PACK1 guest VFS and emits a
+replacement compiler R that compiles `test.c` to 42. SQLite 3.54.1 is vendored
+and runs as a raw NaN16 cartridge. TCC source is
 vendored at `third_party/tinycc` (upstream
 `5cef7f3f85b0fbbd4663fd3518ba097d7fe3d738`, imported tree
 `dcb896d1c7ae2e64114c55c93f5223f92280bbdf`; see
@@ -93,12 +96,40 @@ Other fixes required for tcc1:
   name lookup.
 - VFS file descriptors start at 3, so writes to the first files do not alias
   stdout/stderr (fd 1/2).
+- The variadic call sequence kept the hidden pointer to the first variadic
+  argument in `r11`, but `nan_push_arg()` loads a 16-bit argument through
+  `nan_load_indirect()`, which uses `r11` as its high-byte scratch.  A
+  `short`/`ushort` variadic argument therefore replaced the pointer
+  (observed value 0) and `va_arg` read the first cartridge words.  Keep the
+  hidden pointer in `r9`, which the push paths do not use.  Official
+  `PRAGMA index_info` passes an `i16` column number through
+  `sqlite3VdbeMultiLoad()`; before the fix `sqlite3_expert_analyze()` saw
+  `SQLITE_NOMEM` (Tcl code 7), after it `ext/expert/expert1.test` is
+  **0 errors out of 69 tests**.
 
 Result: self1 compiles the TCC sources with the self-hosted libtcc to a
 byte-identical self2 (2,059,480 bytes), and self2 compiles `test.c` to 42.
 The softfloat runtime supplies IEEE binary64 add/sub/mul/div, comparison and
 conversion helpers, plus `__divdi3`, `__udivdi3`, `__moddi3`, `__umoddi3`,
 `__ashldi3`, `__ashrdi3` and `__lshrdi3`.
+
+### Flat-image stack placement (WAL-sized images)
+
+The flat prelude used a fixed `SP = 0x300000` words while the stack grows
+upward.  WAL-disabled testfixture data ends at word 3,134,713 (guest
+0xBF53E4), 44,060 bytes below the stack; WAL-enabled data ends at word
+3,157,665 (guest 0xC0BA84), 47,748 bytes **above** it.  The first stack frames
+then overwrite `sqlite3Config`/`xLog`; `sqlite3_log()` loads the corrupt
+`xLog` and calls into `aDateTimeFuncs` in data, halting at word 3,146,612.
+
+`nan16-link.c` now emits `SP = max(0x300000, align16(total_words))`, leaving
+images that fit below 0x300000 byte-identical and rejecting images with less
+than 0x1000 words of stack below the pack at word 0x400000.  The WAL-enabled
+official testfixture now passes `select1` **199/0** (96,064,648 bytes, SHA-256
+`8e59fd9a6e690d9b3795a4fa678f91a7ac3454e6928f6c1839fe7561245d4a46`).
+WAL is enabled in the testfixture gate; `busy2` runs to a normal halt but has
+5/15 failures because the VFS `xShmLock` is still a no-op (checkpoint
+read-mark/busy results), which is the next WAL parity item.
 
 ### tcc2 fixpoint
 
@@ -159,6 +190,65 @@ host tcc0, clang), have each resulting compiler compile the same source, and
 compare deterministic outputs.  That is diverse double compilation, separate
 from a compiler-correctness proof.
 
+## Raw-source self-build (C1b)
+
+`tools/tcc_nan16_selfbuild.sh` moves the self-build input from host-preprocessed
+`.i` blobs to raw source files.  A tcc1 builder reads an N16PACK1 archive from
+the guest VFS, compiles raw `libtcc.c` (with its headers), raw `libc.c` and the
+generic build driver into a replacement compiler R, then runs R.  R compiles
+raw `test.c` to a 42 cartridge; the R output is byte-identical to the tcc0
+oracle for that program.  Sizes/hashes from the current tree:
+
+- R (replacement compiler, 1,940,000 bytes) SHA-256
+  `2ba83eb61cab39d94f15f5c2f71ce1911f68cb99bab53b95c680841155469d0d`.
+- test cartridge 210,360 bytes, `main` returns 42.
+
+The builder itself is still produced by tcc0 from a preprocessed bootstrap
+`libtcc.i`; that is the bootstrap stage, not the product.  R and every source
+input to it are raw C.  The compiler image contains no host path.
+
+N16PACK1 is the single guest archive format
+(`src/tests/tcl_sqlite/PACK_FORMAT.md`, `tools/nan16_suite_pack.py`).  A pack is
+a byte stream; `tools/nan16_pack_image.py` packs four bytes per NaN16 payload
+word and places it at a checked guest base.  `nan16_vfs_add_pack()` uses the
+dynamic VFS table (`NAN16_VFS_INIT_CAP`, optional `NAN16_VFS_MAXFILES`), so a
+2,133-file suite is not truncated.  `tools/tcc_nan16_vfs_pack.sh` verifies
+every byte of a 256-byte pattern, a non-ASCII blob crossing a payload-word
+boundary, and a 2,133-file pack whose last entry is read back; it also checks
+the 25.8 MB suite layout and the `printf` `*` width/precision paths.
+
+Memory map for the self-build gate (guest byte addresses):
+
+| range | use |
+| --- | --- |
+| 0x00000000 | flat compiler image |
+| 0x00800000 | compiler image floor / stack grows down from 0x00c00000 |
+| 0x00c00000-0x00ffffff | reserved for the x86_64 S1 trap/kernel frame |
+| 0x01000000 | low N16PACK1 base (self-build and SQLite packs) |
+| 0x03000000 | output copy 0 (8 MiB) |
+| 0x03800000 | output copy 1 (8 MiB) |
+| 0x03e00000 | diagnostics |
+| 0x03f00000 | progress word |
+| 0x04000000 | heap (128 MiB in the self-build gate) |
+
+The pack tool rejects a base below the stack top, a guest span that crosses
+the next region, or an encoded host image over its budget.  The 25.8 MB Tcl
+suite pack spans 0x01000000..0x0289c700, so it remains below the output copy;
+its encoded host image is 51,613,184 bytes plus 32 MiB of word padding.
+
+**SQLite-on-R status:** R compiles the vendored 3.54.1 amalgamation,
+`nan16_vfs.c` and the SQL probe from the same raw VFS and emits a
+6,727,720-byte cartridge that is **byte-identical to the tcc0-built oracle**.
+The probe finishes in 8,789,447 steps with sum=6, count=3, max="two" and the
+expected magic words.  The earlier hang was a linker-state leak, not a
+SQLite or data-layout defect: `nan16_relocs`/`nan16_addr_relocs`/jump fixups
+are file-scope arrays, and a process that compiles job 0 and job 1 in sequence
+(the generic build driver) applied job 0's relocations to job 1's text at the
+same byte offsets.  `tcc_new()` now resets the NaN16 linker state; the
+regression is `tools/tcc_nan16_multijob.sh` (job a returns 0, job b returns 42;
+disabling the reset makes job b return 1).  Removing the stale patches makes
+R's SQLite output identical to tcc0's.
+
 ## The milestone
 
 `tcc1` and `tcc2` are reached.  `tcc1` is TCC compiled by TCC on NaN16; it
@@ -166,8 +256,10 @@ compiles `test.c` to a cartridge that returns 42.  `tcc2` is self1 compiling
 the TCC sources again to a byte-identical 2,059,480-byte self2, which also
 compiles `test.c` to 42.  NaN16 is now a self-hosting platform with its own C
 compiler, libc, VFS and linker.  The fixpoint completes within the
-4,000,000,000-step gate budget.  SQLite 3.54.1 also runs on the VM; the
-verified-chain gate remains scoped in its own section below.
+gate budget.  The raw-source tcc1 rebuild R also compiles SQLite 3.54.1 +
+the NaN16 VFS + probe from the guest VFS to the byte-identical tcc0
+cartridge (sum=6,count=3,max="two").  The verified-chain gate remains scoped
+in its own section below.
 
 ## Guest console capture
 
@@ -349,11 +441,24 @@ gates, not assumptions.
   `test.c`, emits an inner cartridge, and the inner returns 42. Passing and
   wired into `presqlite_gate`.
 - `tools/tcc_nan16_rawcc.sh`: tcc1 preprocesses and compiles raw `libc.c`
-  plus a program with guest-VFS `/usr/include` headers, links an
-  835,928-byte inner cartridge, and verifies its `main` returns 42. Passing.
+  plus a program with guest-VFS `/usr/include` headers, links a
+  210,512-byte inner cartridge, and verifies its `main` returns 42. Passing.
+- `tools/tcc_nan16_vfs_pack.sh`: verifies the N16PACK1 payload-word encoding
+  byte-for-byte (including a non-ASCII blob crossing a word boundary), the
+  dynamic VFS with a 2,133-file pack whose last entry is readable, the
+  25.8 MB suite layout, and libc `printf` `*` width/precision. Passing.
+- `tools/tcc_nan16_selfbuild.sh`: tcc1 compiles raw `libtcc.c` + raw `libc.c`
+  + the build driver from the guest VFS into R (1,940,000 bytes, SHA-256
+  `2ba83eb61cab39d94f15f5c2f71ce1911f68cb99bab53b95c680841155469d0d`);
+  R compiles raw `test.c` to 42 and compiles SQLite 3.54.1 + the VFS + probe
+  to a 6,727,720-byte cartridge byte-identical to tcc0, running with
+  sum=6,count=3,max="two". Passing.
+- `tools/tcc_nan16_multijob.sh`: two independent TCCState jobs in one guest
+  process; job a -> 0, job b -> 42.  This is the linker relocation-state
+  reset regression (disabling the reset makes job b return 1). Passing.
 - `tools/tcc_nan16_tcc2.sh`: self1 compiles the TCC sources to a
   byte-identical self2 (2,059,480 bytes); self2 also compiles `test.c` to a
-  144-byte cartridge whose `main` returns 42.  Passing within the 5.0B-step cumulative
+  144-byte cartridge whose `main` returns 42.  Passing within the 8.0B-step cumulative
   budget, resumable in slices.  SHA-256
   `41e0397c83b96c30014d804efc231aa27fc06a766d47dc2f3384d40da238cc44`.
 - `tools/tcc_sqlite.sh`: vendored SQLite 3.54.1 plus the NaN16 in-memory VFS;
@@ -387,9 +492,13 @@ TCC cannot precede the ABI and memory work:
    self2; self2 compiles `test.c` to 42.
 5. [x] SQLite 3.54.1: vendored, cross-compiled by tcc0, and exercised by
    `tcc_sqlite` (suite/stress/assert builds match native).
-6. [ ] Broaden the guest-compiler/program corpus (printf, libm, struct-heavy
+6. [x] C1b/C2: tcc1 builds R from raw `libtcc.c`; R compiles raw `test.c` to
+   42 and compiles SQLite 3.54.1 + the VFS + probe to a byte-identical
+   oracle cartridge (sum=6, count=3, max="two").  The multi-job linker-state
+   reset is covered by `tools/tcc_nan16_multijob.sh`.
+7. [ ] Broaden the guest-compiler/program corpus (printf, libm, struct-heavy
    and varargs programs) beyond add/fib/loops/structs/switch and the
    double-constant test.
-7. [ ] ncc <-> TCC bidirectional call test and the 8-byte `double` ABI audit.
-8. [ ] Verified chain: opcode-lowering lemmas plus small UTM traces; scope the
+8. [ ] ncc <-> TCC bidirectional call test and the 8-byte `double` ABI audit.
+9. [ ] Verified chain: opcode-lowering lemmas plus small UTM traces; scope the
    compiler-correctness statement honestly.

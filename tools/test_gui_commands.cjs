@@ -1,0 +1,167 @@
+'use strict';
+// Guard NaN/0S GUI commands and browser window initialization. This catches
+// the command-n hang without changing guest behavior or requiring an emulator.
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const source = fs.readFileSync(path.join(__dirname, '../src/exhibits/gui_cart.nas'), 'utf8');
+
+function block(start, end) {
+  const a = source.indexOf('\n' + start + '\n');
+  assert.ok(a >= 0, 'Missing guest label ' + start);
+  const b = source.indexOf('\n' + end + '\n', a + start.length + 2);
+  assert.ok(b > a, 'Missing subsequent label ' + end);
+  return source.slice(a, b);
+}
+
+const net = block('tm_net:', 'tm_utl:');
+assert.match(net, /MOVI r1,5\s*\nCALL @gui_single/, 'n must launch NaNNet window kind 5');
+
+const browser = block('tm_br:', 'tm_nsh:');
+assert.match(browser, /MOVI r1,7\s*\nCALL @gui_open_new/, 'b must launch browser kind 7');
+
+const init = block('br_init:', 'br_draw:');
+assert.match(init, /ST r1,r0,@br_id[\s\S]*?LD r1,r0,@br_id\s*\nCALL @term_fit/,
+  'browser initializer must restore the actual window ID before term_fit');
+assert.doesNotMatch(init, /^PUTC r1\s*$/m, 'debug PUTC must not overwrite browser window ID');
+
+// F0 is a guest-specific NaN16 function key, not a standard PC key.
+const kbd = fs.readFileSync(path.join(__dirname, '../src/lib/kbd.nas'), 'utf8');
+const virtualRows = kbd.match(/^\.word 0,0,0,0,256,0,0,267,268,0,0,0,0,0,0,0$/gm) || [];
+assert.equal(virtualRows.length, 2,
+  'Both shifted and normal NaN16 keymaps must map Set-1 0x54 to F0 and preserve F11/F12');
+const f0route = block('gk_np:', 'gk_notf0:');
+assert.match(f0route, /MOVI r2,0x100\s*\nCMP r1,r2\s*\nJMP\[NE\] @gk_notf0\s*\nCALL @gk_help/,
+  'The desktop must dispatch the virtual F0 event 0x100');
+const f0help = block('gk_help:', 'gh_id:');
+assert.match(f0help, /CALL @term_cmd[\s\S]*CALL @term_draw/,
+  'F0 must display native terminal help inside the guest');
+
+const controls = block('term_key:', 'tk_id:');
+assert.match(controls, /MOVI r4,13\s*\nCMP r3,r4\s*\nJMP\[EQ\] @tk_enter/,
+  'the key n by itself must remain ordinary printable text, not a command');
+
+const dispatch = block('fs_dispatch:', 'fs_d_build:');
+assert.match(dispatch, /LA r2,@fs_s_build_head\s*\nCALL @fs_prefix/,
+  'The build command family must be recognized by raw NaN16 before one-letter fallback');
+assert.match(dispatch, /LA r2,@fs_s_build\s*\nCALL @fs_exact/,
+  'Full bootable-image building requires an exact command match');
+assert.match(dispatch, /JMP\[NE\] @fs_d_build\s*\nJMP @fs_d_build_help/,
+  'Bare build and invalid arguments must display help instead of launching browser');
+
+const exact = block('fs_exact:', 'fs_dispatch:');
+assert.match(exact, /LDB r3,r1,0[\s\S]*?LDB r4,r2,0[\s\S]*?CMP r3,r4/,
+  'The exact match must compare the whole command including NUL');
+const help = block('fs_d_build_help:', 'fs_d_cc:');
+assert.match(help, /CALL @vc_puts[\s\S]*?CALL @sb_serial/,
+  'The raw NaN16 build help must be printed in the terminal and on serial');
+const build = block('fs_d_build:', 'fs_d_build_help:');
+assert.match(build, /CALL @sb_build/, 'Only build nan0s launches native image building');
+assert.match(source, /fs_s_build_head:\s*\n\.str "build"\s*\nfs_s_build:\s*\n\.str "build nan0s"/,
+  'The build family and full command must be declared independently');
+
+// The desktop's modern features must execute inside raw NaN16, never inside
+// the browser DOM. Verify the native render and dispatch symbols are linked.
+const wm = fs.readFileSync(path.join(__dirname, '../src/lib/wm.nas'), 'utf8');
+const shell = fs.readFileSync(path.join(__dirname, '../src/lib/shell.nas'), 'utf8');
+assert.match(source, /\.include "\.\.\/lib\/shell\.nas"/, 'Native shell must be linked into the bootable cartridge');
+assert.match(source, /CALL @wm_draw_all\s*\nCALL @g_bar\s*\nCALL @sh_draw/,
+  'Native launcher/modal must render after guest windows');
+assert.match(block('g_compose:', 'g_nodraw:'), /CALL @wm_draw_all[\s\S]*?CALL @g_bar[\s\S]*?CALL @sh_draw[\s\S]*?CALL @g_present/,
+  'Retained scene must compose shell after windows and present afterwards');
+assert.match(block('g_present:', 'gs_ready:'), /gp_overlap:[\s\S]*?FBCOPY[\s\S]*?gp_right:[\s\S]*?FBCOPY/,
+  'Native damage presenter must preserve opaque cursor pixels');
+assert.match(source, /g_onkey:[\s\S]*?CALL @sh_handle[\s\S]*?gk_regular:/,
+  'Modal guest keyboard routing must precede global hotkeys');
+assert.match(source, /CALL @sh_launcher/, 'F1 must open native app launcher');
+assert.match(source, /CALL @sh_dialog/, 'F4 must open native confirmation dialog');
+assert.match(source, /CALL @wm_minimize/, 'F8 must minimize a guest window');
+assert.match(source, /CALL @wm_tile/, 'F9 must tile native guest windows');
+assert.match(source, /CALL @wm_snap/, 'F10/F11 must snap native guest windows');
+assert.match(source, /CALL @wm_restore_minimized/, 'F12 must restore a minimized guest window');
+assert.match(source, /CALL @wm_theme_toggle/, 'Shift+F5 must toggle native themes');
+assert.match(source, /CALL @g_resizekey/, 'Shift+F2 must use native window resize mode');
+assert.match(source, /CALL @wm_activate_slot/, 'Ctrl+1..8 must activate taskbar windows');
+for (const name of [
+  'wm_draw_taskbar:', 'wm_minimize:', 'wm_restore_minimized:', 'wm_activate_slot:',
+  'wm_snap:', 'wm_tile:', 'wm_notice:', 'wm_notice_tick:', 'wm_theme_toggle:',
+]) {
+  assert.ok(wm.includes('\n' + name + '\n'), 'Missing raw NaN16 window manager symbol ' + name);
+}
+for (const name of ['sh_draw:', 'sh_init:', 'sh_launcher:', 'sh_dialog:', 'sh_handle:']) {
+  assert.ok(shell.includes('\n' + name + '\n'), 'Missing raw NaN16 shell symbol ' + name);
+}
+assert.match(wm, /CALL @wm_draw_taskbar/, 'The native frame composition must include the taskbar');
+assert.match(wm, /CALL @wm_rect[\s\S]*?dw_noaccent:/,
+  'Window decorations must use native framebuffer drawing');
+assert.match(shell, /sh_appnames:[\s\S]*?\.word @sh_n0,@sh_n1,@sh_n2,@sh_n3,@sh_n4,@sh_n5,@sh_n6,@sh_n7/,
+  'App launcher must include all eight native applications');
+assert.doesNotMatch(wm + shell, /<div|document\.|window\.(?:addEventListener|querySelector|document)|\.js\b|#include <stdio/,
+  'No browser or foreign-language guest window implementation is allowed');
+// Mouse driver runs INSIDE the raw NaN16 guest: there is no DOM hit testing,
+// JavaScript window dragging, or host-generated guest pointer events.
+const mouse = fs.readFileSync(path.join(__dirname, '../src/lib/mouse.nas'), 'utf8');
+assert.match(source, /\.include "\.\.\/lib\/mouse\.nas"/,
+  'Full guest must link the native PS/2 AUX driver');
+assert.match(source, /CALL @sh_draw\s*\nCALL @ms_draw/,
+  'Guest cursor must be the final visual layer, above modal overlays');
+assert.match(source, /CALL @ms_poll\s*\nCALL @kbd_poll/,
+  'Guest must poll AUX data before keyboard scan codes');
+for (const name of [
+  'ms_write_ready:', 'ms_command:', 'ms_data:', 'ms_init:', 'ms_poll:',
+  'ms_update:', 'ms_down:', 'ms_drag_update:', 'ms_draw:',
+]) {
+  assert.ok(mouse.includes('\n' + name + '\n'),
+    'Native PS/2 driver missing entrypoint ' + name);
+}
+const mouseInit = mouse.slice(mouse.indexOf('ms_init:'), mouse.indexOf('; Non-blocking; budget'));
+assert.match(mouseInit, /0xA8[\s\S]*0xD4[\s\S]*0xF6[\s\S]*0xD4[\s\S]*0xF4/,
+  'Mouse startup must enable the AUX port then send defaults and stream enable');
+assert.match(mouse, /ms_write_wait:[\s\S]*INB r2,r1[\s\S]*BOOL\.8 r4,r2,r3[\s\S]*SUB r8,r8,r13/,
+  'PS/2 commands must wait for input-busy to clear with a bounded budget');
+assert.match(mouse, /MOVI r3,0x20[\s\S]*BOOL\.8 r4,r2,r3[\s\S]*JMP\[EQ\] @ms_poll_done/,
+  'Mouse poll must never read keyboard data as an AUX packet');
+assert.match(mouse, /CALL @ms_update\s*\nLD r10,r0,@ms_budget/,
+  'AUX packet processing must not starve the guest event loop');
+assert.match(mouse, /MOVI r2,0xC0[\s\S]*JMP\[NE\] @ms_update_done/,
+  'Mouse overflow bits must discard invalid movement packets');
+assert.match(mouse, /CALL @wm_raise/, 'Mouse click must focus overlapped windows');
+assert.match(mouse, /CALL @wm_taskbar_select/, 'Taskbar clicks must select or reveal windows');
+assert.match(mouse, /CALL @ms_cycle_under_pointer/,
+  'Right-click must cycle overlapping windows directly under the pointer');
+assert.match(wm, /wm_taskbar_select:[\s\S]*?CALL @wm_minimize[\s\S]*?CALL @wm_activate_slot/,
+  'Clicking an active taskbar window must expose what is underneath without closing it');
+assert.match(mouse, /CALL @sh_click/, 'Native modal and launcher clicks must be dispatched');
+assert.match(mouse, /CALL @wm_minimize/, 'Native minimize button must be clickable');
+assert.match(mouse, /CALL @wm_enlarge/, 'Native maximize button must be clickable');
+assert.match(mouse, /ms_drag_resize:/, 'The bottom-right resize grip must be draggable');
+assert.match(mouse, /ms_release:[\s\S]*?CALL @wm_snap[\s\S]*?ms_release_end:/,
+  'Dropping a dragged native window near a desktop edge must snap it');
+assert.match(mouse, /ms_hit_move:[\s\S]*?TICK r2[\s\S]*?MOVI r5,350[\s\S]*?CALL @wm_enlarge/,
+  'Double-clicking a guest title bar must toggle native maximize or restore');
+assert.match(mouse, /MOVI r1,0xFFFF\s*\nST r1,r0,@ms_last_title_id/,
+  'Double-click history must be reset on native mouse startup');
+assert.doesNotMatch(mouse, /document\.|<div|window\.addEventListener|#include <stdio/,
+  'Native mouse logic must not be implemented in JS or C');
+console.log('PASS: raw NaN16 PS/2 AUX init, packet decoder, mouse hit testing, drag, resize, taskbar and modal');
+
+// Repeated app-grid clicks activate the existing app instead of silently
+// stacking indistinguishable duplicates behind the topmost window.
+const launcher = shell.slice(shell.indexOf('sh_launch_selected:'), shell.indexOf('sh_dialog_key:'));
+assert.match(launcher, /LD r1,r0,@sh_sel[\s\S]*?CALL @gui_single/,
+  'All launcher tiles must focus/reuse an existing app instance');
+assert.doesNotMatch(launcher, /CALL @gui_open_new/,
+  'The native launcher must not silently create duplicate windows');
+assert.match(wm, /LD r3,r0,@dw_id[\s\S]*?CALL @fb_char7/,
+  'Native window title bar must render its stable instance ID');
+assert.match(wm, /LD r3,r0,@wd_i[\s\S]*?CALL @fb_char7/,
+  'Taskbar must render the matching native instance ID');
+assert.match(wm, /wm_close:[\s\S]*?CALL @wm_zremove[\s\S]*?ST r0,r1,#W_ALIVE/,
+  'Closing a window must unlink z-order and kill exactly its live slot');
+
+console.log('PASS: raw NaN16 taskbar, launcher, modal, notification, themes, tile, snap, resize and restore');
+
+assert.match(source,/ce_enter:[\s\S]*?MOVI r2,@s_ce_demo\s*\nCALL @ce_streq/);
+assert.match(source,/tl_append:[\s\S]*?STB r5,r4,0/);
+assert.match(source,/ce_save:\s*\n;[^\n]*\nLD r1,r0,@ce_len/);
+console.log('PASS: F0 native help, F1-F12 mapping, n/b routing, build command help, disk builder');

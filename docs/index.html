@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>NaN/0S — live in the browser (v86)</title>
+<title>NaN/0S — full system live in the browser (v86)</title>
 <style>
   :root { --bg:#0b0b1a; --fg:#cfd2e6; --dim:#6d7194; --blue:#8f9bff; --cyan:#00f0ff; --pink:#ff2bd6; --green:#39ff14; }
   * { box-sizing: border-box; }
@@ -21,6 +21,45 @@
     background:#000; border:1px solid #23234a; border-radius:6px; padding:10px; overflow:auto; }
   #screen_container > div { white-space:pre; font:14px/14px ui-monospace,monospace; color:#d8d8e8; }
   #screen_container canvas { display:none; image-rendering:pixelated; max-width:100%; height:auto; }
+  /* Dedicated immersive stage: the Exit button is not adjacent to the
+     normal Full screen launcher and remains accessible above mobile UI. */
+  #fullscreen-stage { position:relative; }
+  #fullscreen-exitbar { display:none; }
+  #fullscreen-stage.immersive {
+    position:fixed; inset:0; z-index:100; width:100%; height:100vh;
+    height:100dvh; padding: max(6px, env(safe-area-inset-top)) 6px 0;
+    background:#05050e; display:flex; flex-direction:column; gap:8px;
+  }
+  #fullscreen-stage.immersive #screen_container {
+    flex:1 1 auto; min-height:0; min-width:0; width:100%; max-width:none;
+    height:auto; margin:0; overflow:auto; border-radius:6px;
+    overscroll-behavior:contain;
+  }
+  #fullscreen-stage.immersive #fullscreen-exitbar {
+    flex:0 0 auto; display:flex; align-items:center; flex-wrap:nowrap;
+    justify-content:space-between; gap:8px;
+    padding:6px 4px max(10px, env(safe-area-inset-bottom));
+    background:#101027; border-top:1px solid #343464;
+  }
+  #fullscreen-exitbar .fullscreen-tools { display:flex; gap:5px; flex:0 1 auto; min-width:0; }
+  #exit-fullscreen-keyboard { display:none; }
+  body.nan0s-immersive.nan0s-keys-open #exit-fullscreen-keyboard {
+    display:block; min-height:50px; width:100%; margin:0 0 8px;
+    border:2px solid #9fa8ff; background:#282047; font-weight:700;
+  }
+  #fullscreen-exitbar button { min-height:48px; min-width:40px; padding:9px 10px; touch-action:manipulation; }
+  #exit-fullscreen {
+    margin-left:auto; flex:0 0 auto; min-width:128px !important;
+    background:#282047; border:2px solid #9fa8ff; font-weight:700;
+  }
+  body.nan0s-immersive { overflow:hidden; }
+  body.nan0s-immersive .typebar { display:none; }
+  body.nan0s-immersive.nan0s-keys-open .typebar {
+    display:block; position:fixed; top:max(8px, env(safe-area-inset-top));
+    left:8px; right:8px; margin:0; width:auto; max-width:none; z-index:150;
+    padding:8px; background:#101027; border:1px solid #555589;
+    border-radius:8px; box-shadow:0 4px 24px #000d;
+  }
   .controls { display:flex; gap:10px; align-items:center; flex-wrap:wrap; justify-content:center; margin:12px 0 4px; }
   button { background:#151534; color:var(--fg); border:1px solid #2e2e5e; border-radius:5px;
     padding:7px 14px; font:inherit; cursor:pointer; }
@@ -29,9 +68,68 @@
   .hint { color:var(--dim); font-size:13px; text-align:center; }
   .hint b { color:var(--fg); }
   .typebar { max-width:640px; margin:8px auto 6px; }
-  .typebar input { width:100%; background:#07070f; color:var(--fg); border:1px solid #2e2e5e;
-    border-radius:5px; padding:11px 12px; font:inherit; }
-  .typebar input:focus { outline:none; border-color:var(--cyan); }
+  .typebar-row { display:flex; gap:8px; }
+  .typebar textarea { flex:1; min-width:0; background:#07070f; color:var(--fg); border:1px solid #2e2e5e;
+    border-radius:5px; padding:11px 12px; font:inherit; resize:vertical; }
+  .typebar textarea:focus { outline:none; border-color:var(--cyan); }
+  .typebar-row button { white-space:nowrap; }
+  #enter-mode[aria-checked="true"] { border-color:var(--cyan); color:var(--cyan); }
+  #enter-mode { font-size:12px; padding:6px; }
+  /* In the phone keyboard overlay, F-keys must remain reachable while Gboard
+     is open. A horizontal rail avoids hiding the guest behind twelve rows. */
+  .function-keys-label { margin:4px 0 0; text-align:left; font-size:11px; color:var(--dim); }
+  .function-keys { display:flex; gap:5px; overflow-x:auto; overscroll-behavior-x:contain;
+    padding:4px 0 7px; scrollbar-width:thin; -webkit-overflow-scrolling:touch; }
+  .function-keys button { flex:0 0 auto; min-width:45px; min-height:38px; padding:6px 8px;
+    font-size:14px; font-weight:600; touch-action:manipulation; }
+  /*
+   * Android browsers scroll a focused INPUT toward the center of the reduced
+   * viewport, obscuring the emulated display. Pin the existing IME text field
+   * on phones so the page does not chase an input below the NaN/0S screen.
+   * The guest PS/2 input bridge and desktop layout remain unchanged.
+   */
+  @media (pointer: coarse), (max-width: 760px) {
+    header { padding-top: 80px; }
+    .typebar {
+      position: fixed;
+      top: max(6px, env(safe-area-inset-top));
+      left: 6px;
+      right: 6px;
+      z-index: 50;
+      width: auto;
+      max-width: none;
+      margin: 0;
+      padding: 6px 8px;
+      background: #101027;
+      border: 1px solid #343464;
+      border-radius: 8px;
+      box-shadow: 0 2px 12px #0009;
+    }
+    .typebar > label, .typebar > .hint { display: none; }
+    .function-keys-label { margin-top:5px; }
+    .typebar textarea { font-size: 16px; padding: 8px 10px; min-height: 40px; }
+    .typebar-row button { padding: 7px 10px; }
+    /*
+     * Never squeeze the native 1024x768 guest into the phone's width.
+     * Display the native screen. One finger controls the guest; two fingers zoom
+     * only the guest viewport, never the entire HTML page.
+     */
+    #screen_container {
+      width: 100%;
+      max-width: 100%;
+      height: clamp(260px, 62svh, 660px);
+      overflow: auto;
+      overscroll-behavior: contain;
+      /* Guest touchscreen owns single-finger input; two fingers pan/zoom. */
+      touch-action: none;
+      -webkit-overflow-scrolling: touch;
+    }
+    #screen_container canvas {
+      max-width: none !important;
+      height: auto;
+    }
+    #screen_container > div { width: max-content; }
+  }
   .pad { display:flex; flex-wrap:wrap; gap:6px; justify-content:center; max-width:760px; margin:0 auto 8px; }
   .pad button { min-width:44px; padding:10px 0; font-size:15px; }
   details { margin-top:16px; color:var(--dim); }
@@ -51,19 +149,59 @@
     no host OS underneath.</p>
 </header>
 <main>
-  <div id="status">loading v86…</div>
-  <div id="screen_container" tabindex="0">
-    <div style="white-space:pre;font:14px/14px monospace;color:#d8d8e8"></div>
-    <canvas style="display:none"></canvas>
+  <div id="status">loading NaN/0S full-system boot…</div>
+  <div id="fullscreen-stage">
+    <div id="screen_container" tabindex="0">
+      <div style="white-space:pre;font:14px/14px monospace;color:#d8d8e8"></div>
+      <canvas style="display:none"></canvas>
+    </div>
+    <div id="fullscreen-exitbar" role="toolbar" aria-label="Full-screen NaN/0S controls">
+      <div class="fullscreen-tools">
+        <button type="button" id="fullscreen-keyboard" aria-pressed="false" title="Show or hide the guest keyboard and F0–F12 keys">Keys</button>
+        <button type="button" id="fullscreen-zoom-out" aria-label="Zoom out NaN/0S">−</button>
+        <button type="button" id="fullscreen-zoom-fit" aria-label="Fit NaN/0S display">Fit</button>
+        <button type="button" id="fullscreen-zoom-in" aria-label="Zoom in NaN/0S">+</button>
+      </div>
+      <button type="button" id="exit-fullscreen" aria-label="Exit NaN/0S full-screen display">Exit full screen</button>
+    </div>
+    <div class="typebar">
+      <button type="button" id="exit-fullscreen-keyboard" aria-label="Exit full-screen NaN/0S while keyboard is open">Exit full screen</button>
+    <label for="type" class="hint">Phone keyboard → NaN/0S PS/2 keyboard</label>
+    <div class="typebar-row">
+      <textarea id="type" rows="1" inputmode="text" enterkeyhint="enter" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"
+             placeholder="Tap to type into NaN/0S" aria-describedby="type-hint" disabled></textarea>
+      <button type="button" id="clear-type" disabled title="Clear only this phone input field">Clear</button>
+      <button type="button" id="enter-mode" role="switch" aria-checked="true" title="Enter executes commands; switch off for literal newlines" disabled>Exec ON</button>
+    </div>
+    <div class="function-keys-label">Guest F0–F12 · swipe the keys sideways for F8–F12 →</div>
+    <div class="function-keys" id="function-keys" role="group" aria-label="Guest NaN/0S function keys F0 through F12">
+      <button type="button" data-code="84" title="NaN/0S F0 opens raw-NaN16 terminal help" aria-label="NaN/0S F0 opens raw-NaN16 terminal help" disabled>F0</button>
+      <button type="button" data-code="59" title="PS/2 function key F1" aria-label="PS/2 function key F1" disabled>F1</button>
+      <button type="button" data-code="60" title="PS/2 function key F2" aria-label="PS/2 function key F2" disabled>F2</button>
+      <button type="button" data-code="61" title="PS/2 function key F3" aria-label="PS/2 function key F3" disabled>F3</button>
+      <button type="button" data-code="62" title="PS/2 function key F4" aria-label="PS/2 function key F4" disabled>F4</button>
+      <button type="button" data-code="63" title="PS/2 function key F5" aria-label="PS/2 function key F5" disabled>F5</button>
+      <button type="button" data-code="64" title="PS/2 function key F6" aria-label="PS/2 function key F6" disabled>F6</button>
+      <button type="button" data-code="65" title="PS/2 function key F7" aria-label="PS/2 function key F7" disabled>F7</button>
+      <button type="button" data-code="66" title="PS/2 function key F8" aria-label="PS/2 function key F8" disabled>F8</button>
+      <button type="button" data-code="67" title="PS/2 function key F9" aria-label="PS/2 function key F9" disabled>F9</button>
+      <button type="button" data-code="68" title="PS/2 function key F10" aria-label="PS/2 function key F10" disabled>F10</button>
+      <button type="button" data-code="87" title="PS/2 function key F11" aria-label="PS/2 function key F11" disabled>F11</button>
+      <button type="button" data-code="88" title="PS/2 function key F12" aria-label="PS/2 function key F12" disabled>F12</button>
+    </div>
+    <p id="type-hint" class="hint">Text is sent into the guest as you type. Exec ON: Enter submits. Exec OFF: Enter inserts a literal source newline. Clear resets only this field.</p>
+  </div>
   </div>
   <div class="controls">
     <button id="restart" disabled>Restart</button>
-    <button id="fullscreen" disabled>Full screen</button>
-    <span class="hint">boots to the desktop with one terminal · <b>q</b> quits the GUI → museum menu (<b>1–8</b>, <b>ESC</b> back) · tap the keys below or the text bar to type</span>
-  </div>
-  <div class="typebar">
-    <input id="type" type="text" inputmode="text" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"
-           placeholder="tap here for the phone keyboard — typing goes to the guest" disabled>
+    <button id="fullscreen" type="button" disabled aria-label="Enter NaN/0S full-screen display">Full screen</button>
+    <button id="zoom-out" type="button" disabled aria-label="Zoom out guest screen">−</button>
+    <span id="zoom-level" class="hint">100%</span>
+    <button id="zoom-in" type="button" disabled aria-label="Zoom in guest screen">+</button>
+    <button id="zoom-fit" type="button" disabled>Fit</button>
+    <button id="download-replica" type="button" disabled title="Enabled after build nan0s verifies the full secondary IDE disk">Download rebuilt .img</button>
+    <span class="hint" id="image-fingerprint" aria-live="polite" title="SHA-256 of the exact guest image fetched by this browser">guest disk: loading…</span>
+    <span class="hint"><b>Tap or drag with one finger to control NaN/0S; pinch or move two fingers to zoom/pan.</b> Type <b>build</b> + Enter for command help, or <b>build nan0s</b> + Enter to replicate the entire bootable disk onto an independent IDE slave. The guest verifies every sector, then enables the image download. · boots the complete guest (floppy + primary IDE) to the desktop with one terminal · <b>q</b> quits the GUI → museum menu (<b>1–8</b>, <b>ESC</b> back) · tap the keys below or the text bar to type</span>
   </div>
   <div class="pad" id="pad">
     <button type="button" data-code="1" disabled>Esc</button>
@@ -92,7 +230,7 @@
   </details>
 </main>
 <footer>
-  v86 © copy.sh, BSD-2 · this page boots <code>nan0s.img</code> from the repository
+  v86 © copy.sh, BSD-2 · this page boots the complete <code>nan0s.img</code> with separate floppy and primary IDE drives
   (<a href="https://github.com/shemshallah/nan0s">shemshallah/nan0s</a>) · v86 is fetched from jsDelivr at run time ·
   site: <code>docs/</code> (GitHub Pages, branch <code>main</code> / <code>docs</code>)
 </footer>
@@ -103,9 +241,12 @@
   // Pinned v86 build. BIOS images are not in the npm package; they come from the v86 repo via jsDelivr.
   var V86_CDN = "https://cdn.jsdelivr.net/npm/v86@0.5.473/build/";
   var BIOS_CDN = "https://cdn.jsdelivr.net/gh/copy/v86@master/bios/";
-  // docs/index.html is the GitHub Pages site: Settings -> Pages -> Deploy from a branch,
-  // branch main + folder /docs. nan0s.img sits next to this page; ../build/nan0s.img is
-  // the fallback when serving the repository root locally or on an older deployment.
+  // The live Pages workflow rebuilds the complete guest system and publishes docs/.
+  // Boot like tools/qgate_gui.sh: one source image, two independent virtual disks.
+  // A floppy boot alone is NOT the full GUI path; the ATA loader reads the IDE master.
+  // Always fetch the currently published guest disk. force-cache silently reused
+  // obsolete NaN/0S images on Android even when the HTML and Pages were updated.
+  // Query nonce also bypasses intermediate HTTP caches that ignore Cache-Control.
   var CANDIDATES = ["nan0s.img", "../build/nan0s.img"];
 
   var statusEl = document.getElementById("status");
@@ -113,9 +254,32 @@
   var serialEl = document.getElementById("serial");
   var restartBtn = document.getElementById("restart");
   var fsBtn = document.getElementById("fullscreen");
+  var stageEl = document.getElementById("fullscreen-stage");
+  var exitFsBtn = document.getElementById("exit-fullscreen");
+  var keyboardExitFsBtn = document.getElementById("exit-fullscreen-keyboard");
+  var fsKeysBtn = document.getElementById("fullscreen-keyboard");
+  var fsZoomOutBtn = document.getElementById("fullscreen-zoom-out");
+  var fsZoomFitBtn = document.getElementById("fullscreen-zoom-fit");
+  var fsZoomInBtn = document.getElementById("fullscreen-zoom-in");
+  var zoomOutBtn = document.getElementById("zoom-out");
+  var zoomInBtn = document.getElementById("zoom-in");
+  var zoomFitBtn = document.getElementById("zoom-fit");
+  var replicaBtn = document.getElementById("download-replica");
+  var zoomLevelEl = document.getElementById("zoom-level");
+  var imageFingerprintEl = document.getElementById("image-fingerprint");
+  var isTouchView = typeof window !== "undefined" && !!(window.matchMedia && window.matchMedia("(pointer: coarse), (max-width: 760px)").matches);
+  var guestWidth = 1024;
+  var zoom = isTouchView ? 1.5 : 1;
+  var autoFitPending = isTouchView;
   var padEl = document.getElementById("pad");
+  var functionKeysEl = document.getElementById("function-keys");
   var typeEl = document.getElementById("type");
+  var clearTypeBtn = document.getElementById("clear-type");
+  var enterModeBtn = document.getElementById("enter-mode");
+  var executeEnter = true;
   var emulator = null;
+  var outputDisk = null;
+  var replicaReady = false;
   var serialBuf = "";
   var serialDirty = false;
 
@@ -126,10 +290,164 @@
     else emulator.keyboard_send_scancodes([code, code | 0x80]);
   }
 
+  function updateGuestZoom(next, automatic) {
+    if (!automatic) autoFitPending = false;
+    // Full-screen Fit must be possible even on narrow phone viewports.
+    zoom = Math.max(0.25, Math.min(4, next));
+    zoomLevelEl.textContent = Math.round(zoom * 100) + "%";
+    if (emulator && typeof emulator.screen_set_scale === "function") {
+      emulator.screen_set_scale(zoom, zoom);
+    }
+  }
+
+  function fitGuestScreen() {
+    var available = Math.max(160, screenEl.clientWidth - 24);
+    updateGuestZoom(available / Math.max(320, guestWidth));
+    screenEl.scrollLeft = 0;
+    screenEl.scrollTop = 0;
+  }
+
+  // Two-finger pinch scales the real v86 NaN/0S framebuffer, NOT the webpage.
+  // Anchoring in guest-content coordinates keeps the pixels beneath the fingers
+  // stationary even when the fingers also drag while changing their distance.
+  var pinch = null;
+  var touchContact = null;
+  var touchBlocked = false;
+  // Host I/O only: encode absolute pixel coordinates and contact state in
+  // the guest's reserved virtual touchscreen packet. All hit testing,
+  // cursor drawing, window controls and drag decisions are native NaN16.
+  function guestTouchPacket(touch, buttons) {
+    if (!emulator || !touch || !screenEl.querySelector) return false;
+    var canvas = screenEl.querySelector("canvas");
+    if (!canvas || canvas.width < 1 || canvas.height < 1) return false;
+    var rect = canvas.getBoundingClientRect();
+    if (!(rect.width > 0 && rect.height > 0)) return false;
+    var x = Math.max(0, Math.min(4095, canvas.width - 1,
+      Math.floor((touch.clientX - rect.left) * canvas.width / rect.width)));
+    var y = Math.max(0, Math.min(4095, canvas.height - 1,
+      Math.floor((touch.clientY - rect.top) * canvas.height / rect.height)));
+    var word = (buttons & 7) * 0x1000000 + y * 0x1000 + x;
+    var packet = [0xE0, 0x7F];
+    for (var shift = 24; shift >= 0; shift -= 4) packet.push(0x60 | ((word >>> shift) & 15));
+    emulator.keyboard_send_scancodes(packet);
+    return true;
+  }
+  function consumeTouch(event) {
+    event.stopPropagation();
+    if (event.cancelable !== false) event.preventDefault();
+  }
+  function cancelGuestContact() {
+    if (touchContact && touchContact.down) guestTouchPacket(touchContact.last, 0);
+    touchContact = null;
+  }
+  function pinchGeometry(touches) {
+    var a = touches[0], b = touches[1];
+    var rect = screenEl.getBoundingClientRect();
+    return {
+      x: (a.clientX + b.clientX) / 2 - rect.left - screenEl.clientLeft,
+      y: (a.clientY + b.clientY) / 2 - rect.top - screenEl.clientTop,
+      distance: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY)
+    };
+  }
+  function beginGuestPinch(event) {
+    if (!emulator || !isTouchView || event.touches.length !== 2) return;
+    var g = pinchGeometry(event.touches);
+    if (g.distance < 8) return;
+    pinch = {
+      distance: g.distance,
+      zoom: zoom,
+      anchorX: (screenEl.scrollLeft + g.x) / zoom,
+      anchorY: (screenEl.scrollTop + g.y) / zoom,
+      revision: 0
+    };
+    if (event.cancelable !== false) event.preventDefault();
+    // v86 registers touch handlers on window; do not forward a two-finger
+    // gesture as guest mouse movement.
+    event.stopPropagation();
+  }
+  screenEl.addEventListener("touchstart", function (event) {
+    if (!emulator || !isTouchView) return;
+    if (event.touches.length >= 2) {
+      cancelGuestContact();
+      touchBlocked = true;
+      if (event.touches.length === 2) beginGuestPinch(event);
+      consumeTouch(event);
+      return;
+    }
+    if (event.touches.length !== 1 || touchBlocked) return;
+    var touch = event.touches[0];
+    if (!guestTouchPacket(touch, 0)) return;
+    touchContact = {start:touch, last:touch, down:false};
+    consumeTouch(event);
+  }, { passive: false });
+  screenEl.addEventListener("touchmove", function (event) {
+    if (!emulator || !isTouchView) return;
+    if (event.touches.length === 1) {
+      consumeTouch(event);
+      if (touchBlocked || !touchContact) return;
+      var touch = event.touches[0];
+      var moved = Math.hypot(touch.clientX - touchContact.start.clientX,
+        touch.clientY - touchContact.start.clientY);
+      if (!touchContact.down && moved >= 7) {
+        guestTouchPacket(touchContact.start, 1);
+        touchContact.down = true;
+      }
+      touchContact.last = touch;
+      guestTouchPacket(touch, touchContact.down ? 1 : 0);
+      return;
+    }
+    if (event.touches.length !== 2) return;
+    event.stopPropagation();
+    if (!pinch) beginGuestPinch(event);
+    if (!pinch) return;
+    if (event.cancelable !== false) event.preventDefault();
+    var g = pinchGeometry(event.touches);
+    updateGuestZoom(pinch.zoom * g.distance / pinch.distance);
+    var left = Math.max(0, pinch.anchorX * zoom - g.x);
+    var top = Math.max(0, pinch.anchorY * zoom - g.y);
+    screenEl.scrollLeft = left;
+    screenEl.scrollTop = top;
+    // v86 may update the canvas CSS dimensions after layout; reapply only
+    // the newest gesture to avoid stale animation frames jumping the viewport.
+    if (typeof requestAnimationFrame === "function") {
+      var gesture = pinch;
+      var revision = ++gesture.revision;
+      requestAnimationFrame(function () {
+        if (pinch === gesture && pinch.revision === revision) {
+          screenEl.scrollLeft = left;
+          screenEl.scrollTop = top;
+        }
+      });
+    }
+  }, { passive: false });
+  screenEl.addEventListener("touchend", function (event) {
+    if (!emulator || !isTouchView) return;
+    consumeTouch(event);
+    if (event.touches.length !== 2) pinch = null;
+    if (event.touches.length !== 0) return;
+    if (!touchBlocked && touchContact) {
+      var touch = event.changedTouches && event.changedTouches[0] || touchContact.last;
+      if (!touchContact.down) guestTouchPacket(touch, 1);
+      guestTouchPacket(touch, 0);
+    }
+    touchContact = null;
+    touchBlocked = false;
+  }, { passive: false });
+  screenEl.addEventListener("touchcancel", function (event) {
+    consumeTouch(event);
+    cancelGuestContact();
+    pinch = null;
+    touchBlocked = false;
+  }, { passive: false });
+
   function setInputEnabled(on) {
     typeEl.disabled = !on;
+    clearTypeBtn.disabled = !on;
+    enterModeBtn.disabled = !on;
     var keys = padEl.querySelectorAll("button");
     for (var i = 0; i < keys.length; i++) keys[i].disabled = !on;
+    var fn = functionKeysEl.querySelectorAll("button");
+    for (var j = 0; j < fn.length; j++) fn[j].disabled = !on;
   }
 
   function status(text, isError) {
@@ -150,36 +468,117 @@
         return Promise.reject(new Error("floppy image not found (tried " + CANDIDATES.join(", ") + ")"));
       }
       var url = CANDIDATES[i++];
-      status("fetching " + url + " …");
-      return fetch(url, { cache: "force-cache" }).then(function (r) {
+      var freshUrl = url + (url.indexOf("?") < 0 ? "?" : "&") + "guest=" + Date.now();
+      status("fetching fresh NaN/0S guest image: " + url + " …");
+      return fetch(freshUrl, { cache: "no-store" }).then(function (r) {
         if (!r.ok) throw new Error(url + ": HTTP " + r.status);
-        return r.arrayBuffer();
+        return r.arrayBuffer().then(function (data) {
+          var bytes = new Uint8Array(data);
+          if (bytes.length < 1474560 || bytes[510] !== 0x55 || bytes[511] !== 0xAA) {
+            throw new Error(url + ": invalid or incomplete NaN/0S boot image");
+          }
+          // Fingerprint the exact disk bytes *before* v86 can modify the buffer.
+          // This makes a stale cache or wrong image identifiable on a phone.
+          if (typeof crypto !== "undefined" && crypto.subtle && crypto.subtle.digest) {
+            imageFingerprintEl.textContent = "guest disk: verifying SHA-256…";
+            return crypto.subtle.digest("SHA-256", data).then(function (digest) {
+              var hex = Array.from(new Uint8Array(digest)).map(function (b) {
+                return b.toString(16).padStart(2, "0");
+              }).join("");
+              imageFingerprintEl.textContent = "guest SHA-256: " + hex.slice(0, 16);
+              imageFingerprintEl.title = "Full NaN/0S image SHA-256: " + hex;
+              return data;
+            }, function () {
+              imageFingerprintEl.textContent = "guest disk: " + bytes.length + " bytes (SHA-256 unavailable)";
+              return data;
+            });
+          }
+          imageFingerprintEl.textContent = "guest disk: " + bytes.length + " bytes (SHA-256 unavailable)";
+          return data;
+        });
       }).catch(attempt);
     }
     return attempt();
   }
 
+  var bootBannerSeen = false;
   function boot(image) {
-    status("starting v86 …");
+    status("starting v86 with source IDE master and blank independent build output …");
+    replicaReady = false;
+    replicaBtn.disabled = true;
+    // Only the guest NaN16 ATA driver writes this destination buffer.
+    // Never expose the original source image as the build target.
+    outputDisk = new ArrayBuffer(image.byteLength);
+    // The IDE disk must have an independent backing buffer: the guest can write to it
+    // without corrupting the boot floppy. Both contain the exact same built system.
+    var ideImage = image.slice(0);
     emulator = new V86({
       wasm_path: V86_CDN + "v86.wasm",
       bios: { url: BIOS_CDN + "seabios.bin" },
       vga_bios: { url: BIOS_CDN + "vgabios.bin" },
+      boot_order: 0x321, // floppy, hard disk, CD-ROM (matches QEMU -boot order=a)
       fda: { buffer: image },
-      memory_size: 32 * 1024 * 1024,
+      hda: { buffer: ideImage }, // immutable logical source (guest reads)
+      hdb: { buffer: outputDisk }, // blank IDE slave: guest writes full bootable output
+      memory_size: 128 * 1024 * 1024,
       vga_memory_size: 2 * 1024 * 1024,
       autostart: true,
       screen_container: screenEl
     });
     emulator.add_listener("emulator-ready", function () {
-      status("running — tap a key below, or the text bar to use the phone keyboard");
+      status("v86 ready — booting complete NaN/0S from floppy + IDE…");
       restartBtn.disabled = false;
       fsBtn.disabled = false;
+      zoomOutBtn.disabled = false;
+      zoomInBtn.disabled = false;
+      zoomFitBtn.disabled = false;
+      updateGuestZoom(zoom, true);
       setInputEnabled(true);
     });
+    emulator.add_listener("screen-set-size", function (size) {
+      // When the guest switches from SeaBIOS text to 1024x768 graphics, keep
+      // the user's zoom rather than allowing the canvas to shrink to fit.
+      if (size && size[0] > 0) guestWidth = size[0];
+      if (autoFitPending && size && size[0] >= 640 && size[1] >= 480) {
+        fitGuestScreen();
+      } else updateGuestZoom(zoom, true);
+    });
+    // Some v86 builds do not expose the screen-size bus event to listeners.
+    // Observe the actual framebuffer size as a fallback, once per boot.
+    if (typeof MutationObserver !== "undefined" && screenEl.querySelector) {
+      var displayCanvas = screenEl.querySelector("canvas");
+      if (displayCanvas) {
+        var fitNative = function () {
+          if (!autoFitPending || displayCanvas.width < 640 || displayCanvas.height < 480 ||
+              displayCanvas.getBoundingClientRect().width <= 0) return;
+          guestWidth = displayCanvas.width;
+          fitGuestScreen();
+          sizeObserver.disconnect();
+        };
+        var sizeObserver = new MutationObserver(fitNative);
+        sizeObserver.observe(displayCanvas, {attributes:true, attributeFilter:["width","height","style"]});
+        fitNative();
+      }
+    }
     emulator.add_listener("serial0-output-byte", function (b) {
       serialBuf += String.fromCharCode(b);
       serialDirty = true;
+      // A guest-owned verification marker is emitted only after all 2880
+      // sectors have been written and read back on the secondary IDE drive.
+      if (!replicaReady && serialBuf.indexOf("NANBUILD OK\n") !== -1) {
+        var bytes = new Uint8Array(outputDisk);
+        if (bytes.length === 1474560 && bytes[510] === 0x55 && bytes[511] === 0xAA) {
+          replicaReady = true;
+          replicaBtn.disabled = false;
+          status("NaN/0S verified a complete 1.44 MiB bootable replica. Download rebuilt .img.");
+        } else {
+          status("Guest reported success but output disk image is incomplete; download disabled.", true);
+        }
+      }
+      if (serialBuf.indexOf("NaN/0S") !== -1 && !bootBannerSeen) {
+        bootBannerSeen = true;
+        status("NaN/0S boot banner detected — full-system IDE disk attached");
+      }
     });
     emulator.add_listener("download-error", function (e) {
       status("download failed: " + (e && e.file_name ? e.file_name : "component"), true);
@@ -189,8 +588,106 @@
   restartBtn.addEventListener("click", function () {
     if (emulator) { emulator.restart(); screenEl.focus(); }
   });
-  fsBtn.addEventListener("click", function () {
-    if (emulator) emulator.screen_go_fullscreen();
+  // Native v86.screen_go_fullscreen() only targets the canvas, leaving our
+  // exit control outside the fullscreen element. Request fullscreen on the
+  // entire stage instead, and ALWAYS enter a CSS immersive fallback first:
+  // Android browsers sometimes reject Fullscreen API requests outright.
+  var nativeFsActive = false;
+  var fullscreenSerial = 0;
+  function enterFullscreen() {
+    var serial = ++fullscreenSerial;
+    if (!emulator) return;
+    stageEl.classList.add("immersive");
+    document.body.classList.add("nan0s-immersive");
+    document.body.classList.remove("nan0s-keys-open");
+    fsKeysBtn.setAttribute("aria-pressed", "false");
+    fsBtn.setAttribute("aria-expanded", "true");
+    updateGuestZoom(zoom);
+    if (typeof stageEl.requestFullscreen === "function") {
+      try {
+        var promise = stageEl.requestFullscreen();
+        if (promise && typeof promise.then === "function") {
+          promise.then(function () {
+            if (serial === fullscreenSerial && stageEl.classList.contains("immersive")) nativeFsActive = true;
+          }, function () {
+            // CSS fallback remains interactive if the native API is denied.
+            if (serial === fullscreenSerial) nativeFsActive = false;
+          });
+        }
+      } catch (ignored) {
+        nativeFsActive = false;
+      }
+    }
+  }
+  function exitFullscreen() {
+    ++fullscreenSerial;
+    stageEl.classList.remove("immersive");
+    document.body.classList.remove("nan0s-immersive");
+    document.body.classList.remove("nan0s-keys-open");
+    fsKeysBtn.setAttribute("aria-pressed", "false");
+    fsBtn.setAttribute("aria-expanded", "false");
+    nativeFsActive = false;
+    if (document.fullscreenElement === stageEl && typeof document.exitFullscreen === "function") {
+      try {
+        var promise = document.exitFullscreen();
+        if (promise && typeof promise.catch === "function") promise.catch(function () {});
+      } catch (ignored) {}
+    }
+    updateGuestZoom(zoom);
+  }
+  fsBtn.addEventListener("click", enterFullscreen);
+  exitFsBtn.addEventListener("click", exitFullscreen);
+  keyboardExitFsBtn.addEventListener("click", exitFullscreen);
+  // v86's global mouse adapter should never intercept these host controls.
+  var fsBar = document.getElementById("fullscreen-exitbar");
+  fsBar.addEventListener("touchstart", function (e) { e.stopPropagation(); }, { passive:true });
+  fsBar.addEventListener("touchmove", function (e) { e.stopPropagation(); }, { passive:true });
+  fsBar.addEventListener("mousedown", function (e) { e.stopPropagation(); });
+  // Host controls must not leak touch presses/releases to v86's mouse adapter.
+  [typeEl, clearTypeBtn, enterModeBtn, functionKeysEl, padEl, fsBar, restartBtn, fsBtn,
+   zoomOutBtn, zoomFitBtn, zoomInBtn, replicaBtn, keyboardExitFsBtn].forEach(function (el) {
+    ["touchstart", "touchmove", "touchend", "touchcancel", "mousedown", "mouseup"].forEach(function (name) {
+      el.addEventListener(name, function (e) { e.stopPropagation(); }, { passive:true });
+    });
+  });
+  fsKeysBtn.addEventListener("click", function () {
+    var open = !document.body.classList.contains("nan0s-keys-open");
+    document.body.classList.toggle("nan0s-keys-open", open);
+    fsKeysBtn.setAttribute("aria-pressed", open ? "true" : "false");
+    if (open) typeEl.focus({ preventScroll:true });
+    else if (typeof typeEl.blur === "function") typeEl.blur();
+  });
+  fsZoomOutBtn.addEventListener("click", function () { updateGuestZoom(zoom / 1.25); });
+  fsZoomFitBtn.addEventListener("click", fitGuestScreen);
+  fsZoomInBtn.addEventListener("click", function () { updateGuestZoom(zoom * 1.25); });
+  if (typeof document.addEventListener === "function") {
+    document.addEventListener("fullscreenchange", function () {
+      // Chrome's system back/exit gesture should close our CSS overlay too.
+      if (nativeFsActive && document.fullscreenElement !== stageEl) exitFullscreen();
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && stageEl.classList.contains("immersive")) exitFullscreen();
+    });
+  }
+
+  zoomOutBtn.addEventListener("click", function () { updateGuestZoom(zoom / 1.25); });
+  zoomInBtn.addEventListener("click", function () { updateGuestZoom(zoom * 1.25); });
+  zoomFitBtn.addEventListener("click", fitGuestScreen);
+  replicaBtn.addEventListener("click", function () {
+    if (!replicaReady || !outputDisk) return;
+    var bytes = new Uint8Array(outputDisk);
+    if (bytes.length !== 1474560 || bytes[510] !== 0x55 || bytes[511] !== 0xAA) {
+      status("Build output failed boot-signature validation; download blocked.", true);
+      return;
+    }
+    var url = URL.createObjectURL(new Blob([outputDisk], { type: "application/octet-stream" }));
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = "nan0s-replica.img";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
   });
 
   // On-screen keypad: every button is a make+break PS/2 scancode pair. Works on touch
@@ -200,30 +697,162 @@
     if (!b || b.tagName !== "BUTTON" || b.disabled) return;
     var code = parseInt(b.getAttribute("data-code"), 10);
     if (isNaN(code)) return;
-    sendKey(code, b.getAttribute("data-ext") === "1");
+    if (code === 0x1c) phoneEnter();
+    else sendKey(code, b.getAttribute("data-ext") === "1");
   });
 
-  // Text bar: focusing it raises the phone's IME. While it is focused the emulator's own
-  // document-level keyboard capture is disabled, so typed text is forwarded exactly once
-  // (printable chars via keyboard_send_text; Backspace/Enter/Escape/Tab as scancodes).
-  var SPECIAL = { Backspace: 0x0E, Enter: 0x1C, Escape: 0x01, Tab: 0x0F };
-  typeEl.addEventListener("focus", function () {
-    if (emulator) emulator.keyboard_set_enabled(false);
+  // This rail is a virtual PS/2 keyboard, not a browser-level hotkey handler.
+  // Avoid stealing focus from the Android IME when a function button is tapped.
+  functionKeysEl.addEventListener("pointerdown", function (e) {
+    if (e.target && e.target.tagName === "BUTTON" && e.cancelable !== false) e.preventDefault();
+  }, { passive: false });
+  functionKeysEl.addEventListener("click", function (e) {
+    var b = e.target;
+    if (!b || b.tagName !== "BUTTON" || b.disabled) return;
+    var code = parseInt(b.getAttribute("data-code"), 10);
+    if (isNaN(code)) return;
+    sendKey(code, false);
   });
-  typeEl.addEventListener("blur", function () {
-    if (emulator) emulator.keyboard_set_enabled(true);
+
+  // Android/Gboard input bridge. keyboard_set_enabled(false) disables v86's PS/2
+  // keyboard delivery, including injected text, so NEVER disable it while typing.
+  // Instead stop browser key events at this INPUT and inject real Set-1 scan codes.
+  // Keep an edit mirror: Android IMEs repeatedly replace composing text rather than
+  // emitting one keypress per letter. Reconcile changes with backspace + new strokes.
+  // Do not clear INPUT.value on every event; that breaks IME composition.
+  var CHAR_KEYS = {
+    a:0x1e,b:0x30,c:0x2e,d:0x20,e:0x12,f:0x21,g:0x22,h:0x23,i:0x17,
+    j:0x24,k:0x25,l:0x26,m:0x32,n:0x31,o:0x18,p:0x19,q:0x10,r:0x13,
+    s:0x1f,t:0x14,u:0x16,v:0x2f,w:0x11,x:0x2d,y:0x15,z:0x2c,
+    "1":0x02,"2":0x03,"3":0x04,"4":0x05,"5":0x06,"6":0x07,"7":0x08,
+    "8":0x09,"9":0x0a,"0":0x0b,"-":0x0c,"=":0x0d,"[":0x1a,"]":0x1b,
+    "\\":0x2b,";":0x27,"'":0x28,"`":0x29,",":0x33,".":0x34,"/":0x35,
+    " ":0x39
+  };
+  var SHIFTED_KEYS = {
+    "!":"1","@":"2","#":"3","$":"4","%":"5","^":"6","&":"7","*":"8",
+    "(":"9",")":"0","_":"-","+":"=","{":"[","}":"]","|":"\\",
+    ":":";","\"":"'","~":"`","<":",",">":".","?":"/"
+  };
+  var SPECIAL = { Enter:0x1c, Escape:0x01, Tab:0x0f, ArrowUp:0x48,
+    ArrowDown:0x50, ArrowLeft:0x4b, ArrowRight:0x4d,
+    F0:0x54, F1:0x3b, F2:0x3c, F3:0x3d, F4:0x3e, F5:0x3f,
+    F6:0x40, F7:0x41, F8:0x42, F9:0x43, F10:0x44, F11:0x57, F12:0x58 };
+  var mirrored = "";
+  var phoneQueue = [], phoneBusy = false, phoneEnterKeydown = false;
+  function queuePhone(codes) {
+    if (!emulator || !codes.length) return;
+    phoneQueue.push(...codes);
+    if (phoneBusy) return;
+    drainPhone();
+  }
+  function drainPhone() {
+    if (!emulator || !phoneQueue.length) { phoneBusy = false; return; }
+    // Do not split Shift make/key/break groups or E0 sequences.
+    var count = 0;
+    while (count < phoneQueue.length && count < 12) {
+      var sc = phoneQueue[count];
+      count += sc === 0x2a || sc === 0xe0 ? 4 : 2;
+    }
+    emulator.keyboard_send_scancodes(phoneQueue.splice(0,count));
+    phoneBusy = phoneQueue.length > 0;
+    if (phoneBusy) setTimeout(drainPhone, 35);
+  }
+
+  function appendStroke(codes, key, shifted) {
+    if (shifted) codes.push(0x2a); // left Shift press
+    codes.push(key, key | 0x80);
+    if (shifted) codes.push(0xaa); // left Shift release
+  }
+
+  function encodeChar(c, codes) {
+    if (c === "\n" || c === "\r") { appendStroke(codes, 0x1c, true); return true; }
+    if (c === "\t") { for (var n=0;n<4;n++) appendStroke(codes, 0x39, false); return true; }
+    var lower = c.toLowerCase(), shifted = c !== lower;
+    var key = CHAR_KEYS[lower];
+    if (key === undefined && SHIFTED_KEYS[c]) {
+      key = CHAR_KEYS[SHIFTED_KEYS[c]];
+      shifted = true;
+    }
+    if (key === undefined) return false;
+    appendStroke(codes, key, shifted);
+    return true;
+  }
+
+  function syncPhoneInput() {
+    var current = typeEl.value.replace(/\r\n?/g,"\n");
+    if (!emulator) { mirrored = current; return; }
+    var oldChars = Array.from(mirrored), newChars = Array.from(current);
+    var prefix = 0;
+    while (prefix < oldChars.length && prefix < newChars.length &&
+           oldChars[prefix] === newChars[prefix]) prefix++;
+    var codes = [];
+    for (var i = prefix; i < oldChars.length; i++) {
+      // Only undo characters that had a representable guest key.
+      var discarded = [];
+      if (encodeChar(oldChars[i], discarded)) appendStroke(codes, 0x0e, false);
+    }
+    var skipped = false;
+    for (var j = prefix; j < newChars.length; j++) {
+      if (!encodeChar(newChars[j], codes)) skipped = true;
+    }
+    mirrored = current;
+    if (codes.length) queuePhone(codes);
+    if (current.indexOf("\n") !== -1) { mirrored = current.slice(current.lastIndexOf("\n")+1); typeEl.value = mirrored; }
+    if (skipped) status("This guest uses US/ASCII keys; unsupported characters were skipped.", true);
+  }
+
+  function clearPhoneInput() {
+    // Reset only the IME mirror. Never erase text in the running guest.
+    typeEl.value = "";
+    mirrored = "";
+  }
+
+  function phoneEnter() {
+    syncPhoneInput();
+    var codes=[]; appendStroke(codes,0x1c,!executeEnter); queuePhone(codes);
+    // Submitted guest lines must never be backspaced by a later IME edit.
+    clearPhoneInput();
+  }
+  enterModeBtn.addEventListener("click", function () {
+    executeEnter = !executeEnter;
+    enterModeBtn.setAttribute("aria-checked", String(executeEnter));
+    enterModeBtn.textContent = executeEnter ? "Exec ON" : "Exec OFF";
+    typeEl.focus({preventScroll:true});
   });
   typeEl.addEventListener("keydown", function (e) {
+    e.stopPropagation(); // let v86 handle the guest, not the browser keyboard event
+    if (e.isComposing || e.keyCode === 229) return;
+    if (e.key === "Enter") {
+      e.preventDefault(); phoneEnterKeydown = true; phoneEnter(); return;
+    }
     var code = SPECIAL[e.key];
-    if (code === undefined) return;
-    e.preventDefault();
-    sendKey(code, false);
-    typeEl.value = "";
+    if (code !== undefined) {
+      e.preventDefault();
+      queuePhone(e.key.indexOf("Arrow") === 0 ? [0xe0,code,0xe0,code|0x80] : [code,code|0x80]);
+    } else if (e.key === "Backspace" && typeEl.value.length === 0) {
+      e.preventDefault();
+      queuePhone([0x0e,0x8e]);
+    }
+    // Other Backspace events mutate the input and are handled by the diff.
   });
-  typeEl.addEventListener("input", function () {
-    var v = typeEl.value;
-    if (v && emulator) emulator.keyboard_send_text(v);
-    typeEl.value = "";
+  typeEl.addEventListener("keyup", function (e) { e.stopPropagation(); if(e.key==="Enter") phoneEnterKeydown=false; });
+  typeEl.addEventListener("keypress", function (e) { e.stopPropagation(); });
+  typeEl.addEventListener("beforeinput", function (e) {
+    if (e.inputType === "insertLineBreak" || e.inputType === "insertParagraph") {
+      e.preventDefault();
+      if (!phoneEnterKeydown) phoneEnter();
+      phoneEnterKeydown=false;
+    } else if (e.inputType === "deleteContentBackward" && typeEl.value.length === 0) {
+      e.preventDefault();
+      queuePhone([0x0e,0x8e]);
+    }
+  });
+  typeEl.addEventListener("input", syncPhoneInput);
+  typeEl.addEventListener("compositionend", syncPhoneInput);
+  clearTypeBtn.addEventListener("click", function () {
+    clearPhoneInput();
+    typeEl.focus({ preventScroll: true });
   });
 
   fetchImage().then(function (image) {

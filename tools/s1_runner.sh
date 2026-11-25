@@ -2,6 +2,7 @@
 # tools/s1_runner.sh - x86_64 bare-metal S1 runner with the gate CLI.
 #
 #   --img FILE [--mem MB] [--steps N] [--serial]
+#   [--keys TEXT] [--guest-input FILE]
 #   [--guest-script PATH] [--guest-stdout FILE] [--guest-stderr FILE]
 #   [--peek 'ADDR[:LEN],...']
 #
@@ -16,16 +17,18 @@ export LC_ALL=C
 ROOT=$(pwd)
 
 usage() {
-  echo "usage: $0 --img FILE [--mem MB] [--steps N] [--serial] [--guest-script PATH] [--guest-stdout FILE] [--guest-stderr FILE] [--peek 'ADDR[:LEN][,ADDR[:LEN]...]']" >&2
+  echo "usage: $0 --img FILE [--mem MB] [--steps N] [--serial] [--keys TEXT] [--guest-input FILE] [--guest-script PATH] [--guest-stdout FILE] [--guest-stderr FILE] [--peek 'ADDR[:LEN][,ADDR[:LEN]...]']" >&2
   exit 2
 }
-IMG=""; MEM_MB=128; STEPS=50000000; SERIAL=0; GOUT=""; GERR=""; PEEK=""; GSCRIPT=""
+IMG=""; MEM_MB=128; STEPS=50000000; SERIAL=0; GOUT=""; GERR=""; PEEK=""; GSCRIPT=""; KEYS=""; GINPUT=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --img) [ "$#" -ge 2 ] || usage; IMG=$2; shift 2 ;;
     --mem) [ "$#" -ge 2 ] || usage; MEM_MB=$2; shift 2 ;;
     --steps) [ "$#" -ge 2 ] || usage; STEPS=$2; shift 2 ;;
     --serial) SERIAL=1; shift ;;
+    --keys) [ "$#" -ge 2 ] || usage; KEYS=$2; shift 2 ;;
+    --guest-input) [ "$#" -ge 2 ] || usage; GINPUT=$2; shift 2 ;;
     --guest-script) [ "$#" -ge 2 ] || usage; GSCRIPT=$2; shift 2 ;;
     --guest-stdout) [ "$#" -ge 2 ] || usage; GOUT=$2; shift 2 ;;
     --guest-stderr) [ "$#" -ge 2 ] || usage; GERR=$2; shift 2 ;;
@@ -41,9 +44,17 @@ case "$STEPS" in *[!0-9]*|"") echo "s1_runner: bad --steps" >&2; exit 2 ;; esac
 [ "$STEPS" -eq 0 ] && STEPS=50000000
 QEMU_BIN=${QEMU:-qemu-system-x86_64}
 command -v "$QEMU_BIN" >/dev/null 2>&1 || { echo "s1_runner: no $QEMU_BIN" >&2; exit 1; }
+QEMU_ACCEL=""
+if [ "${S1_QEMU_ACCEL:-}" = kvm ] && [ -e /dev/kvm ]; then
+  QEMU_ACCEL="-enable-kvm -cpu host"
+fi
 if [ -n "${S1_QEMU_MEM:-}" ]; then QMEM=$S1_QEMU_MEM
-elif [ "$MEM_MB" -le 128 ]; then QMEM=256
-else QMEM=$((MEM_MB * 2)); fi
+else
+    # --mem is MiB of C payload; guest words are 8 bytes and hold four C
+    # bytes, so the machine needs twice that plus the kernel/BIOS/stack.
+    QMEM=$((MEM_MB * 2 + 128))
+    [ "$QMEM" -lt 256 ] && QMEM=256
+fi
 
 T="${TMPDIR:-/tmp}/s1_runner.$$"; mkdir -p "$T"; trap 'if [ "${S1_KEEP:-0}" = 1 ]; then echo "s1_runner: kept $T" >&2; else rm -rf "$T"; fi' EXIT INT TERM
 
@@ -79,6 +90,51 @@ BYTES=$(wc -c < "$T/guest.bin")
 GWORDS=$((BYTES / 8))
 [ "$GWORDS" -le "$WORDS" ] || { echo "s1_runner: image $GWORDS words > --mem capacity $WORDS" >&2; exit 1; }
 [ "$GWORDS" -le "$SAFE" ] || { echo "s1_runner: image exceeds QEMU RAM (raise S1_QEMU_MEM)" >&2; exit 1; }
+
+# Deterministic guest input.  --guest-input is copied byte-for-byte;
+# --keys accepts C-style escapes (\n, \r, \t, \\, \0, \xNN).
+if [ -n "$GINPUT" ]; then
+  [ -f "$GINPUT" ] || { echo "s1_runner: no such input file: $GINPUT" >&2; exit 1; }
+  cp "$GINPUT" "$T/keys.bin"
+else
+  python3 - "$KEYS" "$T/keys.bin" <<'PY'
+import sys
+s = sys.argv[1]
+out = bytearray()
+i = 0
+while i < len(s):
+    c = s[i]
+    if c == '\\' and i + 1 < len(s):
+        e = s[i + 1]
+        if e == 'n': out.append(10); i += 2; continue
+        if e == 'r': out.append(13); i += 2; continue
+        if e == 't': out.append(9); i += 2; continue
+        if e == '0': out.append(0); i += 2; continue
+        if e == '\\': out.append(92); i += 2; continue
+        if e == 'x' and i + 4 <= len(s):
+            try:
+                out.append(int(s[i + 2:i + 4], 16)); i += 4; continue
+            except ValueError:
+                pass
+    out.extend(c.encode('latin1', 'replace'))
+    i += 1
+open(sys.argv[2], 'wb').write(out)
+PY
+fi
+python3 - "$T/keys.bin" "$T/keys.S" <<'PY'
+import sys
+data = open(sys.argv[1], 'rb').read()
+with open(sys.argv[2], 'w') as f:
+    f.write(".section .rodata\n")
+    f.write(".global s1_keys_len\ns1_keys_len: .long %d\n" % len(data))
+    f.write(".global s1_keys_data\ns1_keys_data:\n")
+    if data:
+        for i in range(0, len(data), 16):
+            f.write("  .byte " + ",".join(str(b) for b in data[i:i+16]) + "\n")
+    else:
+        f.write("  .byte 0\n")
+    f.write(".text\n")
+PY
 
 # Peek specs are word addresses/lengths, embedded at link time.
 printf '%s' "$PEEK" | tr ',' '\n' > "$T/peeks.txt"
@@ -147,10 +203,11 @@ with open(sys.argv[2], "w") as f:
 PY
 
 clang --target=x86_64-none-elf -c "$T/script.S" -o "$T/script.o"
+clang --target=x86_64-none-elf -c "$T/keys.S" -o "$T/keys.o"
 clang --target=x86_64-none-elf -c "$T/guest.S" -o "$T/guest.o"
 clang --target=x86_64-none-elf -c "$T/peek.S" -o "$T/peek.o"
 ld.lld -m elf_x86_64 -T src/native64/s1_kabi.ld -e _start \
-  -o "$T/s1.elf" "$T/boot.o" "$T/s1.o" "$T/guest.o" "$T/script.o" "$T/peek.o"
+  -o "$T/s1.elf" "$T/boot.o" "$T/s1.o" "$T/guest.o" "$T/script.o" "$T/peek.o" "$T/keys.o"
 llvm-objcopy -O binary "$T/s1.elf" "$T/s1.bin"
 [ "$(wc -c < "$T/s1.bin")" -le 65536 ] || { echo "s1_runner: S1 image > 64 KiB" >&2; exit 1; }
 cat "$T/bootsec.bin" "$T/s1.bin" > "$T/image"
@@ -168,7 +225,7 @@ else
 fi
 
 rm -f "$T/com" "$T/dbg"
-timeout "${S1_QEMU_TIMEOUT:-600}" "$QEMU_BIN" -m "$QMEM" \
+timeout "${S1_QEMU_TIMEOUT:-600}" "$QEMU_BIN" -m "$QMEM" $QEMU_ACCEL \
   -drive format=raw,if=floppy,file="$T/image" $DRIVE -boot a \
   -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
   -display none -serial "file:$T/com" -debugcon "file:$T/dbg" \

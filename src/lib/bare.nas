@@ -79,6 +79,10 @@ JMP @ata_write28
 .equ W_BFS_ENT  0xF0700
 .equ W_BFS_TMP  0xF0701
 .equ W_BFS_OFF  0xF0702
+.equ W_BFL_PATH 0xF0703
+.equ W_BFL_DST  0xF0704
+.equ W_BFL_MAX  0xF0705
+.equ W_BFL_LEN  0xF0706
 
 bare_fs_open:
 ST r15,r14,0
@@ -171,6 +175,373 @@ bfw_zero:
 MOVI r1,0
 RET
 
+; bare_fs_load: r1=path r2=dst byte ptr r3=max -> r1=bytes or -1
+; Copies the stored bytes into the caller's buffer.  Used by guests that
+; keep a working copy and persist it with bare_fs_save (SQLite VFS).
+bare_fs_load:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_BFL_PATH
+ST r2,r0,#W_BFL_DST
+ST r3,r0,#W_BFL_MAX
+CALL @nfs_ensure
+LD r1,r0,#W_BFL_PATH
+CALL @nfs_data
+CMP r3,r0
+JMP[EQ] @bfl_no
+CMP r2,r0
+JMP[EQ] @bfl_zero
+LD r4,r0,#W_BFL_MAX
+CMP r2,r4
+JMP[LE] @bfl_len
+ADD r2,r4,r0
+bfl_len:
+ST r2,r0,#W_BFL_LEN
+SHL r1,r1,2
+LD r5,r0,#W_BFL_DST
+LD r6,r0,#W_BFL_LEN
+bfl_l:
+CMP r6,r0
+JMP[EQ] @bfl_ok
+LDB r7,r1,0
+STB r7,r5,0
+ADD r1,r1,r13
+ADD r5,r5,r13
+SUB r6,r6,r13
+JMP @bfl_l
+bfl_ok:
+LD r1,r0,#W_BFL_LEN
+JMP @bfl_d
+bfl_zero:
+MOVI r1,0
+JMP @bfl_d
+bfl_no:
+LA r1,0xFFFFFFFF
+bfl_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; bare_fs_save: r1=path r2=src byte ptr r3=bytes -> r1=entry or 0
+; Replaces the file contents in one call (nfs_write creates/truncates).
+bare_fs_save:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_BFL_PATH
+ST r2,r0,#W_BFL_DST
+ST r3,r0,#W_BFL_LEN
+CALL @nfs_ensure
+LD r1,r0,#W_BFL_PATH
+LD r2,r0,#W_BFL_DST
+SHR r2,r2,2
+LD r3,r0,#W_BFL_LEN
+CALL @nfs_write
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; bare_fs_size: r1=path -> r1=bytes or -1
+bare_fs_size:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_BFL_PATH
+CALL @nfs_ensure
+LD r1,r0,#W_BFL_PATH
+CALL @nfs_data
+CMP r3,r0
+JMP[EQ] @bfs_no
+ADD r1,r2,r0
+JMP @bfs_sz_d
+bfs_no:
+LA r1,0xFFFFFFFF
+bfs_sz_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; ---- POSIX metadata over NPAF -------------------------------------
+.equ W_BFD_DIR 0xF0707
+.equ W_BFD_IDX 0xF0708
+.equ W_BFD_BUF 0xF0709
+.equ W_BFD_MAX 0xF070A
+.equ W_BFD_TYP 0xF070B
+.equ W_BFD_LEN 0xF070C
+.equ W_BFD_P   0xF070D
+.equ W_BFD_ENT 0xF070E
+.equ W_BFT_H   0xF0710
+.equ W_BFT_L   0xF0711
+.equ W_BFT_D   0xF0712
+.equ W_BFD_IDX0 0xF0720
+.equ W_BFD_NAME 0xF0730
+
+; bare_fs_access: r1=path -> 1 present / 0 absent
+bare_fs_access:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_BFS_PATH
+CALL @nfs_ensure
+LD r1,r0,#W_BFS_PATH
+CALL @nfs_find
+CMP r1,r0
+JMP[EQ] @bfa_no
+MOVI r1,1
+JMP @bfa_d
+bfa_no:
+MOVI r1,0
+bfa_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; bare_fs_mkdir: r1=path -> 0 ok / -1 error
+bare_fs_mkdir:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_BFS_PATH
+CALL @nfs_ensure
+LD r1,r0,#W_BFS_PATH
+CALL @nfs_find
+CMP r1,r0
+JMP[NE] @bfmk_err
+LD r1,r0,#W_BFS_PATH
+MOVI r2,1
+CALL @nfs_create
+CMP r1,r0
+JMP[EQ] @bfmk_err
+MOVI r1,0
+JMP @bfmk_d
+bfmk_err:
+LA r1,0xFFFFFFFF
+bfmk_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; bare_fs_rmdir: r1=path -> 0 ok / -1 error (must be an empty directory)
+bare_fs_rmdir:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_BFS_PATH
+CALL @nfs_ensure
+LD r1,r0,#W_BFS_PATH
+CALL @nfs_find
+CMP r1,r0
+JMP[EQ] @bfrm_err
+LD r2,r1,#NF_E_DIR
+CMP r2,r0
+JMP[EQ] @bfrm_err
+MOVI r2,0
+ST r2,r0,#W_BFD_IDX0
+LD r1,r0,#W_BFS_PATH
+LA r2,#W_BFD_IDX0
+LA r3,#W_BFD_NAME
+MOVI r4,64
+LA r5,#W_BFD_TYP
+CALL @bare_fs_readdir
+CMP r1,r0
+JMP[NE] @bfrm_err
+LD r1,r0,#W_BFS_PATH
+CALL @nfs_delete
+CMP r1,r0
+JMP[EQ] @bfrm_err
+MOVI r1,0
+JMP @bfrm_d
+bfrm_err:
+LA r1,0xFFFFFFFF
+bfrm_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; bare_fs_readdir: r1=dirpath r2=index word ptr r3=namebuf r4=max
+;                  r5=type word ptr -> 1 entry / 0 end
+bare_fs_readdir:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_BFD_DIR
+ST r2,r0,#W_BFD_IDX
+ST r3,r0,#W_BFD_BUF
+ST r4,r0,#W_BFD_MAX
+ST r5,r0,#W_BFD_TYP
+; directory prefix length
+LD r6,r0,#W_BFD_DIR
+MOVI r7,0
+brd_len:
+LDB r8,r6,0
+CMP r8,r0
+JMP[EQ] @brd_len_d
+ADD r6,r6,r13
+ADD r7,r7,r13
+JMP @brd_len
+brd_len_d:
+ST r7,r0,#W_BFD_LEN
+; trim a trailing slash (but keep "/" itself)
+MOVI r8,1
+CMP r7,r8
+JMP[LE] @brd_trim_d
+ADDI r8,r6,-1
+LDB r9,r8,0
+MOVI r10,47
+CMP r9,r10
+JMP[NE] @brd_trim_d
+SUB r7,r7,r13
+ST r7,r0,#W_BFD_LEN
+brd_trim_d:
+LD r6,r0,#W_BFD_IDX
+LD r6,r6,0
+brd_loop:
+MOVI r7,#NFS_MAX
+CMP r6,r7
+JMP[GE] @brd_none
+ADD r1,r6,r0
+CALL @nfs_entry
+CMP r1,r0
+JMP[EQ] @brd_next
+ST r1,r0,#W_BFD_ENT
+ADDI r2,r1,#NF_E_PATH
+SHL r2,r2,2
+ST r2,r0,#W_BFD_P
+; compare the directory prefix
+LD r7,r0,#W_BFD_LEN
+LD r8,r0,#W_BFD_DIR
+MOVI r9,0
+brd_cmp:
+CMP r9,r7
+JMP[GE] @brd_prefix
+LDB r10,r8,0
+LDB r11,r2,0
+CMP r10,r11
+JMP[NE] @brd_next
+ADD r8,r8,r13
+ADD r2,r2,r13
+ADD r9,r9,r13
+JMP @brd_cmp
+brd_prefix:
+MOVI r10,1
+CMP r7,r10
+JMP[EQ] @brd_name
+MOVI r10,47
+LDB r11,r2,0
+CMP r11,r10
+JMP[NE] @brd_next
+ADD r2,r2,r13
+brd_name:
+LDB r11,r2,0
+CMP r11,r0
+JMP[EQ] @brd_next
+MOVI r10,47
+CMP r11,r10
+JMP[EQ] @brd_next
+LD r3,r0,#W_BFD_BUF
+LD r4,r0,#W_BFD_MAX
+SUB r4,r4,r13
+MOVI r9,0
+brd_cp:
+CMP r9,r4
+JMP[GE] @brd_cp_d
+LDB r11,r2,0
+CMP r11,r0
+JMP[EQ] @brd_cp_d
+MOVI r10,47
+CMP r11,r10
+JMP[EQ] @brd_cp_d
+STB r11,r3,0
+ADD r2,r2,r13
+ADD r3,r3,r13
+ADD r9,r9,r13
+JMP @brd_cp
+brd_cp_d:
+STB r0,r3,0
+LD r3,r0,#W_BFD_IDX
+ADD r6,r6,r13
+ST r6,r3,0
+LD r3,r0,#W_BFD_ENT
+LD r4,r3,#NF_E_DIR
+LD r3,r0,#W_BFD_TYP
+ST r4,r3,0
+MOVI r1,1
+JMP @brd_d
+brd_next:
+ADD r6,r6,r13
+JMP @brd_loop
+brd_none:
+LD r3,r0,#W_BFD_IDX
+MOVI r4,#NFS_MAX
+ST r4,r3,0
+MOVI r1,0
+brd_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; bare_fs_stat: r1=path r2=stat word ptr -> 0 ok / -1 error
+; layout: 0 isdir, 1 size, 2 mode, 3 mtime_ms
+bare_fs_stat:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_BFS_PATH
+ST r2,r0,#W_BFD_BUF
+CALL @nfs_ensure
+LD r1,r0,#W_BFS_PATH
+CALL @nfs_find
+CMP r1,r0
+JMP[EQ] @bfst_err
+LD r3,r1,#NF_E_DIR
+LD r4,r1,#NF_E_SIZE
+MOVI r6,0x81A4
+CMP r3,r0
+JMP[EQ] @bfst_mode
+MOVI r6,0x41ED
+bfst_mode:
+LD r5,r0,#W_BFD_BUF
+ST r3,r5,0
+ST r4,r5,1
+ST r6,r5,2
+TICK r7
+ST r7,r5,3
+MOVI r1,0
+JMP @bfst_d
+bfst_err:
+LA r1,0xFFFFFFFF
+bfst_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; bare_fs_truncate: r1=path r2=new length -> 0 ok / -1 error
+; Shrinking is supported; growing is rejected (the caller can rewrite).
+bare_fs_truncate:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_BFT_H
+ST r2,r0,#W_BFT_L
+CALL @nfs_ensure
+LD r1,r0,#W_BFT_H
+CALL @nfs_data
+CMP r3,r0
+JMP[EQ] @bft_err
+ST r1,r0,#W_BFT_D
+LD r4,r0,#W_BFT_L
+CMP r4,r2
+JMP[GT] @bft_err
+CMP r4,r2
+JMP[EQ] @bft_ok
+LD r1,r0,#W_BFT_H
+LD r2,r0,#W_BFT_D
+LD r3,r0,#W_BFT_L
+CALL @nfs_write
+CMP r1,r0
+JMP[EQ] @bft_err
+bft_ok:
+MOVI r1,0
+JMP @bft_d
+bft_err:
+LA r1,0xFFFFFFFF
+bft_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
 bare_fs_seek:
 ST r15,r14,0
 ADD r14,r14,r13
@@ -255,7 +626,11 @@ JMP[EQ] @bfrn_n
 LD r2,r1,#NF_E_SIZE
 ST r2,r0,#W_BFS_OFF
 LD r2,r1,#NF_E_OFF
-LA r3,#NFS_ARENA
+LA r3,#NFS_BASE
+ADDI r3,r3,8
+MOVI r4,#NFS_MAX
+SHL r4,r4,4
+ADD r3,r3,r4
 ADD r3,r3,r2
 LD r1,r0,#W_BFS_TMP
 ADD r2,r3,r0

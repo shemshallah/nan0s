@@ -118,9 +118,8 @@ MOVI r2,@v_scroll
 MOVI r3,15
 STW r1,r2,r3
 
-; ---- cold boot: run the system cart (GUI desktop) when the builder declared one;
-; its entry opens a single CLI window (A2). ESC/q there returns to this menu.
-; boot_rec is separate from the exhibit TOC, so slots stay free for exhibits.
+; ---- cold boot: snapshot the catalog, then run the system cart (GUI desktop)
+; when the builder declared one. The snapshot survives a large cart loaded at 8192.
 CALL @sh_snap_toc
 LA r10,@boot_rec
 LD r1,r10,0
@@ -334,40 +333,6 @@ JMP[EQ] @sh_key
 SUB r1,r1,r13
 ST r1,r0,@sh_page
 JMP @sh_redraw
-
-; Snapshot the catalog and titles before a large cart overwrites 22000/23600.
-; The GUI debugger reads this copy; the shell menu still uses the live TOC.
-sh_snap_toc:
-ST r15,r0,@sst_lnk
-LA r1,0x70000
-MOVI r2,#TOC_BASE
-LA r3,1408
-BCOPY r1,r2,r3
-LA r1,0x72000
-MOVI r2,23600
-LA r3,1408
-BCOPY r1,r2,r3
-MOVI r4,0
-LA r5,0x70000
-sst_loop:
-LD r6,r5,0
-CMP r6,r0
-JMP[EQ] @sst_done
-MOVI r2,16
-MUL r3,r4,r2
-LA r1,0x72000
-ADD r3,r3,r1
-ST r3,r5,3
-ADDI r5,r5,16
-ADD r4,r4,r13
-MOVI r2,87
-CMP r4,r2
-JMP[LT] @sst_loop
-sst_done:
-LD r15,r0,@sst_lnk
-RET
-sst_lnk:
-.word 0
 
 ; ---- load + seal-check + run the cartridge whose TOC entry is at r10 ----
 sh_run:
@@ -694,6 +659,39 @@ ss_body:
 .equ TOC_BASE 22000
 .equ BOOT_BASE 4784
 .equ SERVICE_BASE 4816
+; ---- TOC/title snapshot at 0x70000/0x72000 for the debugger ----
+sh_snap_toc:
+ST r15,r0,@sst_lnk
+LA r1,0x70000
+MOVI r2,#TOC_BASE
+LA r3,1408
+BCOPY r1,r2,r3
+LA r1,0x72000
+MOVI r2,23600
+LA r3,1408
+BCOPY r1,r2,r3
+MOVI r4,0
+LA r5,0x70000
+sst_loop:
+LD r6,r5,0
+CMP r6,r0
+JMP[EQ] @sst_done
+MOVI r2,16
+MUL r3,r4,r2
+LA r1,0x72000
+ADD r3,r3,r1
+ST r3,r5,3
+ADDI r5,r5,16
+ADD r4,r4,r13
+MOVI r2,87
+CMP r4,r2
+JMP[LT] @sst_loop
+sst_done:
+LD r15,r0,@sst_lnk
+RET
+sst_lnk:
+.word 0
+
 .org 4784
 boot_rec:
 ; system cart record (the GUI desktop), same 16-word shape. [0]=0 -> boot to menu.
@@ -748,7 +746,7 @@ cpu_body:
 .str " Native core: x86, 5,800 bytes.\n Guest ISA: NaN16 double-endian, 16 truth-table classes.\n Clock: PIT TICK, 1,000 Hz class.\n AArch64 and RISC-V native cores: planned.\n Android root detection: host-only, not bare metal."
 
 
-; =============================================================================
+
 ; NANDBG resident ABI and demo target (word 5800+)
 ; The GUI terminal's `debug` command opens a second CLI that calls these
 ; trampolines. 5700..8191 is the gap between the shell's strings and the cart
@@ -1317,13 +1315,18 @@ dbg_mem_geth_cls:
   LDN r1,r1,0
   RET
 
-; ---- checkpoint arena copies (64K words) -------------------------------
-; The GUI saves registers and the header; these two helpers move the arena.
+; ---- checkpoint arena and capture copies (64K words + 8K) -------------
+; The GUI saves registers and the header; these helpers move the 64K cart
+; arena and the captured screen/serial window at 0x60000..0x62000.
 dbg_ckpt_to:
   ST r15,r0,@nd_ealnk
   LA r1,0x91000
   LA r2,0x80000
   LA r3,0x10000
+  BCOPY r1,r2,r3
+  LA r1,0xA1000
+  LA r2,0x60000
+  LA r3,0x2000
   BCOPY r1,r2,r3
   MOVI r1,1
   LD r15,r0,@nd_ealnk
@@ -1335,6 +1338,10 @@ dbg_ckpt_from:
   LA r2,0x91000
   LA r3,0x10000
   BCOPY r1,r2,r3
+  LA r1,0x60000
+  LA r2,0xA1000
+  LA r3,0x2000
+  BCOPY r1,r2,r3
   MOVI r1,1
   LD r15,r0,@nd_ealnk
   RET
@@ -1344,6 +1351,8 @@ dbg_map:
   CALL @nd_addr
   LD r15,r0,@nd_ealnk
   RET
+
+; ---- paged cartridge catalog area (builder writes 16-word entries at 22000) ----
 
 ; ---- paged cartridge catalog area (builder writes 16-word entries at 22000) ----
 .org 22000

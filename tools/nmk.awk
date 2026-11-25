@@ -174,7 +174,10 @@ function parse_item(t,  ii,jj,s1,b1,n4,s4,k4,v4,rest,wi,w,mmla,prd,mm){
   if (substr(t,1,4)==".equ"){
     split(t, ea, " ")
     if (length(ea)<3) die("bad .equ: " t)
-    EQ[ea[2]] = inum(ea[3])
+    # Compile-time configuration: an environment variable with the .equ
+    # name overrides the source default (for example NFS_MAX=512).
+    if (ea[2] in ENVIRON) EQ[ea[2]] = inum(ENVIRON[ea[2]])
+    else EQ[ea[2]] = inum(ea[3])
     return
   }
   if (substr(t,1,4)==".org"){
@@ -314,6 +317,13 @@ function resolve(   i,t,v,mn,bn,predn,rest,args,na,ci,ch,x,f,d,a,imm0,imm2,p,tj2
       a = 0
     }
     if (mn=="MOVI" && imm0>65535) die(sprintf("MOVI immediate %d does not fit 16 bits (use LA): %s", imm0, t))
+    # JMP/CALL carry only a 16-bit immediate.  Promote a far target to the
+    # 24-bit JMPF/CALLF form (d:a:imm) instead of silently truncating it.
+    if ((mn=="JMP" || mn=="CALL") && (imm0<0 || imm0>65535)) {
+      imm0=imm0%16777216; if (imm0<0) imm0+=16777216
+      mn = (mn=="JMP") ? "JMPF" : "CALLF"
+      d = int(imm0/1048576); a = int(imm0/65536)%16
+    }
     imm2=imm0%65536; if (imm2<0) imm2+=65536
     p = dn[mn]*16777216 + d*1048576 + a*65536 + imm2
     EMIT[j-1]=wline(n,p)"   ; "sprintf("%03d",j-1)" "dis2(n,p)
