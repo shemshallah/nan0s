@@ -298,6 +298,8 @@ unaffected by this ABI.
   image from a heap extent; exact `LOK` on both engines.
 - `tools/kabi_sleep_gate.sh` - tick time, blocking sleep, wakeup and an idle
   process; exact `SOK` on both engines.
+- `tools/kabi_kill_gate.sh` - `SVC 22 kill(pid, signal)`, termination status
+  128+signal, and waiter wakeup; exact `KOK` on both engines.
 - `tools/s1_guest_gate.sh` - flat-cartridge acceptance: focused coverage,
   scalar FP, and real `src/tests/nfs2_test.nas`, x86_64 QEMU COM1 exactly
   equal to the C oracle; debug console reports loader word count/HALT.
