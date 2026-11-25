@@ -198,6 +198,21 @@ np_init_v:
 np_lookup:
   CMP r1,r0
   JMP[EQ] @npl_none
+  ; Fast path: pids are monotonic and the common first-fit allocation is
+  ; slot = pid-1.  Verify the pid, then fall back to the linear scan when
+  ; slots have been recycled or the pid is beyond the current table span.
+  MOVI r2,#NP_MAX_PROCS
+  CMP r1,r2
+  JMP[GT] @npl_linear
+  SUB r2,r1,r13
+  MOVI r5,#NP_ENTRY
+  MUL r2,r2,r5
+  LA r4,#NP_BASE
+  ADD r4,r4,r2
+  LD r5,r4,#NP_E_PID
+  CMP r5,r1
+  JMP[EQ] @npl_found
+npl_linear:
   MOVI r3,0
   LA r4,#NP_BASE
 npl_loop:

@@ -39,6 +39,12 @@ command line, the NPAF filesystem service and its POSIX metadata, and the
 process/thread control ABI are raw NaN16.  The desktop and its window manager
 are NaN/0S; the command line you type into the desktop Terminal is NANIX.
 
+The process subsystem is a 1024-slot kernel table with 32 priority levels,
+timer preemption, spawn/wait/kill/sleep, set/getpriority and count/limit SVCs.
+The stress gate runs 512 live processes and four cooperative threads with
+mutex/cond/join on x86_64 S1.  Threads are per-owner-process and cooperative;
+full per-thread preemption and SMP are the remaining scheduler work.
+
 **ndbg** — the NaN-native debugger in this repository. Design: [`spec/NANDBG.md`](spec/NANDBG.md) · Working guide: [`src/dbg/README.md`](src/dbg/README.md).
 
 This suite is also vendored into [`shemshallah/nan0s`](https://github.com/shemshallah/nan0s); that tree now includes a Silver Slate terminal `debug` monitor (`carts`, `load <id>`, `step`/`next`/`finish`, `run`, `regs`, `log`/`ndr`/`mirror`/`poison`/`verify`/`hist`/`stack`/`types`, `break`, `watch`, `bpts`, `wpts`, `bp`/`wp`/`goto`, `mem [addr]`, `dis [addr]`, `screen`, `serial`, `setr`, `setm`, `setw`, `setc`, multi-level `undo [n]`/`redo [n]`, `checkpoint`, `restore`, `reset`, `pc`, `quit`) gated by `tools/ndbg_term.sh`. Refresh the standalone component with `tools/ndbg_sync.sh` from the nan0s checkout.

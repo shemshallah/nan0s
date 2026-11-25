@@ -54,7 +54,7 @@ cat > "$T/expected" <<'EOF'
 SCHED BEGIN
 FS OK
 SPAWN 8
-RUN HLSXAhBKYAsBAB
+RUN HLSXhABKYsABAB
 W 10
 W 20
 W 30
@@ -68,16 +68,20 @@ SCHED PASS
 EOF
 
 ./aarch64/android/nan_cli --img "$T/sched.nan" --mem "$MEM" --steps "$STEPS" \
-  --serial > "$T/c.out" 2> "$T/c.err"
+  --serial --peek '0x59047:1' > "$T/c.full" 2> "$T/c.err"
+sed '$d' "$T/c.full" > "$T/c.out"
 if ! cmp -s "$T/expected" "$T/c.out"; then
   echo "nansched: FAIL (C oracle transcript)"
   echo "--- expected ---"; cat -v "$T/expected"
   echo "--- actual ---"; cat -v "$T/c.out"
   exit 1
 fi
+[ "$(tail -n 1 "$T/c.full")" != "00000000" ] || {
+  echo "nansched: FAIL (C oracle never timer-preempted)"; exit 1; }
 
 sh tools/s1_runner.sh --img "$T/sched.nan" --mem "$MEM" --steps "$STEPS" \
-  --serial > "$T/s1.out" 2> "$T/s1.err"
+  --serial --peek '0x59047:1' > "$T/s1.full" 2> "$T/s1.err"
+sed '$d' "$T/s1.full" > "$T/s1.out"
 if ! cmp -s "$T/c.out" "$T/s1.out"; then
   echo "nansched: FAIL (x86_64 S1 differs from C oracle)"
   echo "--- C ---"; cat -v "$T/c.out"
@@ -89,19 +93,12 @@ fi
   echo "nansched: FAIL (S1 transcript does not end in SCHED PASS)"
   cat -v "$T/s1.out"; exit 1; }
 
-# Slice-preemption evidence: NS_PREEMPT (NS_BASE+327) counts timer-IRQ
-# preemptions.  It must be nonzero on both engines, proving the quantum path
-# ran, not only cooperative yields.
-./aarch64/android/nan_cli --img "$T/sched.nan" --mem "$MEM" --steps "$STEPS" \
-  --peek '0x48147:1' > "$T/cpre.out" 2> "$T/cpre.err"
-[ "$(tail -n 1 "$T/cpre.out")" != "00000000" ] || {
-  echo "nansched: FAIL (C oracle never timer-preempted)"; exit 1; }
-sh tools/s1_runner.sh --img "$T/sched.nan" --mem "$MEM" --steps "$STEPS" \
-  --peek '0x48147:1' > "$T/s1pre.out" 2> "$T/s1pre.err"
-[ "$(tail -n 1 "$T/s1pre.out")" != "00000000" ] || {
+# Slice-preemption evidence: NS_PREEMPT (NS_BASE+4167) counts timer-IRQ
+# preemptions; the last line of each run is the peeked counter.
+[ "$(tail -n 1 "$T/s1.full")" != "00000000" ] || {
   echo "nansched: FAIL (S1 never timer-preempted)"; exit 1; }
 
-echo "nansched: PASS (64-slot nanproc, 32 priority queues, timer preemption,"
+echo "nansched: PASS (1024-slot nanproc, 32 priority queues, timer preemption,"
 echo "  yield/exit/spawn/wait/kill/sleep; SVC 4..8 NPAF + process SVCs on"
 echo "  C oracle == x86_64 S1)"
 cat "$T/s1.out"

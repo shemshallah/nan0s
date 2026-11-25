@@ -10,10 +10,10 @@
 ; Kernel/process memory map (word addresses):
 ;   0..0x1FFFF  image and process code region (RX)
 ;   0x2F0000    nankernel kernel stack, 0x2F1000 trap frame, 0x2F2000 hook
-;   0x40000     nanproc table (64*96)
-;   0x48000     scheduler state NS_BASE: queues/links/wait words,
-;               per-slot frames at NS_BASE+352, region tables at NS_BASE+1888
-;   0x50000     nanproc variable block
+;   0x40000     nanproc table (up to 64*96 in this image; library supports 1024)
+;   0x58000     scheduler state NS_BASE: queues/links/wait words,
+;               per-slot frames at NS_BASE+4192, region tables at NS_BASE+28768
+;   0x69000     nanproc variable block
 ;   0x70000     root process data (accessed through r12=P_DATA)
 ;   0x7F000     boot stack
 ;   0x80000     process stacks (0x800 words each)
@@ -34,8 +34,8 @@ JMP @nsch_boot
 
 ; overrides (later .equ wins in nmk)
 .equ NP_BASE      0x40000
-.equ NP_VARS      0x50000
-.equ NS_BASE      0x48000
+.equ NP_VARS      0x69000
+.equ NS_BASE      0x58000
 
 .equ P_DATA       0x70000
 .equ BOOTSTACK    0x7F000

@@ -3,52 +3,77 @@
 ; This is the kernel scheduler for the existing nan0s kernel.  It owns the
 ; process SVCs delegated by src/lib/nankernel.nas through nk_install_proc:
 ;
-;   SVC  0 yield              -> 0
+;   SVC  0 yield              -> 0 (thread yield in thread mode)
 ;   SVC  1 exit(code)         -> does not return
 ;   SVC  9 spawn(descriptor)  -> pid or 0
 ;   SVC 10 wait(pid|0|-1)     -> exit status (blocks; pid 0/-1 = any child)
+;   SVC 13 thread_create(entry, stack, arg) -> tid or 0
+;   SVC 14 thread_join(tid)                 -> exit code or -1
+;   SVC 15 thread_exit(code)                -> does not return
+;   SVC 16 mutex(op, addr)                  -> 0/1/-1
+;   SVC 17 cond(op, addr, mutex)            -> 0/-1
+;   SVC 18 tls(index, value)                -> old/-1
+;   SVC 19 thread_detach(tid)               -> 0/-1
 ;   SVC 20 getpid             -> pid
 ;   SVC 21 getppid            -> ppid
 ;   SVC 22 kill(pid, sig)     -> 0 / 1 bad pid / 2 already terminating
 ;   SVC 24 sleep(ticks)       -> 0 after the wake tick
+;   SVC 25 setpriority(pid, prio) -> 0/1/2
+;   SVC 26 getpriority(pid)       -> prio or -1
+;   SVC 27 proc_count()           -> live processes
+;   SVC 28 proc_limit()           -> NP_MAX_PROCS
 ;
-; nankernel.nas keeps SVC 4..8 for the NPAF file service.  The same kernel
-; entry dispatches both: boot installs this module with
-;
-;     LA r1,@nsch_svc
-;     CALL @nk_install_proc
-;
-; and the S1 timer vector calls the same kentry.  The scheduler is therefore
-; part of the running kernel, not a standalone demo image.
+; SVC 4..8 stay on nankernel's NPAF file service.  nsch_init installs a small
+; kentry wrapper: it routes the appended process/thread calls above and sends
+; every other trap (SVC 4..8, process SVCs, timer IRQ) to nankernel's kentry,
+; which delegates 0/1/9/10/20..24 back to nsch_svc.  The same kernel therefore
+; handles files and processes.
 ;
 ; ---------------------------------------------------------------------------
 ; ABI / configuration
 ;
 ; Required kernel configuration (later .equ wins; defaults are the test map):
 ;   NP_BASE    process table base (nanproc.nas), default 0x40000
-;   NP_VARS    nanproc variable block, default 0x50000
-;   NS_BASE    scheduler state block, default 0x48000
+;   NP_VARS    nanproc variable block, default 0x69000
+;   NS_BASE    scheduler state block, default 0x58000
 ;
 ; NS_BASE must hold NS_BYTES words.  The layout below is fixed for
-; NS_MAX_PROCS=64 and NS_NPRIO=32:
+; NS_MAX_PROCS=1024 and NS_NPRIO=32:
 ;   +0    32 run-queue pairs {head,tail}; entries are slot+1, 0 = empty
-;   +64   per-slot next link (slot+1)                      64 words
-;   +128  per-slot wait pid (0 = any child)                 64 words
-;   +192  per-slot wait kind (0 none, 1 sleep, 2 wait)      64 words
-;   +256  per-slot wake tick                                64 words
-;   +320  current pid
-;   +321  tick counter (timer IRQs)
-;   +322  current slice
-;   +323  quantum in ticks
-;   +324  next slot (scratch)
-;   +325  active trap-frame pointer
-;   +326  started flag
-;   +327  timer-IRQ preemption count
-;   +328  kernel scratch words 0..7
-;   +352  per-slot 24-word trap frames                      64*24 words
-;   +1888 per-slot region tables (8 entries + terminator)   64*36 words
-;   +4192 boot region table (3 entries)                     16 words
-;   NS_BYTES = 4208
+;   +64   per-slot next link (slot+1)                    1024 words
+;   +1088 per-slot wait pid (0 = any child)              1024 words
+;   +2112 per-slot wait kind (0 none,1 sleep,2 wait)     1024 words
+;   +3136 per-slot wake tick                             1024 words
+;   +4160 current pid
+;   +4161 tick counter (timer IRQs)
+;   +4162 current slice
+;   +4163 quantum in ticks
+;   +4164 next slot (scratch)
+;   +4165 active trap-frame pointer
+;   +4166 started flag
+;   +4167 timer-IRQ preemption count
+;   +4168 kernel scratch words 0..7
+;   +4176 thread-owner pid (0 = no process in thread mode)
+;   +4177 thread-owner slot (NS_NONE = none)
+;   +4178 blocked sleeper count (fast tick path)
+;   +4179 earliest sleeper wake tick (0 when none)
+;   +4192 per-slot 24-word trap frames                    1024*24 words
+;   +28768 per-slot region tables (8 entries + terminator) 1024*36 words
+;   +65632 boot region table (3 entries)                   16 words
+;   NS_BYTES = 65648
+;
+; NP_MAX_PROCS may be lowered.  It must not exceed NS_MAX_PROCS (1024);
+; the nanproc table span is NP_MAX_PROCS*96 words.
+;
+; Thread mode uses nanthr.nas (included below) for one owning process at a
+; time.  TCBs live at NS_TCB_BASE (64 TCBs, 56 words each).  All threads of
+; the owner share its pid and S1 region table; thread switches are
+; cooperative through SVC 0/13..19, and process-level timer preemption still
+; saves/restores the current TCB frame.  A second process may take thread
+; mode only after the first exits (documented gap; no per-process nanthr
+; state duplication).  Thread stacks are caller-provided and must already be
+; mapped in the owner's region table; the nanthr arena at NS_TSTACK_BASE is
+; configured but not auto-mapped in this cooperative slice.
 ;
 ; Process state is the nanproc state word (0 free, 1 ready, 2 running,
 ; 3 blocked, 4 zombie, 5 dead).  The scheduler keeps nanproc authoritative:
@@ -78,16 +103,17 @@
 ; preserve r13/r14; internal routines use a uniform 9-word frame:
 ; [SP] link, [SP+1..8] locals, new SP = old SP+9.  Callees therefore start
 ; their own frame at that SP and cannot overlap a caller's eight locals.
-; NP_MAX_PROCS may be lowered; it must not exceed NS_MAX_PROCS (64).
+; NP_MAX_PROCS may be lowered; it must not exceed NS_MAX_PROCS (1024).
 ; ---------------------------------------------------------------------------
 
 .equ NP_BASE      0x40000
-.equ NP_VARS      0x50000
-.equ NS_BASE      0x48000
+.equ NP_VARS      0x69000
+.equ NS_BASE      0x58000
 
 .include "nanproc.nas"
+.include "nanthr.nas"
 
-.equ NS_MAX_PROCS  64
+.equ NS_MAX_PROCS  1024
 .equ NS_NPRIO      32
 .equ NS_FRAME      9
 .equ NS_FRAME_NEG  -9
@@ -111,36 +137,47 @@
 ; Scheduler state offsets from NS_BASE.
 .equ NS_QUEUE      0
 .equ NS_LINK       64
-.equ NS_WAITPID    128
-.equ NS_WAITK      192
-.equ NS_WAKE       256
-.equ NS_CUR        320
-.equ NS_TICKS      321
-.equ NS_SLICE      322
-.equ NS_QUANTUM    323
-.equ NS_NEXT       324
-.equ NS_FP         325
-.equ NS_STARTED    326
-.equ NS_PREEMPT    327
-.equ NS_TMP0       328
-.equ NS_TMP1       329
-.equ NS_TMP2       330
-.equ NS_TMP3       331
-.equ NS_TMP4       332
-.equ NS_TMP5       333
-.equ NS_TMP6       334
-.equ NS_TMP7       335
-.equ NS_FRAMES     352
-.equ NS_REGT       1888
-.equ NS_BOOTTAB    4192
-.equ NS_BYTES      4208
+.equ NS_WAITPID    1088
+.equ NS_WAITK      2112
+.equ NS_WAKE       3136
+.equ NS_CUR        4160
+.equ NS_TICKS      4161
+.equ NS_SLICE      4162
+.equ NS_QUANTUM    4163
+.equ NS_NEXT       4164
+.equ NS_FP         4165
+.equ NS_STARTED    4166
+.equ NS_PREEMPT    4167
+.equ NS_TMP0       4168
+.equ NS_TMP1       4169
+.equ NS_TMP2       4170
+.equ NS_TMP3       4171
+.equ NS_TMP4       4172
+.equ NS_TMP5       4173
+.equ NS_TMP6       4174
+.equ NS_TMP7       4175
+.equ NS_THRPID     4176
+.equ NS_THRSLOT    4177
+.equ NS_NSLEEP     4178
+.equ NS_SMIN       4179
+.equ NS_FRAMES     4192
+.equ NS_REGT       28768
+.equ NS_BOOTTAB    65632
+.equ NS_BYTES      65648
+
+; Thread arena (nanthr.nas TCBs and kernel-allocated thread stacks).
+.equ NS_TCB_BASE     0xA0000
+.equ NS_TCB_COUNT    64
+.equ NS_TSTACK_BASE  0xA4000
+.equ NS_TSTACK_WORDS 0x4000
+.equ NS_TSTACK_SIZE  0x100
 
 ; Wait kinds.
 .equ NS_WK_NONE    0
 .equ NS_WK_SLEEP   1
 .equ NS_WK_WAIT    2
 
-; Sentinel for "no slot" (slot values are 0..63).
+; Sentinel for "no slot"/"no thread owner" (slot values are 0..1023).
 .equ NS_NONE       0xFFFF
 
 ; Boot region table spans.  Guest memory must be at least 0xA0000 words.
@@ -170,7 +207,7 @@ nsch_init:
 
   ; zero the scheduler block
   LA r3,#NS_BASE
-  MOVI r4,#NS_BYTES
+  LA r4,#NS_BYTES
 nsch_init_z:
   ST r0,r3,0
   ADD r3,r3,r13
@@ -183,12 +220,15 @@ nsch_init_z:
   MOVI r1,#NS_QUANTUM_DEFAULT
   ST r1,r2,#NS_QUANTUM
   ST r1,r2,#NS_SLICE
+  MOVI r1,#NS_NONE
+  ST r1,r2,#NS_THRSLOT
 
   ; boot region table: whole low image/tables/stacks (RWX), then the
   ; nankernel stack/frame/hook block (RWX).  Terminator is the zero word
   ; written by the clear loop.
   LA r3,#NS_BASE
-  ADDI r3,r3,#NS_BOOTTAB
+  LA r1,#NS_BOOTTAB
+  ADD r3,r3,r1
   ST r0,r3,0
   LA r1,#NS_BOOTMEM
   ST r1,r3,1
@@ -218,17 +258,77 @@ nsch_init_z:
   ; boot region table
   MOVI r1,#NS_P_REGIONS
   LA r2,#NS_BASE
-  ADDI r2,r2,#NS_BOOTTAB
+  LA r3,#NS_BOOTTAB
+  ADD r2,r2,r3
   OUTL r2,r1
   ; activate the ABI last
   MOVI r1,#NS_P_ENTRY
-  LA r2,@kentry
+  LA r2,@nsch_kentry
   OUTL r2,r1
 
   MOVI r1,0
   ADDI r14,r14,#NS_FRAME_NEG
   LD r15,r14,0
   RET
+
+; ---------------------------------------------------------------------------
+; nsch_kentry - S1 kernel entry installed by nsch_init.  Appended
+; process/thread SVCs are handled here; every other SVC (4..8 and the
+; nankernel-delegated process numbers), timer IRQ and inherited path goes to
+; nankernel's kentry.
+nsch_kentry:
+  MOVI r13,1
+  MOVI r1,#NS_P_FRAME
+  INL r10,r1
+  LD r3,r10,19
+  CMP r3,r0
+  JMP[EQ] @nsch_ke_svc
+  MOVI r4,1
+  CMP r3,r4
+  JMP[EQ] @nsch_ke_fwd
+  ; Fault while the scheduler owns the trap is a kernel bug.
+  MOVI r1,33
+  PUTC r1
+  MOVI r1,83
+  PUTC r1
+  MOVI r1,10
+  PUTC r1
+  HALT
+nsch_ke_svc:
+  LD r3,r10,20
+  ; SVC 0 is a thread yield while the current process owns thread mode.
+  CMP r3,r0
+  JMP[NE] @nsch_ke_13
+  LA r2,#NS_BASE
+  LD r4,r2,#NS_THRPID
+  CMP r4,r0
+  JMP[EQ] @nsch_ke_fwd
+  LD r5,r2,#NS_CUR
+  CMP r4,r5
+  JMP[NE] @nsch_ke_fwd
+  JMP @nsch_ke_thread
+nsch_ke_13:
+  MOVI r4,13
+  CMP r3,r4
+  JMP[LT] @nsch_ke_25
+  MOVI r4,19
+  CMP r3,r4
+  JMP[LE] @nsch_ke_thread
+nsch_ke_25:
+  MOVI r4,25
+  CMP r3,r4
+  JMP[LT] @nsch_ke_fwd
+  MOVI r4,28
+  CMP r3,r4
+  JMP[LE] @nsch_ke_new
+nsch_ke_fwd:
+  JMP @kentry
+nsch_ke_new:
+  ADD r1,r10,r0
+  JMP @nsch_svc
+nsch_ke_thread:
+  ADD r1,r10,r0
+  JMP @nsch_thread_svc
 
 ; ---------------------------------------------------------------------------
 ; nsch_svc - kernel SVC/timer entry.  r1 = 24-word trap frame pointer.
@@ -292,6 +392,18 @@ nsch_dispatch:
   MOVI r4,24
   CMP r3,r4
   JMP[EQ] @nsch_svc_sleep
+  MOVI r4,25
+  CMP r3,r4
+  JMP[EQ] @nsch_svc_setprio
+  MOVI r4,26
+  CMP r3,r4
+  JMP[EQ] @nsch_svc_getprio
+  MOVI r4,27
+  CMP r3,r4
+  JMP[EQ] @nsch_svc_count
+  MOVI r4,28
+  CMP r3,r4
+  JMP[EQ] @nsch_svc_limit
 nsch_svc_bad:
   LA r2,#NS_BASE
   LD r2,r2,#NS_FP
@@ -326,6 +438,16 @@ nsch_svc_exit:
   LD r1,r2,#NS_CUR
   LD r2,r2,#NS_TMP0
   CALL @np_exit
+  ; drop thread mode if the owner is exiting (all joins must be done first)
+  LA r2,#NS_BASE
+  LD r1,r2,#NS_CUR
+  LD r3,r2,#NS_THRPID
+  CMP r1,r3
+  JMP[NE] @nsch_exit_nothr
+  ST r0,r2,#NS_THRPID
+  MOVI r3,#NS_NONE
+  ST r3,r2,#NS_THRSLOT
+nsch_exit_nothr:
   ; wake parent waiters, then reap the zombie when a parent consumed it
   LA r2,#NS_BASE
   LD r1,r2,#NS_CUR
@@ -431,6 +553,85 @@ nsch_svc_getppid:
   SVCRET
 
 ; ---------------------------------------------------------------------------
+; SVC 25 - setpriority(pid, prio 0..31).
+nsch_svc_setprio:
+  LA r2,#NS_BASE
+  LD r10,r2,#NS_FP
+  LD r3,r10,1
+  LD r4,r10,2
+  MOVI r5,#NS_NPRIO
+  CMP r4,r5
+  JMP[GE] @nsch_setprio_range
+  ST r3,r2,#NS_TMP0
+  ADD r1,r3,r0
+  ADD r2,r4,r0
+  CALL @np_set_priority
+  LA r2,#NS_BASE
+  ST r1,r2,#NS_TMP2
+  CMP r1,r0
+  JMP[NE] @nsch_setprio_fin
+  ; A ready target must move to its new run level.
+  LD r1,r2,#NS_TMP0
+  CALL @np_lookup
+  CMP r1,r0
+  JMP[EQ] @nsch_setprio_ok
+  LD r3,r1,#NP_E_STATE
+  MOVI r4,#NP_ST_READY
+  CMP r3,r4
+  JMP[NE] @nsch_setprio_ok
+  LA r2,#NS_BASE
+  LD r1,r2,#NS_TMP0
+  CALL @nsch_remove_pid
+  LA r2,#NS_BASE
+  LD r1,r2,#NS_TMP0
+  CALL @nsch_slot
+  CALL @nsch_enqueue
+nsch_setprio_ok:
+  MOVI r1,0
+  JMP @nsch_setprio_fin
+nsch_setprio_range:
+  MOVI r1,2
+nsch_setprio_fin:
+  LA r2,#NS_BASE
+  LD r10,r2,#NS_FP
+  ST r1,r10,21
+  SVCRET
+
+; ---------------------------------------------------------------------------
+; SVC 26 - getpriority(pid) -> prio or -1.
+nsch_svc_getprio:
+  LA r2,#NS_BASE
+  LD r10,r2,#NS_FP
+  LD r1,r10,1
+  CALL @np_lookup
+  CMP r1,r0
+  JMP[EQ] @nsch_getprio_bad
+  LD r1,r1,#NP_E_PRIO
+  JMP @nsch_getprio_fin
+nsch_getprio_bad:
+  LA r1,0xFFFFFFFF
+nsch_getprio_fin:
+  LA r2,#NS_BASE
+  LD r10,r2,#NS_FP
+  ST r1,r10,21
+  SVCRET
+
+; ---------------------------------------------------------------------------
+; SVC 27 - proc_count() -> live processes; SVC 28 - proc_limit().
+nsch_svc_count:
+  CALL @np_counts
+  LA r2,#NS_BASE
+  LD r10,r2,#NS_FP
+  ST r1,r10,21
+  SVCRET
+nsch_svc_limit:
+  MOVI r1,#NP_MAX_PROCS
+  LA r2,#NS_BASE
+  LD r10,r2,#NS_FP
+  ST r1,r10,21
+  SVCRET
+
+; ---------------------------------------------------------------------------
 ; SVC 22 - kill(pid, sig).
 nsch_svc_kill:
   LA r2,#NS_BASE
@@ -473,6 +674,23 @@ nsch_sleep_go:
   ADDI r4,r2,#NS_WAITPID
   ADD r4,r4,r1
   ST r0,r4,0
+  LA r4,#NS_BASE
+  LD r3,r4,#NS_NSLEEP
+  CMP r3,r0
+  JMP[NE] @nsch_sleep_have
+  LD r3,r4,#NS_TMP1
+  ST r3,r4,#NS_SMIN
+  JMP @nsch_sleep_inc
+nsch_sleep_have:
+  LD r5,r4,#NS_TMP1
+  LD r3,r4,#NS_SMIN
+  CMP r5,r3
+  JMP[GE] @nsch_sleep_inc
+  ST r5,r4,#NS_SMIN
+nsch_sleep_inc:
+  LD r3,r4,#NS_NSLEEP
+  ADD r3,r3,r13
+  ST r3,r4,#NS_NSLEEP
   LD r1,r2,#NS_CUR
   MOVI r2,#NP_ST_BLOCKED
   CALL @np_set_state
@@ -544,12 +762,26 @@ nsch_sched_save_switch:
   CMP r1,r2
   JMP[EQ] @nsch_ss_pick
   ST r1,r14,1
+  LA r2,#NS_BASE
+  LD r3,r2,#NS_THRSLOT
+  LD r4,r14,1
+  CMP r3,r4
+  JMP[NE] @nsch_ss_norm
+  ; Thread owner: save the live kframe in nanthr's current TCB.
+  MOVI r1,#NS_P_FRAME
+  INL r2,r1
+  LA r3,@nthr_globals
+  LD r4,r3,#NT_G_CUR
+  MOVI r5,24
+  BCOPY r4,r2,r5
+  JMP @nsch_ss_pick
+nsch_ss_norm:
+  LD r1,r14,1
   CALL @nsch_frame_ptr
-  ST r1,r14,2
+  ADD r4,r1,r0
   MOVI r1,#NS_P_FRAME
   INL r2,r1
   MOVI r3,24
-  LD r4,r14,2
   BCOPY r4,r2,r3
 nsch_ss_pick:
   CALL @nsch_pick
@@ -580,10 +812,21 @@ nsch_activate_slot:
   LA r2,#NS_BASE
   LD r1,r14,3
   ST r1,r2,#NS_CUR
-  ; frame -> kframe
+  ; frame -> kframe (current TCB frame in thread mode)
+  LA r2,#NS_BASE
+  LD r3,r2,#NS_THRSLOT
+  LD r4,r14,1
+  CMP r3,r4
+  JMP[NE] @nsch_act_norm
+  LA r3,@nthr_globals
+  LD r3,r3,#NT_G_CUR
+  ST r3,r14,4
+  JMP @nsch_act_copy
+nsch_act_norm:
   LD r1,r14,1
   CALL @nsch_frame_ptr
   ST r1,r14,4
+nsch_act_copy:
   LD r4,r14,4
   MOVI r1,#NS_P_FRAME
   INL r2,r1
@@ -647,6 +890,14 @@ nsch_tick:
 nsch_wake_sleepers:
   ST r15,r14,0
   ADDI r14,r14,#NS_FRAME
+  LA r2,#NS_BASE
+  LD r3,r2,#NS_NSLEEP
+  CMP r3,r0
+  JMP[EQ] @nsch_ws_ret
+  LD r3,r2,#NS_SMIN
+  LD r4,r2,#NS_TICKS
+  CMP r4,r3
+  JMP[LT] @nsch_ws_ret
   ; current priority (0xFFFF if none)
   LA r2,#NS_BASE
   LD r1,r2,#NS_CUR
@@ -662,6 +913,8 @@ nsch_wake_sleepers:
 nsch_ws_scan:
   MOVI r1,0
   ST r1,r14,1
+  LA r4,0xFFFFFFFF
+  ST r4,r14,4
 nsch_ws_loop:
   LD r1,r14,1
   MOVI r2,#NP_MAX_PROCS
@@ -696,19 +949,23 @@ nsch_ws_loop:
   LA r6,#NS_BASE
   LD r7,r6,#NS_TICKS
   CMP r7,r5
-  JMP[LT] @nsch_ws_next
+  JMP[LT] @nsch_ws_notdue
   ; ready
   LD r1,r3,#NP_E_PID
   MOVI r2,#NP_ST_READY
   CALL @np_set_state
   LD r1,r14,1
   CALL @nsch_enqueue
-  ; clear wait kind
+  ; clear wait kind and count the sleeper out
   LA r6,#NS_BASE
   ADDI r6,r6,#NS_WAITK
   LD r1,r14,1
   ADD r6,r6,r1
   ST r0,r6,0
+  LA r6,#NS_BASE
+  LD r7,r6,#NS_NSLEEP
+  SUB r7,r7,r13
+  ST r7,r6,#NS_NSLEEP
   ; higher priority than current forces a switch
   LD r3,r14,3
   LD r4,r3,#NP_E_PRIO
@@ -725,7 +982,27 @@ nsch_ws_next:
   ADD r1,r1,r13
   ST r1,r14,1
   JMP @nsch_ws_loop
+nsch_ws_notdue:
+  LD r6,r14,4
+  CMP r5,r6
+  JMP[GE] @nsch_ws_next
+  ST r5,r14,4
+  JMP @nsch_ws_next
 nsch_ws_done:
+  LA r2,#NS_BASE
+  LD r3,r2,#NS_NSLEEP
+  CMP r3,r0
+  JMP[NE] @nsch_ws_setmin
+  ST r0,r2,#NS_SMIN
+  JMP @nsch_ws_end
+nsch_ws_setmin:
+  LD r3,r14,4
+  ST r3,r2,#NS_SMIN
+nsch_ws_end:
+  ADDI r14,r14,#NS_FRAME_NEG
+  LD r15,r14,0
+  RET
+nsch_ws_ret:
   ADDI r14,r14,#NS_FRAME_NEG
   LD r15,r14,0
   RET
@@ -739,63 +1016,54 @@ nsch_wake_waiters:
   ADDI r14,r14,#NS_FRAME
   ST r1,r14,1
   ST r2,r14,2
-  ; child ppid
+  ; child -> ppid
   CALL @np_lookup
   CMP r1,r0
   JMP[EQ] @nsch_ww_done
   LD r3,r1,#NP_E_PPID
+  CMP r3,r0
+  JMP[EQ] @nsch_ww_done
   ST r3,r14,3
-  ST r0,r14,4              ; woke flag
-  MOVI r3,0
-  ST r3,r14,5              ; slot
-nsch_ww_loop:
-  LD r3,r14,5
-  MOVI r4,#NP_MAX_PROCS
+  ; parent must be blocked in wait
+  ADD r1,r3,r0
+  CALL @np_lookup
+  CMP r1,r0
+  JMP[EQ] @nsch_ww_done
+  ST r1,r14,4
+  LD r3,r1,#NP_E_STATE
+  MOVI r4,#NP_ST_BLOCKED
   CMP r3,r4
-  JMP[GE] @nsch_ww_reap
-  ; entry ptr
-  MOVI r4,#NP_ENTRY
-  MUL r4,r3,r4
-  LA r5,#NP_BASE
-  ADD r5,r5,r4
-  ST r5,r14,6
-  LD r4,r5,#NP_E_PID
-  CMP r4,r0
-  JMP[EQ] @nsch_ww_next
-  ; must be blocked in wait
-  LD r6,r5,#NP_E_STATE
-  MOVI r7,#NP_ST_BLOCKED
-  CMP r6,r7
-  JMP[NE] @nsch_ww_next
-  LA r6,#NS_BASE
-  ADDI r6,r6,#NS_WAITK
-  ADD r6,r6,r3
-  LD r6,r6,0
-  MOVI r7,#NS_WK_WAIT
-  CMP r6,r7
-  JMP[NE] @nsch_ww_next
-  ; must be this child's parent
-  LD r6,r14,3
-  CMP r4,r6
-  JMP[NE] @nsch_ww_next
-  ; waitpid match: specific pid or 0 (any)
-  LA r6,#NS_BASE
-  ADDI r6,r6,#NS_WAITPID
-  ADD r6,r6,r3
-  LD r6,r6,0
-  CMP r6,r0
+  JMP[NE] @nsch_ww_done
+  ; parent slot and wait record
+  LD r1,r14,3
+  CALL @nsch_slot
+  MOVI r2,#NS_NONE
+  CMP r1,r2
+  JMP[EQ] @nsch_ww_done
+  ST r1,r14,5
+  LA r2,#NS_BASE
+  ADDI r2,r2,#NS_WAITK
+  ADD r2,r2,r1
+  LD r3,r2,0
+  MOVI r4,#NS_WK_WAIT
+  CMP r3,r4
+  JMP[NE] @nsch_ww_done
+  LA r2,#NS_BASE
+  ADDI r2,r2,#NS_WAITPID
+  ADD r2,r2,r1
+  LD r3,r2,0
+  CMP r3,r0
   JMP[EQ] @nsch_ww_match
-  LD r7,r14,1
-  CMP r6,r7
-  JMP[NE] @nsch_ww_next
+  LD r4,r14,1
+  CMP r3,r4
+  JMP[NE] @nsch_ww_done
 nsch_ww_match:
-  ; wake: pid -> ready, enqueue
-  LD r1,r5,#NP_E_PID
+  ; wake parent
+  LD r1,r14,3
   MOVI r2,#NP_ST_READY
   CALL @np_set_state
   LD r1,r14,5
   CALL @nsch_enqueue
-  ; frame[21]=status, frame[1]=status, frame[2]=child pid
   LD r1,r14,5
   CALL @nsch_frame_ptr
   LD r2,r14,2
@@ -813,17 +1081,7 @@ nsch_ww_match:
   ADDI r6,r6,#NS_WAITPID
   ADD r6,r6,r1
   ST r0,r6,0
-  MOVI r1,1
-  ST r1,r14,4
-nsch_ww_next:
-  LD r3,r14,5
-  ADD r3,r3,r13
-  ST r3,r14,5
-  JMP @nsch_ww_loop
-nsch_ww_reap:
-  LD r3,r14,4
-  CMP r3,r0
-  JMP[EQ] @nsch_ww_done
+  ; waiter consumed the zombie
   LD r1,r14,1
   CALL @np_reap
 nsch_ww_done:
@@ -864,6 +1122,15 @@ nsch_kill:
   LA r2,#NS_BASE
   ADDI r2,r2,#NS_WAITK
   ADD r2,r2,r1
+  LD r3,r2,0
+  MOVI r4,#NS_WK_SLEEP
+  CMP r3,r4
+  JMP[NE] @nsch_kill_notsleep
+  LA r4,#NS_BASE
+  LD r3,r4,#NS_NSLEEP
+  SUB r3,r3,r13
+  ST r3,r4,#NS_NSLEEP
+nsch_kill_notsleep:
   ST r0,r2,0
   LA r2,#NS_BASE
   ADDI r2,r2,#NS_WAKE
@@ -893,6 +1160,95 @@ nsch_kill_self:
   LD r2,r14,5
   CALL @nsch_wake_waiters
   JMP @nsch_sched_save_switch
+
+; ---------------------------------------------------------------------------
+; Cooperative thread mode (nanthr.nas).  One owning process per boot may use
+; threads; every thread shares the owner pid and S1 region table.  The first
+; thread SVC seeds nanthr's main TCB with the live kframe, so SVC 0 yields
+; between threads once a worker exists.
+nsch_thread_svc:
+  ADD r10,r1,r0
+  LD r3,r10,20
+  LA r2,#NS_BASE
+  ST r3,r2,#NS_TMP0
+  LD r4,r2,#NS_THRPID
+  CMP r4,r0
+  JMP[NE] @nsch_ts_have
+  ADD r1,r10,r0
+  CALL @nsch_thread_boot
+nsch_ts_have:
+  LA r2,#NS_BASE
+  LD r4,r2,#NS_THRPID
+  LD r5,r2,#NS_CUR
+  CMP r4,r5
+  JMP[NE] @nsch_ts_bad
+  ; thread_exit: drop the exiting tid from the nanproc thread list
+  LD r3,r2,#NS_TMP0
+  MOVI r4,15
+  CMP r3,r4
+  JMP[NE] @nsch_ts_disp
+  CALL @nthr_self
+  ADD r2,r1,r0
+  LA r3,#NS_BASE
+  LD r1,r3,#NS_CUR
+  CALL @np_thread_remove
+nsch_ts_disp:
+  MOVI r1,#NS_P_FRAME
+  INL r10,r1
+  ADD r1,r10,r0
+  CALL @nthr_syscall_dispatch
+  ; thread_create: the tid is in the restored r1/frame[1]
+  LA r2,#NS_BASE
+  LD r3,r2,#NS_TMP0
+  MOVI r4,13
+  CMP r3,r4
+  JMP[NE] @nsch_ts_ret
+  MOVI r1,#NS_P_FRAME
+  INL r10,r1
+  LD r1,r10,1
+  CMP r1,r0
+  JMP[EQ] @nsch_ts_ret
+  ADD r2,r1,r0
+  LA r3,#NS_BASE
+  LD r1,r3,#NS_CUR
+  CALL @np_thread_add
+nsch_ts_ret:
+  SVCRET
+nsch_ts_bad:
+  LA r2,#NS_BASE
+  LD r10,r2,#NS_FP
+  LA r1,0xFFFFFFFF
+  ST r1,r10,21
+  SVCRET
+
+; nsch_thread_boot - r1=frame.  Configure nanthr and seed its main TCB.
+nsch_thread_boot:
+  ST r15,r14,0
+  ADDI r14,r14,#NS_FRAME
+  ST r1,r14,1
+  LA r1,#NS_TCB_BASE
+  MOVI r2,#NS_TCB_COUNT
+  LA r3,#NS_TSTACK_BASE
+  MOVI r4,#NS_TSTACK_WORDS
+  MOVI r5,#NS_TSTACK_SIZE
+  CALL @nthr_init
+  ; main TCB frame = live kframe
+  LA r2,@nthr_globals
+  LD r2,r2,#NT_G_CUR
+  LD r1,r14,1
+  MOVI r3,24
+  BCOPY r2,r1,r3
+  ; owner pid/slot
+  LA r2,#NS_BASE
+  LD r3,r2,#NS_CUR
+  ST r3,r2,#NS_THRPID
+  ADD r1,r3,r0
+  CALL @nsch_slot
+  LA r2,#NS_BASE
+  ST r1,r2,#NS_THRSLOT
+  ADDI r14,r14,#NS_FRAME_NEG
+  LD r15,r14,0
+  RET
 
 ; ---------------------------------------------------------------------------
 ; nsch_spawn_desc - r1=ppid, r2=descriptor -> r1=pid or 0.

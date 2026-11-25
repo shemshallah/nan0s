@@ -577,6 +577,10 @@ nthr_restore_frame:
 LD r2,r0,#NT_G_NEXT
 MOVI r3,24
 BCOPY r1,r2,r3
+; Production SVC return: SVCRET reads frame[21], while the dispatcher keeps
+; the syscall result in r1 (TCB frame[1]).  Mirror it for the S1 vector.
+LD r3,r2,1
+ST r3,r1,21
 LD r4,r0,#NT_G_OLDCUR
 CMP r2,r4
 MOVI r1,0

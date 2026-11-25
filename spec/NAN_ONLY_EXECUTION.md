@@ -103,10 +103,15 @@ Raw-NaN gates, not oracle claims:
 - `tools/nanpipe_libc_gate.sh` — guest libc `pipe()/dup2()/read()/write()`
   over the NaN byte-pipe table; `PIPE PASS` on x86_64 S1.
 - `tools/nansched_gate.sh` — the kernel scheduler (`src/lib/nansched.nas`):
-  64-process nanproc table, 32 priority run levels, timer preemption,
-  yield/exit/spawn/wait/kill/sleep.  It installs through `nk_install_proc`;
+  1024-slot nanproc table, 32 priority run levels, timer preemption,
+  yield/exit/spawn/wait/kill/sleep, plus SVC 25 setpriority, 26 getpriority,
+  27 proc_count and 28 proc_limit.  It installs through `nk_install_proc`;
   `nankernel` keeps SVC 4..8 and delegates process SVCs.  `SCHED PASS`,
-  timer preemptions 14, C oracle == x86_64 S1.
+  timer preemption nonzero, C oracle == x86_64 S1.
+- `tools/nansched_stress_gate.sh` — 512 live child processes under the
+  1024-slot scheduler, 73 killed, 512 waited/reaped, status sum 31672, then
+  four cooperative nanthr threads with mutex/cond/join.  `SCHED STRESS PASS`,
+  timer-preemption counter 711 on S1, C oracle == x86_64 S1.
 - `tools/nancli64_gate.sh` — a 64-bit text command line (mkdir/write/cat/ls/
   stat/truncate/rm/rmdir/help/exit) compiled to NaN and running on x86_64
   S1; every filesystem operation goes through the NaN POSIX table.
@@ -141,8 +146,11 @@ Raw-NaN gates, not oracle claims:
 - [x] NaN POSIX metadata (mkdir/stat/readdir/rmdir/access/truncate).
 - [x] SQLite persistence through NaN services.
 - [x] n16i executes on the bare machine.
-- [x] NaN process/thread kernel scheduler (64 processes, priorities,
-      preemption, sleep/wait/kill) installed via `nk_install_proc`.
+- [x] NaN process/thread kernel scheduler (1024 slots, 32 priorities,
+      preemption, sleep/wait/kill, set/getpriority, count/limit) installed
+      via `nk_install_proc`.
+- [x] 512-process stress plus four cooperative threads (mutex/cond/join)
+      under the kernel scheduler.
 - [ ] KABI machine mechanics (SVC/trap/ports/regions) in the NaN-coded
       64-bit core itself.
 - [ ] libc POSIX switched to NaN; C bodies deleted.
