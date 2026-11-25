@@ -4375,7 +4375,7 @@ CALL @vc_puts
 LD r3,r0,@dh_hi
 MOVI r4,8
 SUB r3,r3,r4
-MOVI r4,63
+MOVI r4,4095
 BOOL.8 r3,r3,r4
 ST r3,r0,@dh_s
 MOVI r1,0
@@ -4393,7 +4393,7 @@ MOVI r2,32
 CALL @vc_putc
 LD r1,r0,@dh_s
 ADD r1,r1,r13
-MOVI r2,63
+MOVI r2,4095
 BOOL.8 r1,r1,r2
 ST r1,r0,@dh_s
 LD r1,r0,@dh_n

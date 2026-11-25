@@ -315,6 +315,10 @@ nd_rl:
   ST r0,r0,@nd_urec
   ST r0,r0,@nd_ui
   ST r0,r0,@nd_ud
+  LA r1,0x32000
+  MOVI r2,0
+  MOVI r3,4096
+  BFILL r1,r2,r3
   RET
 
 nd_run:
@@ -402,9 +406,11 @@ nd_loop:
   ST r5,r0,@nd_left
   ST r12,r0,@nd_at
   LD r5,r0,@nd_hi
-  ST r12,r5,@nd_hist
+  LA r6,0x32000
+  ADD r6,r6,r5
+  ST r12,r6,0
   ADD r5,r5,r13
-  MOVI r6,63
+  MOVI r6,4095
   BOOL.8 r5,r5,r6
   ST r5,r0,@nd_hi
   ADD r1,r12,r0
@@ -1573,11 +1579,6 @@ nd_cd:
 .word 0
 nd_hi:
 .word 0
-nd_hist:
-.word 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-.word 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-.word 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-.word 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 nd_wlo:
 .word 8192
 nd_whi:
