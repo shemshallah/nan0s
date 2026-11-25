@@ -7,6 +7,8 @@
 spec/MEMORY_PLAN.md (round 08) says all memory is NaN words, no raw side-regions. VRAM tensors are raw. Proposal: raw windows are explicit and named (RAWMAP), never reachable by LD/ST/fetch, and every block that crosses between NaN space and a raw window carries the dual-face seal (see INTEGRITY_PLAN.md L4): sealed before DMA out, verified after read back. That turns the double-endian seal into silent-corruption detection for long training runs.
 ## Milestones
 M0 DONE (v32, tested in model + v86): 4M words (32 MB), JMPF/CALLF 24-bit far code, 64 MB v86 RAM. tools/test_far.py, src/tests/far_test.nas -> FKMN.
+
+M1a DONE: high-data `LDS`/`STS` forms address the 0xF0000 compiler scratch window without a 16-bit base register. `nmk.awk` lowers direct `LD/ST rX,r0,#high_symbol` to these forms, so the GUI can use the full 64K code slot while compiler scratch stays outside it.
 M1: mask becomes a variable (not an assembler constant); RAM size from the BIOS memory map (E820) read in the boot sector; guest array sized to what exists, up to about 2 GB (2^28 words) in 32-bit flat mode. Needs memory-operand forms in nasm1 or a register-held mask.
 M2: x86-64 long-mode kernel (nasm1 gains REX/64-bit encodings), identity-mapped large pages, guest word array above 4 GB, 16 GB = 2^31 words. Register word index stays 32-bit; word index 2^31 and up is reserved.
 M3: PCIe enumeration (config space), find the GPU, map its BARs (resizable BAR for a full VRAM aperture), RAWMAP window ops, DMA block copy RAM <-> window with seal-on-transfer.
