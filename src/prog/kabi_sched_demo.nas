@@ -22,6 +22,8 @@
 .equ BC       0x8400
 .equ ASTACK   0x47F0
 .equ BSTACK   0x87F0
+.equ SCR_A    0x10000
+.equ SCR_B    0x20000
 
 .org 0
 boot:
@@ -68,7 +70,19 @@ bz:
   ST r0,r0,#RT_A+6
   MOVI r1,3
   ST r1,r0,#RT_A+7
-  ST r0,r0,#RT_A+8
+  ; scratch window for LDS/STS
+  MOVI r1,0
+  MOVHI r1,1
+  ST r1,r0,#RT_A+8
+  MOVI r1,0x1000
+  ST r1,r0,#RT_A+9
+  ST r0,r0,#RT_A+10
+  MOVI r1,3
+  ST r1,r0,#RT_A+11
+  ST r0,r0,#RT_A+12
+  ST r0,r0,#RT_A+13
+  ST r0,r0,#RT_A+14
+  ST r0,r0,#RT_A+15
 
   ; region table B: code RX, data RW
   MOVI r1,0x8000
@@ -85,7 +99,19 @@ bz:
   ST r0,r0,#RT_B+6
   MOVI r1,3
   ST r1,r0,#RT_B+7
-  ST r0,r0,#RT_B+8
+  ; scratch window for LDS/STS
+  MOVI r1,0
+  MOVHI r1,2
+  ST r1,r0,#RT_B+8
+  MOVI r1,0x1000
+  ST r1,r0,#RT_B+9
+  ST r0,r0,#RT_B+10
+  MOVI r1,3
+  ST r1,r0,#RT_B+11
+  ST r0,r0,#RT_B+12
+  ST r0,r0,#RT_B+13
+  ST r0,r0,#RT_B+14
+  ST r0,r0,#RT_B+15
 
   ST r0,r0,#CUR
   ST r0,r0,#DA
@@ -179,6 +205,10 @@ to_a:
   MOVI r1,0x4E04
   MOVI r2,#RT_A
   OUTL r2,r1
+  MOVI r1,0x4E07
+  MOVI r2,0
+  MOVHI r2,1
+  OUTL r2,r1
   SVCRET
 to_b:
   MOVI r1,1
@@ -188,6 +218,10 @@ to_b:
   OUTL r2,r1
   MOVI r1,0x4E04
   MOVI r2,#RT_B
+  OUTL r2,r1
+  MOVI r1,0x4E07
+  MOVI r2,0
+  MOVHI r2,2
   OUTL r2,r1
   SVCRET
 to_other:
@@ -205,6 +239,8 @@ a_entry:
   MOVI r6,6
   MOVI r9,0
   ST r9,r0,#AC
+  MOVI r1,0x1111
+  STS r1,4
 aloop:
   PUTC r7
   LD r9,r0,#AC
@@ -212,9 +248,17 @@ aloop:
   ST r9,r0,#AC
   CMP r9,r6
   JMP[LT] @aloop
+  LDS r2,4
+  MOVI r3,0x1111
+  CMP r2,r3
+  JMP[NE] @afail
   MOVI r1,0
   SVC 1
   JMP @aloop
+afail:
+  MOVI r1,88
+  PUTC r1
+  HALT
 
 ; ---- A data/stack ----
 .org 0x4400
@@ -230,6 +274,8 @@ b_entry:
   MOVI r6,6
   MOVI r9,0
   ST r9,r0,#BC
+  MOVI r1,0x2222
+  STS r1,4
 bloop:
   PUTC r7
   LD r9,r0,#BC
@@ -237,9 +283,17 @@ bloop:
   ST r9,r0,#BC
   CMP r9,r6
   JMP[LT] @bloop
+  LDS r2,4
+  MOVI r3,0x2222
+  CMP r2,r3
+  JMP[NE] @bfail
   MOVI r1,0
   SVC 1
   JMP @bloop
+bfail:
+  MOVI r1,89
+  PUTC r1
+  HALT
 
 ; ---- B data/stack ----
 .org 0x8400
