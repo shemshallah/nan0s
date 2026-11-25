@@ -690,9 +690,9 @@ A ring of compact entries, one per step:
 entry = class 10, payload = pc:16 | op:8 | k:2 | flags:6
 ```
 
-A 4096-entry ring is 32 KB. It records the last 4096 fetches. On a fault, the
-monitor can print the last N with disassembly. A rolling seal over the ring
-detects corruption. This is the “show its own work” ethos applied to a crash:
+A 4096-entry ring is 32 KB. The current core keeps 4096 PC words at 0x32000
+and clears them on reset; the packed op/k/flags entry and rolling seal are
+next. On a fault, the monitor can print the last N with disassembly. This is the “show its own work” ethos applied to a crash:
 the machine can show the road to the fault, not only the hole.
 
 ### 7.7 Undo / time travel
@@ -1251,8 +1251,9 @@ cart seal valid.
 
 ### P2 — records, history, protocol
 
-- [ ] 8-word NDR with operands and seal; mirror pair storage.
-- [ ] Flight-recorder ring (4096 steps) and log ring (256 records).
+- [x] 8-word NDR with operands and seal; mirror pair storage.
+- [~] Flight-recorder ring (4096 PC entries; packed entry next) and log ring
+      (16 records; 256 target).
 - [x] Bounded scalar undo ring (32 records, two writes each); `undo [n]`.
 - [x] Redo ring (32 records) with post-step state and write values; `redo [n]`.
 - [x] Cart checkpoint/restore: registers, PC, condition, call depth, 64K arena.
