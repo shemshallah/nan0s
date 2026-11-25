@@ -64,6 +64,16 @@ finish and triage the later test/ files.
   `tools/nan16_patch_lock_common.py` makes `do_multiclient_test` probe pipe
   creation and run only the same-interpreter (tn==2) variant instead of
   aborting the aggregate at busy2.test.
+- Official `recoverpgsz.test` on the current fixture reports **28 errors
+  out of 89**; every failing case expects 512/2048/4096/... but gets 1024.
+  The C recover probe only exercised 1024, where output 1024 is coincidental.
+  The copied page is valid at its size; the remaining question is why the
+  detected size is not reflected in the output settings for other sizes.
+- Official `backup2.test` is **3 errors out of 16**: backup2-7/11 write a
+  text file and expect SQLITE_NOTADB, but the Tcl `db backup`/`restore`
+  command replaces it with a valid database; a direct C
+  sqlite3_open+sqlite3_backup_init returns 26.  backup2-10 expects the unix
+  "disk I/O error" wording and gets "unable to open database file".
 - A small WAL probe succeeds (`journal_mode=wal`, insert, reopen, count=2)
   with the iVersion-2 shm methods.  Enabling WAL in the 24 MB testfixture,
   however, halts during startup at pc 3,146,612 with no console output; the
