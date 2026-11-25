@@ -137,13 +137,15 @@ finish and triage the later test/ files.
   system errno, xSleep microseconds and chunk-rounded SIZE_HINT.  Verified
   slices: select1 **199/0**, cache **190/0**, date **1749/0**, capi3
   **249/0**, chunksize **7/0**.  cksumvfs and recovercorrupt3 remain open.
-  Official results: select1 **199/0**, cache **190/0**, recoverpgsz
-  **89/0**, backup2 **16/16**, busy2 **0/15** at `--clock steps:100000`,
-  symlink **1/39** (only `symlink-1.3`, `exec ln -s`), wal.test **3/518**
-  (only `wal-20.2/20.3/20.4`, which use `launch_testfixture`/pipes).  The
-  old `wal-10.2.x` frame-count failures, `wal-23.4` recovered-frame count,
-  `wal-24.5` WAL size, `avtrans-9.*.5` fullsync counts, and `cache`'s
-  missing `btree_*` commands are fixed.
+  On the preceding `564121aa` fixture the official results were select1
+  **199/0**, cache **190/0**, recoverpgsz **89/0**, backup2 **16/16**,
+  busy2 **0/15** at `--clock steps:100000`, symlink **1/39** (only
+  `symlink-1.3`, `exec ln -s`), and wal.test **3/518** (only
+  `wal-20.2/20.3/20.4`, which use `launch_testfixture`/pipes); the same
+  slices are being rechecked on `d7e51529`.  The old `wal-10.2.x`
+  frame-count failures, `wal-23.4` recovered-frame count, `wal-24.5` WAL
+  size, `avtrans-9.*.5` fullsync counts, and `cache`'s missing `btree_*`
+  commands are fixed.
 - Real single-process WAL shm locks are in place: per-path slot table,
   per-handle SHARED/EXCLUSIVE masks, refcounted shm, release on
   close/unmap.  `xSleep` advances a virtual-sleep word at `0x03EFF01C`
