@@ -75,9 +75,9 @@ main:
   CMP r1,r2
   JMP[NE] @fail
   ; mirror w4: copy to scratch, BSWAPM in place, compare the payload
-  LA r3,0x31104
+  LA r3,0x31804
   LD r1,r3,0
-  LA r4,0x31200
+  LA r4,0x33000
   ST r1,r4,0
   BSWAPM r4,0
   LD r1,r4,0
@@ -88,9 +88,9 @@ main:
   MOVI r1,@nd_rec
   ADDI r1,r1,7
   LD r2,r1,0
-  LA r3,0x31107
+  LA r3,0x31807
   LD r1,r3,0
-  LA r4,0x31200
+  LA r4,0x33000
   ST r1,r4,0
   BSWAPM r4,0
   LD r1,r4,0
