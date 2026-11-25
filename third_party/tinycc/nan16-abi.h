@@ -49,13 +49,13 @@
 #define NAN16_SIZEOF_LONG   4
 #define NAN16_SIZEOF_LLONG  8
 #define NAN16_SIZEOF_FLOAT  4
-#define NAN16_SIZEOF_DOUBLE 4
+#define NAN16_SIZEOF_DOUBLE 8
 #define NAN16_SIZEOF_PTR    4
 #define NAN16_SIZEOF_SIZE_T 4
 
 #define NAN16_ALIGN_LLONG   8
 #define NAN16_ALIGN_PTR     4
-#define NAN16_ALIGN_DOUBLE  4
+#define NAN16_ALIGN_DOUBLE  8
 
 #define NAN16_VARARGS_OFFSET 16  /* fp+16: 64-byte varargs area */
 #define NAN16_VARARGS_BYTES  64

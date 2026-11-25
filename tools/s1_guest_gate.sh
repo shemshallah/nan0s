@@ -12,7 +12,9 @@ T="${TMPDIR:-/tmp}/s1_guest.$$"; mkdir -p "$T"; trap 'rm -rf "$T"' EXIT
 make -s -C aarch64/android nan_cli
 
 run_guest() {
-  name=$1; src=$2
+  name=$1; src=$2; script=${3:-}
+  script_arg=""
+  [ -n "$script" ] && script_arg="--guest-script $script"
   awk -f tools/nmk.awk -v CMD=emit "$src" > "$T/$name.nan" 2>"$T/$name.asm"
   words=$(awk '{
     line=$0; sub(/;.*/, "", line); gsub(/^[ \t]+|[ \t]+$/, "", line)
@@ -22,9 +24,9 @@ run_guest() {
   [ "$words" -gt 0 ] || { echo "s1_guest: FAIL ($name: empty cartridge)"; exit 1; }
   bytes=$((words * 8))
   ./aarch64/android/nan_cli --img "$T/$name.nan" --steps 20000000 \
-    --serial > "$T/$name.oracle" 2>/dev/null
+    --serial $script_arg > "$T/$name.oracle" 2>/dev/null
   if ! "$ROOT/tools/s1_runner.sh" --img "$T/$name.nan" --mem 64 \
-      --steps 20000000 --serial > "$T/$name.s1" 2> "$T/$name.err"; then
+      --steps 20000000 --serial $script_arg > "$T/$name.s1" 2> "$T/$name.err"; then
     echo "s1_guest: FAIL ($name: runner)"
     cat -v "$T/$name.err" | tail -20
     exit 1
@@ -40,6 +42,7 @@ run_guest() {
 
 run_guest focused src/tests/s1_guest_test.nas
 run_guest fp src/tests/s1_fp_test.nas
+run_guest script src/tests/s1_script_test.nas "/sqlite/test/select1.test"
 run_guest nfs2 src/tests/nfs2_test.nas
 run_guest far src/tests/far_test.nas
 echo "s1_guest: PASS (flat cartridges execute on x86_64 S1; COM1 == C oracle)"

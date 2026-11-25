@@ -10,6 +10,7 @@ node_modules/
 aarch64/android/nan_cli
 aarch64/android/tests/test_core
 aarch64/android/tests/test_core_asan
+aarch64/android/tests/test_kernel_abi
 aarch64/android/app/build/
 aarch64/android/build/
 aarch64/android/.gradle/
@@ -42,3 +43,9 @@ third_party/tinycc/config.mak
 third_party/tinycc/c2str.exe
 third_party/tinycc/tccdefs_.h
 third_party/tinycc/tcc_nan16
+
+# local gate logs
+build/gate-*.log
+build/last-gate-log
+build/tcc2-gate-*.log
+build/tcc2-*.log

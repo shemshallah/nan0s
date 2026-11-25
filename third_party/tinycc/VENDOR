@@ -1,0 +1,17 @@
+# Vendored TinyCC provenance
+
+- Upstream project: https://github.com/TinyCC/tinycc
+- Upstream commit: `5cef7f3f85b0fbbd4663fd3518ba097d7fe3d738`
+- Upstream version: `0.9.28rc`
+- Vendored import commit in nan0s: `7bdb443aac14a1f49a2f3e5a2f223a406921946c`
+- Vendored tree at import: `dcb896d1c7ae2e64114c55c93f5223f92280bbdf`
+- License: LGPL-2.1 (`COPYING`)
+
+Local NaN16 changes live in `nan16-gen.c`, `nan16-link.c`, `nan16-abi.h`,
+`nan16-enc.c/.h`, `tcc.h`, `libtcc.c` and `tccelf.c`.  They are described in
+`spec/TCC_NAN16.md`; do not edit upstream files without recording the patch.
+
+The tree hash above is the git tree object of `third_party/tinycc` at the
+vendoring commit, so the imported upstream snapshot is verifiable without
+requiring the upstream commit to exist in this repository.  The current
+working tree hash is reported by `git rev-parse HEAD:third_party/tinycc`.

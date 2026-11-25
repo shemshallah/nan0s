@@ -122,6 +122,13 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done and gated.
 - [ ] Backend skeleton for a real GPU and a software fallback.
 
 ## P0.5 SMP and concurrency
+- [~] NaN thread subsystem: TCB/trap frame, ready queue, round-robin quantum,
+      preemption hook, join/detach, mutex, cond, TLS and atomics boundary in
+      `src/lib/nanthr.nas`; contract in `spec/THREADS.md`, exact gate in
+      `tools/nanthr_gate.sh`.  The C core is the oracle; the same image has an
+      S1 frame entry (`nthr_syscall_dispatch`) and timer hook
+      (`nthr_preempt`).  Remaining: x86_64 S1 SVC/timer vector wiring and
+      per-core queues/work stealing.
 - [ ] AP bring-up (INIT/SIPI), per-core GDT/TSS/IDT/stacks.
 - [ ] Per-core run queues and scheduler; preemption.
 - [ ] Atomic load/store/RMW, fences, CAS, fetch-add; exact memory model.
@@ -142,39 +149,76 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done and gated.
 - [ ] Fuzzing gates for parsers and syscalls.
 
 ## P0.7 TCC self-hosting and the verified compiler chain
-- [x] Vendor TCC at `third_party/tinycc` (commit 5cef7f3, LGPL-2.1).
+- [x] Vendor TCC at `third_party/tinycc` (upstream `5cef7f3`, imported tree
+      `dcb896d1c7ae2e64114c55c93f5223f92280bbdf`, LGPL-2.1); machine-readable
+      provenance in `third_party/tinycc/VENDOR`.
 - [x] NaN16 ABI contract (`nan16-abi.h`), host word encoder
       (`nan16-enc.c/.h`) and a runnable `MOVI/ST/HALT` smoke test
       (`tcc_nan16_enc`, raw words and `.nan` text).
-- [x] `TCC_TARGET_NAN16` builds (`nan16-gen.c`, `nan16-link.c`, `tcc.h`,
-      `libtcc.c`, `tccelf.c` hooks).  tcc0 compiles and runs 37 C programs
-      (`tcc_nan16_smoke`): returns, calls, loops, arrays, recursion,
-      switch, pointers, strings, structs, function pointers, `long long`
-      pairs, struct args/returns, 64-bit division/shifts, varargs and
-      8-byte binary64 `double`/`long double`.
-- [ ] Before tcc1: fix the generated libtcc call/symbol/frame layout.  The
-      self-host harness (`tools/tcc_nan16_selfhost.sh`) builds a 1.8 MB
-      libtcc+libc cartridge; it traps in the first calls after ~7k steps.
-      The minimal libc/VFS is in `third_party/nan16-libc`; `printf`/`strtod`
-      are in place.
-- [ ] NaN16 output: flat cartridge/executable writer, relocations, sections,
-      entry point, symbol table.
+- [x] tcc0: `TCC_TARGET_NAN16` builds (`nan16-gen.c`, `nan16-link.c`, `tcc.h`,
+      `libtcc.c`, `tccelf.c` hooks) and compiles/runs 40 C programs
+      (`tcc_nan16_smoke`), including 64-bit pairs, structs, varargs,
+      8-byte binary64 `double`/`long double`, comparison-valued `?:`,
+      constant-address lvalues and unaligned bit-field containers.
+- [x] tcc1: `tools/tcc_nan16_selfhost.sh --run` builds self1 (~2.53 MB),
+      self1 compiles `test.c`, emits a 144-byte inner cartridge, and the
+      inner `main` returns 42.  Wired into `presqlite_gate`.
+- [x] Guest compiler direct calls: whole-`SymAttr` bitfield copies were
+      replaced with 2-byte `memcpy`s (a 4-byte bitfield-unit copy zeroed
+      `Sym.r` and sent calls to `FP*4+2`).  The guest compiler now passes
+      `add(20,22)`, recursive `fib(10)` (55) and a loops/arrays/structs/
+      switch test (19).
+- [x] NaN16 output: flat cartridge/executable writer, sections, 24-bit
+      absolute far branches (`0x38`), 32-bit direct `MOVI/MOVHI`+`CALLR`
+      calls, address/data relocations and the entry prelude.  Text-only audit
+      of self1: 9,000 far jumps, 5,781 with targets >64k words, zero 16-bit
+      branch instructions.
+- [x] Guest libc `strtod`: keep 19 significant digits, round to nearest even,
+      and apply one correctly rounded `10^k` from the generated
+      `nan16_pow10.h` table; `__nan16_ull2d` was also corrected.  The old
+      parser wrapped 2^64/2^96 to zero and lost the low bits of DBL_MAX; this
+      was the last self1/self2 difference.
+- [x] tcc2: self1 compiles the preprocessed TCC sources plus
+      `NAN16_RUNTIME_SRC` to self2; `self1 == self2` byte-for-byte
+      (2,529,728 bytes) within the 5.0B-step cumulative gate budget.  self2 compiles
+      `test.c` to a 144-byte inner cartridge whose `main` returns 42.
+      SHA-256 `32c3b8e82b62549ce23cbc372504412d076de2165988710889eabd23541b38f7`.
+- [x] SQLite-driven compiler corrections (no SQLite field/allocator hacks):
+      natural-alignment fallback for unaligned bit-field containers;
+      per-`VT_CMP` operands in `SValue.cmp_r` so `?:` can save/restore
+      comparisons; dereference in the non-symbol constant-lvalue load;
+      `VT_LLOCAL`/member-offset materialisation; 16-byte allocator header for
+      eight-byte payload alignment; `INT*_C`/`UINT*_C` and `NDEBUG` headers.
+- [ ] Broaden the guest-compiler/program corpus beyond add/fib/loops/arrays/
+      structs/switch and the double-constant test: printf, libm, varargs and
+      libtcc subsets.
 - [ ] ABI parity with ncc: args/returns, stack frames, varargs, structs,
-      64-bit pairs, f32/f64; bidirectional call tests.
-- [ ] VFS and headers for `#include`, source and model/SQLite files.
-- [ ] NaN16 `libtcc1` runtime: 64-bit arithmetic, float helpers, alloca,
-      setjmp, mem/str primitives.
-- [ ] tcc0: host cross-build emits NaN16.
-- [ ] tcc1: tcc0 compiles TCC on the VM.
-- [ ] tcc2: tcc1 compiles TCC again; tcc1 == tcc2 byte-for-byte fixpoint.
-- [ ] SQLite: tcc2 compiles the amalgamation, links the shell, runs a query
-      suite (schema, insert, select, join, index, transaction, file reopen).
-- [ ] Verified chain: NaN16 binary -> Binary TM -> Minsky UTM -> Coq trace.
-- [ ] Compiler-correctness bridge: checked relation from TCC output to the
-      executed Binary TM, so "the C you compiled is the code that ran" is an
-      artifact.
-- [ ] Gates: `tools/tcc_build.sh`, `tools/tcc_selfhost.sh`,
-      `tools/tcc_sqlite.sh`, `tools/tcc_verified.sh`, all in presqlite.
+      64-bit pairs, f32/f64; bidirectional call tests.  This is a separate
+      gate: do not link ncc- and tcc-compiled objects until ncc's `double`
+      is 8 bytes and the mixed `printf` test passes.
+- [~] VFS and headers completeness for `#include`, source and model/SQLite
+      files: the guest libc VFS handles includes/sources; a named in-memory
+      SQLite base VFS is in `third_party/sqlite/nan16_vfs.c`; host-file
+      persistence remains separate.
+- [~] NaN16 `libtcc1` runtime: 64-bit arithmetic, shifts and binary64 helpers
+      are in place; `alloca`, `setjmp` and full mem/str coverage remain open.
+- [x] SQLite 3.54.1: vendored unmodified in `third_party/sqlite` with
+      `VENDOR` hashes; tcc0 cross-compiles it with `SQLITE_OS_OTHER=1`,
+      `SQLITE_THREADSAFE=0`, `SQLITE_TEMP_STORE=3`, no WAL, and the in-memory
+      VFS.  `tools/tcc_sqlite.sh` requires bit-identical guest/native results
+      for a 96-result suite and a 256-result 500-row stress database
+      (multi-page btrees, overflow blobs, joins, indexes, transactions,
+      `VACUUM`, close/reopen), plus a `SQLITE_DEBUG` assertion build.
+      Guest `tcc2` compiling the 9.2 MB amalgamation remains a larger
+      budget gate.
+- [ ] Verified chain: finite per-opcode/block lowering lemmas plus small UTM
+      trace checks; scope the compiler-correctness/translation-validation
+      claim honestly (a trace does not by itself prove the binary implements
+      the C source).
+- [x] Gates: `tcc_nan16_smoke`, `tcc_nan16_selfhost`, `tcc_nan16_enc` are in
+      `presqlite_gate`; `tcc_nan16_tcc2` is a standalone resumable gate.
+      `tcc_sqlite` is now a passing standalone differential gate.
+      `tcc_verified` remains the future verified-chain gate.
 
 The TCC port contract, ABI, bootstrap stages and proof chain are detailed in
 `spec/TCC_NAN16.md`. TCC and SQLite are C; the C++17 track is only a dependency
@@ -219,3 +263,88 @@ for llama.cpp, not for tcc2.
 ## P2. System
 - [ ] Filesystem, network stack, GUI, apps, package/tooling.
 - [ ] APK/assets and bare-metal image pipeline.
+
+## P2. NANDBG — NaN-native debug system
+Design: `spec/NANDBG.md`. Gates: `tools/ndbg.sh`, `tools/ndbg_diff.sh`,
+`tools/ndbg_mon.sh`, `tools/ndbg_img.sh`, `tools/ndbg_gui.sh`.
+- [x] Typed diagnostic word: 4×4 severity/domain matrix from the two NaN heads;
+      STW/LDN round-trip, BSWAPM mirror law, quiet/raise.
+- [x] First proof: single-step core (MOVI/MOVHI/ADD/SUB/CMP/JMP/CALL/RET/JMPR/
+      LD/ST/STW/LDN/PUTC/NOP/HALT, all 16 BOOLs, predication/flags), breakpoint
+      without patching, gate/bad-op records, exact transcript gate.
+- [x] Full `0x00–0x5F` step core in `src/dbg/core.nas`: all defined ops,
+      vectors via host-vector delegation, DP4B/VDP4B4, shadow call stack,
+      non-blocking KEY; `0x60/0x61` classified as host extensions.
+- [x] Native-vs-stepped differential gate (`tools/ndbg_diff.sh`): integer,
+      memory, calls, floats, DP4B and vectors; byte-identical transcript,
+      golden checksum, negative mutation check.
+- [x] Real cartridge under the core: Baby runs to `KEY` (`CART PASS`); Trust
+      also passes manually.
+- [~] Containment/watch: write window `[nd_wlo, nd_whi)` guards ST/STB/STW/
+      BCOPY/BFILL; before-write watchpoints with old/new records; guard and
+      watch gate. Watchpoint table + `wpts`/`watch` CLI and ABI2 register/memory
+      setters exist; full permission map, typed write commands, and I/O
+      mediation remain.
+- [x] Serial monitor (`src/dbg/n16dbg.nas`): step, run, breakpoint, goto,
+      watch, history, stack, live type matrix, regs, disassembly, dump; exact
+      session gate.
+- [x] Bare-metal floppy image: `tools/ndbg_img.sh` boots `n16dbg.nas` on
+      qemu with no host OS and checks the monitor banner/prompt on COM1.
+- [x] Desktop terminal `debug` command opens a second CLI (kind 8) with the
+      resident core at 6200 and demo target at 8100.
+- [x] Desktop `carts` / `load <id>` picker: sealed cart copied to the debug
+      arena at 0x80000, mapped at guest 8192; Baby runs to `KEY`.
+- [x] TOC/title snapshots at 0x70000/0x72000, taken before the GUI boots.
+- [x] `next` / `finish` commands over the shadow call stack in the desktop
+      debug CLI.
+- [x] `log` (last four typed records) and `mem [addr]` (eight words at PC
+      or a chosen address, with class) in the desktop debug CLI; break events
+      are logged.
+- [x] Breakpoint/watchpoint tables in the core, ABI2 list/toggle entries,
+      `bp <hex>`/`wp <hex>`/`bpts`/`wpts`/`watch` GUI commands; fast single
+      break remains.
+- [x] Typed `setr <n> <hex>`, `setm <addr> <hex>`, `setw <addr> <word>
+      <class>`, `setc <addr> <class>` and `goto <hex>` commands on ABI2
+      register/memory/class/PC setters.
+- [x] Debug-pane vector I/O capture into a private 25x80 text buffer;
+      `screen` CLI command.
+- [x] Serial capture from target `PUTC` into 0x61000; `serial` CLI command.
+- [x] System utilities `[3] DEBUG` entry opens the desktop debug CLI.
+- [ ] 80×25 pane console (the serial/GUI CLIs already have the type matrix).
+- [x] Bounded scalar undo: 32-record ring at 0x30000, restore of registers,
+      PC, condition, call depth, and two guest words per step; `undo [n]` CLI.
+- [x] Redo ring at 0x62000 with post-step registers/writes; `redo [n]` CLI.
+- [x] Cart `checkpoint`/`restore`: registers, PC, condition, call depth, 64K arena.
+- [x] Desktop `dis [addr]`: shared disassembler, guest-to-host mapping.
+- [ ] 8-word records, mirror-pair log, flight recorder.
+- [ ] NDP (NaN Debug Protocol) over serial/mailbox; symbol blob; poison fill.
+- [ ] Standalone `n16mon` boot monitor; self-debug (`n16dbg` under itself).
+- [ ] Optional native trap trampoline/trace port behind the same control API.
+
+
+## P0.8 Tcl + SQLite official suite (x86_64 product target)
+Plan and component census: `spec/TCL_SQLITE_OFFICIAL_SUITE.md`.
+- [x] tcc1 raw-source guest VFS gate: `tools/tcc_nan16_rawcc.sh` compiles
+      raw `libc.c` + program with `/usr/include` headers from the guest VFS,
+      links a runnable cartridge, and checks inner `main` = 42.  This removes
+      host-preprocessed `.i` input for the program.
+- [x] resumable tcc2 fixpoint: self1 == self2 byte-for-byte at
+      2,529,728 bytes after the VFS/runtime changes; SHA-256
+      `32c3b8e82b62549ce23cbc372504412d076de2165988710889eabd23541b38f7`;
+      fixed-size checkpoints and `TCC2_DIR` resume.
+- [ ] x86_64 S1 parity for the acceptance path: trap/SVC frames, timer IRQ,
+      region checks, device windows; QEMU x86_64 gates.  `nan_cli` remains a
+      compiler conformance oracle only.
+- [ ] NaN kernel: process/thread tables, scheduler, mutex/cond, signals,
+      NaNFS write/dirs, tty, pipes, loopback sockets, NaN16 dynamic loader.
+- [ ] Tcl 9.0.3 port (`tclNan16Port`, channels, notifier, threads, load).
+- [x] Pin Tcl 9.0.3 + SQLite 3.54.1 test-suite provenance; x86_64-gated
+      native baseline script (`tools/tcl_sqlite_native_baseline.sh`).
+- [ ] SQLite testfixture on NaNFS; official 1,199 `.test` files; exact
+      pass/skip/error archive.
+- [ ] tcc1 builds Tcl/testfixture from guest sources; tcc2 fixpoint; suite
+      passes under the tcc1-built image.
+- [ ] Guest process viewer/manager (processes, threads, memory, steps,
+      spawn/kill/priority hooks).
+- [ ] No host/phone path in product or acceptance gates; neutral build dirs
+      only.

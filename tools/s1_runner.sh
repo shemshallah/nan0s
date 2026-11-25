@@ -41,6 +41,10 @@ case "$STEPS" in *[!0-9]*|"") echo "s1_runner: bad --steps" >&2; exit 2 ;; esac
 [ "$STEPS" -eq 0 ] && STEPS=50000000
 QEMU_BIN=${QEMU:-qemu-system-x86_64}
 command -v "$QEMU_BIN" >/dev/null 2>&1 || { echo "s1_runner: no $QEMU_BIN" >&2; exit 1; }
+QEMU_ACCEL=""
+if [ "${S1_QEMU_ACCEL:-}" = kvm ] && [ -e /dev/kvm ]; then
+  QEMU_ACCEL="-enable-kvm -cpu host"
+fi
 if [ -n "${S1_QEMU_MEM:-}" ]; then QMEM=$S1_QEMU_MEM
 elif [ "$MEM_MB" -le 128 ]; then QMEM=256
 else QMEM=$((MEM_MB * 2)); fi
@@ -168,7 +172,7 @@ else
 fi
 
 rm -f "$T/com" "$T/dbg"
-timeout "${S1_QEMU_TIMEOUT:-600}" "$QEMU_BIN" -m "$QMEM" \
+timeout "${S1_QEMU_TIMEOUT:-600}" "$QEMU_BIN" -m "$QMEM" $QEMU_ACCEL \
   -drive format=raw,if=floppy,file="$T/image" $DRIVE -boot a \
   -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
   -display none -serial "file:$T/com" -debugcon "file:$T/dbg" \
