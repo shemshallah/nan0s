@@ -291,7 +291,7 @@ int nan_run(nan_vm *v, uint32_t max_steps) {
     case 0x0C: pc = r[15]; break;
     case 0x0D: pc = A; break;
     case 0x2C: r[15] = pc; pc = A; break;
-    case 0x0E: case 0x1C: case 0x1D: case 0x1E: case 0x1F:
+    case 0x0E: case 0x1E: case 0x1F:
       trap(v, 'O', pc); pc = v->pc; LEAVE(NAN_HALTED);
     case 0x0F: case 0x1B: case 0x2F: break;
     case 0x10: { uint32_t i = A;
@@ -311,6 +311,8 @@ int nan_run(nan_vm *v, uint32_t max_steps) {
     case 0x14: { uint64_t *q = &mem[(A + imm) & M]; *q = __builtin_bswap64(*q); break; }
     case 0x15: nan_ser_putc(v, (uint8_t)r[d]); break;
     case 0x16: mem[A & M] = nan_mkword(r[d], (int)(B & 15)); break;
+    case 0x1C: r[d] = (uint32_t)(mem[(0xF0000u + imm) & M] >> 16); break;
+    case 0x1D: mem[(0xF0000u + imm) & M] = nan_mkword(r[d], 10); break;
     case 0x17: { uint64_t q = mem[(A + imm) & M];
       r[d] = (nan_hvalid(nan_near(q)) && nan_hvalid(nan_far(q))) ? ((nan_hcls(nan_near(q)) << 2) | nan_hcls(nan_far(q))) : 0xFFFFFFFFu; break; }
     case 0x18: r[d] = v->vmode == 1 ? 0x1300C800u : 0x00031950u; break;

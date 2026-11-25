@@ -2,12 +2,12 @@
 ; Materialises the destination pointers from the va_list on the eval stack,
 ; then delegates to the normal scanf core.
 
-.equ W_VS_FMT  64900
-.equ W_VS_AP   64901
-.equ W_VS_FP   64902
-.equ W_VS_WORDS 64903
-.equ W_VS_SUP  64904
-.equ W_VS_TMP  64905
+.equ W_VS_FMT  0xF076C
+.equ W_VS_AP   0xF076D
+.equ W_VS_FP   0xF076E
+.equ W_VS_WORDS 0xF076F
+.equ W_VS_SUP  0xF0770
+.equ W_VS_TMP  0xF0771
 
 ; vs_push_ptr: copy one pointer word from the va_list to the eval stack
 vs_push_ptr:

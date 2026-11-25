@@ -2,16 +2,16 @@
 ; The format is scanned to copy the va_list words onto the eval stack in the
 ; order ni_printf expects, then the normal printf formatter runs unchanged.
 
-.equ W_VA_FMT    64850
-.equ W_VA_AP     64851
-.equ W_VA_WORDS  64852
-.equ W_VA_FP     64853
-.equ W_VA_CH     64854
-.equ W_VA_LEN    64855
-.equ W_VA_STREAM 64856
-.equ W_VA_DST    64857
-.equ W_VA_N      64858
-.equ W_VA_LIM    64859
+.equ W_VA_FMT    0xF073A
+.equ W_VA_AP     0xF073B
+.equ W_VA_WORDS  0xF073C
+.equ W_VA_FP     0xF073D
+.equ W_VA_CH     0xF073E
+.equ W_VA_LEN    0xF073F
+.equ W_VA_STREAM 0xF0740
+.equ W_VA_DST    0xF0741
+.equ W_VA_N      0xF0742
+.equ W_VA_LIM    0xF0743
 
 ; va_arg_word: read one 32-bit word at W_VA_AP and advance it
 va_arg_word:

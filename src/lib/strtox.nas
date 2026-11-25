@@ -1,12 +1,12 @@
 ; strtox.nas - strtol/strtoul/strtoll/strtoull (raw NaN16).
 
-.equ W_SX_S     64700
-.equ W_SX_ORIG  64701
-.equ W_SX_ENDP  64702
-.equ W_SX_ENDVAL 64703
-.equ W_SX_BASE  64704
-.equ W_SX_SIGN  64705
-.equ W_SX_DIGITS 64706
+.equ W_SX_S     0xF06A4
+.equ W_SX_ORIG  0xF06A5
+.equ W_SX_ENDP  0xF06A6
+.equ W_SX_ENDVAL 0xF06A7
+.equ W_SX_BASE  0xF06A8
+.equ W_SX_SIGN  0xF06A9
+.equ W_SX_DIGITS 0xF06AA
 
 ; sx_parse: uses W_SX_S/W_SX_BASE/W_SX_SIGN; sets W_LLD0/1, W_SX_ENDVAL
 sx_parse:

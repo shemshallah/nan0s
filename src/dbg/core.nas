@@ -789,6 +789,18 @@ nd_h_ld:
   CALL @nd_ea
   LD r4,r14,0
   JMP @nd_t_st
+nd_h_lds:
+  LA r1,0xF0000
+  ADD r1,r1,r7
+  LD r4,r1,0
+  JMP @nd_t_st
+nd_h_sts:
+  LA r1,0xF0000
+  ADD r1,r1,r7
+  LD r4,r5,@nd_regs
+  MOVI r6,10
+  STW r4,r1,r6
+  JMP @nd_loop
 nd_h_st:
   CALL @nd_ea
   ADD r1,r14,r0
@@ -1654,7 +1666,7 @@ nd_optab:
 .word @nd_h_bool,@nd_h_movi,@nd_h_movhi,@nd_h_add,@nd_h_sub,@nd_h_shl,@nd_h_shr,@nd_h_cmp
 .word @nd_h_ld,@nd_h_st,@nd_h_jmp,@nd_h_call,@nd_h_ret,@nd_h_jmpr,@nd_h_bad,@nd_h_nop
 .word @nd_h_vpoke,@nd_h_vpeek,@nd_h_key,@nd_h_tick,@nd_h_bswapm,@nd_h_putc,@nd_h_stw,@nd_h_ldn
-.word @nd_h_dispq,@nd_h_dispset,@nd_h_keyq,@nd_h_beep,@nd_h_bad,@nd_h_bad,@nd_h_bad,@nd_h_bad
+.word @nd_h_dispq,@nd_h_dispset,@nd_h_keyq,@nd_h_beep,@nd_h_lds,@nd_h_sts,@nd_h_bad,@nd_h_bad
 .word @nd_h_mul,@nd_h_mulh,@nd_h_mulhu,@nd_h_div,@nd_h_mod,@nd_h_divu,@nd_h_modu,@nd_h_sar
 .word @nd_h_cmps,@nd_h_addi,@nd_h_ldb,@nd_h_stb,@nd_h_callr,@nd_h_bcopy,@nd_h_bfill,@nd_h_nop2
 .word @nd_h_fadd,@nd_h_fsub,@nd_h_fmul,@nd_h_fdiv,@nd_h_fsqrt,@nd_h_fcmp,@nd_h_cvtif,@nd_h_cvtfi
