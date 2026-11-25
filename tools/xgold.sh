@@ -1,11 +1,21 @@
 #!/bin/sh
-# tools/xgold.sh - rebuild the native x86 gold stream from .xa sources.
-# The NaN-native assembler (src/prog/nasm1.nas) runs in the NaN16 core; the
-# outer shell only stages source/bytes.  Output is src/native/nan16_x86.nan
-# (boot 512 + kernel bytes), the stream tools/mkimg.awk consumes.
-set -e; cd "$(dirname "$0")/.."; export LC_ALL=C
-T="${TMPDIR:-/tmp}/xgold.$$"; mkdir -p "$T"; trap 'rm -rf "$T"' EXIT
-CLI=aarch64/android/nan_cli; [ -x "$CLI" ] || (cd aarch64/android && make -s nan_cli)
+# tools/xgold.sh - rebuild the native x86 gold stream with the native S1 core.
+#
+# No C and no Python: gawk stages the source, the prebuilt native S1 runs the
+# NaN assembler (nasm1), QEMU captures its serial bytes, and awk emits the gold
+# text.  The S1 core is the only native layer; every instruction above it is
+# NaN16.
+set -e
+cd "$(dirname "$0")/.."
+export LC_ALL=C
+T="${TMPDIR:-/tmp}/xgold_native.$$"
+mkdir -p "$T"
+trap 'rm -rf "$T"' EXIT
+
+command -v qemu-system-i386 >/dev/null 2>&1 || {
+  echo "xgold: qemu-system-i386 is required" >&2; exit 1;
+}
+[ -f src/native/nan16_x86.nan ] || { echo "xgold: missing native gold core" >&2; exit 1; }
 
 asm_one() { # src out.bin
   src="$1"; out="$2"
@@ -20,24 +30,60 @@ asm_one() { # src out.bin
   }' > src/prog/_xgold_h.nas
   awk -f tools/nmk.awk -v CMD=emit src/prog/_xgold_h.nas > "$T/h.nan"
   rm -f src/prog/_xgold_h.nas
-  "$CLI" --img "$T/h.nan" --mem 16 --steps 2000000000 --serial > "$T/ser" 2>"$T/err" || true
-  [ "$(head -c 1 "$T/ser")" = "Y" ] || { echo "xgold: assembler rejected $src"; tail -2 "$T/err"; exit 1; }
+
+  # Full guest bytes, not the 512 KiB floppy limit.
+  awk '{
+    line=$0; sub(/;.*/, "", line); gsub(/^[ \t]+|[ \t]+$/, "", line)
+    n=split(line, a, "_")
+    if (n==3 && length(a[1])==4 && length(a[2])==8 && length(a[3])==4)
+      printf "%s%s%s%s%s%s%s%s", \
+        substr(a[3],3,2), substr(a[3],1,2), \
+        substr(a[2],7,2), substr(a[2],5,2), substr(a[2],3,2), substr(a[2],1,2), \
+        substr(a[1],3,2), substr(a[1],1,2)
+  }' "$T/h.nan" | xxd -r -p > "$T/guest.bin"
+  [ -s "$T/guest.bin" ] || { echo "xgold: empty guest for $src" >&2; exit 1; }
+
+  # Boot floppy = current gold boot+kernel.  The ATA loader reads the full
+  # guest from IDE LBA 129, so the 512 KiB floppy limit does not apply.
+  : > "$T/carts.txt"
+  awk -f tools/mkimg.awk -v GOLD=src/native/nan16_x86.nan \
+    -v GUEST="$T/h.nan" -v CARTS="$T/carts.txt" \
+    -v OUTB="$T/boot.bin" -v OUTG="$T/junk.bin" >/dev/null
+  cat "$T/boot.bin" > "$T/floppy.img"
+  truncate -s 1474560 "$T/floppy.img"
+  dd if=/dev/zero of="$T/disk.img" bs=512 count=129 status=none
+  cat "$T/guest.bin" >> "$T/disk.img"
+  truncate -s 1474560 "$T/disk.img"
+
+  rm -f "$T/ser"
+  timeout 180 qemu-system-i386 -m 64 \
+    -drive format=raw,if=floppy,file="$T/floppy.img" \
+    -drive format=raw,if=ide,index=0,file="$T/disk.img" \
+    -boot a -display none -serial "file:$T/ser" -no-reboot >/dev/null 2>&1 || true
+  [ "$(head -c 1 "$T/ser" 2>/dev/null)" = "Y" ] || {
+    echo "xgold: native assembler rejected $src" >&2
+    head -c 200 "$T/ser" | cat -v >&2 || true
+    exit 1
+  }
   tail -c +3 "$T/ser" > "$out"
 }
 
-asm_one x86/boot/kboot0.xa "$T/boot.bin"
+asm_one x86/boot/kboot0.xa "$T/boot.bin.sector"
 asm_one src/native/kan16.xa "$T/kern.bin"
-[ "$(wc -c < "$T/boot.bin")" -eq 512 ] || { echo "xgold: boot is not 512 bytes"; exit 1; }
-[ "$(wc -c < "$T/kern.bin")" -le 65536 ] || { echo "xgold: kernel exceeds 128 boot sectors"; exit 1; }
-python3 - "$T" <<'PY'
-import sys
-T=sys.argv[1]
-boot=open(T+'/boot.bin','rb').read(); kern=open(T+'/kern.bin','rb').read()
-out=['; NaN16 gold: boot 512 + kernel %d bytes (runtime E820 memory sizing)'%len(kern)]
-for base,name,blob in [(0,'boot',boot),(512,'kernel',kern)]:
-    for off in range(0,len(blob),16):
-        out.append('%s   ; %s+%04X'%(' '.join('%02x'%b for b in blob[off:off+16]),name,off))
-open('src/native/nan16_x86.nan','w').write('\n'.join(out)+'\n')
-open('x86/native/nan16_x86.nan','w').write('\n'.join(out)+'\n')
-print('xgold: boot 512 + kernel %d bytes' % len(kern))
-PY
+[ "$(wc -c < "$T/boot.bin.sector")" -eq 512 ] || { echo "xgold: boot is not 512 bytes" >&2; exit 1; }
+[ "$(wc -c < "$T/kern.bin")" -le 65536 ] || { echo "xgold: kernel exceeds 128 boot sectors" >&2; exit 1; }
+
+# Pack the two byte streams as the gold text consumed by tools/mkimg.awk.
+{
+  echo "; NaN16 gold: boot 512 + kernel $(wc -c < "$T/kern.bin") bytes (native S1 rebuild)"
+  for pair in "boot:$T/boot.bin.sector:0" "kernel:$T/kern.bin:512"; do
+    name=${pair%%:*}; rest=${pair#*:}; file=${rest%%:*}; base=${rest##*:}
+    xxd -p -c 16 "$file" | awk -v name="$name" -v base="$base" '{
+      s=""
+      for (i=1; i<=length($0); i+=2) s = s (s==""?"":" ") substr($0,i,2)
+      printf "%s   ; %s+%04X\n", s, name, base + (NR-1)*16
+    }'
+  done
+} > src/native/nan16_x86.nan
+cp src/native/nan16_x86.nan x86/native/nan16_x86.nan
+echo "xgold: boot 512 + kernel $(wc -c < "$T/kern.bin") bytes (no C/Python)"
