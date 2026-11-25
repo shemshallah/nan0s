@@ -206,7 +206,7 @@ nd_logcp:
   JMP[NE] @nd_logcp
   ; twin block: same words, then BSWAPM each mirror word in place
   SHL r7,r6,3
-  LA r4,0x31100
+  LA r4,0x31800
   ADD r7,r7,r4
   MOVI r8,@nd_rec
   MOVI r5,8
@@ -221,7 +221,7 @@ nd_logm:
   CMP r5,r0
   JMP[NE] @nd_logm
   ADD r6,r6,r13
-  MOVI r7,15
+  MOVI r7,255
   BOOL.8 r6,r6,r7
   ST r6,r0,@nd_li
   LD r6,r0,@nd_seq
