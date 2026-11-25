@@ -152,6 +152,7 @@ done
 [ -f tools/ndbg_mon.sh ] && run ndbg_mon sh tools/ndbg_mon.sh
 [ -f tools/ndbg_img.sh ] && run ndbg_img sh tools/ndbg_img.sh
 [ -f tools/ndbg_term.sh ] && run ndbg_term sh tools/ndbg_term.sh
+[ -f tools/lds_gate.sh ] && run lds_gate sh tools/lds_gate.sh
 
 if [ -f tools/mkall.sh ] && want mkall; then
   run mkall sh tools/mkall.sh
