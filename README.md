@@ -30,7 +30,7 @@
 
 **ndbg** — the NaN-native debugger in this repository. Design: [`spec/NANDBG.md`](spec/NANDBG.md) · Working guide: [`src/dbg/README.md`](src/dbg/README.md).
 
-This suite is also vendored into [`shemshallah/nan0s`](https://github.com/shemshallah/nan0s); that tree now includes a Silver Slate terminal `debug` monitor (`carts`, `load <id>`, `step`/`next`/`finish`, `run`, `regs`, `log`/`ndr`/`hist`/`stack`/`types`, `break`, `watch`, `bpts`, `wpts`, `bp`/`wp`/`goto`, `mem [addr]`, `dis [addr]`, `screen`, `serial`, `setr`, `setm`, `setw`, `setc`, multi-level `undo [n]`/`redo [n]`, `checkpoint`, `restore`, `reset`, `pc`, `quit`) gated by `tools/ndbg_term.sh`. Refresh the standalone component with `tools/ndbg_sync.sh` from the nan0s checkout.
+This suite is also vendored into [`shemshallah/nan0s`](https://github.com/shemshallah/nan0s); that tree now includes a Silver Slate terminal `debug` monitor (`carts`, `load <id>`, `step`/`next`/`finish`, `run`, `regs`, `log`/`ndr`/`mirror`/`hist`/`stack`/`types`, `break`, `watch`, `bpts`, `wpts`, `bp`/`wp`/`goto`, `mem [addr]`, `dis [addr]`, `screen`, `serial`, `setr`, `setm`, `setw`, `setc`, multi-level `undo [n]`/`redo [n]`, `checkpoint`, `restore`, `reset`, `pc`, `quit`) gated by `tools/ndbg_term.sh`. Refresh the standalone component with `tools/ndbg_sync.sh` from the nan0s checkout.
 
 <br/>
 
