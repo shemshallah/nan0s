@@ -288,6 +288,8 @@ unaffected by this ABI.
 - `tools/kabi64_gate.sh` - exact x86_64 COM1 transcript.
 - `tools/kabi_asm_gate.sh` - `INL`/`SVC`/`SVCRET` nmk emit, exact words,
   `CMD=check` round-trip and the NaN disassembler table.
+- `tools/kabi_sched_gate.sh` - timer-preempted two-process scheduler demo;
+  exact serial text on the C oracle and x86_64 S1.
 - `tools/s1_guest_gate.sh` - flat-cartridge acceptance: focused coverage,
   scalar FP, and real `src/tests/nfs2_test.nas`, x86_64 QEMU COM1 exactly
   equal to the C oracle; debug console reports loader word count/HALT.
