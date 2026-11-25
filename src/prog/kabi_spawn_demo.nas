@@ -414,8 +414,14 @@ parent_entry:
   ST r1,r0,#PID2
   LD r1,r0,#PID1
   SVC 10
+  MOVI r2,10
+  CMP r1,r2
+  JMP[NE] @bad
   LD r1,r0,#PID2
   SVC 10
+  MOVI r2,20
+  CMP r1,r2
+  JMP[NE] @bad
   MOVI r1,79
   PUTC r1
   MOVI r1,75
@@ -423,6 +429,18 @@ parent_entry:
   MOVI r1,10
   PUTC r1
   MOVI r1,0
+  SVC 1
+  HALT
+bad:
+  MOVI r1,66
+  PUTC r1
+  MOVI r1,65
+  PUTC r1
+  MOVI r1,68
+  PUTC r1
+  MOVI r1,10
+  PUTC r1
+  MOVI r1,1
   SVC 1
   HALT
 
