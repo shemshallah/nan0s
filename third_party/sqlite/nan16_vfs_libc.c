@@ -93,6 +93,77 @@ static int lock_set(NanLFile *f, int level)
 
 static unsigned int temp_seq;
 static unsigned int rand_state = 0x12345678u;
+#ifdef SQLITE_TEST
+int sqlite3_sync_count;
+int sqlite3_fullsync_count;
+#endif
+
+/* Single-process WAL shared memory.  Every connection to the same guest
+   path sees one region; SQLite's xShmLock protocol is serialized by the
+   single interpreting process, so the locks are accepted (a no-op). */
+typedef struct NanShm {
+    struct NanShm *next;
+    char path[128];
+    unsigned char *mem;
+    unsigned int bytes;
+    int ref;
+} NanShm;
+static NanShm *nan_shm;
+
+static NanShm *shm_find(const char *path, int create)
+{
+    NanShm *s;
+    for (s = nan_shm; s; s = s->next)
+        if (!strcmp(s->path, path)) return s;
+    if (!create) return 0;
+    s = (NanShm *)malloc(sizeof *s);
+    if (!s) return 0;
+    memset(s, 0, sizeof *s);
+    strncpy(s->path, path, sizeof s->path - 1);
+    s->next = nan_shm;
+    nan_shm = s;
+    return s;
+}
+static int l_shmmap(sqlite3_file *pFile, int iPg, int pgsz, int isWrite,
+                    void volatile **pp)
+{
+    NanLFile *f = (NanLFile *)pFile;
+    NanShm *s = shm_find(f->path, 1);
+    unsigned int need = (unsigned int)(iPg + 1) * (unsigned int)pgsz;
+    (void)isWrite;
+    if (!s) return SQLITE_IOERR;
+    if (need > s->bytes) {
+        unsigned char *p = (unsigned char *)realloc(s->mem, need);
+        if (!p) return SQLITE_NOMEM;
+        memset(p + s->bytes, 0, need - s->bytes);
+        s->mem = p;
+        s->bytes = need;
+    }
+    *pp = s->mem + (unsigned int)iPg * (unsigned int)pgsz;
+    return SQLITE_OK;
+}
+static int l_shmlock(sqlite3_file *pFile, int offset, int n, int flags)
+{
+    (void)pFile; (void)offset; (void)n; (void)flags;
+    return SQLITE_OK;
+}
+static void l_shmbarrier(sqlite3_file *pFile) { (void)pFile; }
+static int l_shmunmap(sqlite3_file *pFile, int deleteFlag)
+{
+    NanLFile *f = (NanLFile *)pFile;
+    NanShm **pp, *s;
+    if (!deleteFlag) return SQLITE_OK;
+    for (pp = &nan_shm; *pp; pp = &(*pp)->next) {
+        if (!strcmp((*pp)->path, f->path)) {
+            s = *pp;
+            *pp = s->next;
+            free(s->mem);
+            free(s);
+            break;
+        }
+    }
+    return SQLITE_OK;
+}
 
 static int l_close(sqlite3_file *pFile)
 {
@@ -139,7 +210,6 @@ static int l_sync(sqlite3_file *pFile, int flags)
 {
     NanLFile *f = (NanLFile *)pFile;
 #ifdef SQLITE_TEST
-    extern int sqlite3_sync_count, sqlite3_fullsync_count;
     if (flags & SQLITE_SYNC_FULL) sqlite3_fullsync_count++;
     sqlite3_sync_count++;
 #endif
@@ -222,9 +292,10 @@ static int l_device(sqlite3_file *pFile)
     return 0;
 }
 static const sqlite3_io_methods l_io = {
-    1, l_close, l_read, l_write, l_truncate, l_sync,
+    2, l_close, l_read, l_write, l_truncate, l_sync,
     l_filesize, l_lock, l_unlock, l_checkreserved,
-    l_filecontrol, l_sectorsize, l_device
+    l_filecontrol, l_sectorsize, l_device,
+    l_shmmap, l_shmlock, l_shmbarrier, l_shmunmap
 };
 
 static int l_open(sqlite3_vfs *pVfs, const char *name, sqlite3_file *pFile,
