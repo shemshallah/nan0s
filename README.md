@@ -28,6 +28,12 @@
 
 </div>
 
+> **Execution-model rule:** `aarch64/android/core/nan16.c` and the
+> `nan_cli` built from it are a host C **oracle**, not the product runtime.
+> The raw NaN/0S implementation is authoritative, and x86_64 S1 is the
+> product gate. Read [`DONT_USE_NAN16_C.md`](DONT_USE_NAN16_C.md) before
+> reporting a `nan_cli` result.
+
 **ndbg** — the NaN-native debugger in this repository. Design: [`spec/NANDBG.md`](spec/NANDBG.md) · Working guide: [`src/dbg/README.md`](src/dbg/README.md).
 
 This suite is also vendored into [`shemshallah/nan0s`](https://github.com/shemshallah/nan0s); that tree now includes a Silver Slate terminal `debug` monitor (`carts`, `load <id>`, `step`/`next`/`finish`, `run`, `regs`, `log`/`ndr`/`hist`/`stack`/`types`, `break`, `watch`, `bpts`, `wpts`, `bp`/`wp`/`goto`, `mem [addr]`, `dis [addr]`, `screen`, `serial`, `setr`, `setm`, `setw`, `setc`, multi-level `undo [n]`/`redo [n]`, `checkpoint`, `restore`, `reset`, `pc`, `quit`) gated by `tools/ndbg_term.sh`. Refresh the standalone component with `tools/ndbg_sync.sh` from the nan0s checkout.
