@@ -383,7 +383,12 @@ static uint32_t s1_run(uint64_t budget) {
   while (done < budget) {
     done++; s.steps++;
 #ifdef S1_GUEST
-    if ((s.steps & 1023u) == 0) guest_publish_time();
+    if ((s.steps & 1023u) == 0) {
+      guest_publish_time();
+      if ((s.steps % 100000000u) == 0) {
+        dbg_puts("S1STEP "); dbg_dec((uint32_t)s.steps); dbg_putc('\n');
+      }
+    }
 #endif
     uint32_t at = pc;
     if (s.kregions != UNSET && !s.kin &&
