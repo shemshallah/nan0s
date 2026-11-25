@@ -107,7 +107,7 @@ static void t_predication_and_traps(void) {
   begin(); I(0x01, 3, 0, 1); I(0x49, 0, 0, 0); EQ(go(10), NAN_HALTED); ser(b, sizeof b); CHECK(!strcmp(b, "!O0002")); CHECK(!strcmp(nan_trap_text(V), "!O0002"));
   EQ(go(10), NAN_HALTED);                                                   /* stays halted */
   begin(); I(0x0E, 0, 0, 0); go(10); ser(b, sizeof b); CHECK(!strcmp(b, "!O0001"));      /* table entry 0x0E is a bad op */
-  begin(); I(0x1C, 0, 0, 0); go(10); ser(b, sizeof b); CHECK(!strcmp(b, "!O0001"));
+  begin(); I(0x1F, 0, 0, 0); go(10); ser(b, sizeof b); CHECK(!strcmp(b, "!O0001"));
   /* predicated-off bad table op does not trap; 0x2F is a NOP */
   begin(); emit(0x0E, 0, 0, 0, 1 << 3); I(0x2F, 0, 0, 0); I(0x01, 3, 0, 5); halt(); go(10); EQ(R(3), 5); ser(b, sizeof b); CHECK(b[0] == 0);
   /* but op>0x5F traps even when predicated off */

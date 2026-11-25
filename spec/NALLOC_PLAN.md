@@ -14,3 +14,6 @@ nasm0 inside the guest assembles nalloc_test.nas (944 words) identical to the sc
 Known limit (documented in nalloc.nas): free trusts the word before the pointer; a pointer into the middle of a block is only caught if that word looks free.
 
 Platform placement: nalloc is the per-process heap; base/size come from MEMQ regions and the syscall layer owns the grant (`spec/NANVM_SPEC.md` §8.2, §9.1).
+
+## Platform integration (S1 milestone)
+`src/prog/kabi_proc_demo.nas` places a 0x4000-word nalloc heap at word 0x40000 after CPUID memory discovery and exposes it to an isolated process through SVC `region_map`. The kernel calls `nal_alloc` and appends the returned span to the live region table; `tools/kabi_proc_gate.sh` checks the grant, an in-bounds write, and an unmapped-access fault on both the C oracle and x86_64 S1.

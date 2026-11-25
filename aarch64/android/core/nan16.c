@@ -117,6 +117,9 @@ void nan_reset(nan_vm *v) {
   v->vmode = 0; v->fbw = 0; v->fbh = 0; v->fbtot = 64000;
   v->trap[0] = 0; v->ser_h = v->ser_t = 0;
   v->tick_last = 0xFFFFFFFFu; v->tick_same = 0;
+  v->kentry = v->kframe = v->kstack = v->kregions = v->ktcb = NAN_KABI_UNSET;
+  v->ktimer = v->ktimer_left = 0;
+  v->kin = v->ktimer_pending = v->ktrap_pending = 0;
   v->dirty++; v->frame++;
   nan_dev_reset(v);
 }
@@ -249,6 +252,115 @@ static void dispset(nan_vm *v, uint32_t x) {
   v->dirty++; v->frame++;
 }
 
+/* ---- kernel ABI v0.1 (spec/KERNEL_ABI.md) ----
+ * Frame words use the normal NaN16 class +q/+q representation so guest LD
+ * reads the 32-bit payload directly.  The kernel ABI is active as soon as
+ * the entry port is set; before that, 0x4E/0x4F keep their old reserved-op
+ * trap behaviour. */
+static uint32_t kabi_fw(const uint64_t *f, int i) { return (uint32_t)(f[i] >> 16); }
+static int kabi_frame_ok(const nan_vm *v) {
+  return v->kframe != NAN_KABI_UNSET &&
+         (uint64_t)v->kframe + NAN_TF_WORDS <= v->mem_words;
+}
+static int kabi_vector(nan_vm *v, uint32_t cause, uint32_t resume_pc, uint32_t imm) {
+  if (v->kentry == NAN_KABI_UNSET || v->kentry >= v->mem_words ||
+      !kabi_frame_ok(v)) return -1;
+  if (v->kstack != NAN_KABI_UNSET && v->kstack >= v->mem_words) return -1;
+  uint64_t *f = v->mem + v->kframe;
+  for (int i = 0; i < 16; i++) f[i] = nan_mkword(v->r[i], 10);
+  f[NAN_TF_PC] = nan_mkword(resume_pc, 10);
+  f[NAN_TF_K] = nan_mkword((uint32_t)(v->k & 3), 10);
+  f[NAN_TF_ADDRH] = nan_mkword(0, 10);          /* ADDRH is not in the S1 C core */
+  f[NAN_TF_CAUSE] = nan_mkword(cause & 3u, 10);
+  f[NAN_TF_IMM] = nan_mkword(imm, 10);
+  f[NAN_TF_RET] = nan_mkword(0, 10);
+  f[NAN_TF_SP] = nan_mkword(v->r[14], 10);
+  f[NAN_TF_RESERVED] = nan_mkword(0, 10);
+  if (v->kstack != NAN_KABI_UNSET) v->r[14] = v->kstack;
+  v->kin = 1;
+  v->ktimer_pending = (cause == NAN_CAUSE_IRQ) ? 1u : 0u;
+  v->ktrap_pending = (cause != NAN_CAUSE_IRQ) ? 1u : 0u;
+  v->pc = v->kentry;
+  return 0;
+}
+static int kabi_restore(nan_vm *v) {
+  if (!kabi_frame_ok(v)) return -1;
+  const uint64_t *f = v->mem + v->kframe;
+  for (int i = 0; i < 16; i++) v->r[i] = kabi_fw(f, i);
+  v->k = (int)(kabi_fw(f, NAN_TF_K) & 3u);
+  v->pc = kabi_fw(f, NAN_TF_PC);
+  /* An SVC return value is carried in frame[21]; IRQ/fault resumes keep
+      the guest r1 saved in frame[1]. */
+  if ((kabi_fw(f, NAN_TF_CAUSE) & 3u) == NAN_CAUSE_SVC)
+    v->r[1] = kabi_fw(f, NAN_TF_RET);
+  v->halted = 0;
+  v->kin = 0;
+  v->ktimer_pending = v->ktrap_pending = 0;
+  return 0;
+}
+/* Region table: {base word, nwords, kind, prot}; nwords==0 terminates.
+ * Every word of [first, first+nwords) must be covered by an entry whose
+ * prot contains all requested bits.  Adjacent entries may split a block. */
+static int kabi_region_range(const nan_vm *v, uint32_t first, uint32_t nwords,
+                             uint32_t prot) {
+  if (v->kregions == NAN_KABI_UNSET || v->kin) return 1;
+  if (!nwords) return 1;
+  uint64_t end = (uint64_t)first + nwords;
+  if (end > v->mem_words) return 0;
+  uint64_t covered = first;
+  while (covered < end) {
+    int found = 0;
+    for (uint32_t e = v->kregions;
+         (uint64_t)e + NAN_REGION_WORDS <= v->mem_words;
+         e += NAN_REGION_WORDS) {
+      const uint64_t *q = v->mem + e;
+      uint32_t base = kabi_fw(q, 0), nw = kabi_fw(q, 1), p = kabi_fw(q, 3);
+      if (nw == 0) break;
+      uint64_t rend = (uint64_t)base + nw;
+      if (covered >= base && covered < rend) {
+        if ((p & prot) != prot) return 0;
+        covered = end < rend ? end : rend;
+        found = 1;
+        break;
+      }
+    }
+    if (!found) return 0;
+  }
+  return 1;
+}
+/* Kernel control ports are configured by the boot path before the entry
+ * port is set.  Once the ABI is live, only kernel-mode code may write them;
+ * a guest write is a region-style fault. */
+static int kabi_port_locked(const nan_vm *v, uint32_t port) {
+  return v->kentry != NAN_KABI_UNSET && !v->kin &&
+         port >= NAN_KABI_PORT_ENTRY && port <= NAN_KABI_PORT_STATUS;
+}
+static int kabi_byte_range(const nan_vm *v, uint32_t byte_addr, uint32_t nbytes,
+                           uint32_t prot) {
+  if (v->kregions == NAN_KABI_UNSET || v->kin) return 1;
+  if (!nbytes) return 1;
+  uint64_t end = (uint64_t)byte_addr + nbytes;
+  if (end > (uint64_t)v->mem_words * 4u) return 0;
+  uint32_t first = byte_addr >> 2;
+  uint32_t last = (uint32_t)((end - 1) >> 2);
+  return kabi_region_range(v, first, last - first + 1u, prot);
+}
+
+/* The goto (not continue) is deliberate: a continue inside do{}while(0)
+ * would only leave the macro's own loop and fall through into the faulting
+ * access.  `restart` is after the timer tick, so the aborted instruction
+ * neither commits nor consumes an instruction slot. */
+#define KABI_FAULT(retpc, faddr) do { \
+  if (v->kentry == NAN_KABI_UNSET || v->kin || \
+      kabi_vector(v, NAN_CAUSE_FAULT, (retpc), (faddr))) { \
+    trap(v, 'K', (retpc)); pc = v->pc; LEAVE(NAN_HALTED); \
+  } \
+  pc = v->pc; goto restart; \
+} while (0)
+#define KABI_GUEST_FAULT(retpc, faddr) do { \
+  if (v->kentry != NAN_KABI_UNSET && !v->kin) KABI_FAULT((retpc), (faddr)); \
+} while (0)
+
 int nan_run(nan_vm *v, uint32_t max_steps) {
   uint32_t *r = v->r; uint64_t *mem = v->mem;
   const uint32_t M = v->mem_mask;
@@ -259,15 +371,27 @@ int nan_run(nan_vm *v, uint32_t max_steps) {
   if (v->halted) return NAN_HALTED;
   while (done < max_steps) {
     done++; v->steps++;
-    uint64_t w = mem[pc & M];
+    uint32_t at = pc;
+    if (v->kregions != NAN_KABI_UNSET && !v->kin &&
+        (uint64_t)v->kregions + NAN_REGION_WORDS > v->mem_words) {
+      trap(v, 'K', at); pc = v->pc; LEAVE(NAN_HALTED);
+    }
+    if (!kabi_region_range(v, at, 1, NAN_PROT_X)) KABI_FAULT(at, at);
+    uint64_t w = mem[at & M];
     uint32_t nh = nan_near(w), fh = nan_far(w);
-    if (!nan_hvalid(nh) || !nan_hvalid(fh)) { trap(v, 'G', pc + 1); pc = v->pc; LEAVE(NAN_HALTED); }
-    uint32_t at = pc; pc++;
+    if (!nan_hvalid(nh) || !nan_hvalid(fh)) {
+      KABI_GUEST_FAULT(at, at);
+      trap(v, 'G', pc + 1); pc = v->pc; LEAVE(NAN_HALTED);
+    }
+    pc++;
     uint32_t p = (uint32_t)(w >> 16), op = p >> 24;
     int n = (int)((nan_hcls(nh) << 2) | nan_hcls(fh));
     if (op == 0xFF) { v->halted = 1; LEAVE(NAN_HALTED); }
-    if (op > 0x5F) { trap(v, 'O', pc); pc = v->pc; LEAVE(NAN_HALTED); }
-    if (op != 0 && !((n >> v->k) & 1)) continue;
+    if (op > 0x5F) {
+      KABI_GUEST_FAULT(at, at);
+      trap(v, 'O', pc); pc = v->pc; LEAVE(NAN_HALTED);
+    }
+    if (op != 0 && !((n >> v->k) & 1)) goto tick;
     if (v->trace) v->trace(v->trace_ctx, at, p, n, v->k);
     uint32_t d = (p >> 20) & 15, a = (p >> 16) & 15, imm = p & 0xFFFF;
     uint32_t A = r[a], B = r[imm & 15];
@@ -284,14 +408,19 @@ int nan_run(nan_vm *v, uint32_t max_steps) {
     case 0x27: { uint32_t res = (uint32_t)((int32_t)A >> (p & 31)); r[d] = res; SETK(res == 0, 0); break; }
     case 0x07: SETK(A == B, A < B); break;
     case 0x28: SETK(A == B, (int32_t)A < (int32_t)B); break;
-    case 0x08: r[d] = (uint32_t)(mem[(A + imm) & M] >> 16); break;
-    case 0x09: mem[(A + imm) & M] = nan_mkword(r[d], 10); break;
+    case 0x08: { uint32_t ad = A + imm;
+      if (!kabi_region_range(v, ad, 1, NAN_PROT_R)) KABI_FAULT(at, ad);
+      r[d] = (uint32_t)(mem[ad & M] >> 16); break; }
+    case 0x09: { uint32_t ad = A + imm;
+      if (!kabi_region_range(v, ad, 1, NAN_PROT_W)) KABI_FAULT(at, ad);
+      mem[ad & M] = nan_mkword(r[d], 10); break; }
     case 0x0A: pc = imm; break;
     case 0x0B: r[15] = pc; pc = imm; break;
     case 0x0C: pc = r[15]; break;
     case 0x0D: pc = A; break;
     case 0x2C: r[15] = pc; pc = A; break;
     case 0x0E: case 0x1E: case 0x1F:
+      KABI_GUEST_FAULT(at, at);
       trap(v, 'O', pc); pc = v->pc; LEAVE(NAN_HALTED);
     case 0x0F: case 0x1B: case 0x2F: break;
     case 0x10: { uint32_t i = A;
@@ -308,12 +437,21 @@ int nan_run(nan_vm *v, uint32_t max_steps) {
       if (v->ms == v->tick_last) { if (++v->tick_same >= 256) { v->tick_same = 0; LEAVE(NAN_TIME_WAIT); } }
       else { v->tick_last = v->ms; v->tick_same = 0; }
       break;
-    case 0x14: { uint64_t *q = &mem[(A + imm) & M]; *q = __builtin_bswap64(*q); break; }
+    case 0x14: { uint32_t ad = A + imm;
+      if (!kabi_region_range(v, ad, 1, NAN_PROT_R | NAN_PROT_W)) KABI_FAULT(at, ad);
+      uint64_t *q = &mem[ad & M]; *q = __builtin_bswap64(*q); break; }
     case 0x15: nan_ser_putc(v, (uint8_t)r[d]); break;
-    case 0x16: mem[A & M] = nan_mkword(r[d], (int)(B & 15)); break;
-    case 0x1C: r[d] = (uint32_t)(mem[(0xF0000u + imm) & M] >> 16); break;
-    case 0x1D: mem[(0xF0000u + imm) & M] = nan_mkword(r[d], 10); break;
-    case 0x17: { uint64_t q = mem[(A + imm) & M];
+    case 0x16: if (!kabi_region_range(v, A, 1, NAN_PROT_W)) KABI_FAULT(at, A);
+      mem[A & M] = nan_mkword(r[d], (int)(B & 15)); break;
+    case 0x1C: { uint32_t ad = 0xF0000u + imm;
+      if (!kabi_region_range(v, ad, 1, NAN_PROT_R)) KABI_FAULT(at, ad);
+      r[d] = (uint32_t)(mem[ad & M] >> 16); break; }
+    case 0x1D: { uint32_t ad = 0xF0000u + imm;
+      if (!kabi_region_range(v, ad, 1, NAN_PROT_W)) KABI_FAULT(at, ad);
+      mem[ad & M] = nan_mkword(r[d], 10); break; }
+    case 0x17: { uint32_t ad = A + imm;
+      if (!kabi_region_range(v, ad, 1, NAN_PROT_R)) KABI_FAULT(at, ad);
+      uint64_t q = mem[ad & M];
       r[d] = (nan_hvalid(nan_near(q)) && nan_hvalid(nan_far(q))) ? ((nan_hcls(nan_near(q)) << 2) | nan_hcls(nan_far(q))) : 0xFFFFFFFFu; break; }
     case 0x18: r[d] = v->vmode == 1 ? 0x1300C800u : 0x00031950u; break;
     case 0x19: dispset(v, r[d]); break;
@@ -329,16 +467,25 @@ int nan_run(nan_vm *v, uint32_t max_steps) {
       r[d] = res; SETK(res == 0, 0); break; }
     case 0x29: { uint32_t s2 = (uint32_t)(int32_t)(int16_t)imm; uint64_t s = (uint64_t)A + s2;
       r[d] = (uint32_t)s; SETK((uint32_t)s == 0, s >> 32); break; }
-    case 0x2A: { uint32_t ad = A + imm; r[d] = ((uint32_t)(mem[(ad >> 2) & M] >> 16) >> ((ad & 3) * 8)) & 0xFF; break; }
-    case 0x2B: { uint32_t ad = A + imm, sh = (ad & 3) * 8; uint64_t *q = &mem[(ad >> 2) & M];
+    case 0x2A: { uint32_t ad = A + imm;
+      if (!kabi_byte_range(v, ad, 1, NAN_PROT_R)) KABI_FAULT(at, ad);
+      r[d] = ((uint32_t)(mem[(ad >> 2) & M] >> 16) >> ((ad & 3) * 8)) & 0xFF; break; }
+    case 0x2B: { uint32_t ad = A + imm, sh = (ad & 3) * 8;
+      if (!kabi_byte_range(v, ad, 1, NAN_PROT_W)) KABI_FAULT(at, ad);
+      uint64_t *q = &mem[(ad >> 2) & M];
       uint32_t pl = (uint32_t)(*q >> 16); pl = (pl & ~(0xFFu << sh)) | ((r[d] & 0xFF) << sh); *q = nan_mkword(pl, 10); break; }
-    case 0x2D: { uint32_t src = A & M, dst = r[d] & M, cnt = B;
+    case 0x2D: { uint32_t src = A, dst = r[d], cnt = B;
+      if (!kabi_region_range(v, src, cnt, NAN_PROT_R)) KABI_FAULT(at, src);
+      if (!kabi_region_range(v, dst, cnt, NAN_PROT_W)) KABI_FAULT(at, dst);
+      src &= M; dst &= M;
       if (cnt) {
         if (((dst - src) & M) < cnt) { uint32_t s = (src + cnt - 1) & M, t = (dst + cnt - 1) & M;
           for (uint32_t i = 0; i < cnt; i++) { mem[t] = mem[s]; s = (s - 1) & M; t = (t - 1) & M; } }
         else for (uint32_t i = 0; i < cnt; i++) { mem[dst] = mem[src]; src = (src + 1) & M; dst = (dst + 1) & M; } }
       break; }
-    case 0x2E: { uint32_t dst = r[d], cnt = B; uint64_t wd = nan_mkword(A, 10);
+    case 0x2E: { uint32_t dst = r[d], cnt = B;
+      if (!kabi_region_range(v, dst, cnt, NAN_PROT_W)) KABI_FAULT(at, dst);
+      uint64_t wd = nan_mkword(A, 10);
       for (uint32_t i = 0; i < cnt; i++) mem[(dst + i) & M] = wd; break; }
     case 0x30: case 0x31: case 0x32: r[d] = fp_bin((int)op, A, B); v->k = 0; break;
     case 0x33: r[d] = fp_div(A, B); v->k = 0; break;
@@ -355,13 +502,21 @@ int nan_run(nan_vm *v, uint32_t max_steps) {
     case 0x3B: if (v->vmode == 1) { v->frame++; LEAVE(NAN_VSYNC); } break;
     case 0x3C: fb_copy(v, r[d], A, B); break;
     case 0x3D: fb_fill(v, r[d], A, (uint8_t)B); break;
-    case 0x3E: nan_port_out(v, A & 0xFFFF, r[d], 1); break;
+    case 0x3E: { uint32_t po = A & 0xFFFF;
+      if (kabi_port_locked(v, po)) KABI_FAULT(at, po);
+      nan_port_out(v, po, r[d], 1); break; }
     case 0x3F: r[d] = nan_port_in(v, A & 0xFFFF, 1) & 0xFF; break;
     case 0x40: r[d] = nan_port_in(v, A & 0xFFFF, 2) & 0xFFFF; break;
-    case 0x41: nan_port_out(v, A & 0xFFFF, r[d] & 0xFFFF, 2); break;
-    case 0x42: { uint32_t cnt = r[d], idx = B;
+    case 0x41: { uint32_t po = A & 0xFFFF;
+      if (kabi_port_locked(v, po)) KABI_FAULT(at, po);
+      nan_port_out(v, po, r[d] & 0xFFFF, 2); break; }
+    case 0x42: { uint32_t cnt = r[d], idx = B, po = A & 0xFFFF;
+      if (kabi_port_locked(v, po)) KABI_FAULT(at, po);
+      if (!kabi_region_range(v, idx, cnt, NAN_PROT_R)) KABI_FAULT(at, idx);
       for (uint32_t i = 0; i < cnt; i++, idx++) nan_port_out(v, A & 0xFFFF, (uint32_t)(mem[idx & M] >> 16) & 0xFFFF, 2); break; }
-    case 0x43: nan_port_out(v, A & 0xFFFF, r[d], 4); break;
+    case 0x43: { uint32_t po = A & 0xFFFF;
+      if (kabi_port_locked(v, po)) KABI_FAULT(at, po);
+      nan_port_out(v, po, r[d], 4); break; }
     case 0x44: { uint32_t reg[4] = {0, 0, 0, 0};
       if (A == 0x4E4D00FFu) {              /* machine-memory discovery */
         reg[0] = v->mem_mask;
@@ -382,8 +537,10 @@ int nan_run(nan_vm *v, uint32_t max_steps) {
     case 0x50: memset(v->vreg[d], 0, 64); break;
     case 0x51: { uint32_t *q = (uint32_t *)(void *)v->vreg[d];
       for (int i = 0; i < 16; i++) q[i] = A; break; }
-    case 0x52: nan_read_bytes(v, A, v->vreg[d], 64); break;
-    case 0x53: nan_write_bytes(v, A, v->vreg[d], 64); break;
+    case 0x52: if (!kabi_byte_range(v, A, 64, NAN_PROT_R)) KABI_FAULT(at, A);
+      nan_read_bytes(v, A, v->vreg[d], 64); break;
+    case 0x53: if (!kabi_byte_range(v, A, 64, NAN_PROT_W)) KABI_FAULT(at, A);
+      nan_write_bytes(v, A, v->vreg[d], 64); break;
     case 0x54: for (int i = 0; i < 64; i++) v->vreg[d][i] = (uint8_t)(v->vreg[a][i] + v->vreg[imm & 15][i]); break;
     case 0x55: for (int i = 0; i < 64; i++) v->vreg[d][i] = (uint8_t)(v->vreg[a][i] - v->vreg[imm & 15][i]); break;
     case 0x56: { uint32_t *q = (uint32_t *)(void *)v->vreg[d];
@@ -443,8 +600,37 @@ int nan_run(nan_vm *v, uint32_t max_steps) {
         acc += av * bv;
       }
       r[d] = (uint32_t)acc; SETK(acc == 0, 0); break; }
-    default: trap(v, 'O', pc); pc = v->pc; LEAVE(NAN_HALTED);
+    /* ---- kernel ABI v0.1 (spec/KERNEL_ABI.md) ---- */
+    case 0x4D: r[d] = nan_port_in(v, A & 0xFFFFu, 4); break;      /* INL  */
+    case 0x4E: {                                                  /* SVC  */
+      if (v->kentry == NAN_KABI_UNSET || v->kin) {
+        trap(v, 'O', pc); pc = v->pc; LEAVE(NAN_HALTED);
+      }
+      if (kabi_vector(v, NAN_CAUSE_SVC, pc, imm)) {
+        trap(v, 'K', pc); pc = v->pc; LEAVE(NAN_HALTED);
+      }
+      pc = v->pc; break; }
+    case 0x4F: {                                                  /* SVCRET */
+      if (!v->kin) { trap(v, 'O', pc); pc = v->pc; LEAVE(NAN_HALTED); }
+      if (kabi_restore(v)) { trap(v, 'K', pc); pc = v->pc; LEAVE(NAN_HALTED); }
+      pc = v->pc; break; }
+    default: KABI_GUEST_FAULT(at, at);
+      trap(v, 'O', pc); pc = v->pc; LEAVE(NAN_HALTED);
     }
+  tick:
+    /* Timer is sampled at instruction boundaries, never while the kernel
+       is running.  It counts every completed instruction. */
+    if (v->ktimer && !v->kin) {
+      if (v->ktimer_left == 0) v->ktimer_left = v->ktimer;
+      if (--v->ktimer_left == 0) {
+        v->ktimer_left = v->ktimer;
+        if (kabi_vector(v, NAN_CAUSE_IRQ, pc, 0)) {
+          trap(v, 'K', pc); pc = v->pc; LEAVE(NAN_HALTED);
+        }
+        pc = v->pc;
+      }
+    }
+  restart: ;
   }
 out:
   v->pc = pc;
