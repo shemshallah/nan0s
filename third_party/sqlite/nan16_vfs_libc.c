@@ -27,8 +27,14 @@ typedef struct NanLFile {
     unsigned int shm_excl;   /* WAL shm locks held EXCLUSIVE by this handle */
     int shm_mapped;          /* this handle has counted one NanShm ref */
     int psow;                /* POWERSAFE_OVERWRITE (FCNTL can clear it) */
+    int szChunk;             /* SQLITE_FCNTL_CHUNK_SIZE (0 = none) */
     char path[128];
 } NanLFile;
+
+/* Last OS errno, surfaced through xGetLastError so sqlite3_system_errno()
+   and the error message match the unix VFS. */
+static int nan_last_errno;
+static void nan_set_errno(void) { nan_last_errno = errno; }
 
 /* SQLite's unix VFS detects same-process lock conflicts because POSIX locks
  * are process-wide.  The guest has no fcntl locks, so keep the same state
@@ -270,10 +276,13 @@ static int l_read(sqlite3_file *pFile, void *buf, int amt, sqlite3_int64 off)
 {
     NanLFile *f = (NanLFile *)pFile;
     int r;
-    if (f->fd < 0) return SQLITE_IOERR_READ;
-    if (lseek(f->fd, (off_t)off, SEEK_SET) < 0) return SQLITE_IOERR_READ;
+    if (f->fd < 0) { errno = EISDIR; nan_set_errno(); return SQLITE_IOERR_READ; }
+    if (lseek(f->fd, (off_t)off, SEEK_SET) < 0) {
+        nan_set_errno();
+        return SQLITE_IOERR_READ;
+    }
     r = (int)read(f->fd, buf, (size_t)amt);
-    if (r < 0) return SQLITE_IOERR_READ;
+    if (r < 0) { nan_set_errno(); return SQLITE_IOERR_READ; }
     if (r < amt) {
         memset((unsigned char *)buf + r, 0, (size_t)(amt - r));
         return SQLITE_IOERR_SHORT_READ;
@@ -284,18 +293,31 @@ static int l_write(sqlite3_file *pFile, const void *buf, int amt, sqlite3_int64 
 {
     NanLFile *f = (NanLFile *)pFile;
     int r;
-    if (f->fd < 0) return SQLITE_IOERR_WRITE;
-    if (f->readonly) return SQLITE_READONLY;
-    if (lseek(f->fd, (off_t)off, SEEK_SET) < 0) return SQLITE_IOERR_WRITE;
+    if (f->fd < 0) { errno = EBADF; nan_set_errno(); return SQLITE_IOERR_WRITE; }
+    if (f->readonly) { errno = EACCES; nan_set_errno(); return SQLITE_READONLY; }
+    if (lseek(f->fd, (off_t)off, SEEK_SET) < 0) {
+        nan_set_errno();
+        return SQLITE_IOERR_WRITE;
+    }
     r = (int)write(f->fd, buf, (size_t)amt);
-    return r == amt ? SQLITE_OK : SQLITE_IOERR_WRITE;
+    if (r != amt) { nan_set_errno(); return SQLITE_IOERR_WRITE; }
+    return SQLITE_OK;
 }
 static int l_truncate(sqlite3_file *pFile, sqlite3_int64 size)
 {
     NanLFile *f = (NanLFile *)pFile;
+    sqlite3_int64 nSize = size;
     if (f->readonly) return SQLITE_READONLY;
-    return f->fd >= 0 && ftruncate(f->fd, (off_t)size) == 0
-        ? SQLITE_OK : SQLITE_IOERR_TRUNCATE;
+    /* Match unixTruncate(): when a chunk size is configured, round the
+       file up so the allocation happens in the requested chunks. */
+    if (f->szChunk > 0) {
+        sqlite3_int64 nRound =
+            ((nSize + f->szChunk - 1) / f->szChunk) * f->szChunk;
+        if (nRound > nSize) nSize = nRound;
+    }
+    if (f->fd >= 0 && ftruncate(f->fd, (off_t)nSize) == 0) return SQLITE_OK;
+    nan_set_errno();
+    return SQLITE_IOERR_TRUNCATE;
 }
 static int l_sync(sqlite3_file *pFile, int flags)
 {
@@ -363,7 +385,10 @@ static int l_filecontrol(sqlite3_file *pFile, int op, void *arg)
         return SQLITE_OK;
     case SQLITE_FCNTL_SIZE_HINT: {
         sqlite3_int64 n = *(sqlite3_int64 *)arg;
-        if (f->fd >= 0) ftruncate(f->fd, (off_t)n);
+        if (f->fd >= 0 && ftruncate(f->fd, (off_t)n) != 0) {
+            nan_set_errno();
+            return SQLITE_IOERR_TRUNCATE;
+        }
         return SQLITE_OK;
     }
     case SQLITE_FCNTL_POWERSAFE_OVERWRITE: {
@@ -374,6 +399,8 @@ static int l_filecontrol(sqlite3_file *pFile, int op, void *arg)
         return SQLITE_OK;
     }
     case SQLITE_FCNTL_CHUNK_SIZE:
+        f->szChunk = arg ? *(int *)arg : 0;
+        return SQLITE_OK;
     case SQLITE_FCNTL_SYNC:
     case SQLITE_FCNTL_COMMIT_PHASETWO:
         return SQLITE_OK;
@@ -427,8 +454,11 @@ static int l_open(sqlite3_vfs *pVfs, const char *name, sqlite3_file *pFile,
     struct stat lst;
     (void)pVfs;
     if (name && (flags & SQLITE_OPEN_NOFOLLOW)
-        && lstat(name, &lst) == 0 && S_ISLNK(lst.st_mode))
+        && lstat(name, &lst) == 0 && S_ISLNK(lst.st_mode)) {
+        errno = ELOOP;
+        nan_set_errno();
         return SQLITE_CANTOPEN;
+    }
     f->fd = -1;
     f->del = 0;
     f->readonly = !(flags & (SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE));
@@ -437,6 +467,7 @@ static int l_open(sqlite3_vfs *pVfs, const char *name, sqlite3_file *pFile,
     f->shm_excl = 0;
     f->shm_mapped = 0;
     f->psow = 1;
+    f->szChunk = 0;
     f->path[0] = 0;
     if (!name) {
         snprintf(tmp, sizeof tmp, "/.nan_tmp_%u", ++temp_seq);
@@ -473,7 +504,10 @@ static int l_open(sqlite3_vfs *pVfs, const char *name, sqlite3_file *pFile,
                      | SQLITE_OPEN_READONLY;
         }
     }
-    if (fd < 0) return SQLITE_CANTOPEN;
+    if (fd < 0) {
+        nan_set_errno();
+        return SQLITE_CANTOPEN;
+    }
     f->fd = fd;
     shm_set_path(f, name);
     if (pOutFlags) *pOutFlags = outFlags;
@@ -533,7 +567,7 @@ static int l_sleep(sqlite3_vfs *pVfs, int usec)
        boundaries.  Busy-handler timeouts then match Tcl's clock and do not
        consume millions of instructions. */
     *slept += (unsigned)((usec + 999) / 1000);
-    return 0;
+    return (usec + 999) / 1000;
 }
 static unsigned int l_now_ms(void)
 {
@@ -553,9 +587,13 @@ static int l_currenttimeint64(sqlite3_vfs *pVfs, sqlite3_int64 *pTime)
 }
 static int l_getlasterror(sqlite3_vfs *pVfs, int nBuf, char *zBuf)
 {
+    const char *zMsg;
     (void)pVfs;
-    if (nBuf > 0) zBuf[0] = 0;
-    return 0;
+    if (nBuf <= 0) return nan_last_errno;
+    zMsg = nan_last_errno ? strerror(nan_last_errno) : "";
+    if (zMsg == 0) zMsg = "";
+    snprintf(zBuf, (size_t)nBuf, "%s", zMsg);
+    return nan_last_errno;
 }
 static sqlite3_vfs l_vfs = {
     .iVersion = 2,
