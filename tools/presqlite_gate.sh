@@ -153,6 +153,7 @@ done
 [ -f tools/ndbg_img.sh ] && run ndbg_img sh tools/ndbg_img.sh
 [ -f tools/ndbg_term.sh ] && run ndbg_term sh tools/ndbg_term.sh
 [ -f tools/raw_only_gate.sh ] && run raw_only sh tools/raw_only_gate.sh
+[ -f tools/xgold_gate.sh ] && run xgold sh tools/xgold_gate.sh
 [ -f tools/lds_gate.sh ] && run lds_gate sh tools/lds_gate.sh
 [ -f tools/kabi_gate.sh ] && run kabi sh tools/kabi_gate.sh
 [ -f tools/kabi_proc_gate.sh ] && run kabi_proc sh tools/kabi_proc_gate.sh
