@@ -54,6 +54,26 @@ finish and triage the later test/ files.
   `sqlite3_recover_run` return SQLITE_NOTADB and the test output page size
   512.  This points at the recover wrapper input-page path, not at TCC; the
   remaining page-size detector/wrapper interaction is still open.
+- POSIX permission bits are implemented (0644/0444/0755/0777, chmod, stat,
+  access, open checks) and Tcl exposes `-permissions`; `attach.test` is now
+  **0 errors out of 113**, `attach2.test` **0/71**.  The read-write open
+  fallback to O_RDONLY fixes the readonly-database path (backup2-6).
+- VFS sync and fullsync counters are incremented under `SQLITE_TEST`, so
+  `SQLITE_NO_SYNC` is no longer defined; avtrans' sync assertions can run.
+- The flat cartridge cannot fork/exec or create pipes, so
+  `tools/nan16_patch_lock_common.py` makes `do_multiclient_test` probe pipe
+  creation and run only the same-interpreter (tn==2) variant instead of
+  aborting the aggregate at busy2.test.
+- A small WAL probe succeeds (`journal_mode=wal`, insert, reopen, count=2)
+  with the iVersion-2 shm methods.  Enabling WAL in the 24 MB testfixture,
+  however, halts during startup at pc 3,146,612 with no console output; the
+  mapped build's `MAP` entries stop at `__nan16_f2ull` (3,052,286), so the
+  failing code is a large unmapped region.  This is an open large-image /
+  codegen issue, not yet fixed; the suite image keeps `SQLITE_OMIT_WAL`.
+- Current product fixture: 96,064,648 bytes, SHA-256
+  `758e4ed1182a938fc42e0c1aa52d111032f9d495a4bce1b12a2db6b7f8850f62`
+  (select1 199/0).  A fresh one-process veryquick run (checkpointed) is in
+  progress; earlier runs reached 431B steps before the busy2 abort.
 - The testfixture build kept `SQLITE_OMIT_DEPRECATED`, which compiles
   `test_expired()` down to a TCL_OK with no result; `badutf2-4.0` therefore
   saw `{}` instead of `0`.  The official testfixture does not omit deprecated
