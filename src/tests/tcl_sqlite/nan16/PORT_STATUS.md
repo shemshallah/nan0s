@@ -42,9 +42,13 @@ finish and triage the later test/ files.
   of aborting the aggregate in `exec`.
 - Symbolic links are real in the libc VFS and Tcl (`file link`/`readlink`);
   `xFullPathname` resolves the target and returns `SQLITE_OK_SYMLINK` for
-  `-nofollow`.  `symlink.test` now completes.  The remaining 13 failures are
-  WAL expectations (the fixture is built with `SQLITE_OMIT_WAL`) plus
-  `symlink-1.3`, which creates a loop with `exec ln -s` (no Tcl `exec`).
+  `-nofollow`.  `TclpObjLstat` now uses `lstat()` so dangling links can be
+  deleted, and relative link targets are resolved against the link's own
+  directory.  Official `symlink.test` on the WAL-enabled `sym-fix.bin`
+  (96,064,648 bytes, SHA-256
+  `b12183abe665c4f99949c9873c205bb69045d4af36463a98e06cf2fd9ac34a8b`)
+  is **1 error out of 39**: only `symlink-1.3`, which builds a loop with
+  `exec ln -s` and therefore needs a guest `exec`/process spawn.
 - `ext/recover` currently reports 42 failures in the aggregate.  Traced so
   far: official `PRAGMA page_size` is 1024, the copied page-2 header is a
   valid 0x0D table leaf at 1024 (`recoverIsValidPage` semantics reproduced in
@@ -482,8 +486,8 @@ procedures; it returns an empty attribute list rather than inventing one.
   channel path.
 - `Tcl_GetOpenFile` (stdio `FILE *` access) returns `TCL_ERROR`; `fdopen` is
   absent from the guest libc.
-- Links/symlinks: `file link`, `readlink`, `utime` fail (`EINVAL`/`EACCES`);
-  `lstat` aliases `stat`.
+- Links/symlinks: `file link`, `readlink`, and real `lstat` work; `utime`
+  still fails (`EINVAL`/`EACCES`).
 - `file attributes` returns an empty attribute set (no owner/group/mode
   database).
 - No encoding data files are loaded.  Built-in Tcl encodings remain visible
