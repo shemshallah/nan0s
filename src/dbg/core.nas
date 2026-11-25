@@ -405,14 +405,6 @@ nd_loop:
   SUB r5,r5,r13
   ST r5,r0,@nd_left
   ST r12,r0,@nd_at
-  LD r5,r0,@nd_hi
-  LA r6,0x32000
-  ADD r6,r6,r5
-  ST r12,r6,0
-  ADD r5,r5,r13
-  MOVI r6,4095
-  BOOL.8 r5,r5,r6
-  ST r5,r0,@nd_hi
   ADD r1,r12,r0
   CALL @nd_addr
   ST r1,r0,@nd_waddr
@@ -426,6 +418,24 @@ nd_loop:
   ST r2,r0,@nd_curn
   LD r3,r1,0
   ST r3,r0,@nd_raw
+  ; history: pc:16 | op:8 | k:2 (flags zero)
+  LD r5,r0,@nd_hi
+  LA r6,0x32000
+  ADD r6,r6,r5
+  LD r7,r0,@nd_at
+  MOVI r8,0xFFFF
+  BOOL.8 r7,r7,r8
+  SHR r8,r3,24
+  SHL r8,r8,16
+  BOOL.14 r7,r7,r8
+  SHL r8,r11,24
+  BOOL.14 r7,r7,r8
+  MOVI r9,10
+  STW r7,r6,r9
+  ADD r5,r5,r13
+  MOVI r6,4095
+  BOOL.8 r5,r5,r6
+  ST r5,r0,@nd_hi
   MOVI r4,16
   CMP r2,r4
   JMP[GE] @nd_trapg

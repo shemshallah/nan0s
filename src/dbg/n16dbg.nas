@@ -163,6 +163,8 @@ cl_loop:
   LA r1,0x32000
   ADD r1,r1,r8
   LD r1,r1,0
+  MOVI r4,0xFFFF
+  BOOL.8 r1,r1,r4
   MOVI r2,4
   CALL @nd_puthex
   MOVI r1,32
