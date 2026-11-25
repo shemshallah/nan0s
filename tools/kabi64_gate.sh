@@ -45,7 +45,7 @@ timeout 30 qemu-system-x86_64 -m "$MEM" -drive format=raw,if=floppy,file="$T/img
 
 cat > "$T/expect" <<'EOF'
 NAN0S S1 KABI x86_64
-S1 KABI x86_64 PASS 102 checks, 0 failures
+S1 KABI x86_64 PASS 106 checks, 0 failures
 EOF
 if ! diff -u "$T/expect" "$T/com" > "$T/diff" 2>&1; then
   echo "kabi64: FAIL (COM1 transcript differs)"
@@ -53,4 +53,4 @@ if ! diff -u "$T/expect" "$T/com" > "$T/diff" 2>&1; then
   echo "--- actual ---"; cat -v "$T/com"
   exit 1
 fi
-echo "kabi64: PASS (x86_64 long mode + ABI mechanics, 102 checks, ${MEM} MiB)"
+echo "kabi64: PASS (x86_64 long mode + ABI mechanics, 106 checks, ${MEM} MiB)"

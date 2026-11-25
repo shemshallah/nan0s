@@ -65,3 +65,8 @@ INL r1,r2
 SVC 7
 SVCRET
 HALT
+
+; output hook required by the shared disassembler
+dis_out:
+  PUTC r9
+  RET
