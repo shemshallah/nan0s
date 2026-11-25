@@ -4059,7 +4059,7 @@ ADD r3,r4,r0
 lg_cnt:
 ST r3,r0,@lg_n
 SUB r3,r2,r3
-MOVI r4,15
+MOVI r4,255
 BOOL.8 r3,r3,r4
 ST r3,r0,@lg_s
 lg_loop:
@@ -4103,7 +4103,7 @@ MOVI r1,10
 PUTC r1
 LD r1,r0,@lg_s
 ADD r1,r1,r13
-MOVI r2,15
+MOVI r2,255
 BOOL.8 r1,r1,r2
 ST r1,r0,@lg_s
 LD r1,r0,@lg_n
