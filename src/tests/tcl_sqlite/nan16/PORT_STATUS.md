@@ -131,9 +131,12 @@ finish and triage the later test/ files.
   `SQLITE_IOCAP_POWERSAFE_OVERWRITE | SQLITE_IOCAP_SUBPAGE_READ` (truthful
   for the RAM-backed store), with `SQLITE_FCNTL_POWERSAFE_OVERWRITE` support
   for `psow=0`.
-- Final fixture (`product-final.bin`, copy of `diag-btree.bin`):
-  96,064,648 bytes, SHA-256
-  `564121aad84f07b0174c9914326daa6954c130ceb6463b5b43e7b94d9a53c79d`.
+- Candidate final fixture (`diag-final5.bin`): 96,064,648 bytes, SHA-256
+  `d7e515299c676c3ce45fa36bbe40eb1119521832f26e1780ee77237f82f730df`.
+  It adds the completed strftime shim, fake-time/localtime, 160 MiB heap,
+  system errno, xSleep microseconds and chunk-rounded SIZE_HINT.  Verified
+  slices: select1 **199/0**, cache **190/0**, date **1749/0**, capi3
+  **249/0**, chunksize **7/0**.  cksumvfs and recovercorrupt3 remain open.
   Official results: select1 **199/0**, cache **190/0**, recoverpgsz
   **89/0**, backup2 **16/16**, busy2 **0/15** at `--clock steps:100000`,
   symlink **1/39** (only `symlink-1.3`, `exec ln -s`), wal.test **3/518**
