@@ -94,6 +94,24 @@ finish and triage the later test/ files.
   select1 **199/0**.  The current `sym-fix.bin` (SHA-256
   `b12183ab...`) adds the symlink and recover/backup fixes and still passes
   select1 199/0, backup2 16/16, and recoverpgsz 89/0.
+- The first fresh aggregate on `564121aa` reached **698,836,591,843
+  steps** and stopped at the official harness limit: **1000 errors out of
+  59,638 tests**, then `*** Giving up...` in `date4`.  Most errors were a
+  single missing-libc-shim family: the Tcl `strftime` port left `%I`/`%W`
+  literal while SQLite implements them, so every `date4` comparison (24,858
+  timestamps) mismatched.  The shim now implements `%I/%W/%U/%V/%G/%g/%k/
+  %l/%P/%C/%D/%s/%x/%X/%z/%Z`; a 300-value probe and official `date.test`
+  (0/1749) match.  `date-2.40`/`date-4.1` needed the VFS to honor
+  `sqlite3_current_time` (Julian-ms epoch) and `SQLITE_OMIT_LOCALTIME` was
+  removed so `date-6.20` and `date2-510/520` take the normal localtime
+  path.
+- Other failures from that run: `capi3-13-5` (`xSleep` must return
+  microseconds, not milliseconds), `chunksize-1.2` (`SIZE_HINT` must round
+  to `szChunk`), `cksumvfs-1.3/1.4` and `recovercorrupt3-1.2/2.2` (open
+  traces), and `crash8-1.2/2.1/4.4/4.7/4.8/4.10` which are explicit child
+  process capability failures.  `capi3-3.3` needed a stored system errno;
+  `xGetLastError`, write/read/truncate failures now set it.  The fixture
+  heap default is 160 MiB for the ~42 MB cksumvfs transaction.
 - The aggregate exposed two more fixture defects.  `l_sync()` classified
   `SQLITE_SYNC_NORMAL` (0x02) as FULL because it tested
   `flags & SQLITE_SYNC_FULL` (0x03); it now uses `(flags & 0x0F) ==
