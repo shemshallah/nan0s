@@ -1,4 +1,4 @@
-# NaN/0S v42 / r26
+# NANIX v42 / r26
 
 A bare-metal museum of computing where every instruction is a 64-bit
 double-ended NaN-like word, every exhibit is NaN16 code, and the machine can
@@ -33,14 +33,14 @@ host-side dev-loop equivalent. Census details + evidence: `spec/PYTHON_CENSUS.md
 - **Homebrew 5x7 font.** Complete printable ASCII, 14 Unicode glyphs, 1px
   horizontal and 2px vertical gaps, UTF-8 decoder (`fb_char5` / `fb_text5`).
   The Sierpinski panel is 53 columns and eight lines of sharper text.
-  `NaN/0S` is in the exhibit headers. No copied font.
+  `NANIX` is in the exhibit headers. No copied font.
 - **Sierpinski.** Real 320x128 white-on-black pixel rule-90 lattice, live
   scroll; the lower 72 pixels are a scrollable 3x5-font label. The exact dev
   note is in the panel.
 - **Boole 16.** 98-line scrollable plaque, all 16 two-input functions built and
   run at runtime, the lane identity, the mirror law, and a dual-face word lab.
   `V_SCROLL` is a general shell vector.
-- **About NaN/0S** and **About Shemshallah**, both scrollable.
+- **About NANIX** and **About Shemshallah**, both scrollable.
 - **The Trust exhibit.** A preface on Ken Thompson and the question, then the
   full paper "Trusting Trust in a Double-Endian NaN Machine", 376 wrapped
   lines, scrollable. Paper: `spec/TRUST_PAPER.md`.
@@ -56,9 +56,9 @@ host-side dev-loop equivalent. Census details + evidence: `spec/PYTHON_CENSUS.md
   bitmap allocator, block write/read; `NANFS PASS` (`logs/nanfs_r21.txt`).
 - **ATA read + write.** `ATA RW PASS` on the primary master (r21 v86-era evidence; the same boot now runs under qemu). The 16-bit
   PIO path needed the `0x66` operand-size prefix; `OUTL` completes the sector.
-- **Nine TOC entries.** Baby, Boole, Sierpinski, About NaN/0S, About
+- **Nine TOC entries.** Baby, Boole, Sierpinski, About NANIX, About
   Shemshallah, Trust, Patriot Missile Failure, Paradox Engine, and the
-  NaN/0S GUI desktop.
+  NANIX GUI desktop.
 
 ## r24: the desktop (GUI in NaN16)
 
@@ -66,10 +66,10 @@ Menu entry 9 opens a windowed desktop. **No native GUI code**: the window
 manager, console, apps and the self-test are NaN16 (`src/lib/wm.nas`,
 `src/exhibits/gui_cart.nas`, `src/tests/gui_test.nas`).
 
-- 320x200 desktop, `NaN/0S` top bar with live tick counter, MOVE indicator.
+- 320x200 desktop, `NANIX` top bar with live tick counter, MOVE indicator.
 - Window manager: 8 windows, z-order, focus = top, raise, Tab cycles, ESC closes,
   overlap and occlusion test (`wm_covered`), 11 px title bars that start with
-  `NaN/0S`, close box, focus colours. Every window owns a 512-word private buffer.
+  `NANIX`, close box, focus colours. Every window owns a 512-word private buffer.
 - App kinds dispatch through a table (init, draw, key, tick), so a new program is
   four routines and a table row.
 - **Terminal**: virtual console (cells, cursor, scroll by BCOPY, backspace). Commands

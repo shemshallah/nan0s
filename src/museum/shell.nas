@@ -1,4 +1,4 @@
-; NaN/0S shell (round 18) - exhibit cartridge loader.
+; NANIX shell (round 18) - exhibit cartridge loader.
 ; Entry: word 0 JMPs here (shell_entry at word 512).
 ; r0=0, r13=1, r14=SP, r15=link.
 
@@ -530,7 +530,7 @@ cu_foot:
 
 ; ---- Data ----
 sh_banner:
-.str " NaN/0S  SYSTEM  -  NaN16                                           "
+.str " NANIX  SYSTEM  -  NaN16                                           "
 sh_more:
 .str " PAGE "
 sh_btab:
@@ -557,7 +557,7 @@ sh_r3:
 sh_bad:
 .str "SEAL MISMATCH - cartridge REFUSED (not loaded, not run)"
 sh_foot:
-.str "ring 0, no host OS. 1-9 run item; [ ] page; C command line; ESC redraw. NaN/0S v40\n"
+.str "ring 0, no host OS. 1-9 run item; [ ] page; C command line; ESC redraw. NANIX v40\n"
 
 ; ---- System menu: settings, NaNNet, disk, memory, CPU ----
 sys_menu:
@@ -1262,7 +1262,7 @@ LD r15,r14,0
 RET
 
 cli_s_banner:
-.str "NaN/0S text shell - POSIX command line\n"
+.str "NANIX text shell - POSIX command line\n"
 cli_prompt:
 .str "nan0s> "
 cli_s_eof:
@@ -1334,31 +1334,31 @@ sh_visidx:
 .word 0
 .org 5376
 sm_title:
-.str " NaN/0S  SYSTEM"
+.str " NANIX  SYSTEM"
 sm_body:
 .str " [1] SETTINGS\n [2] NANNET / BROWSER\n\n ESC returns to the main menu."
 sm_foot:
-.str "NaN/0S SYSTEM  1-2 open  ESC main menu"
+.str "NANIX SYSTEM  1-2 open  ESC main menu"
 sys_foot:
-.str "NaN/0S  any key returns to the system menu"
+.str "NANIX  any key returns to the system menu"
 st_title:
-.str " NaN/0S  SETTINGS"
+.str " NANIX  SETTINGS"
 st_body:
 .str " VISUAL MODES\n 80x25 text is current.\n 320x200 pixel is live for Sierpinski and Paradox.\n 1024x768 GUI is planned, VBE driver not yet.\n AArch64 phone, x86, and RISC-V layouts are planned.\n\n CONFIRMATION RULE\n A future visual mode change will show a 10 second countdown\n and revert to the previous mode if no key is pressed."
 net_title:
-.str " NaN/0S  NANNET"
+.str " NANIX  NANNET"
 net_body:
 .str " CONNECT\n No NIC driver yet. No link.\n SETTINGS\n Node NaN-0001, transport serial/ATA, no network stack.\n Plan: NaN16 IPv4/UDP loopback over COM1, then a PCIe NIC\n driver with DMA and a NaNNet settings page."
 disk_title:
-.str " NaN/0S  DISK UTILITY"
+.str " NANIX  DISK UTILITY"
 disk_body:
 .str " ATA primary master: read PASS (sector 0 = NAN0).\n ATA PIO write: C-core PASS (16-bit OUTW); QEMU/real pending.\n NaNFS RAM: format/alloc/write/read PASS.\n Image: 1.44 MB, guest 32,768 words.\n Next: QEMU/real write validation, then NaNFS on disk."
 mem_title:
-.str " NaN/0S  MEMORY UTILITY"
+.str " NANIX  MEMORY UTILITY"
 mem_body:
 .str " Guest image: sized by the store header (up to 4M words).\n Runtime G window: 8 MB at 0x200000.\n nalloc heap and MEMQ/E820 discovery are planned.\n Current exhibits use fixed buffers below the store.\n Store: 3,072..14,516 words."
 cpu_title:
-.str " NaN/0S  CPU / ARCHITECTURE"
+.str " NANIX  CPU / ARCHITECTURE"
 cpu_body:
 .str " Native core: x86, 5,800 bytes.\n Guest ISA: NaN16 double-endian, 16 truth-table classes.\n Clock: PIT TICK, 1,000 Hz class.\n AArch64 and RISC-V native cores: planned.\n Android root detection: host-only, not bare metal."
 

@@ -1,4 +1,4 @@
-; NaN/0S GUI CARTRIDGE: desktop + overlapping windows, all NaN16.
+; NANIX GUI CARTRIDGE: desktop + overlapping windows, all NaN16.
 ; Programs: Terminal (virtual console), Sierpinski (stateless rule-90 pixel window),
 ; Monitor (double-endian timer lamps), Hex (live guest memory viewer).
 ; Keys (kbd.nas, 1024x768): TAB focus | F2 MOVE mode (arrows move, ENTER leaves) | F3 enlarge/restore | ESC close.
@@ -574,7 +574,7 @@ SUB r14,r14,r13
 LD r15,r14,0
 RET
 s_banner:
-.str "NaN/0S TERMINAL\nh = help\n> "
+.str "NANIX TERMINAL\nh = help\n> "
 ; ---- vc_putc: r1=id r2=char ----
 vc_putc:
 ST r15,r14,0
@@ -1418,7 +1418,7 @@ tm_id:
 s_help:
 .str "h c v w b l m x t s n u f e q\nb browser l lattice m monitor x hex\nt term w count c clear v ver\ne C editor (.run/.demo)\ns settings n browser u utils\nf files (nsh) q quit gui\n"
 s_ver:
-.str "NaN/0S GUI r26\npure NaN16 wm\n"
+.str "NANIX GUI r26\npure NaN16 wm\n"
 s_wins:
 .str "WINDOWS "
 s_guess_unk:

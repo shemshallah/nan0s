@@ -36,7 +36,7 @@ cp build/nan0s.img "$T/hda.img"
   -drive format=raw,if=ide,file="$T/hda.img" \
   -display none -serial "file:$T/com1.txt" -monitor stdio \
   > "$T/monitor.txt" 2> "$T/qemu.txt"
-grep -q 'NaN/0S' "$T/com1.txt"
+grep -q 'NANIX' "$T/com1.txt"
 if grep -Eqi 'unknown command|invalid command' "$T/monitor.txt"; then
   echo "FAIL: PS/2 mouse/keyboard commands unsupported"
   exit 1

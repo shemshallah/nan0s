@@ -66,7 +66,11 @@ if [ -z "$RUNNER" ] && [ -x build/nanthr_x64_runner ]; then
 fi
 if [ -n "$RUNNER" ]; then
   set +e
-  "$RUNNER" "$T/t.nan" > "$T/x64.out" 2> "$T/x64.err"
+  case "$(basename "$RUNNER")" in
+    s1_runner.sh) "$RUNNER" --img "$T/t.nan" --mem 64 --steps 100000000 --serial \
+                    > "$T/x64.out" 2> "$T/x64.err" ;;
+    *)            "$RUNNER" "$T/t.nan" > "$T/x64.out" 2> "$T/x64.err" ;;
+  esac
   xrc=$?
   set -e
   sed -e 's/^\[nan_cli\].*$//' -e '/^$/d' "$T/x64.out" > "$T/x64.got"

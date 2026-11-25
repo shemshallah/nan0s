@@ -21,7 +21,7 @@ timeout "$SECS" qemu-system-i386 -m 512 \
   $DARG \
   -display none -serial "file:$T/com1.txt" -no-reboot >/dev/null 2>&1 || true
 rc=0
-grep -q "NaN/0S" "$T/com1.txt" || { echo "qgate: NaN/0S banner MISSING on COM1"; rc=1; }
+grep -q "NANIX" "$T/com1.txt" || { echo "qgate: NANIX banner MISSING on COM1"; rc=1; }
 # The OS boots the GUI desktop; qgate_gui checks the framebuffer.  There is
 # no museum menu banner any more.
 if [ $rc -eq 0 ]; then

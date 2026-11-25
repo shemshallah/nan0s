@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/github/nan0s-banner.svg" alt="NaN/0S" width="100%"/>
+<img src="assets/github/nan0s-banner.svg" alt="NANIX" width="100%"/>
 
 <br/>
 
@@ -30,7 +30,7 @@
 
 > **Execution-model rule:** `aarch64/android/core/nan16.c` and the
 > `nan_cli` built from it are a host C **oracle**, not the product runtime.
-> The raw NaN/0S implementation is authoritative, and x86_64 S1 is the
+> The raw NANIX implementation is authoritative, and x86_64 S1 is the
 > product gate. Read [`DONT_USE_NAN16_C.md`](DONT_USE_NAN16_C.md) before
 > reporting a `nan_cli` result.
 
@@ -50,7 +50,7 @@ This suite is also vendored into [`shemshallah/nan0s`](https://github.com/shemsh
 
 ## `> orientation`
 
-NaN/0S is a bare-metal museum of computing whose fundamental unit of computation is a quiet contradiction.
+NANIX is a bare-metal museum of computing whose fundamental unit of computation is a quiet contradiction.
 
 Every machine word is 64 bits wide and **both of its ends are IEEE 754 NaN headers**. Not one end, both: a *near* head and a *far* head, read in opposite byte orders, with a 32-bit payload sandwiched between them. Each head is one of four legal values (positive/negative × signaling/quiet), so each end carries two bits, and together the two ends spell a four-bit **class nibble**. That nibble is not metadata. It is a truth table. It is the opcode of a Boolean function. It is also the predicate that decides whether an instruction runs at all. The same four bits, read two ways, are the machine's whole sense of logic.
 
@@ -71,7 +71,7 @@ A small, high-signal circle is welcome. Everything else is noise.
 <div align="center">
 
 <a href="https://shemshallah.github.io/NaN0S/?live=1">
-<img src="assets/nan0s-desktop.png" alt="NaN/0S desktop — click to boot LIVE in your browser" width="100%"/>
+<img src="assets/nan0s-desktop.png" alt="NANIX desktop — click to boot LIVE in your browser" width="100%"/>
 </a>
 
 **Click the image. The real guest floppy boots in your browser.**
@@ -205,7 +205,7 @@ The frozen baseline lives in [`spec/NAN16_SPEC.md`](spec/NAN16_SPEC.md); everyth
 You power the machine. Before a pixel appears, COM1 says one line:
 
 ```
-NaN/0S R26J READY MENU=S
+NANIX R26J READY MENU=S
 ```
 
 Then the museum draws itself in text mode — eighty columns, twenty-five rows, no operating system anywhere in the stack — and waits. You press a key. The shell checks the exhibit's **seal** (both faces, both payload hashes, a class channel), copies the cartridge into the run slot, and jumps. If anything is wrong with a word, the machine does not argue: it prints `!G` or `!O`, a program counter, and stops.
@@ -219,7 +219,7 @@ Nine exhibits are installed. Each shows the date of the event, who was involved 
 | **1** | 1948 · **Manchester Baby** (SSEM), 21 June 1948 | RE-CREATION |
 | **2** | 1854 · **Boole**, *The Laws of Thought* — all 16 functions, live | INSPIRED |
 | **3** | 1915 · **Sierpinski** — Rule 90, a live fractal | RE-CREATION |
-| **4** | 2026 · **About NaN/0S** — the machine, the trust, the plan | INSPIRED |
+| **4** | 2026 · **About NANIX** — the machine, the trust, the plan | INSPIRED |
 | **5** | 2026 · **About Shemshallah** — the developer | INSPIRED |
 | **6** | 1984 · **Trust** — *Reflections on Trusting Trust* | INSPIRED |
 | **7** | 1991 · **Patriot Missile Failure**, Dhahran | RE-CREATION |
@@ -272,7 +272,7 @@ The long form, with the diverse-double-compilation argument and the dual-face se
 
 ## `> what it actually is`
 
-NaN/0S is a single-address-space, ring-0-feeling, NaN16 guest running on a minimal native kernel. The guest word stream is intended to be architecture-neutral; only the thinnest boot shim and a few native primitives differ between x86, AArch64, and the RISC-V smoke tests.
+NANIX is a single-address-space, ring-0-feeling, NaN16 guest running on a minimal native kernel. The guest word stream is intended to be architecture-neutral; only the thinnest boot shim and a few native primitives differ between x86, AArch64, and the RISC-V smoke tests.
 
 Key technical facts:
 
@@ -496,7 +496,7 @@ A small circle of people who understand the constraints, the tone, and the cost 
 - clean architecture adapters that do not enlarge the trusted base
 - improvements to the pure `sh`/`awk` outer tools
 
-Everything that tries to turn NaN/0S into a normal operating system, a friendly community product, or a vehicle for unrelated ideas will be declined without lengthy discussion.
+Everything that tries to turn NANIX into a normal operating system, a friendly community product, or a vehicle for unrelated ideas will be declined without lengthy discussion.
 
 If you decode the signal, open the issue.  
 If you build something that belongs here, make it small, exact, and sealable.

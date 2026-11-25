@@ -27,7 +27,7 @@ tools/mkall.sh  ->  build/nan0s.img
 ```
 
 `sh tools/qgate.sh` boots that image on bare x86 (QEMU) and requires the
-`NaN/0S` banner on COM1.  The default boot is the GUI desktop; `qgate_gui`
+`NANIX` banner on COM1.  The default boot is the GUI desktop; `qgate_gui`
 checks the 1024x768 framebuffer.  A pending ESC at cold boot enters the text
 shell (no museum menu); the GUI/museum code is legacy, not the boot path.  The upgraded machine target is **x86_64 S1**
 (`tools/s1_runner.sh`); `tools/nan0s_guest_gate.sh` runs a NaN guest on it by

@@ -1,4 +1,4 @@
-; NaN/0S MUSEUM - round 18. Exhibit cartridge system.
+; NANIX MUSEUM - round 18. Exhibit cartridge system.
 
 .org 0
 JMP @sh_cold
@@ -73,19 +73,17 @@ NOP
 
 .org 512
 sh_cold:
-; Plain OS banner.  No menu, no museum launcher: vectors are installed by
-; shell_entry and the command line starts immediately.
+; NANIX OS banner.  No museum menu: vectors are installed by shell_entry,
+; then the GUI desktop (boot cart) or the text shell starts.
 MOVI r1,78
 PUTC r1
-MOVI r1,97
+MOVI r1,65
 PUTC r1
 MOVI r1,78
 PUTC r1
-MOVI r1,47
+MOVI r1,73
 PUTC r1
-MOVI r1,48
-PUTC r1
-MOVI r1,83
+MOVI r1,88
 PUTC r1
 MOVI r1,13
 PUTC r1

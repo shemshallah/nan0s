@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>NaN/0S — full system live in the browser (v86)</title>
+<title>NANIX — full system live in the browser (v86)</title>
 <style>
   :root { --bg:#0b0b1a; --fg:#cfd2e6; --dim:#6d7194; --blue:#8f9bff; --cyan:#00f0ff; --pink:#ff2bd6; --green:#39ff14; }
   * { box-sizing: border-box; }
@@ -85,7 +85,7 @@
   /*
    * Android browsers scroll a focused INPUT toward the center of the reduced
    * viewport, obscuring the emulated display. Pin the existing IME text field
-   * on phones so the page does not chase an input below the NaN/0S screen.
+   * on phones so the page does not chase an input below the NANIX screen.
    * The guest PS/2 input bridge and desktop layout remain unchanged.
    */
   @media (pointer: coarse), (max-width: 760px) {
@@ -149,33 +149,33 @@
     no host OS underneath.</p>
 </header>
 <main>
-  <div id="status">loading NaN/0S full-system boot…</div>
+  <div id="status">loading NANIX full-system boot…</div>
   <div id="fullscreen-stage">
     <div id="screen_container" tabindex="0">
       <div style="white-space:pre;font:14px/14px monospace;color:#d8d8e8"></div>
       <canvas style="display:none"></canvas>
     </div>
-    <div id="fullscreen-exitbar" role="toolbar" aria-label="Full-screen NaN/0S controls">
+    <div id="fullscreen-exitbar" role="toolbar" aria-label="Full-screen NANIX controls">
       <div class="fullscreen-tools">
         <button type="button" id="fullscreen-keyboard" aria-pressed="false" title="Show or hide the guest keyboard and F0–F12 keys">Keys</button>
-        <button type="button" id="fullscreen-zoom-out" aria-label="Zoom out NaN/0S">−</button>
-        <button type="button" id="fullscreen-zoom-fit" aria-label="Fit NaN/0S display">Fit</button>
-        <button type="button" id="fullscreen-zoom-in" aria-label="Zoom in NaN/0S">+</button>
+        <button type="button" id="fullscreen-zoom-out" aria-label="Zoom out NANIX">−</button>
+        <button type="button" id="fullscreen-zoom-fit" aria-label="Fit NANIX display">Fit</button>
+        <button type="button" id="fullscreen-zoom-in" aria-label="Zoom in NANIX">+</button>
       </div>
-      <button type="button" id="exit-fullscreen" aria-label="Exit NaN/0S full-screen display">Exit full screen</button>
+      <button type="button" id="exit-fullscreen" aria-label="Exit NANIX full-screen display">Exit full screen</button>
     </div>
     <div class="typebar">
-      <button type="button" id="exit-fullscreen-keyboard" aria-label="Exit full-screen NaN/0S while keyboard is open">Exit full screen</button>
-    <label for="type" class="hint">Phone keyboard → NaN/0S PS/2 keyboard</label>
+      <button type="button" id="exit-fullscreen-keyboard" aria-label="Exit full-screen NANIX while keyboard is open">Exit full screen</button>
+    <label for="type" class="hint">Phone keyboard → NANIX PS/2 keyboard</label>
     <div class="typebar-row">
       <textarea id="type" rows="1" inputmode="text" enterkeyhint="enter" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"
-             placeholder="Tap to type into NaN/0S" aria-describedby="type-hint" disabled></textarea>
+             placeholder="Tap to type into NANIX" aria-describedby="type-hint" disabled></textarea>
       <button type="button" id="clear-type" disabled title="Clear only this phone input field">Clear</button>
       <button type="button" id="enter-mode" role="switch" aria-checked="true" title="Enter executes commands; switch off for literal newlines" disabled>Exec ON</button>
     </div>
     <div class="function-keys-label">Guest F0–F12 · swipe the keys sideways for F8–F12 →</div>
-    <div class="function-keys" id="function-keys" role="group" aria-label="Guest NaN/0S function keys F0 through F12">
-      <button type="button" data-code="84" title="NaN/0S F0 opens raw-NaN16 terminal help" aria-label="NaN/0S F0 opens raw-NaN16 terminal help" disabled>F0</button>
+    <div class="function-keys" id="function-keys" role="group" aria-label="Guest NANIX function keys F0 through F12">
+      <button type="button" data-code="84" title="NANIX F0 opens raw-NaN16 terminal help" aria-label="NANIX F0 opens raw-NaN16 terminal help" disabled>F0</button>
       <button type="button" data-code="59" title="PS/2 function key F1" aria-label="PS/2 function key F1" disabled>F1</button>
       <button type="button" data-code="60" title="PS/2 function key F2" aria-label="PS/2 function key F2" disabled>F2</button>
       <button type="button" data-code="61" title="PS/2 function key F3" aria-label="PS/2 function key F3" disabled>F3</button>
@@ -194,14 +194,14 @@
   </div>
   <div class="controls">
     <button id="restart" disabled>Restart</button>
-    <button id="fullscreen" type="button" disabled aria-label="Enter NaN/0S full-screen display">Full screen</button>
+    <button id="fullscreen" type="button" disabled aria-label="Enter NANIX full-screen display">Full screen</button>
     <button id="zoom-out" type="button" disabled aria-label="Zoom out guest screen">−</button>
     <span id="zoom-level" class="hint">100%</span>
     <button id="zoom-in" type="button" disabled aria-label="Zoom in guest screen">+</button>
     <button id="zoom-fit" type="button" disabled>Fit</button>
     <button id="download-replica" type="button" disabled title="Enabled after build nan0s verifies the full secondary IDE disk">Download rebuilt .img</button>
     <span class="hint" id="image-fingerprint" aria-live="polite" title="SHA-256 of the exact guest image fetched by this browser">guest disk: loading…</span>
-    <span class="hint"><b>Tap or drag with one finger to control NaN/0S; pinch or move two fingers to zoom/pan.</b> Type <b>build</b> + Enter for command help, or <b>build nan0s</b> + Enter to replicate the entire bootable disk onto an independent IDE slave. The guest verifies every sector, then enables the image download. · boots the complete guest (floppy + primary IDE) to the desktop with one terminal · <b>q</b> quits the GUI → museum menu (<b>1–8</b>, <b>ESC</b> back) · tap the keys below or the text bar to type</span>
+    <span class="hint"><b>Tap or drag with one finger to control NANIX; pinch or move two fingers to zoom/pan.</b> Type <b>build</b> + Enter for command help, or <b>build nan0s</b> + Enter to replicate the entire bootable disk onto an independent IDE slave. The guest verifies every sector, then enables the image download. · boots the complete guest (floppy + primary IDE) to the desktop with one terminal · <b>q</b> quits the GUI → museum menu (<b>1–8</b>, <b>ESC</b> back) · tap the keys below or the text bar to type</span>
   </div>
   <div class="pad" id="pad">
     <button type="button" data-code="1" disabled>Esc</button>
@@ -245,7 +245,7 @@
   // Boot like tools/qgate_gui.sh: one source image, two independent virtual disks.
   // A floppy boot alone is NOT the full GUI path; the ATA loader reads the IDE master.
   // Always fetch the currently published guest disk. force-cache silently reused
-  // obsolete NaN/0S images on Android even when the HTML and Pages were updated.
+  // obsolete NANIX images on Android even when the HTML and Pages were updated.
   // Query nonce also bypasses intermediate HTTP caches that ignore Cache-Control.
   var CANDIDATES = ["nan0s.img", "../build/nan0s.img"];
 
@@ -307,7 +307,7 @@
     screenEl.scrollTop = 0;
   }
 
-  // Two-finger pinch scales the real v86 NaN/0S framebuffer, NOT the webpage.
+  // Two-finger pinch scales the real v86 NANIX framebuffer, NOT the webpage.
   // Anchoring in guest-content coordinates keeps the pixels beneath the fingers
   // stationary even when the fingers also drag while changing their distance.
   var pinch = null;
@@ -469,13 +469,13 @@
       }
       var url = CANDIDATES[i++];
       var freshUrl = url + (url.indexOf("?") < 0 ? "?" : "&") + "guest=" + Date.now();
-      status("fetching fresh NaN/0S guest image: " + url + " …");
+      status("fetching fresh NANIX guest image: " + url + " …");
       return fetch(freshUrl, { cache: "no-store" }).then(function (r) {
         if (!r.ok) throw new Error(url + ": HTTP " + r.status);
         return r.arrayBuffer().then(function (data) {
           var bytes = new Uint8Array(data);
           if (bytes.length < 1474560 || bytes[510] !== 0x55 || bytes[511] !== 0xAA) {
-            throw new Error(url + ": invalid or incomplete NaN/0S boot image");
+            throw new Error(url + ": invalid or incomplete NANIX boot image");
           }
           // Fingerprint the exact disk bytes *before* v86 can modify the buffer.
           // This makes a stale cache or wrong image identifiable on a phone.
@@ -486,7 +486,7 @@
                 return b.toString(16).padStart(2, "0");
               }).join("");
               imageFingerprintEl.textContent = "guest SHA-256: " + hex.slice(0, 16);
-              imageFingerprintEl.title = "Full NaN/0S image SHA-256: " + hex;
+              imageFingerprintEl.title = "Full NANIX image SHA-256: " + hex;
               return data;
             }, function () {
               imageFingerprintEl.textContent = "guest disk: " + bytes.length + " bytes (SHA-256 unavailable)";
@@ -526,7 +526,7 @@
       screen_container: screenEl
     });
     emulator.add_listener("emulator-ready", function () {
-      status("v86 ready — booting complete NaN/0S from floppy + IDE…");
+      status("v86 ready — booting complete NANIX from floppy + IDE…");
       restartBtn.disabled = false;
       fsBtn.disabled = false;
       zoomOutBtn.disabled = false;
@@ -570,14 +570,14 @@
         if (bytes.length === 1474560 && bytes[510] === 0x55 && bytes[511] === 0xAA) {
           replicaReady = true;
           replicaBtn.disabled = false;
-          status("NaN/0S verified a complete 1.44 MiB bootable replica. Download rebuilt .img.");
+          status("NANIX verified a complete 1.44 MiB bootable replica. Download rebuilt .img.");
         } else {
           status("Guest reported success but output disk image is incomplete; download disabled.", true);
         }
       }
-      if (serialBuf.indexOf("NaN/0S") !== -1 && !bootBannerSeen) {
+      if (serialBuf.indexOf("NANIX") !== -1 && !bootBannerSeen) {
         bootBannerSeen = true;
-        status("NaN/0S boot banner detected — full-system IDE disk attached");
+        status("NANIX boot banner detected — full-system IDE disk attached");
       }
     });
     emulator.add_listener("download-error", function (e) {
