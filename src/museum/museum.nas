@@ -73,6 +73,8 @@ NOP
 
 .org 512
 sh_cold:
+; Plain OS banner.  No menu, no museum launcher: vectors are installed by
+; shell_entry and the command line starts immediately.
 MOVI r1,78
 PUTC r1
 MOVI r1,97
@@ -82,42 +84,6 @@ PUTC r1
 MOVI r1,47
 PUTC r1
 MOVI r1,48
-PUTC r1
-MOVI r1,83
-PUTC r1
-MOVI r1,32
-PUTC r1
-MOVI r1,82
-PUTC r1
-MOVI r1,50
-PUTC r1
-MOVI r1,54
-PUTC r1
-MOVI r1,74
-PUTC r1
-MOVI r1,32
-PUTC r1
-MOVI r1,82
-PUTC r1
-MOVI r1,69
-PUTC r1
-MOVI r1,65
-PUTC r1
-MOVI r1,68
-PUTC r1
-MOVI r1,89
-PUTC r1
-MOVI r1,32
-PUTC r1
-MOVI r1,77
-PUTC r1
-MOVI r1,69
-PUTC r1
-MOVI r1,78
-PUTC r1
-MOVI r1,85
-PUTC r1
-MOVI r1,61
 PUTC r1
 MOVI r1,83
 PUTC r1

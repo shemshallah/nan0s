@@ -120,12 +120,9 @@ STW r1,r2,r3
 
 ; ---- cold boot: snapshot the catalog, then run the system cart (GUI desktop)
 ; when the builder declared one. The snapshot survives a large cart loaded at 8192.
-CALL @sh_snap_toc
-LA r10,@boot_rec
-LD r1,r10,0
-CMP r1,r0
-JMP[EQ] @sh_redraw
-JMP @sh_run
+; OS boot: vectors are installed; go straight to the command line.
+; The museum launcher/GUI is no longer the boot path.
+JMP @cli_entry
 
 ; ---- 2. Clear screen and display menu ----
 sh_redraw:
@@ -279,6 +276,9 @@ JMP[EQ] @sh_sys
 MOVI r4,27
 CMP r1,r4
 JMP[EQ] @sh_redraw
+MOVI r4,99
+CMP r1,r4
+JMP[EQ] @cli_entry
 MOVI r4,93
 CMP r1,r4
 JMP[EQ] @sh_pgnext
@@ -548,7 +548,7 @@ sh_r3:
 sh_bad:
 .str "SEAL MISMATCH - cartridge REFUSED (not loaded, not run)"
 sh_foot:
-.str "ring 0, no host OS. 1-9 run item; [ ] page; ESC redraw. NaN/0S v40\n"
+.str "ring 0, no host OS. 1-9 run item; [ ] page; C command line; ESC redraw. NaN/0S v40\n"
 
 ; ---- System menu: settings, NaNNet, disk, memory, CPU ----
 sys_menu:
@@ -691,6 +691,614 @@ LD r15,r0,@sst_lnk
 RET
 sst_lnk:
 .word 0
+
+; =============================================================================
+; Existing text shell: POSIX command line (mkdir/write/cat/ls/stat/rm/rmdir/
+; help/exit).  It is the same shell and the same build/nan0s.img; the menu
+; entry is C.  Filesystem calls go through the NaN POSIX service layer
+; (bare_fs_* -> nfs2/NPAF), not a host or C implementation.
+; =============================================================================
+.org 1300
+.equ W_HEAP   0xF03D6
+.equ C_HEAP   8100000
+.equ W_RAND   0xF059B
+.equ CLI_BUF  0x3C3800
+.equ CLI_NAME 0x3C3900
+.equ CLI_LOAD 0x3C3A00
+.equ CLI_MAX  200
+.equ CLI_W_N    0xF0E80
+.equ CLI_W_CMD  0xF0E81
+.equ CLI_W_PATH 0xF0E82
+.equ CLI_W_P2   0xF0E83
+.equ CLI_W_IDX  0xF0E84
+.equ CLI_W_TYP  0xF0E85
+.equ CLI_W_LEN  0xF0E86
+.equ CLI_W_ST   0xF0E90
+
+.include "../lib/ata.nas"
+.include "../lib/nfs2.nas"
+.include "../lib/bare.nas"
+
+; stdio's stream table is not needed by this command line.  bare.nas refers
+; to these symbols from its unused open/read/write/close slots; harmless
+; stubs keep the POSIX service object self-contained.
+nfs_ensure:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @nfs_load
+LA r1,#NFS_BASE
+LD r2,r1,0
+LA r3,0x4E504146
+CMP r2,r3
+JMP[EQ] @clnfe_d
+CALL @nfs_format
+clnfe_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+st_alloc:
+MOVI r1,0
+RET
+st_strdup:
+MOVI r1,0
+RET
+st_write_buf:
+MOVI r1,0
+RET
+st_read_buf:
+MOVI r1,0
+RET
+st_flush:
+MOVI r1,0
+RET
+
+; ---- serial console helpers ------------------------------------------------
+; cli_puts: r1 = packed .str word address
+cli_puts:
+ST r15,r14,0
+ADD r14,r14,r13
+ADD r10,r1,r0
+cli_putw:
+LD r4,r10,0
+MOVI r9,4
+cli_putc4:
+MOVI r8,255
+BOOL.8 r7,r4,r8
+CMP r7,r0
+JMP[EQ] @cli_putd
+PUTC r7
+SHR r4,r4,8
+SUB r9,r9,r13
+JMP[NE] @cli_putc4
+ADD r10,r10,r13
+JMP @cli_putw
+cli_putd:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; cli_puts_byte: r1 = NUL-terminated byte pointer
+cli_puts_byte:
+ST r15,r14,0
+ADD r14,r14,r13
+ADD r10,r1,r0
+cli_pbl:
+LDB r2,r10,0
+CMP r2,r0
+JMP[EQ] @cli_pbd
+PUTC r2
+ADD r10,r10,r13
+JMP @cli_pbl
+cli_pbd:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; cli_dec: r1 = unsigned value
+cli_dec:
+ST r15,r14,0
+ADD r14,r14,r13
+MOVI r5,0
+cli_dec_l:
+MOVI r7,10
+DIVU r8,r1,r7
+MUL r9,r8,r7
+SUB r9,r1,r9
+LA r10,@cli_decbuf
+ADD r10,r10,r5
+ST r9,r10,0
+ADD r5,r5,r13
+ADD r1,r8,r0
+CMP r1,r0
+JMP[NE] @cli_dec_l
+cli_dec_r:
+SUB r5,r5,r13
+LA r10,@cli_decbuf
+ADD r10,r10,r5
+LD r1,r10,0
+ADDI r1,r1,48
+PUTC r1
+CMP r5,r0
+JMP[NE] @cli_dec_r
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+cli_decbuf:
+.word 0
+.word 0
+.word 0
+.word 0
+.word 0
+.word 0
+.word 0
+.word 0
+.word 0
+.word 0
+
+; cli_skipsp: r1 = byte ptr -> first non-space
+cli_skipsp:
+LDB r2,r1,0
+MOVI r3,32
+CMP r2,r3
+JMP[EQ] @cli_sk_adv
+MOVI r3,9
+CMP r2,r3
+JMP[NE] @cli_sk_d
+cli_sk_adv:
+ADD r1,r1,r13
+JMP @cli_skipsp
+cli_sk_d:
+RET
+
+; cli_strlen: r1 = byte ptr -> r1 = length
+cli_strlen:
+ADD r3,r1,r0
+MOVI r1,0
+cli_sl:
+LDB r2,r3,0
+CMP r2,r0
+JMP[EQ] @cli_sld
+ADD r1,r1,r13
+ADD r3,r3,r13
+JMP @cli_sl
+cli_sld:
+RET
+
+; cli_prefix: r1 = line bytes, r2 = packed .str -> 1 if prefix
+cli_prefix:
+SHL r2,r2,2
+cli_pfl:
+LDB r4,r2,0
+CMP r4,r0
+JMP[EQ] @cli_pfy
+LDB r3,r1,0
+CMP r3,r4
+JMP[NE] @cli_pfn
+ADD r1,r1,r13
+ADD r2,r2,r13
+JMP @cli_pfl
+cli_pfy:
+MOVI r1,1
+RET
+cli_pfn:
+MOVI r1,0
+RET
+
+; cli_exact: r1 = line bytes, r2 = packed .str -> 1 if identical
+cli_exact:
+SHL r2,r2,2
+cli_exl:
+LDB r3,r1,0
+LDB r4,r2,0
+CMP r3,r4
+JMP[NE] @cli_exn
+CMP r3,r0
+JMP[EQ] @cli_exy
+ADD r1,r1,r13
+ADD r2,r2,r13
+JMP @cli_exl
+cli_exy:
+MOVI r1,1
+RET
+cli_exn:
+MOVI r1,0
+RET
+
+; cli_ok0: r1=0 is success ; cli_oknz: r1!=0 is success
+cli_ok0:
+CMP r1,r0
+JMP[NE] @cli_err
+LA r1,@cli_s_ok
+JMP @cli_puts
+cli_oknz:
+CMP r1,r0
+JMP[EQ] @cli_err
+LA r1,@cli_s_ok
+JMP @cli_puts
+cli_err:
+LA r1,@cli_s_error
+JMP @cli_puts
+
+; cli_readline: KEY/KEYQ line editor -> r1=length or -1 on exhausted input
+cli_readline:
+ST r15,r14,0
+ADD r14,r14,r13
+MOVI r10,0
+cli_rl:
+KEY r1
+CMP r1,r0
+JMP[EQ] @cli_rleof
+MOVI r2,13
+CMP r1,r2
+JMP[EQ] @cli_rlnl
+MOVI r2,10
+CMP r1,r2
+JMP[EQ] @cli_rlnl
+MOVI r2,8
+CMP r1,r2
+JMP[EQ] @cli_rlbs
+MOVI r2,127
+CMP r1,r2
+JMP[EQ] @cli_rlbs
+MOVI r2,#CLI_MAX
+CMP r10,r2
+JMP[GE] @cli_rl
+LA r2,#CLI_BUF
+ADD r2,r2,r10
+STB r1,r2,0
+ADD r10,r10,r13
+PUTC r1
+JMP @cli_rl
+cli_rlbs:
+CMP r10,r0
+JMP[EQ] @cli_rl
+SUB r10,r10,r13
+MOVI r1,8
+PUTC r1
+MOVI r1,32
+PUTC r1
+MOVI r1,8
+PUTC r1
+JMP @cli_rl
+cli_rlnl:
+LA r2,#CLI_BUF
+ADD r2,r2,r10
+STB r0,r2,0
+MOVI r1,10
+PUTC r1
+ADD r1,r10,r0
+JMP @cli_rld
+cli_rleof:
+LA r2,#CLI_BUF
+ADD r2,r2,r10
+STB r0,r2,0
+LA r1,0xFFFFFFFF
+cli_rld:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; ---- command line entry and dispatch ---------------------------------------
+cli_entry:
+CALL @nfs_ensure
+CALL @v_cls
+LA r1,@cli_s_banner
+CALL @cli_puts
+cli_loop:
+LA r1,@cli_prompt
+CALL @cli_puts
+CALL @cli_readline
+LA r2,0xFFFFFFFF
+CMP r1,r2
+JMP[EQ] @cli_eof
+LA r1,#CLI_BUF
+CALL @cli_skipsp
+ST r1,r0,#CLI_W_CMD
+LDB r2,r1,0
+CMP r2,r0
+JMP[EQ] @cli_loop
+CALL @cli_dispatch
+JMP @cli_loop
+cli_eof:
+LA r1,@cli_s_eof
+CALL @cli_puts
+HALT
+
+cli_dispatch:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r1,r0,#CLI_W_CMD
+LA r2,@cli_s_help
+CALL @cli_exact
+CMP r1,r0
+JMP[NE] @cli_c_help
+LD r1,r0,#CLI_W_CMD
+LA r2,@cli_s_exit
+CALL @cli_exact
+CMP r1,r0
+JMP[NE] @cli_c_exit
+LD r1,r0,#CLI_W_CMD
+LA r2,@cli_s_ls
+CALL @cli_exact
+CMP r1,r0
+JMP[NE] @cli_c_lsroot
+LD r1,r0,#CLI_W_CMD
+LA r2,@cli_s_mkdir
+CALL @cli_prefix
+CMP r1,r0
+JMP[NE] @cli_c_mkdir
+LD r1,r0,#CLI_W_CMD
+LA r2,@cli_s_rmdir
+CALL @cli_prefix
+CMP r1,r0
+JMP[NE] @cli_c_rmdir
+LD r1,r0,#CLI_W_CMD
+LA r2,@cli_s_write
+CALL @cli_prefix
+CMP r1,r0
+JMP[NE] @cli_c_write
+LD r1,r0,#CLI_W_CMD
+LA r2,@cli_s_cat
+CALL @cli_prefix
+CMP r1,r0
+JMP[NE] @cli_c_cat
+LD r1,r0,#CLI_W_CMD
+LA r2,@cli_s_stat
+CALL @cli_prefix
+CMP r1,r0
+JMP[NE] @cli_c_stat
+LD r1,r0,#CLI_W_CMD
+LA r2,@cli_s_rm
+CALL @cli_prefix
+CMP r1,r0
+JMP[NE] @cli_c_rm
+LD r1,r0,#CLI_W_CMD
+LA r2,@cli_s_ls_sp
+CALL @cli_prefix
+CMP r1,r0
+JMP[NE] @cli_c_ls
+LA r1,@cli_s_unknown
+CALL @cli_puts
+JMP @cli_disp_d
+
+cli_c_help:
+LA r1,@cli_s_help_text
+CALL @cli_puts
+JMP @cli_disp_d
+cli_c_exit:
+LA r1,@cli_s_bye
+CALL @cli_puts
+HALT
+cli_c_lsroot:
+LA r1,#CLI_BUF
+MOVI r2,47
+STB r2,r1,0
+STB r0,r1,1
+CALL @cli_ls_path
+JMP @cli_disp_d
+cli_c_ls:
+LD r1,r0,#CLI_W_CMD
+ADDI r1,r1,3
+CALL @cli_skipsp
+CALL @cli_ls_path
+JMP @cli_disp_d
+cli_c_mkdir:
+LD r1,r0,#CLI_W_CMD
+ADDI r1,r1,6
+CALL @cli_skipsp
+CALL @bare_fs_mkdir
+CALL @cli_ok0
+JMP @cli_disp_d
+cli_c_rmdir:
+LD r1,r0,#CLI_W_CMD
+ADDI r1,r1,6
+CALL @cli_skipsp
+CALL @bare_fs_rmdir
+CALL @cli_ok0
+JMP @cli_disp_d
+cli_c_rm:
+LD r1,r0,#CLI_W_CMD
+ADDI r1,r1,3
+CALL @cli_skipsp
+CALL @bare_fs_remove
+CALL @cli_ok0
+JMP @cli_disp_d
+cli_c_cat:
+LD r1,r0,#CLI_W_CMD
+ADDI r1,r1,4
+CALL @cli_skipsp
+LA r2,#CLI_LOAD
+MOVI r3,511
+CALL @bare_fs_load
+LA r2,0xFFFFFFFF
+CMP r1,r2
+JMP[EQ] @cli_cat_no
+ST r1,r0,#CLI_W_LEN
+LA r10,#CLI_LOAD
+cli_cat_l:
+LD r5,r0,#CLI_W_LEN
+CMP r5,r0
+JMP[EQ] @cli_cat_nl
+LDB r1,r10,0
+PUTC r1
+ADD r10,r10,r13
+SUB r5,r5,r13
+ST r5,r0,#CLI_W_LEN
+JMP @cli_cat_l
+cli_cat_nl:
+MOVI r1,10
+PUTC r1
+JMP @cli_disp_d
+cli_cat_no:
+LA r1,@cli_s_error
+CALL @cli_puts
+JMP @cli_disp_d
+cli_c_write:
+LD r1,r0,#CLI_W_CMD
+ADDI r1,r1,6
+CALL @cli_skipsp
+ST r1,r0,#CLI_W_PATH
+ADD r3,r1,r0
+cli_w_scan:
+LDB r2,r3,0
+CMP r2,r0
+JMP[EQ] @cli_w_usage
+MOVI r4,32
+CMP r2,r4
+JMP[EQ] @cli_w_split
+ADD r3,r3,r13
+JMP @cli_w_scan
+cli_w_split:
+STB r0,r3,0
+ADD r1,r3,r13
+CALL @cli_skipsp
+ST r1,r0,#CLI_W_P2
+CALL @cli_strlen
+ST r1,r0,#CLI_W_LEN
+; nfs_write consumes a word-aligned source pointer, so stage the text in
+; the aligned load buffer before saving.
+LD r1,r0,#CLI_W_P2
+LA r2,#CLI_LOAD
+LD r3,r0,#CLI_W_LEN
+cli_w_copy:
+CMP r3,r0
+JMP[EQ] @cli_w_copied
+LDB r4,r1,0
+STB r4,r2,0
+ADD r1,r1,r13
+ADD r2,r2,r13
+SUB r3,r3,r13
+JMP @cli_w_copy
+cli_w_copied:
+LD r1,r0,#CLI_W_PATH
+LA r2,#CLI_LOAD
+LD r3,r0,#CLI_W_LEN
+CALL @bare_fs_save
+CALL @cli_oknz
+JMP @cli_disp_d
+cli_w_usage:
+LA r1,@cli_s_write_help
+CALL @cli_puts
+JMP @cli_disp_d
+cli_c_stat:
+LD r1,r0,#CLI_W_CMD
+ADDI r1,r1,5
+CALL @cli_skipsp
+LA r2,#CLI_W_ST
+CALL @bare_fs_stat
+CMP r1,r0
+JMP[NE] @cli_err
+LD r1,r0,#CLI_W_ST
+CMP r1,r0
+JMP[EQ] @cli_st_file
+LA r1,@cli_s_dir
+JMP @cli_st_type
+cli_st_file:
+LA r1,@cli_s_file
+cli_st_type:
+CALL @cli_puts
+LA r1,@cli_s_size
+CALL @cli_puts
+LA r1,#CLI_W_ST
+ADDI r1,r1,1
+LD r1,r1,0
+CALL @cli_dec
+LA r1,@cli_s_mode
+CALL @cli_puts
+LA r1,#CLI_W_ST
+ADDI r1,r1,2
+LD r1,r1,0
+CALL @cli_dec
+MOVI r1,10
+PUTC r1
+JMP @cli_disp_d
+cli_disp_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; cli_ls_path: r1 = directory byte string
+cli_ls_path:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#CLI_W_PATH
+MOVI r2,0
+ST r2,r0,#CLI_W_IDX
+cli_ls_l:
+LD r1,r0,#CLI_W_PATH
+LA r2,#CLI_W_IDX
+LA r3,#CLI_NAME
+MOVI r4,64
+LA r5,#CLI_W_TYP
+CALL @bare_fs_readdir
+CMP r1,r0
+JMP[EQ] @cli_ls_d
+LA r1,#CLI_NAME
+CALL @cli_puts_byte
+LD r1,r0,#CLI_W_TYP
+CMP r1,r0
+JMP[EQ] @cli_ls_nl
+MOVI r1,47
+PUTC r1
+cli_ls_nl:
+MOVI r1,10
+PUTC r1
+LD r1,r0,#CLI_W_IDX
+ADD r1,r1,r13
+ST r1,r0,#CLI_W_IDX
+JMP @cli_ls_l
+cli_ls_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+cli_s_banner:
+.str "NaN/0S text shell - POSIX command line\n"
+cli_prompt:
+.str "nan0s> "
+cli_s_eof:
+.str "\n"
+cli_s_bye:
+.str "bye\n"
+cli_s_ok:
+.str "ok\n"
+cli_s_error:
+.str "error\n"
+cli_s_unknown:
+.str "unknown\n"
+cli_s_help:
+.str "help"
+cli_s_exit:
+.str "exit"
+cli_s_ls:
+.str "ls"
+cli_s_ls_sp:
+.str "ls "
+cli_s_mkdir:
+.str "mkdir "
+cli_s_rmdir:
+.str "rmdir "
+cli_s_write:
+.str "write "
+cli_s_cat:
+.str "cat "
+cli_s_stat:
+.str "stat "
+cli_s_rm:
+.str "rm "
+cli_s_write_help:
+.str "usage: write PATH TEXT\n"
+cli_s_file:
+.str "file"
+cli_s_dir:
+.str "dir"
+cli_s_size:
+.str " size="
+cli_s_mode:
+.str " mode="
+cli_s_help_text:
+.str "commands: mkdir PATH | write PATH TEXT | cat PATH | ls [PATH]\n"
+.str "          stat PATH | rm PATH | rmdir PATH | help | exit\n"
 
 .org 4784
 boot_rec:
