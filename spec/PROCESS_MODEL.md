@@ -71,6 +71,8 @@ region table.
   spawn; exact `LOK` on both engines.
 - `tools/kabi_sleep_gate.sh` - `SVC 11 time`, `SVC 24 sleep`, timer-tick
   wakeup and an idle process; exact `SOK` on both engines.
+- `tools/kabi_kill_gate.sh` - `SVC 22 kill(pid, signal)`, status 128+signal,
+  live-count update and waiter wakeup; exact `KOK` on both engines.
 - `tools/s1_guest_gate.sh` - flat-cartridge parity for the implemented S1
   subset, including the host-test NFS2 cartridge.
 
@@ -96,9 +98,14 @@ region table.
   `SVC 11 time`, `SVC 24 sleep(ticks)`, a sleep queue scanned on each IRQ,
   and a dedicated idle process so ticks advance while all real processes are
   blocked. The child proves the elapsed tick delta before exiting.
+- `kabi_kill_demo.nas` implements the frozen `SVC 22 kill(pid, sig)`:
+  the kernel rejects free/exited/self targets, marks the target exited with
+  status 128+signal, decrements the live count, wakes waiters with that
+  status, and returns 0 to the killer. The demo kills a sleeping child and
+  verifies status 137.
 - Still missing for a production scheduler: priority/fair-share policy,
-  blocking I/O, signals, and a filesystem-backed loader (`load_image` is
-  currently memory-backed).
+  blocking I/O, signal handlers (kill is terminate-only), and a
+  filesystem-backed loader (`load_image` is currently memory-backed).
 - The `LDS`/`STS` window base is now control port `0x4E07` (default
   `0xF0000`). A kernel can therefore point each process at its own mapped
   64K scratch window while `nmk` keeps emitting window-relative offsets.
