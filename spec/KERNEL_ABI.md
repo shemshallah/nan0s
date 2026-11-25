@@ -290,6 +290,8 @@ unaffected by this ABI.
   `CMD=check` round-trip and the NaN disassembler table.
 - `tools/kabi_sched_gate.sh` - timer-preempted two-process scheduler demo
   with per-process scratch windows; exact serial text on both engines.
+- `tools/kabi_spawn_gate.sh` - process table, spawn/wait/exit lifecycle and
+  round-robin scheduling; exact `12OK` on both engines.
 - `tools/s1_guest_gate.sh` - flat-cartridge acceptance: focused coverage,
   scalar FP, and real `src/tests/nfs2_test.nas`, x86_64 QEMU COM1 exactly
   equal to the C oracle; debug console reports loader word count/HALT.

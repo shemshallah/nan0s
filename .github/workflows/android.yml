@@ -55,6 +55,7 @@ jobs:
           sh tools/kabi_gate.sh || exit 1
           sh tools/kabi_proc_gate.sh || exit 1
           sh tools/kabi_sched_gate.sh || exit 1
+          sh tools/kabi_spawn_gate.sh || exit 1
           sh tools/s1_guest_gate.sh || exit 1
           sh tools/ncc_lex.sh || exit 1
           sh tools/ncc_m1.sh || exit 1
