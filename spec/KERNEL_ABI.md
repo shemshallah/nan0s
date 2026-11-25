@@ -39,13 +39,14 @@ values are **guest word indices**, not byte addresses.
 | 0x4E04 | OUT/IN | region table word address |
 | 0x4E05 | OUT/IN | current TCB word address (opaque to S1) |
 | 0x4E06 | IN | status: bit0 timer pending, bit1 trap pending |
+| 0x4E07 | OUT/IN | `LDS`/`STS` window base word (power-on 0xF0000) |
 
 Power-on values: every address port is `0xFFFFFFFF` (`NAN_KABI_UNSET`), the
 timer is 0. The kernel ABI is **active iff 0x4E00 is not UNSET**. Before then,
 0x4E and 0x4F keep their previous reserved-op trap behaviour, so old programs
 do not change. `INL` itself is always a valid opcode.
 
-Once the ABI is active, writes to ports 0x4E00-0x4E06 are kernel-only. A
+Once the ABI is active, writes to ports 0x4E00-0x4E07 are kernel-only. A
 guest-mode write vectors as `cause=2` with the port number in `frame[20]`
 instead of reconfiguring the boundary. Boot code writes the ports before the
 entry port activates the ABI; kernel code writes them with `in_kernel=1`.

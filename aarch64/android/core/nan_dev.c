@@ -188,6 +188,7 @@ static uint32_t port_in(nan_vm *v, uint32_t port, int size) {
   case NAN_KABI_PORT_KSTACK: return v->kstack;
   case NAN_KABI_PORT_REGIONS: return v->kregions;
   case NAN_KABI_PORT_TCB: return v->ktcb;
+  case NAN_KABI_PORT_DATA: return v->kdata;
   case 0xCFC: case 0xCFD: case 0xCFE: case 0xCFF: {
     uint32_t c = pci_cfg(v->pci_addr); if (c == 0xFFFFFFFFu) return size == 2 ? 0xFFFF : 0xFF;
     return (c >> ((port & 3) * 8)) & (size == 2 ? 0xFFFFu : 0xFFu); }
@@ -224,6 +225,7 @@ static void port_out(nan_vm *v, uint32_t port, uint32_t val, int size) {
   case NAN_KABI_PORT_KSTACK:  v->kstack = val; break;
   case NAN_KABI_PORT_REGIONS: v->kregions = val; break;
   case NAN_KABI_PORT_TCB:     v->ktcb = val; break;
+  case NAN_KABI_PORT_DATA:    v->kdata = val; break;
   case 0xCF8: if (size == 4) v->pci_addr = val; break;
   case 0x1F0: if (size == 2 && ata_present(v) && a->mode == 2) {
       a->buf[a->pos++] = (uint16_t)val;

@@ -125,6 +125,7 @@ static void t_control_ports(void) {
   EQ(V->kentry, ENTRY); EQ(V->kframe, FRAME); EQ(V->ktimer, 16);
   EQ(V->kstack, KSTACK);
   EQ(V->kregions, NAN_KABI_UNSET); EQ(V->ktcb, TCB);
+  EQ(V->kdata, 0xF0000u);
   EQ(R(3), 0);
 }
 
