@@ -4385,6 +4385,8 @@ LD r3,r0,@dh_s
 LD r1,r0,@dh_ptr
 ADD r1,r1,r3
 LD r2,r1,0
+MOVI r4,0xFFFF
+BOOL.8 r2,r2,r4
 LD r1,r0,@dk_id
 MOVI r3,4
 CALL @dbg_puthex
