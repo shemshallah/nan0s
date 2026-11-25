@@ -1257,6 +1257,7 @@ ssize_t write(int fd, const void *buf, size_t n)
     if (fd < FD_VFS_BASE || (unsigned)(fd - FD_VFS_BASE) >= vfs_cap) return -1;
     f = &files[fd - FD_VFS_BASE];
     if (!f->used || !f->writable) return -1;
+    if (n == 0) return 0;
     if (f->pos + n > f->cap) {
         unsigned nc = f->cap ? f->cap : 256;
         unsigned char *nb;
@@ -1264,7 +1265,14 @@ ssize_t write(int fd, const void *buf, size_t n)
         nb = malloc(nc);
         if (!nb) return -1;
         if (f->data) { memcpy(nb, f->data, f->size); free(f->data); }
-        f->data = nb; f->cap = nc;
+        f->data = nb;
+        f->cap = nc;
+    }
+    /* Seeking past EOF and writing must leave a zero-filled hole, as on a
+       POSIX filesystem.  Without this, recover's page-size detection can
+       read stale bytes from a recycled heap buffer as synthetic page 1. */
+    if (f->pos > f->size) {
+        memset(f->data + f->size, 0, f->pos - f->size);
     }
     memcpy(f->data + f->pos, buf, n);
     f->pos += n;
