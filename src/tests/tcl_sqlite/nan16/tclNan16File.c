@@ -164,7 +164,10 @@ TclpObjLstat(
     if (path == NULL) {
 	return -1;
     }
-    return stat(path, bufPtr);
+    /* lstat() matters here: the generic [file delete] path uses lstat to
+       notice a symbolic link, so a dangling link must still report its own
+       S_IFLNK type and be unlinked rather than skipped as ENOENT. */
+    return lstat(path, bufPtr);
 }
 
 int
@@ -478,22 +481,61 @@ TclpObjLink(
 	return NULL;
     }
     if (toPtr != NULL) {
-	const char *target = (const char *)Tcl_FSGetNativePath(toPtr);
-	if (target == NULL) {
-	    return NULL;
+	const char *target = NULL;
+
+	/*
+	 * A relative symbolic target is resolved against the directory that
+	 * holds the new link, not against the current working directory.
+	 * (Mirrors unix/tclUnixFile.c: Tcl_FSAccess on the joined path only
+	 * validates existence; the link itself keeps the original relative
+	 * target text.)
+	 */
+	if ((linkAction & TCL_CREATE_SYMBOLIC_LINK)
+		&& (Tcl_FSGetPathType(toPtr) == TCL_PATH_RELATIVE)) {
+	    Tcl_Obj *dirPtr, *absPtr;
+
+	    dirPtr = TclPathPart(NULL, pathPtr, TCL_PATH_DIRNAME);
+	    if (dirPtr == NULL) {
+		return NULL;
+	    }
+	    absPtr = Tcl_FSJoinToPath(dirPtr, 1, &toPtr);
+	    Tcl_IncrRefCount(absPtr);
+	    if (Tcl_FSAccess(absPtr, F_OK) == -1) {
+		Tcl_DecrRefCount(absPtr);
+		Tcl_DecrRefCount(dirPtr);
+		errno = ENOENT;
+		return NULL;
+	    }
+	    Tcl_DecrRefCount(absPtr);
+	    Tcl_DecrRefCount(dirPtr);
+	} else {
+	    target = (const char *)Tcl_FSGetNativePath(toPtr);
+	    if (target == NULL) {
+		return NULL;
+	    }
+	    if (access(target, F_OK) == -1) {
+		errno = ENOENT;
+		return NULL;
+	    }
 	}
 	if (access(src, F_OK) != -1) {
 	    errno = EEXIST;
 	    return NULL;
 	}
-	if (access(target, F_OK) == -1) {
-	    errno = ENOENT;
-	    return NULL;
-	}
 	if (linkAction & TCL_CREATE_SYMBOLIC_LINK) {
-	    if (symlink(target, src) != 0) {
+	    Tcl_Obj *transPtr = Tcl_FSGetTranslatedPath(NULL, toPtr);
+	    Tcl_Size length;
+	    const char *linkTarget;
+
+	    if (transPtr == NULL) {
 		return NULL;
 	    }
+	    linkTarget = TclGetStringFromObj(transPtr, &length);
+	    if (symlink(linkTarget, src) != 0) {
+		Tcl_DecrRefCount(transPtr);
+		return NULL;
+	    }
+	    Tcl_DecrRefCount(transPtr);
 	    return toPtr;
 	}
 	errno = EPERM;              /* hard links are not supported */
