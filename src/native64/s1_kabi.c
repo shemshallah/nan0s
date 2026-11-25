@@ -532,6 +532,17 @@ static uint32_t s1_run(uint64_t budget) {
       for (uint32_t i = 0; i < cnt; i++) MEM[(dst + i) & MEM_MASK] = wd; break; }
     case 0x38: pc = p & 0xFFFFFFu; break;
     case 0x39: s.r[15] = pc; pc = p & 0xFFFFFFu; break;
+    case 0x13: s.r[d] = (uint32_t)(s.steps / 1000u); break;
+    case 0x3E: { uint16_t po = (uint16_t)(A & 0xFFFFu);
+      if (s.kentry != UNSET && !s.kin && po >= 0x4E00u && po <= 0x4E07u)
+        S1_VECTOR(CAUSE_FAULT, at, po);
+      port_out(po, s.r[d] & 0xFFu); break; }
+    case 0x3F: s.r[d] = port_in((uint16_t)(A & 0xFFFFu)) & 0xFFu; break;
+    case 0x40: s.r[d] = port_in((uint16_t)(A & 0xFFFFu)) & 0xFFFFu; break;
+    case 0x41: { uint16_t po = (uint16_t)(A & 0xFFFFu);
+      if (s.kentry != UNSET && !s.kin && po >= 0x4E00u && po <= 0x4E07u)
+        S1_VECTOR(CAUSE_FAULT, at, po);
+      port_out(po, s.r[d] & 0xFFFFu); break; }
     case 0x43: { uint16_t po = (uint16_t)(A & 0xFFFFu);
       if (s.kentry != UNSET && !s.kin && po >= 0x4E00u && po <= 0x4E07u)
         S1_VECTOR(CAUSE_FAULT, at, po);
