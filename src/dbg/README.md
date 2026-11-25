@@ -8,7 +8,7 @@ The NaN-native debug system. Design and rationale: `spec/NANDBG.md`.
 |---|---|
 | `ndbg.nas` | first proof: 16 diagnostic types, records, subset step core, breakpoint, gate/bad-op records |
 | `core.nas` | reusable full `0x00–0x5F` step core: typed traps, shadow call stack, non-blocking KEY, DP4B, vectors, scalar undo hooks |
-| `n16dbg.nas` | serial monitor: step, run, breakpoint, goto, watch, history, stack, types, registers, disassembly, dump, NDR |
+| `n16dbg.nas` | serial monitor: step, run, breakpoint, goto, watch, history, stack, types, registers, disassembly, dump, NDR, mirror verify |
 | `undo_stub.nas` | no-op recording hooks for standalone core builds |
 | `ndr.nas` | included by `core.nas`: NDR w4-w6 operands and FNV-1a/32 seal in w7 |
 | `../tests/ndbg_core_test.nas` | reset/run/step on a small target |
@@ -88,7 +88,7 @@ The undo ring is 32 records at host word 0x30000, enabled by `dbg_begin` and
 same debug starts set `nd_iocap=1`, so cart `VPOKE`/display ops write to the
 private text buffer at 0x60000 and target `PUTC` at 0x61000 instead of the
 desktop/COM1. The undo/redo rings live at 0x30000/0x62000 and the sixteen
-eight-word NDRs live at 0x31000; checkpoints use a header at 0x90000, an arena
+eight-word NDRs live at 0x31000, with BSWAPM twins at 0x31100; checkpoints use a header at 0x90000, an arena
 copy at 0x91000, and a capture copy at 0xA1000. Next stages (80x25 pane
 UI, NDR log/checkpoints, NDP) are in `spec/NANDBG.md`.
 
