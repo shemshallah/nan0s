@@ -2093,10 +2093,13 @@ void *mmap(void *a, size_t n, int p, int f, int fd, off_t o)
 int munmap(void *a, size_t n) { (void)a; (void)n; return 0; }
 /* The runner publishes monotonic time and executed steps at guest byte
    0x03EFF010 (ms, steps low, steps high).  The x86_64/S1 kernel must publish
-   the same block. */
+   the same block.  0x03EFF01C accumulates virtual sleep time added by the
+   SQLite VFS xSleep (busy handlers); without it, nanosleep busy-spins on a
+   clock that only advances at runner slice boundaries. */
 static unsigned nan16_now_ms(void)
 {
-    return *(volatile unsigned *)0x03EFF010u;
+    return *(volatile unsigned *)0x03EFF010u
+         + *(volatile unsigned *)0x03EFF01Cu;
 }
 static long days_from_civil(int y, unsigned m, unsigned d)
 {
