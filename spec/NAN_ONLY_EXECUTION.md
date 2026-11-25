@@ -84,6 +84,9 @@ Raw-NaN gates, not oracle claims:
 - `tools/nancli64_gate.sh` — a 64-bit text command line (mkdir/write/cat/ls/
   stat/truncate/rm/rmdir/help/exit) compiled to NaN and running on x86_64
   S1; every filesystem operation goes through the NaN POSIX table.
+- `tools/nanpipe_gate.sh` — a 4 KiB NaN byte pipe (open/write/read/wrap/
+  close).  This is the storage primitive for POSIX `pipe()`/`dup2()` and
+  shell pipelines; the libc/shell wiring is the next step.
 
 ## Remaining integration work
 
