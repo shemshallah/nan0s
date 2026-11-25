@@ -15,12 +15,13 @@ CLI=aarch64/android/nan_cli
 awk -f tools/nmk.awk -v CMD=emit src/dbg/n16dbg.nas > "$T/m.nan" 2>"$T/asm.err" || {
   cat "$T/asm.err"; echo "ndbg_mon: ASSEMBLY FAIL"; exit 1;
 }
-"$CLI" --img "$T/m.nan" --steps 5000000 --keys "s,s,l,t,m,d,p,g,2,0,0,2,ENTER,b,r,n,v,b,w,3,0,0,0,ENTER,r,m,w,3,0,0,0,ENTER,s,r,q" --serial > "$T/out" 2>"$T/err" || true
+"$CLI" --img "$T/m.nan" --steps 5000000 --keys "s,s,l,f,t,m,d,p,g,2,0,0,2,ENTER,b,r,n,v,b,w,3,0,0,0,ENTER,r,m,w,3,0,0,0,ENTER,s,r,q" --serial > "$T/out" 2>"$T/err" || true
 cat > "$T/expected" <<'EOF'
-NANDBG MONITOR - s step  r run  b break  g goto  w watch  l hist  t stack  m types  p regs  d dis  x dump  n ndr  v mirror  q quit
+NANDBG MONITOR - s step  r run  b break  g goto  w watch  l hist  t stack  m types  p regs  d dis  x dump  n ndr  v mirror  f seal  q quit
 > S=0 PC=2001
 > S=0 PC=2002
 > HIST 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 2000 2001 
+> HSEAL CFA1992A
 > STACK empty
 > TYPES FC:00 FM:00 FD:00 FS:00 
 TYPES PC:00 PM:00 PD:00 PS:00 
@@ -65,5 +66,5 @@ if cmp -s "$T/out" "$T/negative"; then
   echo "ndbg_mon: NEGATIVE FAIL (mutated transcript accepted)"
   exit 1
 fi
-echo "ndbg_mon: PASS (step, disasm, regs, hist, stack, types, goto, breakpoint, watch, NDR, mirror, run, quit, exact)"
+echo "ndbg_mon: PASS (step, disasm, regs, hist, stack, types, goto, breakpoint, watch, NDR, mirror, seal, run, quit, exact)"
 echo "ndbg_mon: NEGATIVE PASS (mutated transcript rejected)"
