@@ -149,7 +149,7 @@ fi
 
 # captured display: run Baby to the key wait and dump the text buffer
 "$CLI" --img "$T/guest.bin" --steps 160000000 \
-  --keys "@20000000,d,e,b,u,g,ENTER,@2000000,l,o,a,d,SPACE,1,ENTER,@2000000,r,u,n,ENTER,@4000000,s,c,r,e,e,n,ENTER,@4000000,q,u,i,t,ENTER,@3000000" \
+  --keys "@20000000,d,e,b,u,g,ENTER,@2000000,l,o,a,d,SPACE,1,ENTER,@2000000,r,u,n,ENTER,@8000000,s,c,r,e,e,n,ENTER,@4000000,q,u,i,t,ENTER,@3000000" \
   --serial > "$T/scr" 2>/dev/null || true
 tr -d '\r' < "$T/scr" > "$T/scr.lf"
 if ! grep -qx 'S=5 PC=2009' "$T/scr.lf" ||
