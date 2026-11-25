@@ -17,7 +17,7 @@
 .include "mpp.nas"
 
 ; ------------------------------------------------------------------ memory map
-; Low scratch ABI: words 63000..64999, outside the growing GUI cartridge.
+; Low scratch ABI: words 0xF0000.., above the 64K GUI cartridge.
 ; Shared preprocessor and NFS scratch use the same relocated address block.
 .equ NCC_IRB    1000000      ; IR: 2 words per instruction (byte 4 MB)
 .equ NCC_IRMAX  400000
