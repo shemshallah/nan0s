@@ -385,6 +385,11 @@ static int l_filecontrol(sqlite3_file *pFile, int op, void *arg)
         return SQLITE_OK;
     case SQLITE_FCNTL_SIZE_HINT: {
         sqlite3_int64 n = *(sqlite3_int64 *)arg;
+        /* Like unix fcntlSizeHint(): round the hint up to the configured
+           chunk size so the file grows in whole chunks. */
+        if (f->szChunk > 0) {
+            n = ((n + f->szChunk - 1) / f->szChunk) * f->szChunk;
+        }
         if (f->fd >= 0 && ftruncate(f->fd, (off_t)n) != 0) {
             nan_set_errno();
             return SQLITE_IOERR_TRUNCATE;
@@ -567,7 +572,8 @@ static int l_sleep(sqlite3_vfs *pVfs, int usec)
        boundaries.  Busy-handler timeouts then match Tcl's clock and do not
        consume millions of instructions. */
     *slept += (unsigned)((usec + 999) / 1000);
-    return (usec + 999) / 1000;
+    /* xSleep returns microseconds; sqlite3_sleep() divides by 1000. */
+    return usec;
 }
 static unsigned int l_now_ms(void)
 {
