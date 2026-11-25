@@ -38,7 +38,7 @@ while [ "$m" -le 62 ]; do
   m=$((m+1))
 done
 VEC="nan_simd nan_vec nan_vec_native nan_vec_avx2 nan_q4 nan_q4lm nan_bench xlate_x86"
-IMAGES="mkall qgate64 qgate64core qgate64block qgate64alu qgate64branch qgate64mem qgate64byte qgate64prog qgate64call qgate64mul qgate64div qgate64fp qgate64fpe qgate64mem2 qgate64blockops qgate64trap qgate64vec qgate64vldst qgate64vdp4b qgate64vdp4b4 qgate64callf qgate64putc qgate qgate_gui xmemgate mkproof kabi kabi_proc kabi_sched kabi_spawn kabi_load kabi_sleep s1_guest"
+IMAGES="mkall qgate64 qgate64core qgate64block qgate64alu qgate64branch qgate64mem qgate64byte qgate64prog qgate64call qgate64mul qgate64div qgate64fp qgate64fpe qgate64mem2 qgate64blockops qgate64trap qgate64vec qgate64vldst qgate64vdp4b qgate64vdp4b4 qgate64callf qgate64putc qgate qgate_gui xmemgate mkproof kabi kabi_proc kabi_sched kabi_spawn kabi_load kabi_sleep kabi_kill s1_guest"
 NATIVE="$VEC narena narena64 nten nmatmul nmat64 nmat64x64"
 
 GATES=""
