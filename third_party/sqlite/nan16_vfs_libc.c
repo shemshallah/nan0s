@@ -385,6 +385,11 @@ static int l_filecontrol(sqlite3_file *pFile, int op, void *arg)
         return SQLITE_OK;
     case SQLITE_FCNTL_SIZE_HINT: {
         sqlite3_int64 n = *(sqlite3_int64 *)arg;
+        /* Like unix fcntlSizeHint(): round the hint up to the configured
+           chunk size so the file grows in whole chunks. */
+        if (f->szChunk > 0) {
+            n = ((n + f->szChunk - 1) / f->szChunk) * f->szChunk;
+        }
         if (f->fd >= 0 && ftruncate(f->fd, (off_t)n) != 0) {
             nan_set_errno();
             return SQLITE_IOERR_TRUNCATE;
@@ -567,22 +572,35 @@ static int l_sleep(sqlite3_vfs *pVfs, int usec)
        boundaries.  Busy-handler timeouts then match Tcl's clock and do not
        consume millions of instructions. */
     *slept += (unsigned)((usec + 999) / 1000);
-    return (usec + 999) / 1000;
+    /* xSleep returns microseconds; sqlite3_sleep() divides by 1000. */
+    return usec;
 }
 static unsigned int l_now_ms(void)
 {
     return *(volatile unsigned int *)0x03EFF010u;
 }
+/* Test hook: date.test sets sqlite_current_time through a Tcl link to fake
+   the wall clock (os_unix.c uses the same variable). */
+extern int sqlite3_current_time;
 static int l_currenttime(sqlite3_vfs *pVfs, double *pTime)
 {
     (void)pVfs;
-    *pTime = 2440587.5 + ((double)l_now_ms() / 1000.0) / 86400.0;
+    if (sqlite3_current_time) {
+        *pTime = 2440587.5 + (double)sqlite3_current_time / 86400.0;
+    } else {
+        *pTime = 2440587.5 + ((double)l_now_ms() / 1000.0) / 86400.0;
+    }
     return SQLITE_OK;
 }
 static int l_currenttimeint64(sqlite3_vfs *pVfs, sqlite3_int64 *pTime)
 {
     (void)pVfs;
-    *pTime = (sqlite3_int64)l_now_ms();
+    if (sqlite3_current_time) {
+        *pTime = 1000LL * (sqlite3_int64)sqlite3_current_time
+               + 210866760000000LL;
+    } else {
+        *pTime = (sqlite3_int64)l_now_ms() + 210866760000000LL;
+    }
     return SQLITE_OK;
 }
 static int l_getlasterror(sqlite3_vfs *pVfs, int nBuf, char *zBuf)
