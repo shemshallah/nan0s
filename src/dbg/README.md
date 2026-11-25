@@ -89,7 +89,7 @@ same debug starts set `nd_iocap=1`, so cart `VPOKE`/display ops write to the
 private text buffer at 0x60000 and target `PUTC` at 0x61000 instead of the
 desktop/COM1. The undo/redo rings live at 0x30000/0x62000, the 256
 eight-word NDRs live at 0x31000 with BSWAPM twins at 0x31800, and the 4096-entry packed
-history ring (pc/op/k) lives at 0x32000; checkpoints use a header at 0x90000, an arena
+history ring (pc/op/k) lives at 0x32000 and compiler scratch lives at 0xF0000; checkpoints use a header at 0x90000, an arena
 copy at 0x91000, and a capture copy at 0xA1000. Next stages (80x25 pane
 UI, NDR log/checkpoints, NDP) are in `spec/NANDBG.md`.
 
