@@ -23,6 +23,10 @@ typedef struct NanLFile {
     int del;
     int readonly;
     int lock;               /* current SQLITE_LOCK_* for this handle */
+    unsigned int shm_shared; /* WAL shm locks held SHARED by this handle */
+    unsigned int shm_excl;   /* WAL shm locks held EXCLUSIVE by this handle */
+    int shm_mapped;          /* this handle has counted one NanShm ref */
+    int psow;                /* POWERSAFE_OVERWRITE (FCNTL can clear it) */
     char path[128];
 } NanLFile;
 
@@ -99,14 +103,18 @@ int sqlite3_fullsync_count;
 #endif
 
 /* Single-process WAL shared memory.  Every connection to the same guest
-   path sees one region; SQLite's xShmLock protocol is serialized by the
-   single interpreting process, so the locks are accepted (a no-op). */
+   path sees one region.  There are no threads, but separate connections in
+   one interpreter must still see each other's WAL locks, so keep the same
+   lock model as os_unix.c: lock[i] is -1 for an exclusive holder, 0 for a
+   free slot, or the number of shared holders.  Each handle additionally
+   remembers which slots it owns so unlocks only drop its own references. */
 typedef struct NanShm {
     struct NanShm *next;
     char path[128];
     unsigned char *mem;
     unsigned int bytes;
     int ref;
+    int lock[SQLITE_SHM_NLOCK]; /* -1 exclusive, 0 free, >0 shared holders */
 } NanShm;
 static NanShm *nan_shm;
 
@@ -124,6 +132,47 @@ static NanShm *shm_find(const char *path, int create)
     nan_shm = s;
     return s;
 }
+/* Drop this handle's references in the shared slot array.  Mirror of the
+   aLock[]/sharedMask bookkeeping in os_unix.c: exclusive slots go to 0,
+   shared slots lose one holder. */
+static void shm_release_locks(NanLFile *f, NanShm *s)
+{
+    int i;
+    if (!s) {
+        f->shm_shared = f->shm_excl = 0;
+        return;
+    }
+    for (i = 0; i < SQLITE_SHM_NLOCK; i++) {
+        unsigned int bit = 1u << i;
+        if (f->shm_excl & bit) {
+            if (s->lock[i] == -1) s->lock[i] = 0;
+            f->shm_excl &= ~bit;
+        } else if (f->shm_shared & bit) {
+            if (s->lock[i] > 0) s->lock[i]--;
+            f->shm_shared &= ~bit;
+        }
+    }
+}
+static void shm_unmap_file(NanLFile *f, int deleteFlag)
+{
+    NanShm **pp, *s;
+    for (pp = &nan_shm; *pp; pp = &(*pp)->next)
+        if (!strcmp((*pp)->path, f->path)) break;
+    s = *pp;
+    if (!s) return;
+    shm_release_locks(f, s);
+    if (f->shm_mapped) {
+        f->shm_mapped = 0;
+        if (s->ref > 0) s->ref--;
+    }
+    /* deleteFlag is set when SQLite closes the last connection; ref covers
+       a close order where another handle is still mapped. */
+    if (s->ref == 0) {
+        *pp = s->next;
+        free(s->mem);
+        free(s);
+    }
+}
 static int l_shmmap(sqlite3_file *pFile, int iPg, int pgsz, int isWrite,
                     void volatile **pp)
 {
@@ -132,6 +181,10 @@ static int l_shmmap(sqlite3_file *pFile, int iPg, int pgsz, int isWrite,
     unsigned int need = (unsigned int)(iPg + 1) * (unsigned int)pgsz;
     (void)isWrite;
     if (!s) return SQLITE_IOERR;
+    if (!f->shm_mapped) {
+        f->shm_mapped = 1;
+        s->ref++;
+    }
     if (need > s->bytes) {
         unsigned char *p = (unsigned char *)realloc(s->mem, need);
         if (!p) return SQLITE_NOMEM;
@@ -144,30 +197,68 @@ static int l_shmmap(sqlite3_file *pFile, int iPg, int pgsz, int isWrite,
 }
 static int l_shmlock(sqlite3_file *pFile, int offset, int n, int flags)
 {
-    (void)pFile; (void)offset; (void)n; (void)flags;
+    NanLFile *f = (NanLFile *)pFile;
+    NanShm *s = shm_find(f->path, 0);
+    unsigned int bits;
+    int i;
+
+    if (!s || offset < 0 || n < 1 || offset + n > SQLITE_SHM_NLOCK)
+        return SQLITE_IOERR_SHMLOCK;
+    bits = ((1u << n) - 1u) << offset;
+
+    if (flags & SQLITE_SHM_UNLOCK) {
+        if (flags & SQLITE_SHM_EXCLUSIVE) {
+            for (i = offset; i < offset + n; i++)
+                if (f->shm_excl & (1u << i)) {
+                    if (s->lock[i] == -1) s->lock[i] = 0;
+                    f->shm_excl &= ~(1u << i);
+                }
+        } else {
+            for (i = offset; i < offset + n; i++)
+                if (f->shm_shared & (1u << i)) {
+                    if (s->lock[i] > 0) s->lock[i]--;
+                    f->shm_shared &= ~(1u << i);
+                }
+        }
+        return SQLITE_OK;
+    }
+
+    if (flags & SQLITE_SHM_EXCLUSIVE) {
+        if ((f->shm_excl & bits) == bits) return SQLITE_OK;
+        if (f->shm_shared & bits) return SQLITE_BUSY; /* no upgrade */
+        for (i = offset; i < offset + n; i++)
+            if (s->lock[i] != 0) return SQLITE_BUSY;
+        for (i = offset; i < offset + n; i++) s->lock[i] = -1;
+        f->shm_excl |= bits;
+        return SQLITE_OK;
+    }
+
+    /* SHARED: several connections may own the same slot at once. */
+    for (i = offset; i < offset + n; i++) {
+        unsigned int bit = 1u << i;
+        if (f->shm_excl & bit) return SQLITE_BUSY;
+        if (!(f->shm_shared & bit) && s->lock[i] < 0) return SQLITE_BUSY;
+    }
+    for (i = offset; i < offset + n; i++) {
+        unsigned int bit = 1u << i;
+        if (!(f->shm_shared & bit)) {
+            s->lock[i]++;
+            f->shm_shared |= bit;
+        }
+    }
     return SQLITE_OK;
 }
 static void l_shmbarrier(sqlite3_file *pFile) { (void)pFile; }
 static int l_shmunmap(sqlite3_file *pFile, int deleteFlag)
 {
-    NanLFile *f = (NanLFile *)pFile;
-    NanShm **pp, *s;
-    if (!deleteFlag) return SQLITE_OK;
-    for (pp = &nan_shm; *pp; pp = &(*pp)->next) {
-        if (!strcmp((*pp)->path, f->path)) {
-            s = *pp;
-            *pp = s->next;
-            free(s->mem);
-            free(s);
-            break;
-        }
-    }
+    shm_unmap_file((NanLFile *)pFile, deleteFlag);
     return SQLITE_OK;
 }
 
 static int l_close(sqlite3_file *pFile)
 {
     NanLFile *f = (NanLFile *)pFile;
+    shm_unmap_file(f, 0);
     lock_set(f, SQLITE_LOCK_NONE);
     if (f->del && f->path[0]) unlink(f->path);
     if (f->fd >= 0) close(f->fd);
@@ -273,6 +364,13 @@ static int l_filecontrol(sqlite3_file *pFile, int op, void *arg)
         if (f->fd >= 0) ftruncate(f->fd, (off_t)n);
         return SQLITE_OK;
     }
+    case SQLITE_FCNTL_POWERSAFE_OVERWRITE: {
+        int *p = (int *)arg;
+        if (!p) return SQLITE_NOTFOUND;
+        if (*p < 0) *p = f->psow;
+        else f->psow = *p != 0;
+        return SQLITE_OK;
+    }
     case SQLITE_FCNTL_CHUNK_SIZE:
     case SQLITE_FCNTL_SYNC:
     case SQLITE_FCNTL_COMMIT_PHASETWO:
@@ -288,8 +386,14 @@ static int l_sectorsize(sqlite3_file *pFile)
 }
 static int l_device(sqlite3_file *pFile)
 {
-    (void)pFile;
-    return 0;
+    NanLFile *f = (NanLFile *)pFile;
+    /* The guest file store is RAM-backed and byte-addressable: an overwrite
+       within a sector cannot tear across power loss.  Without PSOW,
+       synchronous=FULL WAL pads every commit to a 512-byte sector boundary
+       by repeating the last frame, which changes logical mxFrame counts.
+       PRAGMA journal_mode=wal&psow=0 clears it per handle via fcntl. */
+    return (f->psow ? SQLITE_IOCAP_POWERSAFE_OVERWRITE : 0)
+         | SQLITE_IOCAP_SUBPAGE_READ;
 }
 static const sqlite3_io_methods l_io = {
     2, l_close, l_read, l_write, l_truncate, l_sync,
@@ -297,6 +401,19 @@ static const sqlite3_io_methods l_io = {
     l_filecontrol, l_sectorsize, l_device,
     l_shmmap, l_shmlock, l_shmbarrier, l_shmunmap
 };
+
+/* SQLite may open the same database as "test.db" and "./test.db".  WAL
+   shared memory is keyed by this string, so store the canonical absolute
+   path to make separate connections share one shm/lock region. */
+static void shm_set_path(NanLFile *f, const char *name)
+{
+    char resolved[128];
+    if (nan16_vfs_resolve(name, resolved) == 0)
+        strncpy(f->path, resolved, sizeof f->path - 1);
+    else
+        strncpy(f->path, name, sizeof f->path - 1);
+    f->path[sizeof f->path - 1] = 0;
+}
 
 static int l_open(sqlite3_vfs *pVfs, const char *name, sqlite3_file *pFile,
                   int flags, int *pOutFlags)
@@ -314,6 +431,10 @@ static int l_open(sqlite3_vfs *pVfs, const char *name, sqlite3_file *pFile,
     f->del = 0;
     f->readonly = !(flags & (SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE));
     f->lock = SQLITE_LOCK_NONE;
+    f->shm_shared = 0;
+    f->shm_excl = 0;
+    f->shm_mapped = 0;
+    f->psow = 1;
     f->path[0] = 0;
     if (!name) {
         snprintf(tmp, sizeof tmp, "/.nan_tmp_%u", ++temp_seq);
@@ -330,8 +451,7 @@ static int l_open(sqlite3_vfs *pVfs, const char *name, sqlite3_file *pFile,
     ) {
         f->readonly = 1;
         f->fd = -1;
-        strncpy(f->path, name, sizeof f->path - 1);
-        f->path[sizeof f->path - 1] = 0;
+        shm_set_path(f, name);
         if (pOutFlags) *pOutFlags = flags;
         pFile->pMethods = &l_io;
         return SQLITE_OK;
@@ -353,8 +473,7 @@ static int l_open(sqlite3_vfs *pVfs, const char *name, sqlite3_file *pFile,
     }
     if (fd < 0) return SQLITE_CANTOPEN;
     f->fd = fd;
-    strncpy(f->path, name, sizeof f->path - 1);
-    f->path[sizeof f->path - 1] = 0;
+    shm_set_path(f, name);
     if (pOutFlags) *pOutFlags = outFlags;
     pFile->pMethods = &l_io;
     return SQLITE_OK;
@@ -404,12 +523,14 @@ static int l_randomness(sqlite3_vfs *pVfs, int nByte, char *zOut)
 }
 static int l_sleep(sqlite3_vfs *pVfs, int usec)
 {
-    struct timespec ts;
+    volatile unsigned *slept = (volatile unsigned *)0x03EFF01Cu;
     (void)pVfs;
     if (usec <= 0) return 0;
-    ts.tv_sec = usec / 1000000;
-    ts.tv_nsec = (long)(usec % 1000000) * 1000L;
-    nanosleep(&ts, 0);
+    /* Advance the guest's virtual clock instead of busy-waiting in the
+       guest nanosleep(), which can only observe time at runner slice
+       boundaries.  Busy-handler timeouts then match Tcl's clock and do not
+       consume millions of instructions. */
+    *slept += (unsigned)((usec + 999) / 1000);
     return 0;
 }
 static unsigned int l_now_ms(void)
