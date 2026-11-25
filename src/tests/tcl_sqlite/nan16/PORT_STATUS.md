@@ -74,12 +74,16 @@ finish and triage the later test/ files.
   command replaces it with a valid database; a direct C
   sqlite3_open+sqlite3_backup_init returns 26.  backup2-10 expects the unix
   "disk I/O error" wording and gets "unable to open database file".
-- A small WAL probe succeeds (`journal_mode=wal`, insert, reopen, count=2)
-  with the iVersion-2 shm methods.  Enabling WAL in the 24 MB testfixture,
-  however, halts during startup at pc 3,146,612 with no console output; the
-  mapped build's `MAP` entries stop at `__nan16_f2ull` (3,052,286), so the
-  failing code is a large unmapped region.  This is an open large-image /
-  codegen issue, not yet fixed; the suite image keeps `SQLITE_OMIT_WAL`.
+- WAL is enabled in the official fixture.  The small WAL probe passes
+  (`journal_mode=wal`, insert, reopen, count=2).  The earlier startup halt at
+  pc 3,146,612 was a fixed-SP overlap: WAL data ends 47,748 bytes above the
+  old `SP=0xC00000`, so stack frames overwrote `sqlite3Config`/`xLog`.
+  `nan16-link.c` now emits `SP=max(0x300000,align16(total_words))`.  WAL
+  fixture: 96,064,648 bytes, SHA-256
+  `8e59fd9a6e690d9b3795a4fa678f91a7ac3454e6928f6c1839fe7561245d4a46`,
+  select1 **199/0**.  `busy2` runs to a normal halt but has 5/15 failures
+  because `xShmLock` is still a no-op (checkpoint read-mark/busy states);
+  real shm lock semantics are the next WAL item.
 - Current product fixture: 96,064,648 bytes, SHA-256
   `758e4ed1182a938fc42e0c1aa52d111032f9d495a4bce1b12a2db6b7f8850f62`
   (select1 199/0).  A fresh one-process veryquick run (checkpointed) is in
