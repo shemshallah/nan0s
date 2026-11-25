@@ -20,6 +20,16 @@
 #include <glob.h>
 #include "nan16_pow10.h"
 
+#ifdef NAN16_PIPE_LIBC
+/* Pipe descriptor layer (third_party/nan16-libc/src/nanpipe_libc.c).  The
+   storage and byte movement live in the NaN np_* primitive; this side only
+   maps POSIX fd semantics onto pipe ids. */
+int npl_is_pipe(int fd);
+ssize_t npl_read(int fd, void *buf, size_t n);
+ssize_t npl_write(int fd, const void *buf, size_t n);
+int npl_close(int fd);
+#endif
+
 int errno;
 
 /* ---------------------------------------------------------------- memory */
@@ -1210,6 +1220,9 @@ int open(const char *name, int flags, ...)
 int creat(const char *name, int mode) { (void)mode; return open(name, O_CREAT | O_WRONLY | O_TRUNC); }
 int close(int fd)
 {
+#ifdef NAN16_PIPE_LIBC
+    if (npl_is_pipe(fd)) return npl_close(fd);
+#endif
     if (fd >= FD_VFS_BASE && (unsigned)(fd - FD_VFS_BASE) < vfs_cap) files[fd - FD_VFS_BASE].pos = 0;
     return 0;
 }
@@ -1226,6 +1239,9 @@ ssize_t read(int fd, void *buf, size_t n)
 {
     MemFile *f;
     unsigned avail;
+#ifdef NAN16_PIPE_LIBC
+    if (npl_is_pipe(fd)) return npl_read(fd, buf, n);
+#endif
     if (fd < FD_VFS_BASE || (unsigned)(fd - FD_VFS_BASE) >= vfs_cap) return -1;
     f = &files[fd - FD_VFS_BASE];
     if (!f->used) return -1;
@@ -1258,6 +1274,9 @@ ssize_t write(int fd, const void *buf, size_t n)
 {
     MemFile *f;
     unsigned i;
+#ifdef NAN16_PIPE_LIBC
+    if (npl_is_pipe(fd)) return npl_write(fd, buf, n);
+#endif
     if (fd == 1 || fd == 2) {
         for (i = 0; i < n; i++)
             if (fd == 1) outcap(&nan16_stdout_data, &nan16_stdout_len, &nan16_stdout_cap, ((const unsigned char *)buf)[i]);

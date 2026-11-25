@@ -209,6 +209,42 @@ typedef struct {
 } S1;
 static S1 s;
 
+/* ---- host-fed key input (KEY 0x12 / KEYQ 0x1A) ----
+ * The runner embeds a byte script as s1_keys_data/s1_keys_len.  KEY and KEYQ
+ * both pop the next byte; 0 means exhausted.  The S1 does not block, so a
+ * cartridge with no input still halts deterministically. */
+extern const uint32_t s1_keys_len __attribute__((weak));
+extern const unsigned char s1_keys_data[] __attribute__((weak));
+static uint32_t key_pos, key_count;
+static void key_reset(void) {
+  if (&s1_keys_len == 0 || &s1_keys_data == 0) { key_pos = key_count = 0; return; }
+  key_pos = 0;
+  key_count = s1_keys_len;
+}
+static uint32_t key_pop(void) {
+  if (key_pos >= key_count) return 0;
+  return s1_keys_data[key_pos++];
+}
+
+/* ---- text plane (DISPQ 0x18 / DISPSET 0x19, VPOKE 0x10 / VPEEK 0x11) ----
+ * 80x25 cells live at the fixed guest byte address 0x03EFF800, next to the
+ * control block at 0x03EFF000, so a guest can read the text plane with LD.
+ * Each cell is stored as a normal +q/+q word: low 16 bits are char|attr<<8. */
+#define TEXT_COLS 80u
+#define TEXT_ROWS 25u
+#define TEXT_CELLS (TEXT_COLS * TEXT_ROWS)
+#define TEXT_BASE_BYTE 0x03EFF800u
+#define TEXT_BASE_WORD (TEXT_BASE_BYTE / 4u)
+static uint32_t disp_vmode, disp_fbw, disp_fbh, disp_fbtot;
+static int text_plane_ok(void) {
+  return (uint64_t)TEXT_BASE_WORD + TEXT_CELLS <= (uint64_t)MEM_WORDS;
+}
+static void text_plane_init(uint32_t fill) {
+  if (!text_plane_ok()) return;
+  for (uint32_t i = 0; i < TEXT_CELLS; i++)
+    MEM[TEXT_BASE_WORD + i] = mkword(fill, 10);
+}
+
 enum { CAUSE_SVC = 0, CAUSE_IRQ = 1, CAUSE_FAULT = 2 };
 enum { PROT_R = 1, PROT_W = 2, PROT_X = 4 };
 enum { TF_PC = 16, TF_K = 17, TF_ADDRH = 18, TF_CAUSE = 19,
@@ -216,6 +252,9 @@ enum { TF_PC = 16, TF_K = 17, TF_ADDRH = 18, TF_CAUSE = 19,
 
 static void s1_reset(void) {
   for (uint32_t i = 0; i < S1_GUEST_ZERO_WORDS; i++) MEM[i] = 0;
+  key_reset();
+  disp_vmode = 0; disp_fbw = 0; disp_fbh = 0; disp_fbtot = 64000;
+  text_plane_init(0x0720);
   s.kdata = 0xF0000u;
   for (int i = 0; i < 16; i++) s.r[i] = 0;
   s.pc = 0; s.k = 0; s.halted = 0; s.steps = 0;
@@ -451,6 +490,27 @@ static uint32_t s1_run(uint64_t budget) {
     case 0x0C: pc = s.r[15]; break;
     case 0x0D: pc = A; break;
     case 0x0F: case 0x1B: case 0x2F: break;
+    case 0x10: { uint32_t i = A;
+      if (disp_vmode == 0 && i < TEXT_CELLS && text_plane_ok())
+        MEM[TEXT_BASE_WORD + i] = mkword(s.r[d] & 0xFFFFu, 10); break; }
+    case 0x11: { uint32_t i = A;
+      if (disp_vmode == 0 && i < TEXT_CELLS && text_plane_ok())
+        s.r[d] = (uint32_t)(MEM[TEXT_BASE_WORD + i] >> 16) & 0xFFFFu; break; }
+    case 0x12: s.r[d] = key_pop(); break;
+    case 0x18: s.r[d] = disp_vmode == 1 ? 0x1300C800u : 0x00031950u; break;
+    case 0x19: { uint32_t v = s.r[d];
+      if (v >= 0xFFFF0000u) { key_pos = key_count; }       /* raw keyboard */
+      else if (v >= 0x10000u) {
+        disp_vmode = 1; disp_fbw = v >> 16; disp_fbh = v & 0xFFFFu;
+        disp_fbtot = disp_fbw * disp_fbh;
+      } else if ((v & 0xFFu) == 0x13u) {
+        disp_vmode = 1; disp_fbw = 320; disp_fbh = 200; disp_fbtot = 64000;
+      } else {
+        disp_vmode = 0; disp_fbw = TEXT_COLS; disp_fbh = TEXT_ROWS;
+        text_plane_init(0);
+      }
+      break; }
+    case 0x1A: s.r[d] = key_pop(); break;
     case 0x14: { uint32_t ad = A + imm;
       if (s.kregions != UNSET && !s.kin &&
           !region_range(ad, 1, PROT_R | PROT_W)) S1_VECTOR(CAUSE_FAULT, at, ad);
@@ -1022,6 +1082,7 @@ void s1_main(void) {
   s.k = 0;
   guest_install_script();
   guest_publish_time();
+  dbg_puts("S1GUEST KEYS "); dbg_dec(key_count); dbg_putc('\n');
   /* Guest-written virtual sleep; keep it zero at boot and preserve it. */
   guest_write_u32(0x03EFF01Cu, 0);
   dbg_puts("S1GUEST LOAD "); dbg_dec(words); dbg_puts(" WORDS\n");
