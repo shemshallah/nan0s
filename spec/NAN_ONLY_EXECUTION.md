@@ -82,6 +82,10 @@ Raw-NaN gates, not oracle claims:
 - `tools/nan0s_guest_gate.sh` — a NaN guest (POSIX metadata/FS) runs on the
   x86_64 S1 machine by default and on the 32-bit `kboot0+kan16` image in
   `NAN0S_GUEST_ARCH=32` parity mode.
+- `tools/nan0s_existing_s1_gate.sh` — extracts the guest region from the
+  existing `build/nan0s.img` and boots it on x86_64 S1.  The real system
+  banner `NaN/0S ... READY MENU=S` is required.  This is the upgraded
+  existing system, not a separate CLI.
 - `tools/nancli64_gate.sh` — a 64-bit text command line (mkdir/write/cat/ls/
   stat/truncate/rm/rmdir/help/exit) compiled to NaN and running on x86_64
   S1; every filesystem operation goes through the NaN POSIX table.
