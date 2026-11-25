@@ -64,16 +64,19 @@ finish and triage the later test/ files.
   `tools/nan16_patch_lock_common.py` makes `do_multiclient_test` probe pipe
   creation and run only the same-interpreter (tn==2) variant instead of
   aborting the aggregate at busy2.test.
-- Official `recoverpgsz.test` on the current fixture reports **28 errors
-  out of 89**; every failing case expects 512/2048/4096/... but gets 1024.
-  The C recover probe only exercised 1024, where output 1024 is coincidental.
-  The copied page is valid at its size; the remaining question is why the
-  detected size is not reflected in the output settings for other sizes.
-- Official `backup2.test` is **3 errors out of 16**: backup2-7/11 write a
-  text file and expect SQLITE_NOTADB, but the Tcl `db backup`/`restore`
-  command replaces it with a valid database; a direct C
-  sqlite3_open+sqlite3_backup_init returns 26.  backup2-10 expects the unix
-  "disk I/O error" wording and gets "unable to open database file".
+- Official `recoverpgsz.test` is **0 errors out of 89**.  The root cause was
+  the libc VFS `write()` not zero-filling a gap when seeking past EOF, so
+  recover read stale heap bytes as synthetic page 1 and detected 1024 for
+  every requested size.  With the gap zeroed and the read-only open flags
+  preserved, all page sizes (512..65536) recover correctly.
+- Official `backup2.test` is **1 error out of 16**: only backup2-10's
+  wording differs (`unable to open database file` vs the unix `disk I/O
+  error`).  backup2-7/11 now return SQLITE_NOTADB; backup2-6 reports the
+  read-only target correctly.  The remaining mapping is a directory-open
+  error-code wording issue.
+- Current best fixture (`final-fix.bin`): 96,064,648 bytes, SHA-256
+  `857e8a97cd976d10db65d161d1a27889a37c705c2236feb02d8967120d217a49`;
+  WAL enabled, select1 **199/0**, recoverpgsz **89/0**, backup2 **15/16**.
 - WAL is enabled in the official fixture.  The small WAL probe passes
   (`journal_mode=wal`, insert, reopen, count=2).  The earlier startup halt at
   pc 3,146,612 was a fixed-SP overlap: WAL data ends 47,748 bytes above the
