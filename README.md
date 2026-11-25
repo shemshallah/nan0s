@@ -47,7 +47,12 @@ online through APIC INIT-SIPI-SIPI, runs a LAPIC timer and reschedule IPI on
 each core, and executes the same NaN workload on all cores with NaN atomics.
 Threads are per-owner-process and cooperative, and the product scheduler is
 still single-core; per-thread preemption and per-CPU queue integration are
-the remaining scheduler work.
+the remaining scheduler work.  A raw-NaN16 kernel-boot image
+(`src/exhibits/gui_sched_boot.nas`) now starts the desktop as PID 1 and a
+NANIX shell as PID 2 under `nankernel` + `nansched`; the scheduler-boot gate
+proves the full Terminal transcript, live PID 1/PID 2 and timer preemption
+on x86_64 S1.  The published GUI/museum image still uses the legacy
+single-cart boot until that image is promoted.
 
 **ndbg** — the NaN-native debugger in this repository. Design: [`spec/NANDBG.md`](spec/NANDBG.md) · Working guide: [`src/dbg/README.md`](src/dbg/README.md).
 

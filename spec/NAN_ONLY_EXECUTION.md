@@ -100,6 +100,14 @@ Raw-NaN gates, not oracle claims:
   (mkdir/write/cat/ls/stat/truncate/rm/rmdir) through `bare_fs_*`.  The
   Terminal keyboard path is driven with delayed PS/2 make codes so the
   command line runs after `kbd_init`.
+- `tools/nan0s_gui64_sched_gate.sh` — the raw-NaN16 kernel-boot image
+  (`src/exhibits/gui_sched_boot.nas`): the GUI is PID 1 (desktop/window
+  manager) and PID 2 is the NANIX command process, both created by
+  `nsch_init`/`nsch_spawn_desc` and scheduled by `nansched`.  The Terminal
+  writes a completed line to `FNB` and yields; PID 2 runs `fs_dispatch` /
+  `term_cmd` and writes into the shared virtual console.  The gate requires
+  the complete NANIX transcript plus live PID 1/PID 2 states and non-zero
+  timer preemption on x86_64 S1.
 - `tools/nanpipe_libc_gate.sh` — guest libc `pipe()/dup2()/read()/write()`
   over the NaN byte-pipe table; `PIPE PASS` on x86_64 S1.
 - `tools/nansched_gate.sh` — the kernel scheduler (`src/lib/nansched.nas`):
@@ -151,8 +159,10 @@ service table.
 
 ## Remaining integration work
 
-1. Boot the NaN/0S desktop and Terminal as scheduled processes under
-   `nankernel` + `nansched` (today the GUI is the boot guest, not PID 1).
+1. Promote the proven kernel-boot image (`gui_sched_boot.nas`, desktop PID 1
+   + NANIX shell PID 2) to the default published `build/nan0s.img`; the S1
+   gate already boots it, but the GUI/museum image remains the published
+   single-cart boot.
 2. Extend `nanthr` from one cooperative thread-owner process to per-process
    thread state and per-thread preemption for AI workloads.
 3. Integrate per-CPU queues, IPIs and locks from the proven SMP prototype
@@ -183,7 +193,9 @@ service table.
       via `nk_install_proc`.
 - [x] 512-process stress plus four cooperative threads (mutex/cond/join)
       under the kernel scheduler.
-- [ ] Desktop/Terminal as scheduled processes under `nansched` (PID 1).
+- [x] Kernel-boot image: desktop PID 1 + NANIX shell PID 2 under
+      `nankernel` + `nansched`, gated on x86_64 S1.
+- [ ] Promote the kernel-boot image to the default published image.
 - [ ] Per-thread preemption and per-process nanthr state.
 - [x] SMP 2/4-CPU prototype (AP startup, per-CPU timers, IPIs, NaN atomics).
 - [ ] SMP per-CPU queues/IPIs integrated into the product scheduler.

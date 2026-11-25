@@ -2,7 +2,7 @@ name: Build and verify x86-64 S1 WASM desktop
 on:
   push:
     branches: [main]
-    paths: ["src/**","tools/s1_runner.sh","tools/build_wasm64.sh","docs/wasm64*",".github/workflows/wasm64.yml"]
+    paths: ["src/**","tools/s1_runner.sh","tools/nan0s_gui64_gate.sh","tools/nan0s_gui64_sched_gate.sh","tools/build_wasm64.sh","docs/wasm64*",".github/workflows/wasm64.yml"]
   workflow_dispatch:
 permissions:
   contents: write
@@ -25,6 +25,8 @@ jobs:
           sh tools/build_wasm64.sh
       - name: Verify the native x86-64 GUI on QEMU
         run: sh tools/nan0s_gui64_gate.sh
+      - name: Verify the kernel-boot PID 1 desktop + PID 2 NANIX shell
+        run: sh tools/nan0s_gui64_sched_gate.sh
       - name: Build pinned long-mode v86 WASM runtime
         run: |
           git clone https://github.com/portlandhodl/v86_64.git /tmp/v86_64

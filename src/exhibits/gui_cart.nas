@@ -166,6 +166,15 @@ g_last:
 .word 0
 g_key:
 .word 0
+; Kernel shell process handshake.  Zero selects the single-process inline
+; command path; a scheduler boot stores PID 2 here and the Terminal hands
+; completed command lines to that process through req/done.
+g_shell_pid:
+.word 0
+g_shell_req:
+.word 0
+g_shell_done:
+.word 0
 ; ---- top bar: MOVE flag and tick counter ----
 g_bar:
 ST r15,r14,0
@@ -926,9 +935,27 @@ CALL @fs_readline
 LD r1,r0,@tk_id
 MOVI r2,10
 CALL @vc_putc
+; When the kernel boot created PID 2, the Terminal is the emulator and
+; PID 2 is the shell.  Hand the completed line over and yield until the
+; shell has written its output.
+LD r1,r0,@g_shell_pid
+CMP r1,r0
+JMP[EQ] @tk_line_local
+ST r0,r0,@g_shell_done
+MOVI r1,1
+ST r1,r0,@g_shell_req
+tk_shell_wait:
+SVC 0
+LD r1,r0,@g_shell_done
+CMP r1,r0
+JMP[EQ] @tk_shell_wait
+ST r0,r0,@g_shell_done
+JMP @tk_line_prompt
+tk_line_local:
 CALL @fs_dispatch
 CMP r1,r0
 JMP[EQ] @tk_enter_normal
+tk_line_prompt:
 LD r1,r0,@tk_id
 MOVI r2,@fs_s_prompt
 CALL @vc_puts

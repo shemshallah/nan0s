@@ -22,6 +22,7 @@ src/tests/.ncc_libm_exact_test.nas
 # local work areas
 staging/
 INCORPORATEANDDELETE/
+tmp/
 
 # private local suite
 **/nannetsuite/
