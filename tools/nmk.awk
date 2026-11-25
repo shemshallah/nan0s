@@ -314,6 +314,13 @@ function resolve(   i,t,v,mn,bn,predn,rest,args,na,ci,ch,x,f,d,a,imm0,imm2,p,tj2
       a = 0
     }
     if (mn=="MOVI" && imm0>65535) die(sprintf("MOVI immediate %d does not fit 16 bits (use LA): %s", imm0, t))
+    # JMP/CALL carry only a 16-bit immediate.  Promote a far target to the
+    # 24-bit JMPF/CALLF form (d:a:imm) instead of silently truncating it.
+    if ((mn=="JMP" || mn=="CALL") && (imm0<0 || imm0>65535)) {
+      imm0=imm0%16777216; if (imm0<0) imm0+=16777216
+      mn = (mn=="JMP") ? "JMPF" : "CALLF"
+      d = int(imm0/1048576); a = int(imm0/65536)%16
+    }
     imm2=imm0%65536; if (imm2<0) imm2+=65536
     p = dn[mn]*16777216 + d*1048576 + a*65536 + imm2
     EMIT[j-1]=wline(n,p)"   ; "sprintf("%03d",j-1)" "dis2(n,p)
