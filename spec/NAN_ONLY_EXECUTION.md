@@ -22,7 +22,7 @@ an oracle, not the product.
 | conformance oracle | C (`aarch64/android/core/nan16.c`, `nan_cli`) | OK only when labelled oracle; never acceptance |
 | S1 machine model | C is acceptable only as the hardware/ISA emulator (`src/native64/s1_kabi.c`), never as kernel services | currently mixes machine and kernel services |
 | NaN kernel/services | raw NaN16 (`.nas`): traps, SVC, scheduler, processes, spawn/wait, sleep, VFS, console, devices | incomplete; C KABI currently supplies process/spawn/sleep/load |
-| guest runtime (libc) | C compiled to NaN; service calls must go through the NaN machine interface (`src/lib/bare.nas`) or SVC ABI | currently self-contained C VFS/console/time |
+| guest runtime (libc) | C compiled to NaN; service calls must go through the NaN machine interface (`src/lib/bare.nas`) or SVC ABI | file persistence is now proven through NaN services (`cbare_sqlite`, `cbare_fs`); console/time and the Tcl libc VFS are still self-contained C |
 | guest applications (Tcl/SQLite/testfixture) | C compiled to NaN | OK |
 
 ## Known violations in the current suite path
@@ -41,6 +41,22 @@ an oracle, not the product.
 5. The suite branch is 271 commits divergent from `nan0s/main`, which is 277
    commits ahead and contains the current NaN system work.  The suite has not
    yet been integrated with the current kernel.
+
+## Proven NaN service boundaries
+
+The following are raw-NaN gates, not oracle claims:
+
+- `tools/cbare_gate.sh` — a C guest calls NaN console and tick services.
+- `tools/cbare_fs_gate.sh` — a C guest creates, writes and reads a file
+  through `bare_fs_open/write/read/close`.
+- `tools/cbare_sqlite_gate.sh` — SQLite (C compiled by TCC) opens a
+  database, inserts, closes, reopens, updates and reopens again.  The only
+  persistence boundary is `bare_fs_load/save/remove/size`; the database
+  header and rows are verified after each reopen.
+- `tools/nfs2_capacity_gate.sh` — NPAF stores 512 files / about 4 MiB and
+  verifies the first, middle and last entries.  `NFS_MAX` and `NFS_CAP` are
+  compile-time `.equ` values that `tools/nmk.awk` accepts from the
+  environment; the arena base is derived from `NFS_BASE + 8 + NFS_MAX*16`.
 
 ## Migration checklist
 

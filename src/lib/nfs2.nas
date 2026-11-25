@@ -13,7 +13,6 @@
 .equ NFS_BASE    2250000
 .equ NFS_MAGIC   0x4E504146
 .equ NFS_MAX     64
-.equ NFS_ARENA   2251032
 .equ NFS_CAP     400000
 .equ NF_E_USED   0
 .equ NF_E_DIR    1
@@ -290,7 +289,11 @@ ST r6,r2,2
 LD r1,r0,#W_NF_ENT
 ST r3,r1,#NF_E_OFF
 ST r4,r1,#NF_E_SIZE
-LA r1,#NFS_ARENA
+LA r1,#NFS_BASE
+ADDI r1,r1,8
+MOVI r5,#NFS_MAX
+SHL r5,r5,4
+ADD r1,r1,r5
 ADD r1,r1,r3
 SHL r1,r1,2
 LD r2,r0,#W_NF_SRC
@@ -333,7 +336,11 @@ CMP r1,r0
 JMP[EQ] @nfs_dd_n
 LD r2,r1,#NF_E_SIZE
 LD r3,r1,#NF_E_OFF
-LA r1,#NFS_ARENA
+LA r1,#NFS_BASE
+ADDI r1,r1,8
+MOVI r4,#NFS_MAX
+SHL r4,r4,4
+ADD r1,r1,r4
 ADD r1,r1,r3
 MOVI r3,1
 JMP @nfs_dd

@@ -79,6 +79,10 @@ JMP @ata_write28
 .equ W_BFS_ENT  0xF0700
 .equ W_BFS_TMP  0xF0701
 .equ W_BFS_OFF  0xF0702
+.equ W_BFL_PATH 0xF0703
+.equ W_BFL_DST  0xF0704
+.equ W_BFL_MAX  0xF0705
+.equ W_BFL_LEN  0xF0706
 
 bare_fs_open:
 ST r15,r14,0
@@ -171,6 +175,90 @@ bfw_zero:
 MOVI r1,0
 RET
 
+; bare_fs_load: r1=path r2=dst byte ptr r3=max -> r1=bytes or -1
+; Copies the stored bytes into the caller's buffer.  Used by guests that
+; keep a working copy and persist it with bare_fs_save (SQLite VFS).
+bare_fs_load:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_BFL_PATH
+ST r2,r0,#W_BFL_DST
+ST r3,r0,#W_BFL_MAX
+CALL @nfs_ensure
+LD r1,r0,#W_BFL_PATH
+CALL @nfs_data
+CMP r3,r0
+JMP[EQ] @bfl_no
+CMP r2,r0
+JMP[EQ] @bfl_zero
+LD r4,r0,#W_BFL_MAX
+CMP r2,r4
+JMP[LE] @bfl_len
+ADD r2,r4,r0
+bfl_len:
+ST r2,r0,#W_BFL_LEN
+SHL r1,r1,2
+LD r5,r0,#W_BFL_DST
+LD r6,r0,#W_BFL_LEN
+bfl_l:
+CMP r6,r0
+JMP[EQ] @bfl_ok
+LDB r7,r1,0
+STB r7,r5,0
+ADD r1,r1,r13
+ADD r5,r5,r13
+SUB r6,r6,r13
+JMP @bfl_l
+bfl_ok:
+LD r1,r0,#W_BFL_LEN
+JMP @bfl_d
+bfl_zero:
+MOVI r1,0
+JMP @bfl_d
+bfl_no:
+LA r1,0xFFFFFFFF
+bfl_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; bare_fs_save: r1=path r2=src byte ptr r3=bytes -> r1=entry or 0
+; Replaces the file contents in one call (nfs_write creates/truncates).
+bare_fs_save:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_BFL_PATH
+ST r2,r0,#W_BFL_DST
+ST r3,r0,#W_BFL_LEN
+CALL @nfs_ensure
+LD r1,r0,#W_BFL_PATH
+LD r2,r0,#W_BFL_DST
+SHR r2,r2,2
+LD r3,r0,#W_BFL_LEN
+CALL @nfs_write
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; bare_fs_size: r1=path -> r1=bytes or -1
+bare_fs_size:
+ST r15,r14,0
+ADD r14,r14,r13
+ST r1,r0,#W_BFL_PATH
+CALL @nfs_ensure
+LD r1,r0,#W_BFL_PATH
+CALL @nfs_data
+CMP r3,r0
+JMP[EQ] @bfs_no
+ADD r1,r2,r0
+JMP @bfs_sz_d
+bfs_no:
+LA r1,0xFFFFFFFF
+bfs_sz_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
 bare_fs_seek:
 ST r15,r14,0
 ADD r14,r14,r13
@@ -255,7 +343,11 @@ JMP[EQ] @bfrn_n
 LD r2,r1,#NF_E_SIZE
 ST r2,r0,#W_BFS_OFF
 LD r2,r1,#NF_E_OFF
-LA r3,#NFS_ARENA
+LA r3,#NFS_BASE
+ADDI r3,r3,8
+MOVI r4,#NFS_MAX
+SHL r4,r4,4
+ADD r3,r3,r4
 ADD r3,r3,r2
 LD r1,r0,#W_BFS_TMP
 ADD r2,r3,r0
