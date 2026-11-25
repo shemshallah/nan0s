@@ -1,0 +1,59 @@
+name: Build and verify x86-64 S1 WASM desktop
+on:
+  push:
+    branches: [main]
+    paths: ["src/**","tools/s1_runner.sh","tools/build_wasm64.sh","docs/wasm64*",".github/workflows/wasm64.yml"]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: nanix-wasm64
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build native system and 64-bit boot disks
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang lld llvm gawk xxd qemu-system-x86 ffmpeg
+          sh tools/build_wasm64.sh
+      - name: Verify the native x86-64 GUI on QEMU
+        run: sh tools/nan0s_gui64_gate.sh
+      - name: Build pinned long-mode v86 WASM runtime
+        run: |
+          git clone https://github.com/portlandhodl/v86_64.git /tmp/v86_64
+          cd /tmp/v86_64
+          git checkout c394574477b57eadfc859f593b4aecb08fa37cb6
+          rustup target add wasm32-unknown-unknown
+          make all
+          cp build/v86_all.js build/v86.wasm bios/seabios.bin bios/vgabios.bin "$GITHUB_WORKSPACE/docs/wasm64/"
+      - name: Boot actual 64-bit browser guest and verify native input
+        run: |
+          npm install --no-save --package-lock=false playwright@1.51.1
+          npx playwright install --with-deps chromium
+          python3 -m http.server 8765 --directory docs >/tmp/wasm64-http.log 2>&1 &
+          node tools/test_wasm64.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: wasm64-evidence
+          path: |
+            docs/wasm64/
+            wasm64-evidence.png
+      - name: Publish only browser-verified 64-bit assets
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -f docs/wasm64/
+          git diff --cached --quiet && exit 0
+          git commit -m "build: publish verified x86-64 WASM system"
+          git fetch origin main
+          git diff --quiet HEAD^ origin/main -- src tools/s1_runner.sh tools/build_wasm64.sh docs/wasm64-player.js docs/wasm64.html || exit 1
+          git rebase origin/main
+          git push origin HEAD:main

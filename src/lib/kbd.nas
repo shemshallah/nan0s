@@ -62,7 +62,11 @@ BOOL.8 r3,r3,r5
 LD r4,r0,@kb_h
 CMP r3,r4
 JMP[EQ] @kp_done
+CALL @kb_web_read
+CMP r2,r0
+JMP[NE] @kp_web_key
 KEYQ r2
+kp_web_key:
 CMP r2,r0
 JMP[EQ] @kp_done
 ; Optional virtual touchscreen transport: E0 7F + seven nibble bytes 60..6F.
@@ -295,3 +299,28 @@ kt_e:
 .word 273,279,280,127,0,0,0,0,0,0,0,0,0,0,0,0
 .word 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 .word 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+
+; S1/WASM host transport: native word mailbox at 0xE8000.
+; word 0=guest signature, 1=host signature, 2=consumer, 3=producer,
+; 4=packed width/height; words 16..271=256 raw PS/2 bytes.
+; Ordinary machine boots never have the host signature.
+kb_web_read:
+LA r3,0xE8000
+LD r4,r3,1
+LA r5,0x4E363457
+CMP r4,r5
+JMP[NE] @kb_web_empty
+LD r4,r3,2
+LD r5,r3,3
+CMP r4,r5
+JMP[EQ] @kb_web_empty
+MOVI r6,255
+BOOL.8 r6,r4,r6
+ADD r6,r6,r3
+LD r2,r6,16
+ADD r4,r4,r13
+ST r4,r3,2
+RET
+kb_web_empty:
+MOVI r2,0
+RET

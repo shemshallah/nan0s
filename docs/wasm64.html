@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NANIX — x86-64 S1</title>
+<style>
+:root{color-scheme:dark;font:15px system-ui;background:#101622;color:#dce4ed}
+body{margin:12px auto;max-width:1100px;padding:0 10px}
+a{color:#8fc8ff} h1{font-size:20px} #status{min-height:2em}
+.controls{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:8px 0}
+textarea,button{background:#243146;color:inherit;border:1px solid #9aa8b9;border-radius:6px;padding:9px;font:inherit}
+textarea{flex:1;min-width:100px;font-size:16px}button:disabled{opacity:.5}
+#keys{display:flex;overflow-x:auto;gap:5px}canvas{width:100%;height:auto;image-rendering:pixelated;touch-action:none;background:#000;border:1px solid #8996a9}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px} .note{font-size:13px;color:#acb8c9}
+</style>
+<h1>NANIX — x86-64 S1 / WebAssembly</h1>
+<p><a href="./">32-bit compatibility player</a> · <span id="status">Loading 64-bit emulator and system…</span></p>
+<div class="controls"><textarea id="type" rows="1" placeholder="Type into native guest" disabled></textarea><button id="clear" disabled>Clear</button><button id="enter" disabled>Enter</button><button id="restart">Restart</button></div>
+<div id="keys" class="controls"></div>
+<canvas id="guest" width="1024" height="768"></canvas>
+<p class="note">Experimental S1 desktop. 512 MiB emulated RAM; mobile devices may be memory limited. Tap a guest window or use keyboard controls. No browser-side desktop or application rendering.</p>
+<details><summary>Guest serial output</summary><pre id="serial"></pre></details>
+<script src="wasm64/v86_all.js"></script>
+<script src="wasm64-player.js"></script>
+</html>
