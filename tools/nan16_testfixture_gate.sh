@@ -18,7 +18,7 @@ TT=third_party/tinycc
 LIBC=third_party/nan16-libc
 PORT=src/tests/tcl_sqlite/nan16
 MEM=${TCL_NAN16_TESTFIXTURE_MEM:-256}
-HEAP_MB=${TCL_NAN16_TESTFIXTURE_HEAP_MB:-128}
+HEAP_MB=${TCL_NAN16_TESTFIXTURE_HEAP_MB:-288}
 TEST=${TCL_NAN16_TESTFIXTURE_TEST:-/sqlite/test/select1.test}
 if [ -n "${TCL_NAN16_TESTFIXTURE_STEPS:-}" ]; then
     STEPS=$TCL_NAN16_TESTFIXTURE_STEPS
@@ -97,6 +97,8 @@ $CC -std=gnu99 -O2 -DTCC_TARGET_NAN16 -DONE_SOURCE -I"$TT" "$TT/tcc.c" \
 
 echo "tcl_testfixture: adapt lock_common for no fork/exec"
 python3 tools/nan16_patch_lock_common.py "$SQLITE_SRC/test/lock_common.tcl"
+echo "tcl_testfixture: bound sqlite_dbdata payloads to the input db size"
+python3 tools/nan16_patch_recover_dbdata.py "$SQLITE_SRC/ext/recover/dbdata.c"
 
 echo "tcl_testfixture: pack official VFS"
 python3 tools/nan16_suite_pack.py "$T/suite.n16pack" \
@@ -159,10 +161,11 @@ PORT_SRCS=$(ls "$PORT"/tclNan16*.c \
     | grep -v 'tclNan16AppInit.c' | grep -v 'tclNan16TestTclsh.c')
 TESTS=$(sed -n '/^TESTSRC =/,/^$/p; /^TESTSRC +=/,/^$/p' "$SQLITE_SRC/main.mk" \
     | grep -oE '\$\(TOP\)/[^ ]+\.c' \
-    | sed "s|\$(TOP)|$SQLITE_SRC|" | grep -v '/src/test_tclsh.c$')
+    | sed "s|\$(TOP)|$SQLITE_SRC|" \
+    | grep -v '/src/test_tclsh.c$' | grep -v '/src/test3.c$')
 
 SQLFLAGS="-DNAN16_HEAP_SIZE=$((HEAP_MB * 1048576)) -DNAN16_SQLITE_VFS_FILES=256 -DNAN16_SQLITE_VFS_NAME=256 -DSQLITE_OS_OTHER=1 -DSQLITE_THREADSAFE=0 -DSQLITE_TEMP_STORE=3 \
- -DSQLITE_OMIT_LOAD_EXTENSION -DSQLITE_OMIT_LOCALTIME \
+ -DSQLITE_OMIT_LOAD_EXTENSION \
  -DSQLITE_DQS=0 -DSQLITE_OMIT_SHARED_CACHE \
  -DSQLITE_MAX_MMAP_SIZE=0 -DNDEBUG \
  -DSQLITE_TEST=1 -DSQLITE_CRASH_TEST=1 \

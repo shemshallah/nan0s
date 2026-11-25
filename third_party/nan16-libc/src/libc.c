@@ -1235,6 +1235,25 @@ ssize_t read(int fd, void *buf, size_t n)
     f->pos += n;
     return n;
 }
+/* Grow a file buffer to at least 'need' bytes.  Use realloc() so the
+   allocator can extend in place: cksumvfs.test grows test.db to ~97 MB and
+   a malloc-new/copy/free doubling would briefly need the old 64 MB buffer
+   plus a new 128 MB one (192 MB) in the 160 MB guest heap. */
+static int mf_grow(MemFile *f, unsigned need)
+{
+    unsigned ncap = f->cap ? f->cap : 256;
+    unsigned char *nb;
+    while (ncap < need) {
+        if (ncap > 0x7FFFFFFFu) { ncap = need; break; }
+        ncap *= 2;
+    }
+    if (ncap < need) { errno = ENOMEM; return -1; }
+    nb = (unsigned char *)realloc(f->data, ncap);
+    if (!nb) { errno = ENOMEM; return -1; }
+    f->data = nb;
+    f->cap = ncap;
+    return 0;
+}
 ssize_t write(int fd, const void *buf, size_t n)
 {
     MemFile *f;
@@ -1259,14 +1278,7 @@ ssize_t write(int fd, const void *buf, size_t n)
     if (!f->used || !f->writable) return -1;
     if (n == 0) return 0;
     if (f->pos + n > f->cap) {
-        unsigned nc = f->cap ? f->cap : 256;
-        unsigned char *nb;
-        while (nc < f->pos + n) nc *= 2;
-        nb = malloc(nc);
-        if (!nb) return -1;
-        if (f->data) { memcpy(nb, f->data, f->size); free(f->data); }
-        f->data = nb;
-        f->cap = nc;
+        if (mf_grow(f, f->pos + n) != 0) return -1;
     }
     /* Seeking past EOF and writing must leave a zero-filled hole, as on a
        POSIX filesystem.  Without this, recover's page-size detection can
@@ -1295,22 +1307,11 @@ off_t lseek(int fd, off_t off, int whence)
 }
 static int mf_resize(MemFile *f, unsigned n)
 {
+    unsigned oldsize = f->size;
     if (n > f->cap) {
-        unsigned nc = f->cap ? f->cap : 256;
-        unsigned char *nb;
-        while (nc < n) nc *= 2;
-        nb = (unsigned char *)malloc(nc);
-        if (!nb) { errno = ENOMEM; return -1; }
-        if (f->data) {
-            memcpy(nb, f->data, f->size);
-            free(f->data);
-        }
-        memset(nb + f->size, 0, nc - f->size);
-        f->data = nb;
-        f->cap = nc;
-    } else if (n > f->size) {
-        memset(f->data + f->size, 0, n - f->size);
+        if (mf_grow(f, n) != 0) return -1;
     }
+    if (n > oldsize) memset(f->data + oldsize, 0, n - oldsize);
     f->size = n;
     if (f->pos > n) f->pos = n;
     return 0;

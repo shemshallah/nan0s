@@ -214,6 +214,19 @@ strftime(char *s, size_t max, const char *format, const struct tm *tm)
 	case 'd': n = snprintf(tmp, sizeof(tmp), "%02d", tm->tm_mday); break;
 	case 'e': n = snprintf(tmp, sizeof(tmp), "%2d", tm->tm_mday); break;
 	case 'H': n = snprintf(tmp, sizeof(tmp), "%02d", tm->tm_hour); break;
+	case 'k': n = snprintf(tmp, sizeof(tmp), "%2d", tm->tm_hour); break;
+	case 'I': {
+	    int h = tm->tm_hour % 12;
+	    if (h == 0) h = 12;
+	    n = snprintf(tmp, sizeof(tmp), "%02d", h);
+	    break;
+	}
+	case 'l': {
+	    int h = tm->tm_hour % 12;
+	    if (h == 0) h = 12;
+	    n = snprintf(tmp, sizeof(tmp), "%2d", h);
+	    break;
+	}
 	case 'M': n = snprintf(tmp, sizeof(tmp), "%02d", tm->tm_min); break;
 	case 'S': n = snprintf(tmp, sizeof(tmp), "%02d", tm->tm_sec); break;
 	case 'j': n = snprintf(tmp, sizeof(tmp), "%03d", tm->tm_yday + 1); break;
@@ -225,6 +238,61 @@ strftime(char *s, size_t max, const char *format, const struct tm *tm)
 	case 'b':
 	case 'h': n = snprintf(tmp, sizeof(tmp), "%.3s", mon[(tm->tm_mon + 12) % 12]); break;
 	case 'p': n = snprintf(tmp, sizeof(tmp), "%s", tm->tm_hour < 12 ? "AM" : "PM"); break;
+	case 'P': n = snprintf(tmp, sizeof(tmp), "%s", tm->tm_hour < 12 ? "am" : "pm"); break;
+	case 'U': {
+	    int yd = tm->tm_yday, wd = tm->tm_wday;
+	    int wk = (yd - wd + 7) / 7;
+	    n = snprintf(tmp, sizeof(tmp), "%02d", wk);
+	    break;
+	}
+	case 'W': {
+	    int yd = tm->tm_yday, mon0 = (tm->tm_wday + 6) % 7;
+	    int wk = (yd - mon0 + 7) / 7;
+	    n = snprintf(tmp, sizeof(tmp), "%02d", wk);
+	    break;
+	}
+	case 'V':
+	case 'G':
+	case 'g': {
+	    int y = tm->tm_year + 1900, yd = tm->tm_yday;
+	    int mon0 = (tm->tm_wday + 6) % 7;
+	    int thu = yd + (3 - mon0);
+	    int yl;
+	    if (thu < 0) {
+		y--;
+		yl = ((y % 4 == 0 && y % 100 != 0) || y % 400 == 0) ? 366 : 365;
+		thu += yl;
+	    } else {
+		yl = ((y % 4 == 0 && y % 100 != 0) || y % 400 == 0) ? 366 : 365;
+		if (thu >= yl) { thu -= yl; y++; }
+	    }
+	    if (*p == 'V') n = snprintf(tmp, sizeof(tmp), "%02d", thu / 7 + 1);
+	    else if (*p == 'G') n = snprintf(tmp, sizeof(tmp), "%04d", y);
+	    else n = snprintf(tmp, sizeof(tmp), "%02d", y % 100);
+	    break;
+	}
+	case 'C': n = snprintf(tmp, sizeof(tmp), "%02d", (tm->tm_year + 1900) / 100); break;
+	case 'D': n = snprintf(tmp, sizeof(tmp), "%02d/%02d/%02d", tm->tm_mon + 1, tm->tm_mday, (tm->tm_year + 1900) % 100); break;
+	case 's': {
+	    int y = tm->tm_year + 1900, m = tm->tm_mon + 1;
+	    long era, days;
+	    unsigned yoe, doy, doe;
+	    y -= m <= 2;
+	    era = (y >= 0 ? y : y - 399) / 400;
+	    yoe = (unsigned)(y - era * 400);
+	    doy = (153u * (unsigned)(m + (m > 2 ? -3 : 9)) + 2u) / 5u
+		+ (unsigned)tm->tm_mday - 1u;
+	    doe = yoe * 365u + yoe / 4u - yoe / 100u + doy;
+	    days = era * 146097L + (long)doe - 719468L;
+	    n = snprintf(tmp, sizeof(tmp), "%lld",
+		(long long)days * 86400LL + tm->tm_hour * 3600L
+		+ tm->tm_min * 60L + tm->tm_sec);
+	    break;
+	}
+	case 'x': n = snprintf(tmp, sizeof(tmp), "%02d/%02d/%02d", tm->tm_mon + 1, tm->tm_mday, (tm->tm_year + 1900) % 100); break;
+	case 'X': n = snprintf(tmp, sizeof(tmp), "%02d:%02d:%02d", tm->tm_hour, tm->tm_min, tm->tm_sec); break;
+	case 'z': n = snprintf(tmp, sizeof(tmp), "+0000"); break;
+	case 'Z': n = snprintf(tmp, sizeof(tmp), "UTC"); break;
 	case 'F': n = snprintf(tmp, sizeof(tmp), "%04d-%02d-%02d", tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday); break;
 	case 'T': n = snprintf(tmp, sizeof(tmp), "%02d:%02d:%02d", tm->tm_hour, tm->tm_min, tm->tm_sec); break;
 	case 'R': n = snprintf(tmp, sizeof(tmp), "%02d:%02d", tm->tm_hour, tm->tm_min); break;

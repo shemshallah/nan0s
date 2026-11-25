@@ -66,6 +66,9 @@ region table.
   instruction timer, exact `AAAABBBBAABB` on the C oracle and x86_64 S1.
 - `tools/kabi_spawn_gate.sh` - process table, `spawn`/`wait`/`exit`, and
   round-robin scheduling; exact `12OK` on both engines.
+- `tools/kabi_load_gate.sh` - in-memory `NIMG` image loader: allocate
+  code+data from nalloc, copy and relocate the payload, build regions and
+  spawn; exact `LOK` on both engines.
 - `tools/s1_guest_gate.sh` - flat-cartridge parity for the implemented S1
   subset, including the host-test NFS2 cartridge.
 
@@ -80,8 +83,16 @@ region table.
   table, and returns a pid. `SVC 10` blocks the parent until the child exits;
   `SVC 1` stores the status and wakes waiters. The scheduler scans for the
   next runnable slot and halts when none remain.
+- `kabi_load_demo.nas` defines an in-memory `NIMG` header
+  `{magic, entry_offset, code_words, data_words, scratch_words, payload_ptr}`
+  and an appended `SVC 23 load_image(header_ptr)`. The kernel allocates the
+  code+data extent from nalloc, copies the payload, computes the entry and
+  stack from the new base, builds the three-region table, and returns a pid.
+  The child is position-independent and proves it runs from the allocated
+  base.
 - Still missing for a production scheduler: priority/fair-share policy,
-  blocking I/O, sleep/wake timers, signals, and a filesystem-backed loader.
+  blocking I/O, sleep/wake timers, signals, and a filesystem-backed loader
+  (`load_image` is currently memory-backed).
 - The `LDS`/`STS` window base is now control port `0x4E07` (default
   `0xF0000`). A kernel can therefore point each process at its own mapped
   64K scratch window while `nmk` keeps emitting window-relative offsets.
