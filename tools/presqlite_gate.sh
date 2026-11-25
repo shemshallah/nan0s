@@ -156,6 +156,7 @@ done
 [ -f tools/kabi_gate.sh ] && run kabi sh tools/kabi_gate.sh
 [ -f tools/kabi_proc_gate.sh ] && run kabi_proc sh tools/kabi_proc_gate.sh
 [ -f tools/kabi_sched_gate.sh ] && run kabi_sched sh tools/kabi_sched_gate.sh
+[ -f tools/kabi_spawn_gate.sh ] && run kabi_spawn sh tools/kabi_spawn_gate.sh
 [ -f tools/s1_guest_gate.sh ] && run s1_guest sh tools/s1_guest_gate.sh
 
 if [ -f tools/mkall.sh ] && want mkall; then

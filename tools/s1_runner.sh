@@ -98,12 +98,13 @@ if [ -n "$PEEK" ]; then NPEEK=$(awk 'NF{n++} END{print n+0}' "$T/peeks.txt"); fi
   echo '.text'
 } > "$T/peek.S"
 
-# <=768 KiB: floppy staging through the boot fixture.  Larger: raw IDE disk
+# <=384 KiB: floppy staging through the boot fixture below the VGA aperture.
+# Larger: raw IDE disk
 # (QEMU if=ide) read by the S1 ATA PIO loader, no size cap below 2^28 sectors.
-if [ "$BYTES" -le $((768 * 1024)) ]; then
+if [ "$BYTES" -le $((384 * 1024)) ]; then
   GDISK=0
   GSECT=$(( (BYTES + 511) / 512 ))
-  [ "$GSECT" -le 1536 ] || { echo "s1_runner: bad small-image sector count" >&2; exit 1; }
+  [ "$GSECT" -le 768 ] || { echo "s1_runner: bad small-image sector count" >&2; exit 1; }
 else
   GDISK=1
   GSECT=0
