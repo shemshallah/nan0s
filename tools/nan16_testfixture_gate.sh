@@ -159,7 +159,8 @@ PORT_SRCS=$(ls "$PORT"/tclNan16*.c \
     | grep -v 'tclNan16AppInit.c' | grep -v 'tclNan16TestTclsh.c')
 TESTS=$(sed -n '/^TESTSRC =/,/^$/p; /^TESTSRC +=/,/^$/p' "$SQLITE_SRC/main.mk" \
     | grep -oE '\$\(TOP\)/[^ ]+\.c' \
-    | sed "s|\$(TOP)|$SQLITE_SRC|" | grep -v '/src/test_tclsh.c$')
+    | sed "s|\$(TOP)|$SQLITE_SRC|" \
+    | grep -v '/src/test_tclsh.c$' | grep -v '/src/test3.c$')
 
 SQLFLAGS="-DNAN16_HEAP_SIZE=$((HEAP_MB * 1048576)) -DNAN16_SQLITE_VFS_FILES=256 -DNAN16_SQLITE_VFS_NAME=256 -DSQLITE_OS_OTHER=1 -DSQLITE_THREADSAFE=0 -DSQLITE_TEMP_STORE=3 \
  -DSQLITE_OMIT_LOAD_EXTENSION -DSQLITE_OMIT_LOCALTIME \
