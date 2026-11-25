@@ -251,37 +251,47 @@ Status legend: **done**, **partial**, **planned**.
       extensions and test hooks; guest VFS on NaNFS. The current product
       fixture is tcc0-built with the official `TESTFIXTURE_FLAGS`,
       `SQLITE_THREADSAFE=0`, all static TESTSRC extensions and the ext test
-      tree; 96,064,648 bytes, SHA-256
-      `6129f2e4d41f249884f9044985b55e2390c9df8e31f4ec96d3d34c92526d968f`.
-      WAL is enabled; the large-image startup crash was a fixed-SP overlap,
-      fixed by `SP=max(0x300000,align16(total_words))`.  The fixture also
-      advertises `POWERSAFE_OVERWRITE`, which removes the sector-padding
-      duplicate WAL frames.
+      tree; 96,065,960 bytes, SHA-256
+      `4f4c0d53efebe94c2c26bc65c75b45353b09e0b22ebd733a978eca39dc137a28`,
+      run with `--mem 384` and a 288 MiB guest heap.  WAL is enabled; the
+      large-image startup crash was a fixed-SP overlap, fixed by
+      `SP=max(0x300000,align16(total_words))`.  The fixture advertises
+      `POWERSAFE_OVERWRITE` (no sector-padding duplicate frames) and
+      `SUBPAGE_READ`.
 - [x] Port `tester.tcl` capability probes and the test runner; the official
-      `tester.tcl`/`tcltest`/`permutations` path is used unchanged.  The only
-      port shim is the no-pipe multi-client probe in `lock_common.tcl`
-      (`tools/nan16_patch_lock_common.py`), which runs the same-interpreter
-      `tn==2` variant instead of aborting.
+      `tester.tcl`/`tcltest`/`permutations` path is used unchanged.  Test
+      support patches are limited to the no-pipe multi-client probe in
+      `lock_common.tcl` (`tools/nan16_patch_lock_common.py`, runs the
+      same-interpreter `tn==2` variant) and a `dbdata.c` payload bound that
+      clamps a corrupt declared record size to the input database size
+      (`tools/nan16_patch_recover_dbdata.py`).  Both are applied by the
+      fixture gate and documented; SQLite field/page layouts are unchanged.
 - [x] Run `select1`: **199 tests, 0 errors** on the C-core oracle and on the
       x86_64 S1 product runner (`tools/nan16_testfixture_gate.sh`); 0 omitted.
 - [x] Official module slices on the final fixture: `attach` **0/113**,
       `attach2` **0/71**, `ext/expert/expert1` **0/69**, `badutf2` **0/42**,
       `exec` **0/4**, `atof1` **0/40,006** (92.18B steps),
       `ext/recover/recoverpgsz` **0/89**, `backup2` **0/16**,
-      `busy2` **0/15** (calibrated clock), and `wal` **3/518** whose only
-      failures are the `launch_testfixture` child-process cases
-      `wal-20.2/20.3/20.4`.  `symlink` is **1/39** (only the `exec ln -s`
-      loop case).
+      `busy2` **0/15** (calibrated clock), `date` **0/1,749**, `cache`
+      **0/190**, `capi3` **0/249**, `chunksize` **0/7**, `cksumvfs`
+      **0/13** (76.3B steps), `recovercorrupt3` **0/7**, and `wal`
+      **3/518** whose only failures are the `launch_testfixture`
+      child-process cases `wal-20.2/20.3/20.4`.  `symlink` is **1/39**
+      (only the `exec ln -s` loop case).
 - [~] Run `veryquick` in one process with unlimited steps and a periodic
       `NAN1` checkpoint (`tools/nan16_suite_resume.sh`).  A previous run
       reached 431B steps and reproduced 51 failures (42 recover, 27 avtrans
       sync counters, backup2/attach) before aborting at busy2's child-pipe
       launch; those causes are fixed.  A WAL-disabled checkpointed run
       reached 96,066,000,000 steps with 0 failures before being stopped.
-      A fresh run now uses `wal-locks.bin` with the calibrated clock
-      (`NAN16_CLOCK=steps:100000`), unlimited steps and 30-second
-      checkpoints.  Remaining capability gaps: child `testfixture`
-      processes/pipes (`launch_testfixture`, shell tests) and `exec`.
+      A fresh run now uses `product-final.bin` (`4f4c0d53`) with the
+      calibrated clock (`NAN16_CLOCK=steps:100000`), `--mem 384`, unlimited
+      steps and 30-second checkpoints.  The 1000-error cap hit in the
+      earlier `564121aa` run was date4's `strftime` shim, now fixed.  A later
+      run reached 585B steps in cksumvfs with no failures before being
+      paused for the recover/cksum fixes.  Remaining capability gaps:
+      child `testfixture` processes/pipes (`launch_testfixture`, shell
+      tests, crash8) and `exec`.
 - [ ] Run `quick`, `full`/`all`, then the complete `.test` corpus; archive
       exact pass/skip/error counts.
 - [x] Fix every traced compiler/libc/kernel defect without SQLite
