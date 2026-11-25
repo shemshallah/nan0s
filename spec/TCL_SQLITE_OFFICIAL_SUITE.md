@@ -265,8 +265,7 @@ Status legend: **done**, **partial**, **planned**.
 - [x] Official module slices on the final fixture: `attach` **0/113**,
       `attach2` **0/71**, `ext/expert/expert1` **0/69**, `badutf2` **0/42**,
       `exec` **0/4**, `atof1` **0/40,006** (92.18B steps),
-      `ext/recover/recoverpgsz` **0/89**, and `backup2` **15/16**
-      (only backup2-10's directory-open wording).
+      `ext/recover/recoverpgsz` **0/89**, and `backup2` **0/16**.
 - [~] Run `veryquick` in one process with unlimited steps and a periodic
       `NAN1` checkpoint (`tools/nan16_suite_resume.sh`).  A previous run
       reached 431B steps and reproduced 51 failures (42 recover, 27 avtrans
@@ -274,8 +273,8 @@ Status legend: **done**, **partial**, **planned**.
       launch; those causes are fixed.  A WAL-disabled checkpointed run
       reached 96,066,000,000 steps with 0 failures before being stopped.
       The next run uses the WAL-enabled final-fix image.  Remaining open
-      items: `busy2`'s shm-lock semantics, backup2-10 wording, and the
-      `exec`-dependent symlink-1.3 case.
+      items: `busy2`'s shm-lock semantics and the `exec`-dependent
+      symlink-1.3 case.
 - [ ] Run `quick`, `full`/`all`, then the complete `.test` corpus; archive
       exact pass/skip/error counts.
 - [ ] Fix every compiler/libc/kernel defect; no SQLite field-size or page

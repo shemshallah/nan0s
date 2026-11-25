@@ -69,14 +69,14 @@ finish and triage the later test/ files.
   recover read stale heap bytes as synthetic page 1 and detected 1024 for
   every requested size.  With the gap zeroed and the read-only open flags
   preserved, all page sizes (512..65536) recover correctly.
-- Official `backup2.test` is **1 error out of 16**: only backup2-10's
-  wording differs (`unable to open database file` vs the unix `disk I/O
-  error`).  backup2-7/11 now return SQLITE_NOTADB; backup2-6 reports the
-  read-only target correctly.  The remaining mapping is a directory-open
-  error-code wording issue.
+- Official `backup2.test` is **0 errors out of 16** on `final-fix.bin`.
+  backup2-6/7/11 now return SQLITE_NOTADB and preserve the read-only target;
+  backup2-10 opens the directory read-only and surfaces `SQLITE_IOERR_READ`
+  ("disk I/O error"), matching unix.  The earlier 15/16 control run
+  (`recover-fix.bin`) differed only in that wording.
 - Current best fixture (`final-fix.bin`): 96,064,648 bytes, SHA-256
   `857e8a97cd976d10db65d161d1a27889a37c705c2236feb02d8967120d217a49`;
-  WAL enabled, select1 **199/0**, recoverpgsz **89/0**, backup2 **15/16**.
+  WAL enabled, select1 **199/0**, recoverpgsz **89/0**, backup2 **16/16**.
 - WAL is enabled in the official fixture.  The small WAL probe passes
   (`journal_mode=wal`, insert, reopen, count=2).  The earlier startup halt at
   pc 3,146,612 was a fixed-SP overlap: WAL data ends 47,748 bytes above the
