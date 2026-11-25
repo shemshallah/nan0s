@@ -18,23 +18,23 @@
 ; relative to its own directory.  Zero means "/".
 
 ; ---- state ---------------------------------------------------------------
-.equ W_INC_DEPTH   61950
-.equ W_INC_LASTSL  61951
-.equ W_INC_NAMEP   61952
-.equ W_INC_QUOTED  61953
-.equ W_INC_DIRP    61954
-.equ W_INC_FILEP   61955
-.equ W_INC_TMP     61956
-.equ W_INC_TMP2    61957
-.equ W_INC_TMP3    61958
-.equ W_INC_TMP4    61959
-.equ W_INC_PATH    61960
-.equ W_INC_RET    61961
-.equ W_INC_SYNTH  61962
+.equ W_INC_DEPTH   0xF079E
+.equ W_INC_LASTSL  0xF079F
+.equ W_INC_NAMEP   0xF07A0
+.equ W_INC_QUOTED  0xF07A1
+.equ W_INC_DIRP    0xF07A2
+.equ W_INC_FILEP   0xF07A3
+.equ W_INC_TMP     0xF07A4
+.equ W_INC_TMP2    0xF07A5
+.equ W_INC_TMP3    0xF07A6
+.equ W_INC_TMP4    0xF07A7
+.equ W_INC_PATH    0xF07A8
+.equ W_INC_RET    0xF07A9
+.equ W_INC_SYNTH  0xF07AA
 
 .equ INC_MAXDEPTH  16
 .equ INC_FRAME     12          ; words: 8 path words + L_WP/L_BI/L_LINE
-.equ INC_STKW      62100       ; word address of the frame stack
+.equ INC_STKW      0xF0834       ; word address of the frame stack
 .equ INC_NAMEB     248000      ; byte buffers (word 62000)
 .equ INC_PATHB     248032
 .equ INC_TMPB      248064

@@ -412,7 +412,7 @@ int nan_run(nan_vm *v, uint32_t max_steps) {
     case 0x0C: pc = r[15]; break;
     case 0x0D: pc = A; break;
     case 0x2C: r[15] = pc; pc = A; break;
-    case 0x0E: case 0x1C: case 0x1D: case 0x1E: case 0x1F:
+    case 0x0E: case 0x1E: case 0x1F:
       KABI_GUEST_FAULT(at, at);
       trap(v, 'O', pc); pc = v->pc; LEAVE(NAN_HALTED);
     case 0x0F: case 0x1B: case 0x2F: break;
@@ -436,6 +436,8 @@ int nan_run(nan_vm *v, uint32_t max_steps) {
     case 0x15: nan_ser_putc(v, (uint8_t)r[d]); break;
     case 0x16: if (!kabi_region_range(v, A, 1, NAN_PROT_W)) KABI_FAULT(at, A);
       mem[A & M] = nan_mkword(r[d], (int)(B & 15)); break;
+    case 0x1C: r[d] = (uint32_t)(mem[(0xF0000u + imm) & M] >> 16); break;
+    case 0x1D: mem[(0xF0000u + imm) & M] = nan_mkword(r[d], 10); break;
     case 0x17: { uint32_t ad = A + imm;
       if (!kabi_region_range(v, ad, 1, NAN_PROT_R)) KABI_FAULT(at, ad);
       uint64_t q = mem[ad & M];

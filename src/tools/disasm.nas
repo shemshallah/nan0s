@@ -489,6 +489,10 @@ t_ops:
 .str "KEYQ   "
 .word 27,1
 .str "BEEP   "
+.word 28,65
+.str "LDS    "
+.word 29,65
+.str "STS    "
 .word 32,801
 .str "MUL    "
 .word 33,801
