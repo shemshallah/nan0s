@@ -41,12 +41,7 @@ while :; do
     if [ -s "$CKPT" ]; then SRC=$CKPT; else SRC=$BASE; fi
     echo "suite: attempt $attempt img=$SRC test=$TEST $(date)" >> "$OUT/suite.log"
     set +e
-    if [ -n "$CLOCK" ]; then
-        CLOCKARG="--clock $CLOCK"
-    else
-        CLOCKARG=""
-    fi
-    "$CLI" --img "$SRC" --mem "$MEM" --steps unlimited $CLOCKARG \
+    "$CLI" --img "$SRC" --mem "$MEM" --steps unlimited --clock "$CLOCK" \
         --checkpoint "$CKPT" --checkpoint-every "$EVERY" \
         --guest-script "$TEST" --guest-stdout "$OUT/stdout" \
         --guest-stderr "$OUT/stderr" --peek '0x100:1' \
