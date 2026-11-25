@@ -31,11 +31,12 @@ $CC -std=gnu99 -O2 -DTCC_TARGET_NAN16 -DONE_SOURCE -I"$TT" "$TT/tcc.c" \
     -o "$T/tcc0" -lm -ldl 2> "$T/tcc.log" || { cat "$T/tcc.log"; exit 1; }
 
 echo "nanpipe_libc: compile guest libc + pipe test"
+# Same command shape as the testfixture/shell gates: they already compile
+# third_party/nan16-libc/src/libc.c; -DNAN16_PIPE_LIBC pulls in the pipe layer.
 "$T/tcc0" -nostdlib -o "$T/guest.bin" \
     -I"$LIBC/include" -I"$TT/include" -I"$TT" \
     -DNAN16_HEAP_SIZE=33554432 -DNAN16_PIPE_LIBC \
-    "$LIBC/src/libc.c" "$LIBC/src/nanpipe_libc.c" \
-    src/tests/nanpipe_libc_test.c > "$T/build.log" 2>&1 || {
+    "$LIBC/src/libc.c" src/tests/nanpipe_libc_test.c > "$T/build.log" 2>&1 || {
         cat "$T/build.log"; exit 1; }
 
 echo "nanpipe_libc: assemble NaN pipe service stub"
@@ -73,9 +74,10 @@ echo "nanpipe_libc: run on x86_64 S1"
 
 if ! grep -qx 'PIPE PASS' "$T/out" 2>/dev/null; then
     echo "nanpipe_libc: FAIL (no PIPE PASS)"
+    echo "--- main result (word 0x100) ---"; cat "$T/peek" 2>/dev/null
     echo "--- stdout ---"; head -20 "$T/out" 2>/dev/null
     echo "--- stderr ---"; head -20 "$T/err" 2>/dev/null
-    echo "--- run ---"; tail -10 "$T/run.err" 2>/dev/null
+    echo "--- run ---"; tail -20 "$T/run.err" 2>/dev/null
     exit 1
 fi
 if ! grep -qx '00000000' "$T/peek" 2>/dev/null; then

@@ -8,6 +8,10 @@
  * closed/absent write end also reads as 0 (EOF).  The fd range 40..63 holds
  * 12 pipes x read/write ends.  VFS descriptors remain in their existing
  * FD_VFS_BASE range and are dispatched by libc.c.
+ *
+ * libc.c includes this file when the guest is built with -DNAN16_PIPE_LIBC,
+ * so testfixture/shell builds that already compile libc.c need no extra
+ * source entry.  It can also be compiled as a standalone translation unit.
  */
 #include <stddef.h>
 #include <errno.h>

@@ -2457,3 +2457,12 @@ double modf(double x, double *iptr)
 }
 int isnan(double x) { return x != x; }
 int isinf(double x) { return x > 1.7976931348623157e308 || x < -1.7976931348623157e308; }
+
+#ifdef NAN16_PIPE_LIBC
+/* Optional POSIX pipe descriptor layer.  Existing guest builds already
+   compile this libc.c; adding -DNAN16_PIPE_LIBC pulls in pipe()/dup2() and
+   the read/write/close dispatch above without a separate source-list change.
+   The guest image must still link the NaN np_* table at byte 0xA59000
+   (src/tests/cbare_pipe_stub.nas is the reference layout). */
+#include "nanpipe_libc.c"
+#endif
