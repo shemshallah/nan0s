@@ -26,6 +26,7 @@ typedef struct NanLFile {
     unsigned int shm_shared; /* WAL shm locks held SHARED by this handle */
     unsigned int shm_excl;   /* WAL shm locks held EXCLUSIVE by this handle */
     int shm_mapped;          /* this handle has counted one NanShm ref */
+    int psow;                /* POWERSAFE_OVERWRITE (FCNTL can clear it) */
     char path[128];
 } NanLFile;
 
@@ -363,6 +364,13 @@ static int l_filecontrol(sqlite3_file *pFile, int op, void *arg)
         if (f->fd >= 0) ftruncate(f->fd, (off_t)n);
         return SQLITE_OK;
     }
+    case SQLITE_FCNTL_POWERSAFE_OVERWRITE: {
+        int *p = (int *)arg;
+        if (!p) return SQLITE_NOTFOUND;
+        if (*p < 0) *p = f->psow;
+        else f->psow = *p != 0;
+        return SQLITE_OK;
+    }
     case SQLITE_FCNTL_CHUNK_SIZE:
     case SQLITE_FCNTL_SYNC:
     case SQLITE_FCNTL_COMMIT_PHASETWO:
@@ -378,8 +386,14 @@ static int l_sectorsize(sqlite3_file *pFile)
 }
 static int l_device(sqlite3_file *pFile)
 {
-    (void)pFile;
-    return 0;
+    NanLFile *f = (NanLFile *)pFile;
+    /* The guest file store is RAM-backed and byte-addressable: an overwrite
+       within a sector cannot tear across power loss.  Without PSOW,
+       synchronous=FULL WAL pads every commit to a 512-byte sector boundary
+       by repeating the last frame, which changes logical mxFrame counts.
+       PRAGMA journal_mode=wal&psow=0 clears it per handle via fcntl. */
+    return (f->psow ? SQLITE_IOCAP_POWERSAFE_OVERWRITE : 0)
+         | SQLITE_IOCAP_SUBPAGE_READ;
 }
 static const sqlite3_io_methods l_io = {
     2, l_close, l_read, l_write, l_truncate, l_sync,
@@ -420,6 +434,7 @@ static int l_open(sqlite3_vfs *pVfs, const char *name, sqlite3_file *pFile,
     f->shm_shared = 0;
     f->shm_excl = 0;
     f->shm_mapped = 0;
+    f->psow = 1;
     f->path[0] = 0;
     if (!name) {
         snprintf(tmp, sizeof tmp, "/.nan_tmp_%u", ++temp_seq);
@@ -508,12 +523,14 @@ static int l_randomness(sqlite3_vfs *pVfs, int nByte, char *zOut)
 }
 static int l_sleep(sqlite3_vfs *pVfs, int usec)
 {
-    struct timespec ts;
+    volatile unsigned *slept = (volatile unsigned *)0x03EFF01Cu;
     (void)pVfs;
     if (usec <= 0) return 0;
-    ts.tv_sec = usec / 1000000;
-    ts.tv_nsec = (long)(usec % 1000000) * 1000L;
-    nanosleep(&ts, 0);
+    /* Advance the guest's virtual clock instead of busy-waiting in the
+       guest nanosleep(), which can only observe time at runner slice
+       boundaries.  Busy-handler timeouts then match Tcl's clock and do not
+       consume millions of instructions. */
+    *slept += (unsigned)((usec + 999) / 1000);
     return 0;
 }
 static unsigned int l_now_ms(void)
