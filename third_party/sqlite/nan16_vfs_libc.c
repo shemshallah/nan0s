@@ -93,6 +93,10 @@ static int lock_set(NanLFile *f, int level)
 
 static unsigned int temp_seq;
 static unsigned int rand_state = 0x12345678u;
+#ifdef SQLITE_TEST
+int sqlite3_sync_count;
+int sqlite3_fullsync_count;
+#endif
 
 /* Single-process WAL shared memory.  Every connection to the same guest
    path sees one region; SQLite's xShmLock protocol is serialized by the
@@ -206,7 +210,6 @@ static int l_sync(sqlite3_file *pFile, int flags)
 {
     NanLFile *f = (NanLFile *)pFile;
 #ifdef SQLITE_TEST
-    extern int sqlite3_sync_count, sqlite3_fullsync_count;
     if (flags & SQLITE_SYNC_FULL) sqlite3_fullsync_count++;
     sqlite3_sync_count++;
 #endif
