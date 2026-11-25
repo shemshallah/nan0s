@@ -15,7 +15,7 @@ CLI=aarch64/android/nan_cli
 awk -f tools/nmk.awk -v CMD=emit src/dbg/n16dbg.nas > "$T/m.nan" 2>"$T/asm.err" || {
   cat "$T/asm.err"; echo "ndbg_mon: ASSEMBLY FAIL"; exit 1;
 }
-"$CLI" --img "$T/m.nan" --steps 5000000 --keys "s,s,l,f,t,m,d,p,g,2,0,0,2,ENTER,b,r,n,v,b,w,3,0,0,0,ENTER,r,m,w,3,0,0,0,ENTER,s,r,o,H,R,2,0,0,0,Q,q" --serial > "$T/out" 2>"$T/err" || true
+"$CLI" --img "$T/m.nan" --steps 5000000 --keys "s,s,l,f,t,m,d,p,g,2,0,0,2,ENTER,b,r,n,v,b,w,3,0,0,0,ENTER,r,m,w,3,0,0,0,ENTER,s,r,o,H,F,R,2,0,0,0,Q,q" --serial > "$T/out" 2>"$T/err" || true
 cat > "$T/expected" <<'EOF'
 NANDBG MONITOR - s step  r run  b break  g goto  w watch  l hist  t stack  m types  p regs  d dis  x dump  n ndr  v mirror  f seal  o ndp  q quit
 > S=0 PC=2001
@@ -53,6 +53,7 @@ TYPES IC:01 IM:01 ID:00 IS:00
 > S=1 PC=200A
 > NDP
 NDP1
+FRAME 01000000 00000000 00000000 FFB0F7B7 00000001 B7F7B0FF 
 R 2000 01D00001
 BYE
 > 
