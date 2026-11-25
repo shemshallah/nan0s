@@ -583,6 +583,9 @@ ndp_key:
   MOVI r2,69
   CMP r1,r2
   JMP[EQ] @ndp_event
+  MOVI r2,70
+  CMP r1,r2
+  JMP[EQ] @ndp_frame
   MOVI r2,81
   CMP r1,r2
   JMP[EQ] @ndp_quit
@@ -689,6 +692,59 @@ ndp_ev_l:
   MOVI r1,10
   PUTC r1
   JMP @ndp_key
+ndp_frame:
+  LA r5,@ndp_f
+  MOVI r1,0x0100
+  SHL r1,r1,16
+  MOVI r3,10
+  ST r1,r5,0
+  ST r0,r5,1
+  ST r0,r5,2
+  MOVI r1,0x9DC5
+  MOVHI r1,0x811C
+  MOVI r2,0x0193
+  MOVHI r2,0x0100
+  MOVI r3,@ndp_f
+  MOVI r4,3
+nfr_l:
+  LD r5,r3,0
+  BOOL.6 r1,r1,r5
+  MUL r1,r1,r2
+  ADDI r3,r3,1
+  SUB r4,r4,r13
+  CMP r4,r0
+  JMP[NE] @nfr_l
+  LA r5,@ndp_f
+  MOVI r4,10
+  ST r1,r5,3
+  LD r1,r5,0
+  ST r1,r5,4
+  LD r1,r5,3
+  ST r1,r5,5
+  ADDI r5,r5,4
+  BSWAPM r5,0
+  LA r5,@ndp_f
+  ADDI r5,r5,5
+  BSWAPM r5,0
+  MOVI r1,@s_ndp_frame
+  CALL @nd_puts
+  MOVI r8,0
+nfr_p:
+  LA r1,@ndp_f
+  ADD r1,r1,r8
+  LD r1,r1,0
+  MOVI r2,8
+  CALL @nd_puthex
+  MOVI r1,32
+  PUTC r1
+  ADD r8,r8,r13
+  MOVI r2,6
+  CMP r8,r2
+  JMP[LT] @nfr_p
+  MOVI r1,10
+  PUTC r1
+  JMP @ndp_key
+
 ndp_quit:
   MOVI r1,@s_ndp_bye
   CALL @nd_puts
@@ -748,6 +804,8 @@ ndp_v:
 .word 0
 ndp_s:
 .word 0
+ndp_f:
+.word 0,0,0,0,0,0
 s_ndp_start:
 .str "NDP\n"
 s_ndp_hello:
@@ -766,4 +824,6 @@ s_ndp_u:
 .str "U "
 s_ndp_ndr:
 .str "NDR "
+s_ndp_frame:
+.str "FRAME "
 
