@@ -120,6 +120,15 @@ finish and triage the later test/ files.
   unlimited steps, 30-second `NAN1` checkpoints, and the calibrated clock;
   earlier runs reached 431B steps before the busy2 abort, and a WAL-disabled
   checkpointed run reached 96,066,000,000 steps with 0 failures.
+- **x86_64 S1 product PASS on the final 96MB fixture**: official
+  `select1.test` is **0 errors out of 199 tests**, main 0 (`rc=0`), on
+  `product-final.bin` (`6129f2e4...`) via `tools/s1_runner.sh` with the
+  IDE-loaded image, 256MiB guest memory, 20B-step budget and the exact
+  `/sqlite/test/select1.test` guest script.  The 96MB ATA load takes about
+  two minutes and the 2.5B-step run about 19 minutes under QEMU; the S1
+  kernel prints `S1STEP` every 100M steps so a load/execution stall is
+  distinguishable.  The S1 also zeroes and preserves the guest
+  virtual-sleep word at `0x03EFF01C` used by calibrated busy timeouts.
 - The testfixture build kept `SQLITE_OMIT_DEPRECATED`, which compiles
   `test_expired()` down to a TCL_OK with no result; `badutf2-4.0` therefore
   saw `{}` instead of `0`.  The official testfixture does not omit deprecated
