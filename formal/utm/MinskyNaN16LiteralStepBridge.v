@@ -788,3 +788,9 @@ Qed.
 
 Print Assumptions lp_exec_SHR_refines.
 
+
+Search (N.to_nat (N.add _ _)).
+Search (N.to_nat (N.sub _ _)).
+Search (N.of_nat (_ + _)).
+Search (N.of_nat (_ - _)).
+Search (Nat2N.inj_add).
