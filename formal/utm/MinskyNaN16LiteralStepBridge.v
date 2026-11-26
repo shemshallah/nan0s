@@ -49,6 +49,10 @@ Proof.
     + simpl. apply IH. intro H. apply Hneq. now f_equal.
 Qed.
 
+Lemma l_k_lp_to_LState :
+  forall L, l_k (lp_to_LState L) = lp_k L.
+Proof. intros L. reflexivity. Qed.
+
 Ltac split_conj_step := repeat match goal with |- _ /\ _ => split end.
 
 (** ** MOVI one-step refinement *)
@@ -541,9 +545,7 @@ Proof.
        (if pred_passes (pred_nat p) (lp_k L)
         then target else S (lp_pc L))).
     rewrite Hpc, Hzf, Hlf.
-    change (pred_holds p (Nat.eqb ((lp_k L / 2) mod 2) 1)
-                        (Nat.eqb (lp_k L mod 2) 1) =
-            pred_passes (pred_nat p) (lp_k L)).
+    repeat rewrite l_k_lp_to_LState.
     apply pred_agrees; assumption.
   - intros i Hi.
     change (vm_reg vm i = N.to_nat (lget_regN (lp_reg L) i) mod 2 ^ 32).
