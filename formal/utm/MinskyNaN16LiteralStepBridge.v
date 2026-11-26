@@ -433,7 +433,7 @@ Proof.
   intros x y H.
   destruct (N.lt_trichotomy x y) as [Hlt | [Heq | Hgt]].
   - exact Hlt.
-  - subst. rewrite N2Nat.inj_iff in Heq. subst. lia.
+  - subst. lia.
   - exfalso. pose proof (N_lt_to_nat_lt y x Hgt). lia.
 Qed.
 
