@@ -1288,3 +1288,7 @@ Proof.
 Qed.
 
 Print Assumptions lp_exec_SHL_refines.
+
+Search N2Nat.inj_land.
+Search N2Nat.inj_lor.
+Search N2Nat.inj_lxor.
