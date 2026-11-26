@@ -464,15 +464,16 @@ Theorem lp_exec_CMP_refines :
     Rlp (lp_exec L (pCMP a b)) (exec_instr_p prog vm).
 Proof.
   intros L vm prog a b HR Ha Hb Hdec Hnth.
+  pose proof HR as HR_R.
   unfold Rlp in *.
   destruct HR as
     (Hpc & Hregs & Hreg15 & Hlink & Hmem & Hzf & Hlf & Hk & Hhalt & Hbound).
-  pose proof (Hregs a Ha) as HA.
-  pose proof (Hregs b Hb) as HB.
+  pose proof (R_reg_eq (lp_to_LState L) vm a HR_R Ha) as HA.
+  pose proof (R_reg_eq (lp_to_LState L) vm b HR_R Hb) as HB.
   assert (HA' : vm_reg vm a = N.to_nat (lget_regN (lp_reg L) a)).
-  { rewrite HA. rewrite Nat.mod_small by (apply Hbound; lia). reflexivity. }
+  { unfold l_reg, lp_to_LState in HA. exact HA. }
   assert (HB' : vm_reg vm b = N.to_nat (lget_regN (lp_reg L) b)).
-  { rewrite HB. rewrite Nat.mod_small by (apply Hbound; lia). reflexivity. }
+  { unfold l_reg, lp_to_LState in HB. exact HB. }
   unfold lp_exec, exec_instr_p.
   rewrite Hnth. cbn.
   unfold R, lp_to_LState.
