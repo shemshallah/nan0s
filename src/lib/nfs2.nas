@@ -15,6 +15,9 @@
 ;   nfs_readdir r1=dir r2=index -> r1=entry r2=name byte ptr r3=size r4=dir
 ;   nfs_rename  r1=old r2=new    -> r1=1/0 (files; dir children are not rewritten)
 ;   nfs_truncate r1=path         -> r1=1/0 (size only; arena is not reclaimed)
+;   nfs_save                     -> r1=0 snapshot saved / -1 error
+;   nfs_load                     -> r1=1 valid snapshot loaded / 0 absent
+;   nfs_sync                     -> mutation hook, same body as nfs_save
 .equ NFS_BASE    2250000
 .equ NFS_MAGIC   0x4E504146
 .equ NFS_MAX     64
@@ -42,6 +45,7 @@
 ; ATA sync scratch (these were previously implicit/global 0)
 .equ W_DK_N    0xF053E
 .equ W_DK_I    0xF053F
+.equ W_DK_C    0xF0540
 .equ NFS_DISK_LBA 2048
 .equ NFS_HDR 11023000
 
@@ -569,53 +573,97 @@ LD r15,r14,0
 RET
 
 ; ---- persistence over ATA primary master ---------------------------
-; Snapshot: header sector (magic, word count) at LBA 4096, then the live
-; NFS words (entries + arena) as consecutive sectors.
-nfs_sync:
+; Snapshot v1 (the only format; nfs_load reads it):
+;   LBA 2048 (one 512-byte sector, 128 ATA payload words):
+;     word 0 = 0x4E465359 ("NFSY"), word 1 = image word count, word 2 = 0
+;   LBA 2049..: the image as consecutive words: NFS_BASE + 0 .. count-1,
+;     i.e. the 8-word NPAF header, max*16 entry words and the live arena
+;     words.  count = 8 + max*16 + arena_used, max = NPAF header word 4.
+; nfs_save -> r1=0 saved / -1 no ATA disk, unformatted/corrupt store, or a
+; store that exceeds the NPAF capacity or the nfs_load word limit.
+nfs_save:
 ST r15,r14,0
 ADD r14,r14,r13
 CALL @ata_present
 CMP r1,r0
-JMP[EQ] @nsy_d
+JMP[EQ] @nsv_err
+LA r1,#NFS_BASE
+LD r2,r1,0
+LA r3,0x4E504146
+CMP r2,r3
+JMP[NE] @nsv_err
+LD r2,r1,2
+LA r3,#NFS_CAP
+CMP r2,r3
+JMP[GT] @nsv_err
+LD r3,r1,3
+CMP r2,r3
+JMP[GT] @nsv_err
+LA r4,#NFS_CAP
+CMP r3,r4
+JMP[GT] @nsv_err
+LD r3,r1,4
+MOVI r4,#NFS_MAX
+CMP r3,r4
+JMP[NE] @nsv_err
+LD r6,r1,1
+CMP r6,r3
+JMP[GT] @nsv_err
+SHL r4,r3,4
+ADDI r4,r4,8
+ADD r4,r4,r2
+LA r5,401032
+CMP r4,r5
+JMP[GT] @nsv_err
+ADDI r5,r4,127
+SHR r5,r5,7
+; Keep the sector count in memory: the ATA call clobbers r1..r5.
+ST r5,r0,#W_DK_N
+ST r0,r0,#W_DK_I
 LA r1,#NFS_HDR
 LA r2,0x4E465359
 ST r2,r1,0
-LA r2,#NFS_BASE
-LD r3,r2,2
-ADDI r4,r3,1032
 ST r4,r1,1
 ST r0,r1,2
 MOVI r1,#NFS_DISK_LBA
 LA r2,#NFS_HDR
-LA r4,@bare_table
-LD r4,r4,7
-CALLR r4
-LA r1,#NFS_BASE
-LD r2,r1,2
-ADDI r2,r2,1032
-ADDI r2,r2,127
-SHR r2,r2,7
-ST r2,r0,#W_DK_N
-ST r0,r0,#W_DK_I
-nsy_l:
+LA r3,@bare_table
+LD r3,r3,7
+CALLR r3
+nsv_l:
 LD r1,r0,#W_DK_I
 LD r2,r0,#W_DK_N
 CMP r1,r2
-JMP[GE] @nsy_d
+JMP[GE] @nsv_ok
 MOVI r3,#NFS_DISK_LBA+1
 ADD r1,r1,r3
 LA r2,#NFS_BASE
 LD r3,r0,#W_DK_I
 SHL r3,r3,7
 ADD r2,r2,r3
-LA r4,@bare_table
-LD r4,r4,7
-CALLR r4
+LA r3,@bare_table
+LD r3,r3,7
+CALLR r3
 LD r1,r0,#W_DK_I
 ADD r1,r1,r13
 ST r1,r0,#W_DK_I
-JMP @nsy_l
-nsy_d:
+JMP @nsv_l
+nsv_ok:
+MOVI r1,0
+JMP @nsv_d
+nsv_err:
+LA r1,0xFFFFFFFF
+nsv_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; nfs_sync: mutation hook used by create/write/delete/rename/truncate.
+; A missing disk is not an error for RAM-only callers.
+nfs_sync:
+ST r15,r14,0
+ADD r14,r14,r13
+CALL @nfs_save
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -642,6 +690,7 @@ JMP[EQ] @nld_n
 LA r3,401032
 CMP r2,r3
 JMP[GT] @nld_n
+ST r2,r0,#W_DK_C
 ADDI r2,r2,127
 SHR r2,r2,7
 ST r2,r0,#W_DK_N
@@ -665,6 +714,32 @@ ADD r1,r1,r13
 ST r1,r0,#W_DK_I
 JMP @nld_l
 nld_y:
+; The outer header is not enough: the loaded NPAF image must have a sane
+; header and its arena/limit must account for every word nfs_save wrote.
+; NFS_MAX is part of the on-disk layout (entry table size), so a snapshot
+; from a differently configured build is rejected rather than parsed.
+LA r1,#NFS_BASE
+LD r2,r1,0
+LA r3,0x4E504146
+CMP r2,r3
+JMP[NE] @nld_n
+LD r2,r1,4
+MOVI r3,#NFS_MAX
+CMP r2,r3
+JMP[NE] @nld_n
+LD r3,r1,2
+LD r4,r1,3
+CMP r3,r4
+JMP[GT] @nld_n
+LA r5,#NFS_CAP
+CMP r4,r5
+JMP[GT] @nld_n
+SHL r5,r2,4
+ADDI r5,r5,8
+ADD r5,r5,r3
+LD r6,r0,#W_DK_C
+CMP r5,r6
+JMP[NE] @nld_n
 MOVI r1,1
 JMP @nld_d
 nld_n:

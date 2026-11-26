@@ -73,8 +73,15 @@ CALL @fb_init_mode
 CALL @kbd_init
 CALL @wm_init
 CALL @g64_init
+; Boot the live store if a valid NPAF snapshot is on the ATA disk.  The
+; first boot (or a blank/corrupt disk) formats RAM and seeds the committed
+; nanfs/ root; later boots keep runtime files and edits.
+CALL @nfs_load
+CMP r1,r0
+JMP[NE] @g_nfs_ready
 CALL @nfs_format
 CALL @rootfs_seed_all
+g_nfs_ready:
 ST r0,r0,@g_quit
 ST r0,r0,@g_move
 ST r0,r0,@g_cnt
