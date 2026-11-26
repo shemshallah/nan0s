@@ -1288,3 +1288,8 @@ Proof.
 Qed.
 
 Print Assumptions lp_exec_SHL_refines.
+
+Search (N.to_nat (N.land _ _)).
+Search (N.to_nat (N.lor _ _)).
+Search (N.to_nat (N.lxor _ _)).
+Search (N.to_nat (N.ldiff _ _)).
