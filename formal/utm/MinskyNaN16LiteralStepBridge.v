@@ -708,7 +708,7 @@ Proof.
         (shr32N (lget_regN (lp_reg L) a) (imm mod 32)))
         by (rewrite Hlen; lia).
       rewrite (to_nat_shr32N (lget_regN (lp_reg L) a) (imm mod 32) Hx).
-      replace (imm mod 32) with imm by (apply Nat.mod_small; lia).
+      rewrite Nat.mod_small by exact Himm.
       rewrite HA'.
       rewrite Nat.mod_small.
       2:{ eapply Nat.le_lt_trans.
@@ -753,7 +753,7 @@ Proof.
     rewrite HA'.
     rewrite <- N_eqb_to_nat.
     rewrite (to_nat_shr32N (lget_regN (lp_reg L) a) (imm mod 32) Hx).
-    replace (imm mod 32) with imm by (apply Nat.mod_small; lia).
+    rewrite Nat.mod_small by exact Himm.
     reflexivity.
   - change (false =
             Nat.eqb
@@ -775,7 +775,7 @@ Proof.
         (shr32N (lget_regN (lp_reg L) a) (imm mod 32)))
         by (rewrite Hlen; lia).
       rewrite (to_nat_shr32N (lget_regN (lp_reg L) a) (imm mod 32) Hx).
-      replace (imm mod 32) with imm by (apply Nat.mod_small; lia).
+      rewrite Nat.mod_small by exact Himm.
       eapply Nat.le_lt_trans.
       * apply Nat.shiftr_upper_bound.
       * exact (Hbound a Ha).
