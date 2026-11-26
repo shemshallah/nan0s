@@ -17,6 +17,7 @@
 
 .include "../lib/nanpipe.nas"
 .include "../lib/nixfd.nas"
+.include "../lib/nixcmds.nas"
 
 .equ NX_STACK   0x250000             ; words, below the heap
 .equ NX_SCAN    0x200                ; low globals, direct LD/ST
@@ -90,6 +91,15 @@
 .equ NX_G_PUTC_CH 0x281
 .equ NX_G_PUTS_STR 0x282
 .equ NX_G_EPUTC_CH 0x283
+; Line-filter integration (nixcmds.nas).
+.equ NX_F_CMD   0x2C0
+.equ NX_F_PATH  0x2C1
+.equ NX_F_COUNT 0x2C2
+.equ NX_F_FLAGS 0x2C3
+.equ NX_F_FD    0x2C4
+.equ NX_F_PAT   0x2C5
+.equ NX_F_FILE  0x2C6
+.equ NX_F_TMP   0x2C7
 
 ; POSIX variable lane: 16 entries of 16-byte name + 64-byte value.  The
 ; table and its string scratches are byte addressed and live above the GUI
@@ -491,6 +501,31 @@ nx_dispatch:
   CALL @nx_streq
   CMP r1,r0
   JMP[NE] @nx_kill
+  LA r1,#NX_CMD
+  LA r2,@nx_c_head
+  CALL @nx_streq
+  CMP r1,r0
+  JMP[NE] @nx_head
+  LA r1,#NX_CMD
+  LA r2,@nx_c_tail
+  CALL @nx_streq
+  CMP r1,r0
+  JMP[NE] @nx_tail
+  LA r1,#NX_CMD
+  LA r2,@nx_c_grep
+  CALL @nx_streq
+  CMP r1,r0
+  JMP[NE] @nx_grep
+  LA r1,#NX_CMD
+  LA r2,@nx_c_sort
+  CALL @nx_streq
+  CMP r1,r0
+  JMP[NE] @nx_sort
+  LA r1,#NX_CMD
+  LA r2,@nx_c_uniq
+  CALL @nx_streq
+  CMP r1,r0
+  JMP[NE] @nx_uniq
   LA r1,#NX_CMD
   LA r2,@nx_c_read
   CALL @nx_streq
@@ -2215,6 +2250,230 @@ nx_wc_bad:
   ST r1,r0,#NX_STATUS
   JMP @nx_done
 
+nx_head:
+  MOVI r1,0
+  JMP @nx_filter
+nx_tail:
+  MOVI r1,1
+  JMP @nx_filter
+nx_grep:
+  MOVI r1,2
+  JMP @nx_filter
+nx_sort:
+  MOVI r1,3
+  JMP @nx_filter
+nx_uniq:
+  MOVI r1,4
+  JMP @nx_filter
+
+; nx_filter_path: r1=arg byte -> r1=0 for stdin, else absolute NX_P1.
+nx_filter_path:
+  ST r15,r14,0
+  ADDI r14,r14,9
+  LDB r2,r1,0
+  CMP r2,r0
+  JMP[EQ] @nx_fp_zero
+  LA r2,#NX_P1
+  CALL @nx_abspath
+  LA r1,#NX_P1
+  JMP @nx_fp_d
+nx_fp_zero:
+  MOVI r1,0
+nx_fp_d:
+  ADDI r14,r14,-9
+  LD r15,r14,0
+  RET
+
+; nx_filter: head/tail/grep/sort/uniq -> nxc_run.
+nx_filter:
+  ST r15,r14,0
+  ADDI r14,r14,9
+  ST r1,r0,#NX_F_CMD
+  LA r1,#NX_A1
+  CALL @nx_next_arg
+  LA r1,#NX_A2
+  CALL @nx_next_arg
+  LA r1,#NX_A3
+  CALL @nx_next_arg
+  LD r5,r0,#NX_F_CMD
+  MOVI r6,2
+  CMP r5,r6
+  JMP[EQ] @nx_f_grep
+  MOVI r6,3
+  CMP r5,r6
+  JMP[GE] @nx_f_list
+
+  ; head/tail
+  ST r0,r0,#NX_F_COUNT
+  LA r1,#NX_A1
+  LA r2,@nx_s_opt_n
+  CALL @nx_streq
+  CMP r1,r0
+  JMP[EQ] @nx_f_ht_plain
+  LA r2,#NX_A2
+  ST r2,r0,#NX_F_COUNT
+  LA r1,#NX_A3
+  JMP @nx_f_path
+nx_f_ht_plain:
+  LA r3,#NX_A1
+  LDB r4,r3,0
+  MOVI r5,45
+  CMP r4,r5
+  JMP[NE] @nx_f_ht_plain2
+  LDB r4,r3,1
+  MOVI r5,110
+  CMP r4,r5
+  JMP[NE] @nx_f_ht_plain2
+  LDB r4,r3,2
+  CMP r4,r0
+  JMP[EQ] @nx_f_ht_plain2
+  ADDI r2,r3,2
+  ST r2,r0,#NX_F_COUNT
+  LA r1,#NX_A2
+  JMP @nx_f_path
+nx_f_ht_plain2:
+  LA r1,#NX_A1
+nx_f_path:
+  CALL @nx_filter_path
+  ST r1,r0,#NX_F_PATH
+  LD r1,r0,#NX_F_CMD
+  LD r2,r0,#NX_F_PATH
+  LD r3,r0,#NX_F_COUNT
+  MOVI r4,0
+  CALL @nxc_run
+  JMP @nx_f_done
+
+; nx_f_parse_opt: r1=byte option token; sets NX_F_FLAGS for -v/-n/-vn/-nv.
+nx_f_parse_opt:
+  ST r15,r14,0
+  ADDI r14,r14,9
+  ST r1,r0,#NX_F_TMP
+  LD r1,r0,#NX_F_TMP
+  LA r2,@nx_s_opt_v
+  CALL @nx_streq
+  CMP r1,r0
+  JMP[EQ] @nx_fpo_n
+  MOVI r4,1
+  ST r4,r0,#NX_F_FLAGS
+  JMP @nx_fpo_d
+nx_fpo_n:
+  LD r1,r0,#NX_F_TMP
+  LA r2,@nx_s_opt_n
+  CALL @nx_streq
+  CMP r1,r0
+  JMP[EQ] @nx_fpo_vn
+  MOVI r4,2
+  ST r4,r0,#NX_F_FLAGS
+  JMP @nx_fpo_d
+nx_fpo_vn:
+  LD r1,r0,#NX_F_TMP
+  LA r2,@nx_s_opt_vn
+  CALL @nx_streq
+  CMP r1,r0
+  JMP[EQ] @nx_fpo_nv
+  MOVI r4,3
+  ST r4,r0,#NX_F_FLAGS
+  JMP @nx_fpo_d
+nx_fpo_nv:
+  LD r1,r0,#NX_F_TMP
+  LA r2,@nx_s_opt_nv
+  CALL @nx_streq
+  CMP r1,r0
+  JMP[EQ] @nx_fpo_d
+  MOVI r4,3
+  ST r4,r0,#NX_F_FLAGS
+nx_fpo_d:
+  ADDI r14,r14,-9
+  LD r15,r14,0
+  RET
+
+nx_f_grep:
+  ; default: pattern = A1, no file, no flags
+  LA r3,#NX_A1
+  ST r3,r0,#NX_F_PAT
+  ST r0,r0,#NX_F_FILE
+  ST r0,r0,#NX_F_FLAGS
+  LDB r4,r3,0
+  CMP r4,r0
+  JMP[EQ] @nx_f_grep_run
+  MOVI r5,45
+  CMP r4,r5
+  JMP[EQ] @nx_f_g_opt_first
+  ; pattern A1, optional option/file in A2
+  LA r1,#NX_A2
+  LDB r4,r1,0
+  CMP r4,r0
+  JMP[EQ] @nx_f_grep_run
+  MOVI r5,45
+  CMP r4,r5
+  JMP[EQ] @nx_f_g_opt_second
+  JMP @nx_f_g_file
+nx_f_g_opt_first:
+  LA r1,#NX_A1
+  CALL @nx_f_parse_opt
+  LA r1,#NX_A2
+  ST r1,r0,#NX_F_PAT
+  LA r1,#NX_A3
+  JMP @nx_f_g_file
+nx_f_g_opt_second:
+  LA r1,#NX_A2
+  CALL @nx_f_parse_opt
+  LA r1,#NX_A3
+nx_f_g_file:
+  CALL @nx_filter_path
+  ST r1,r0,#NX_F_FILE
+  CMP r1,r0
+  JMP[EQ] @nx_f_grep_run
+  ADD r1,r1,r0
+  MOVI r2,0
+  CALL @nfd_open
+  LA r4,0xFFFFFFFF
+  CMP r1,r4
+  JMP[EQ] @nx_f_bad
+  ST r1,r0,#NX_F_FD
+  ADD r1,r1,r0
+  MOVI r2,0
+  CALL @nfd_dup2
+  LD r1,r0,#NX_F_FD
+  CALL @nfd_close
+nx_f_grep_run:
+  MOVI r1,2
+  LD r2,r0,#NX_F_PAT
+  MOVI r3,0
+  LD r4,r0,#NX_F_FLAGS
+  CALL @nxc_run
+  JMP @nx_f_done
+
+nx_f_list:
+  ST r0,r0,#NX_F_FLAGS
+  LA r1,#NX_A1
+  LD r5,r0,#NX_F_CMD
+  MOVI r6,4
+  CMP r5,r6
+  JMP[NE] @nx_f_list_path
+  LA r2,@nx_s_opt_c
+  CALL @nx_streq
+  CMP r1,r0
+  JMP[EQ] @nx_f_list_path
+  MOVI r4,4
+  ST r4,r0,#NX_F_FLAGS
+  LA r1,#NX_A2
+nx_f_list_path:
+  CALL @nx_filter_path
+  ST r1,r0,#NX_F_PATH
+  LD r1,r0,#NX_F_CMD
+  LD r2,r0,#NX_F_PATH
+  MOVI r3,0
+  LD r4,r0,#NX_F_FLAGS
+  CALL @nxc_run
+  JMP @nx_f_done
+
+nx_f_bad:
+  LA r1,@nx_s_err
+  CALL @nx_eputs
+nx_f_done:
+  JMP @nx_done
+
 nx_stat:
   LA r1,#NX_A1
   CALL @nx_next_arg
@@ -2454,6 +2713,27 @@ nx_c_env:
 .str "env"
 nx_c_read:
 .str "read"
+nx_c_head:
+.str "head"
+nx_c_tail:
+.str "tail"
+nx_c_grep:
+.str "grep"
+nx_c_sort:
+.str "sort"
+nx_c_uniq:
+.str "uniq"
+
+nx_s_opt_n:
+.str "-n"
+nx_s_opt_v:
+.str "-v"
+nx_s_opt_vn:
+.str "-vn"
+nx_s_opt_nv:
+.str "-nv"
+nx_s_opt_c:
+.str "-c"
 nx_c_sync:
 .str "sync"
 nx_c_help:
