@@ -791,6 +791,17 @@ Print Assumptions lp_exec_SHR_refines.
 
 (** ** ADD *)
 
+Lemma to_nat_land_mask :
+  forall x, N.to_nat (N.land x word_mask32) = N.to_nat x mod 2 ^ 32.
+Proof.
+  intros x. unfold word_mask32.
+  rewrite ones32.
+  rewrite N.land_ones.
+  rewrite N2Nat.inj_mod.
+  rewrite N2Nat.inj_pow.
+  reflexivity.
+Qed.
+
 Lemma to_nat_mod32N :
   forall x, N.to_nat (mod32N x) = N.to_nat x mod 2 ^ 32.
 Proof.
@@ -969,7 +980,7 @@ Lemma to_nat_sub32N :
 Proof.
   intros x y Hx Hle.
   unfold sub32N.
-  rewrite to_nat_mod32N.
+  rewrite to_nat_land_mask.
   rewrite N2Nat.inj_add.
   rewrite N2Nat.inj_sub.
   rewrite N_to_nat_two32.
