@@ -1119,7 +1119,7 @@ Proof.
     rewrite pack_k_lf.
     rewrite HA', HB'.
     rewrite N_ltb_to_nat.
-    symmetry. apply Nat.ltb_ge. exact Hle.
+    reflexivity.
   - apply pack_k_lt_4.
   - change (vm_halted vm = lp_halted L). exact Hhalt.
   - intros i Hi.
