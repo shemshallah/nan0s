@@ -1056,7 +1056,7 @@ Proof.
       rewrite HA', HB'.
       rewrite Nat.mod_small.
       2:{ apply Nat.lt_le_trans with (N.to_nat (lget_regN (lp_reg L) a)).
-          - apply Nat.sub_le.
+          - lia.
           - exact (Hbound a Ha). }
       reflexivity.
     + rewrite (set_reg_neq _ _ _ _ Hne).
@@ -1134,7 +1134,7 @@ Proof.
         by (rewrite Hlen; lia).
       rewrite (to_nat_sub32N _ _ Hx Hle).
       apply Nat.lt_le_trans with (N.to_nat (lget_regN (lp_reg L) a)).
-      * apply Nat.sub_le.
+      * lia.
       * exact (Hbound a Ha).
     + rewrite (lget_regN_lset_word_neq (lp_reg L) d
         (sub32N (lget_regN (lp_reg L) a)
