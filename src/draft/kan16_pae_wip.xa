@@ -1,3 +1,5 @@
+; SUPERSEDED by src/native/kan16_pae.xa (the promoted PAE kernel).
+; This draft is kept for history and is not built by tools/pae16_asm.sh.
 ; kan16.xa - NaN16/NaNVM1 native core, BARE flat 32-bit x86, assembled by nasm1.
 ; The ONE host file; everything else is NaN16 guest code. Transcribed from src/native/nan16.s.
 .base 0x10000

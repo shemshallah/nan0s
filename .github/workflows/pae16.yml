@@ -1,0 +1,117 @@
+name: PAE 16 GB bank window
+
+# Real QEMU gates for the PAE kernel (src/native/kan16_pae.xa).  The 7 GiB job
+# runs on a standard ubuntu-latest runner (16 GiB RAM).  The 16 GiB job is
+# separate and manual: it needs a 32 GiB+ host (or a larger runner); the guard
+# step fails rather than reporting a PASS on a standard runner.
+
+on:
+  push:
+    paths:
+      - "src/native/kan16_pae.xa"
+      - "src/lib/memmap_defs.nas"
+      - "src/tests/pae16_test.nas"
+      - "tools/pae16_asm.sh"
+      - "tools/pae16_gate.sh"
+      - "src/boot/kboot0.xa"
+      - "tools/mkimg.awk"
+      - "tools/nmk.awk"
+      - "spec/MEMMAP.md"
+      - ".github/workflows/pae16.yml"
+  pull_request:
+    paths:
+      - "src/native/kan16_pae.xa"
+      - "src/lib/memmap_defs.nas"
+      - "src/tests/pae16_test.nas"
+      - "tools/pae16_asm.sh"
+      - "tools/pae16_gate.sh"
+      - "src/boot/kboot0.xa"
+      - "tools/mkimg.awk"
+      - "tools/nmk.awk"
+      - "spec/MEMMAP.md"
+      - ".github/workflows/pae16.yml"
+  workflow_dispatch:
+    inputs:
+      run_16g:
+        description: "Run the separate 16 GiB job (requires a 32 GiB+ host)"
+        type: boolean
+        default: false
+      runner_16g:
+        description: "Runner label for the 16 GiB job (blank = ubuntu-latest; guard will refuse)"
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  pae-7g:
+    name: PAE 7 GiB QEMU (standard runner)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gawk xxd qemu-system-x86
+      - name: Build and boot the PAE kernel at 7 GiB
+        env:
+          PAE_MEM_MB: "7168"
+          PAE_MIN_BANKS: "7"
+          PAE_MIN_USABLE_MB: "7000"
+          PAE_REQUIRE_E820: "1"
+          PAE_REQUIRE_KIND2: "1"
+          PAE_MIN_MAP_ENTRIES: "2"
+          PAE_SECS: "300"
+          PAE_KEEP: "1"
+        run: sh tools/pae16_gate.sh
+      - name: Upload serial transcript
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pae-7g-serial
+          path: |
+            tmp/pae16_gate/ser.txt
+            tmp/pae16_gate/qemu.log
+          if-no-files-found: warn
+
+  pae-16g:
+    name: PAE 16 GiB QEMU (32 GiB+ runner, manual)
+    if: github.event_name == 'workflow_dispatch' && inputs.run_16g
+    runs-on: ${{ inputs.runner_16g || 'ubuntu-latest' }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require a 32 GiB+ host (guard)
+        run: |
+          mib=$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo)
+          echo "host RAM: ${mib} MiB"
+          if [ "$mib" -lt 20000 ]; then
+            echo "::error::PAE 16 GiB needs a 32 GiB+ host (got ${mib} MiB). Use a larger runner or run this job manually on such a host."
+            exit 1
+          fi
+      - name: Install QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gawk xxd qemu-system-x86
+      - name: Build and boot the PAE kernel at 16 GiB
+        env:
+          PAE_MEM_MB: "16384"
+          PAE_MIN_BANKS: "16"
+          PAE_MIN_USABLE_MB: "16000"
+          PAE_REQUIRE_E820: "1"
+          PAE_REQUIRE_KIND2: "1"
+          PAE_MIN_MAP_ENTRIES: "2"
+          PAE_SECS: "600"
+          PAE_KEEP: "1"
+        run: sh tools/pae16_gate.sh
+      - name: Upload serial transcript
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pae-16g-serial
+          path: |
+            tmp/pae16_gate/ser.txt
+            tmp/pae16_gate/qemu.log
+          if-no-files-found: warn
