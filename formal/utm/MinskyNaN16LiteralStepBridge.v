@@ -621,6 +621,3 @@ Proof.
 Qed.
 
 Print Assumptions lp_exec_RETP_refines.
-
-Search N.shiftr.
-Search N.land.
