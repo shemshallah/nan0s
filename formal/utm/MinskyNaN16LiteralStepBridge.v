@@ -442,7 +442,7 @@ Lemma N_ltb_to_nat :
 Proof.
   intros x y.
   destruct (N.ltb x y) eqn:E.
-  - apply N.ltb_lt in E. apply Nat.ltb_lt.
+  - apply N.ltb_lt in E. symmetry. apply Nat.ltb_lt.
     apply N_lt_to_nat_lt. exact E.
   - symmetry. apply Nat.ltb_ge. apply Nat.le_of_not_lt. intro H.
     assert (Hlt : (x < y)%N) by (apply N_lt_of_to_nat_lt; exact H).
