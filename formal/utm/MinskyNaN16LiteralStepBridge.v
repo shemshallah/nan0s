@@ -88,7 +88,7 @@ Proof.
       rewrite (lget_regN_lset_word_eq (lp_reg L) d (N.of_nat imm))
         by (rewrite Hlen; lia).
       rewrite Nat2N.id.
-      rewrite Nat.mod_small by exact Himm. reflexivity.
+      rewrite Himm32. reflexivity.
     + rewrite (set_reg_neq _ _ _ _ Hne).
       rewrite (lget_regN_lset_word_neq (lp_reg L) d (N.of_nat imm) i Hne).
       exact (Hregs i Hi).
@@ -690,6 +690,8 @@ Proof.
   { unfold l_reg, lp_to_LState in HA. exact HA. }
   assert (Hx : (lget_regN (lp_reg L) a < 2 ^ 32)%N)
     by (apply N_lt_two32_of_nat; exact (Hbound a Ha)).
+  assert (Himm32 : imm mod 32 = imm)
+    by (apply Nat.mod_small; exact Himm).
   unfold lp_exec, exec_instr_p.
   rewrite Hnth. cbn.
   unfold R, lp_to_LState.
@@ -708,7 +710,7 @@ Proof.
         (shr32N (lget_regN (lp_reg L) a) (imm mod 32)))
         by (rewrite Hlen; lia).
       rewrite (to_nat_shr32N (lget_regN (lp_reg L) a) (imm mod 32) Hx).
-      rewrite Nat.mod_small by exact Himm.
+      rewrite Himm32.
       rewrite HA'.
       rewrite Nat.mod_small.
       2:{ eapply Nat.le_lt_trans.
@@ -753,7 +755,7 @@ Proof.
     rewrite HA'.
     rewrite <- N_eqb_to_nat.
     rewrite (to_nat_shr32N (lget_regN (lp_reg L) a) (imm mod 32) Hx).
-    rewrite Nat.mod_small by exact Himm.
+    rewrite Himm32.
     reflexivity.
   - change (false =
             Nat.eqb
@@ -775,7 +777,7 @@ Proof.
         (shr32N (lget_regN (lp_reg L) a) (imm mod 32)))
         by (rewrite Hlen; lia).
       rewrite (to_nat_shr32N (lget_regN (lp_reg L) a) (imm mod 32) Hx).
-      rewrite Nat.mod_small by exact Himm.
+      rewrite Himm32.
       eapply Nat.le_lt_trans.
       * apply Nat.shiftr_upper_bound.
       * exact (Hbound a Ha).
