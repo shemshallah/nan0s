@@ -13,6 +13,9 @@
 ;   nobj_revoke r1=cap -> new generation, old caps invalidated
 ;   nobj_release r1=cap -> 0 / -1
 ;   nobj_check  r1=cap r2=required rights -> entry ptr or 0
+;   nobj_set_io r1=save hook r2=load hook
+;   nobj_save   r1=path byte -> 0/-1
+;   nobj_load   r1=path byte -> 0/-1
 ;
 ; Capability word (32-bit payload value):
 ;   bits 31..24 0xCA
@@ -26,7 +29,7 @@
 ;
 ; Cross-call state lives in globals, never in caller stack words above SP:
 ; NANIX callees are allowed to overwrite those.  LD/ST have a 16-bit immediate,
-; so these words are deliberately in the reserved low block 0x3A0..0x3A9;
+; so these words are deliberately in the reserved low block 0x3A0..0x3D2;
 ; high buffers must be addressed through an LA base register.
 
 .equ NOBJ_TAB     0x340000
@@ -45,6 +48,12 @@
 .equ NOBJ_G_RIGHT    0x3A7
 .equ NOBJ_G_TMP    0x3A8
 .equ NOBJ_G_TMP2    0x3A9
+.equ NOBJ_G_SRC     0x3AA
+.equ NOBJ_G_WORDS   0x3AB
+.equ NOBJ_G_IDX     0x3AC
+.equ NOBJ_HOOK_SAVE 0x3D0
+.equ NOBJ_HOOK_LOAD 0x3D1
+.equ NOBJ_G_PATH    0x3D2
 .equ NOBJ_R_READ  1
 .equ NOBJ_R_WRITE 2
 .equ NOBJ_R_EXEC  4
@@ -401,6 +410,119 @@ nobj_rv_gen:
 nobj_rv_n:
   MOVI r1,0
 nobj_rv_d:
+  SUB r14,r14,r13
+  LD r15,r14,0
+  RET
+
+; nobj_set_io: r1=save hook r2=load hook.  Hooks are called as:
+;   save r1=path r2=src word ptr r3=words -> r1=0/-1
+;   load r1=path -> r1=src word ptr r2=words / 0
+nobj_set_io:
+  ST r1,r0,#NOBJ_HOOK_SAVE
+  ST r2,r0,#NOBJ_HOOK_LOAD
+  MOVI r1,0
+  RET
+
+; nobj_save: r1=path byte -> 0/-1
+nobj_save:
+  ST r15,r14,0
+  ADD r14,r14,r13
+  ST r1,r0,#NOBJ_G_PATH
+  LD r3,r0,#NOBJ_HOOK_SAVE
+  CMP r3,r0
+  JMP[EQ] @nobj_sv_n
+  LD r1,r0,#NOBJ_G_PATH
+  LA r2,#NOBJ_TAB
+  MOVI r3,#NOBJ_TOTAL
+  LD r4,r0,#NOBJ_HOOK_SAVE
+  CALLR r4
+  JMP @nobj_sv_d
+nobj_sv_n:
+  LA r1,0xFFFFFFFF
+nobj_sv_d:
+  SUB r14,r14,r13
+  LD r15,r14,0
+  RET
+
+; nobj_load: r1=path byte -> 0/-1
+nobj_load:
+  ST r15,r14,0
+  ADD r14,r14,r13
+  ST r1,r0,#NOBJ_G_PATH
+  LD r3,r0,#NOBJ_HOOK_LOAD
+  CMP r3,r0
+  JMP[EQ] @nobj_ld_n
+  LD r1,r0,#NOBJ_G_PATH
+  CALLR r3
+  CMP r1,r0
+  JMP[EQ] @nobj_ld_n
+  MOVI r3,#NOBJ_TOTAL
+  CMP r2,r3
+  JMP[NE] @nobj_ld_n
+  ST r1,r0,#NOBJ_G_SRC
+  ST r2,r0,#NOBJ_G_WORDS
+  ; validate entries before replacing the live table
+  MOVI r3,0
+  ST r3,r0,#NOBJ_G_IDX
+nobj_ld_l:
+  LD r3,r0,#NOBJ_G_IDX
+  MOVI r4,#NOBJ_MAX
+  CMP r3,r4
+  JMP[GE] @nobj_ld_copy
+  MOVI r4,#NOBJ_ENT
+  MUL r4,r3,r4
+  LD r5,r0,#NOBJ_G_SRC
+  ADD r5,r5,r4
+  ST r5,r0,#NOBJ_G_ENT
+  LD r4,r5,0
+  CMP r4,r0
+  JMP[EQ] @nobj_ld_next
+  ; magic
+  LD r6,r5,0
+  CALL @nobj_magic
+  CMP r6,r1
+  JMP[NE] @nobj_ld_n
+  ; id = index + 1
+  LD r5,r0,#NOBJ_G_ENT
+  LD r4,r5,1
+  LD r3,r0,#NOBJ_G_IDX
+  ADD r3,r3,r13
+  CMP r4,r3
+  JMP[NE] @nobj_ld_n
+  ; generation nonzero
+  LD r4,r5,2
+  CMP r4,r0
+  JMP[EQ] @nobj_ld_n
+  ; payload <= 24 words
+  LD r4,r5,4
+  MOVI r6,24
+  CMP r4,r6
+  JMP[GT] @nobj_ld_n
+nobj_ld_next:
+  LD r3,r0,#NOBJ_G_IDX
+  ADD r3,r3,r13
+  ST r3,r0,#NOBJ_G_IDX
+  JMP @nobj_ld_l
+nobj_ld_copy:
+  LD r1,r0,#NOBJ_G_SRC
+  LA r2,#NOBJ_TAB
+  MOVI r3,#NOBJ_TOTAL
+  MOVI r4,0
+nobj_ld_cp:
+  CMP r4,r3
+  JMP[GE] @nobj_ld_ok
+  LD r5,r1,0
+  ST r5,r2,0
+  ADD r1,r1,r13
+  ADD r2,r2,r13
+  ADD r4,r4,r13
+  JMP @nobj_ld_cp
+nobj_ld_ok:
+  MOVI r1,0
+  JMP @nobj_ld_d
+nobj_ld_n:
+  LA r1,0xFFFFFFFF
+nobj_ld_d:
   SUB r14,r14,r13
   LD r15,r14,0
   RET

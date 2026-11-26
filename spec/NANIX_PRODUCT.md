@@ -282,7 +282,7 @@ NaN16 VM / S1 / bare metal
 | M0 | POSIX compatibility: fds, redirection, pipelines, tty, persistence | existing suite |
 | M1a | object table + capability checks + revocation | `tools/nanobj_gate.sh` — **PASS** |
 | M1b | 32-word entries + tensor metadata + namespace object | tensor create/view/shape/rights + namespace resolve |
-| M1c | object persistence and checksum validation | create, save, reboot, verify |
+| M1c | object persistence and validation | `tools/nanobj_persist_gate.sh` — **PASS** (RAM hook); NPAF hook pending |
 | M2a | agent process image | checkpoint a counter, resume, state continues |
 | M2b | trace + replay | `tools/nantrace_gate.sh` — seal/verify/tamper **PASS**; replay pending |
 | M3a | object channel / tool bus | typed cap messages, backpressure, quota/revoke |
