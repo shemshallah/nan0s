@@ -3,6 +3,7 @@
 set -e
 cd "$(dirname "$0")/.."
 sh tools/mkbase.sh
+sh tools/rootfs_seed.sh
 awk -f tools/nmk.awk -v CMD=emit src/museum/museum.nas > src/nan/museum.nan
 # Reassemble the actual GUI source before packing it into the boot image.
 # Previously builds reused a stale checked-in gui_cart.nan, so fixing a .nas

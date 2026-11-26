@@ -74,34 +74,7 @@ CALL @kbd_init
 CALL @wm_init
 CALL @g64_init
 CALL @nfs_format
-LA r1,@fs_hello_path
-SHL r1,r1,2
-LA r2,@fs_hello_src
-CALL @fs_seed
-LA r1,@fs_donut_path
-SHL r1,r1,2
-LA r2,@fs_donut_src
-CALL @fs_seed
-LA r1,@fs_donutf_path
-SHL r1,r1,2
-LA r2,@fs_donutf_src
-CALL @fs_seed
-LA r1,@fs_donutspin_path
-SHL r1,r1,2
-LA r2,@fs_donutspin_src
-CALL @fs_seed
-LA r1,@fs_spin_path
-SHL r1,r1,2
-LA r2,@fs_donutspin_src
-CALL @fs_seed
-LA r1,@fs_inc_path
-SHL r1,r1,2
-LA r2,@fs_inc_src
-CALL @fs_seed
-LA r1,@fs_useinc_path
-SHL r1,r1,2
-LA r2,@fs_useinc_src
-CALL @fs_seed
+CALL @rootfs_seed_all
 ST r0,r0,@g_quit
 ST r0,r0,@g_move
 ST r0,r0,@g_cnt
@@ -8637,25 +8610,6 @@ FSDEC:
 .word 0,0,0,0,0,0,0,0,0,0
 fs_s_prompt:
 .str "> "
-fs_hello_path:
-.str "/hello.c"
-fs_hello_src:
-.str "int main(void){ printf(\"hello from /hello.c\\n\"); return 0; }\n"
-
-fs_donut_path:
-.str "/donut.c"
-fs_donut_src:
-.str "int k;\nint main(){\n  float A=0,B=0.3,i,j,z[1760];\n  char b[1760];\n  printf(\"\\x1b[2J\");\n  memset(b,32,1760);\n  memset(z,0,7040);\n  for(j=0;6.28>j;j+=0.07)\n    for(i=0;6.28>i;i+=0.02){\n      float c=sin(i),d=cos(j),e=sin(A),f=sin(j),g=cos(A),h=d+2,D=1/(c*h*e+f*g+5),l=cos(i),m=cos(B),n=sin(B),t=c*h*g-f*e;\n      int x=40+30*D*(l*h*m-t*n),y=12+15*D*(l*h*n+t*m),o=x+80*y,N=8*((f*e-c*d*g)*m-c*d*e-f*g-l*d*n);\n      if(22>y&&y>0&&x>0&&80>x&&D>z[o]){z[o]=D;b[o]=\".,-~:;=!*#$@\"[N>0?N:0];}\n    }\n  printf(\"\\x1b[H\");\n  for(k=0;1761>k;k++) putchar(k%80?b[k]:10);\n  return 0;\n}\n"
-fs_donutf_path:
-.str "/donut_fast.c"
-fs_donutf_src:
-.str "int k;\nint main(){\n  float A=0,B=0.3,i,j,z[1760];\n  char b[1760];\n  printf(\"\\x1b[2J\");\n  memset(b,32,1760);\n  memset(z,0,7040);\n  for(j=0;6.28>j;j+=0.05)\n    for(i=0;6.28>i;i+=0.15){\n      float c=sin(i),d=cos(j),e=sin(A),f=sin(j),g=cos(A),h=d+2,D=1/(c*h*e+f*g+5),l=cos(i),m=cos(B),n=sin(B),t=c*h*g-f*e;\n      int x=40+30*D*(l*h*m-t*n),y=12+15*D*(l*h*n+t*m),o=x+80*y,N=8*((f*e-c*d*g)*m-c*d*e-f*g-l*d*n);\n      if(22>y&&y>0&&x>0&&80>x&&D>z[o]){z[o]=D;b[o]=\".,-~:;=!*#$@\"[N>0?N:0];}\n    }\n  printf(\"\\x1b[H\");\n  for(k=0;1761>k;k++) putchar(k%80?b[k]:10);\n  return 0;\n}\n"
-fs_donutspin_path:
-.str "/donut_spin.c"
-fs_spin_path:
-.str "/spin.c"
-fs_donutspin_src:
-.str "int k;\nint main(){\n  float A=0,B=0.3,i,j,z[1760];\n  char b[1760];\n  printf(\"\\x1b[2J\");\n  while(1){\n  memset(b,32,1760);\n  memset(z,0,7040);\n  for(j=0;6.28>j;j+=0.05)\n    for(i=0;6.28>i;i+=0.15){\n      float c=sin(i),d=cos(j),e=sin(A),f=sin(j),g=cos(A),h=d+2,D=1/(c*h*e+f*g+5),l=cos(i),m=cos(B),n=sin(B),t=c*h*g-f*e;\n      int x=40+30*D*(l*h*m-t*n),y=12+15*D*(l*h*n+t*m),o=x+80*y,N=8*((f*e-c*d*g)*m-c*d*e-f*g-l*d*n);\n      if(22>y&&y>0&&x>0&&80>x&&D>z[o]){z[o]=D;b[o]=\".,-~:;=!*#$@\"[N>0?N:0];}\n    }\n  printf(\"\\x1b[H\");\n  for(k=0;1761>k;k++) putchar(k%80?b[k]:10);\n  A+=0.04; B+=0.02;\n  }\n  return 0;\n}\n"
 ; ================================================================== INCLUDE EXPANDER
 ; fs_match: r1=byte src r2=packed string -> r1=1/0, r2=advanced source
 fs_match:
@@ -8887,15 +8841,6 @@ fx_tmp:
 fx_found:
 .word 0
 
-fs_inc_path:
-.str "/inc.h"
-fs_inc_src:
-.str "int add(int a,int b){ return a+b; }\n"
-fs_useinc_path:
-.str "/useinc.c"
-fs_useinc_src:
-.str "#include \"/inc.h\"\nint main(void){ printf(\"%d\\n\", add(20,22)); return 0; }\n"
-
 ; Native S1 browser I/O metadata and click hit testing. Browser only supplies
 ; physical input; window focus, geometry and dispatch belong to the guest.
 g64_init:
@@ -9024,3 +8969,5 @@ g64_idx:
 .word 0
 g64_id:
 .word 0
+
+.include "../nan/rootfs_seed.nas"

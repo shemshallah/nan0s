@@ -1,0 +1,3 @@
+Welcome to NANIX on NaN/0S.
+The .c files in / are demo inputs for the raw-NaN16 ncc compiler.
+System code is .nas/NaN16; C here is data, not the OS.

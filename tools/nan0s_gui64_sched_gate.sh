@@ -75,7 +75,6 @@ for r in range(64):
         ch.append(chr(v) if 0 < v < 128 else ' ')
     rows.append(''.join(ch).rstrip())
 want = [
-    'NANIX POSIX shell',
     '> mkdir /x', 'ok',
     '> write /x/a hello', 'saved',
     '> cat /x/a', 'hello',

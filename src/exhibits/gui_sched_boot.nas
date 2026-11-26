@@ -262,7 +262,7 @@ gui_desc_desktop:
   .word @cart_entry, 0x59000, 0, 0, 1
   .word 0, #KERNEL_MEM, 4, 7
 gui_desc_shell:
-  .word @gui_shell_proc, #SHELL_STACK, 0, 0, 1
+  .word @nx_main, #SHELL_STACK, 0, 0, 1
   .word 0, #KERNEL_MEM, 4, 7
 
 ; Boot scratch/evidence published for gates and for the `mem` command.
@@ -274,3 +274,10 @@ g_heap_end:
   .word 0
 g_map_i:
   .word 0
+
+; ---------------------------------------------------------------------------
+; NANIX POSIX shell (PID 2).  Separate image region so command growth cannot
+; consume the 64K GUI cart.  Loaded at word 0x80000 (byte 4 MiB), below the
+; GUI compiler buffers and shell stack, outside the cart slot.
+.org 0x80000
+.include "../nix/nixsh.nas"

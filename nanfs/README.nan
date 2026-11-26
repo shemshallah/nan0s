@@ -1,0 +1,2 @@
+The NANIX shell, ncc compiler, filesystem and scheduler are raw NaN16.
+The .c files are editor/demo inputs compiled by ncc at runtime.
