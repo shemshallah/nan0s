@@ -444,9 +444,12 @@ Proof.
   destruct (N.ltb x y) eqn:E.
   - apply N.ltb_lt in E. symmetry. apply Nat.ltb_lt.
     apply N_lt_to_nat_lt. exact E.
-  - symmetry. apply Nat.ltb_ge. apply Nat.le_of_not_lt. intro H.
-    assert (Hlt : (x < y)%N) by (apply N_lt_of_to_nat_lt; exact H).
-    rewrite (proj2 (N.ltb_lt x y) Hlt) in E. discriminate.
+  - symmetry. apply Nat.ltb_ge.
+    assert (Hnot : ~ N.to_nat x < N.to_nat y).
+    { intro H.
+      assert (Hlt : (x < y)%N) by (apply N_lt_of_to_nat_lt; exact H).
+      rewrite (proj2 (N.ltb_lt x y) Hlt) in E. discriminate. }
+    lia.
 Qed.
 
 (** ** CMP *)
