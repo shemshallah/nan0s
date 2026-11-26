@@ -394,8 +394,10 @@ LD r1,r0,#W_VA_STREAM
 MOVI r2,4
 CMP r1,r2
 JMP[GE] @nvf_file
-LA r1,#FMTBUF
-CALL @ni_puts
+LD r1,r0,#W_VA_STREAM
+LA r2,#FMTBUF
+LD r3,r0,#W_VA_N
+CALL @st_fd_write
 JMP @nvf_done
 nvf_file:
 CALL @st_entry

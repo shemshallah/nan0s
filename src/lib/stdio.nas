@@ -1,5 +1,10 @@
-; stdio.nas - FILE streams over the NPAF path filesystem (raw NaN16).
-; Handles 1/2/3 are stdin/stdout/stderr; files use handles 4..19.
+; stdio.nas - FILE streams over NANIX descriptors and NPAF path files.
+; Handles 1/2/3 are stdin/stdout/stderr and alias NANIX descriptors 0/1/2
+; through nfd_read/nfd_write (spec/NIX_FD.md).  Files use handles 4..19 on
+; the NPAF path filesystem.  When the fd layer is absent or not initialised,
+; or when ncc_run keeps the legacy ncc_out hook (a GUI cart), the standard
+; handles fall back to the Terminal / keyboard path so existing ncc_out
+; users keep working.
 ; Entry layout (10 words each):
 ;   0 used, 1 path, 2 buffer, 3 len, 4 cap, 5 pos, 6 mode, 7 dirty,
 ;   8 eof, 9 spare.
@@ -315,6 +320,230 @@ SUB r14,r14,r13
 LD r15,r14,0
 RET
 
+; ---- NANIX standard descriptors ------------------------------------
+; Handles 1/2/3 are the NANIX descriptors 0/1/2 (spec/NIX_FD.md).  The
+; nfd_* ABI owns the fd table; stdio never inspects or duplicates it.
+; Only handles <4 take this path, files 4.. use STTAB above.
+
+; Legacy-link fallback for the two ABI calls stdio makes.  A GUI cart has no
+; nixfd.nas, so stdout/stderr replay through ncc_putc_base (ncc_out) and
+; stdin declines so st_fd_read can fall back to the keyboard.  nmk keeps the
+; last definition of a label: the NANIX image includes nixfd.nas after the
+; GUI cart, so the real nfd_read/nfd_write replace these there.  There is no
+; second fd table; this is only the default backend for a link without nixfd.
+nfd_write:
+ST r15,r14,0
+ADD r14,r14,r13
+MOVI r4,1
+CMP r1,r4
+JMP[EQ] @nfwf_go
+MOVI r4,2
+CMP r1,r4
+JMP[EQ] @nfwf_go
+LA r1,0xFFFFFFFF
+JMP @nfwf_d
+nfwf_go:
+MOVI r4,0
+nfwf_l:
+CMP r4,r3
+JMP[GE] @nfwf_ok
+LDB r1,r2,0
+ST r2,r14,0
+ADD r14,r14,r13
+ST r3,r14,0
+ADD r14,r14,r13
+ST r4,r14,0
+ADD r14,r14,r13
+CALL @ncc_putc_base
+SUB r14,r14,r13
+LD r4,r14,0
+SUB r14,r14,r13
+LD r3,r14,0
+SUB r14,r14,r13
+LD r2,r14,0
+ADD r2,r2,r13
+ADD r4,r4,r13
+JMP @nfwf_l
+nfwf_ok:
+ADD r1,r3,r0
+nfwf_d:
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+nfd_read:
+LA r1,0xFFFFFFFF
+RET
+
+; st_fd_write: r1=stdio handle r2=src byte r3=len -> bytes or -1
+; A negative nfd_write means no fd layer (GUI cart), so replay through the
+; legacy Terminal/serial writer.  Short writes are returned as-is.
+st_fd_write:
+ST r15,r14,0
+ADDI r14,r14,4
+ST r1,r14,-4
+ST r2,r14,-3
+ST r3,r14,-2
+ST r0,r14,-1
+LD r4,r0,@ncc_fd
+CMP r4,r0
+JMP[EQ] @sfw_fl
+ADDI r1,r1,-1
+CALL @nfd_write
+CMPS r1,r0
+JMP[GE] @sfw_d
+sfw_fl:
+LD r4,r14,-1
+LD r3,r14,-2
+CMP r4,r3
+JMP[GE] @sfw_ok
+LD r2,r14,-3
+LDB r1,r2,0
+CALL @ncc_putc_base
+LD r2,r14,-3
+ADD r2,r2,r13
+ST r2,r14,-3
+LD r4,r14,-1
+ADD r4,r4,r13
+ST r4,r14,-1
+JMP @sfw_fl
+sfw_ok:
+LD r1,r14,-2
+sfw_d:
+ADDI r14,r14,-4
+LD r15,r14,0
+RET
+
+; st_fd_putc: r1=stdio handle r2=char -> r2=char or -1
+st_fd_putc:
+ST r15,r14,0
+ADDI r14,r14,4
+ST r1,r14,-3
+ST r2,r14,-2
+ADD r3,r14,r0
+ADDI r3,r3,-1
+SHL r3,r3,2
+STB r2,r3,0
+LD r1,r14,-3
+ADD r2,r3,r0
+MOVI r3,1
+CALL @st_fd_write
+CMP r1,r13
+JMP[NE] @sfp_f
+LD r2,r14,-2
+ADD r1,r2,r0
+JMP @sfp_d
+sfp_f:
+LA r1,0xFFFFFFFF
+sfp_d:
+ADDI r14,r14,-4
+LD r15,r14,0
+RET
+
+; st_fd_puts: r1=stdio handle r2=C string -> 0 or -1
+st_fd_puts:
+ST r15,r14,0
+ADDI r14,r14,2
+ST r1,r14,-2
+ST r2,r14,-1
+LD r1,r14,-1
+CALL @ni_strlen
+ADD r3,r1,r0
+LD r1,r14,-2
+LD r2,r14,-1
+CALL @st_fd_write
+CMPS r1,r0
+JMP[LT] @sfps_e
+MOVI r1,0
+JMP @sfps_d
+sfps_e:
+LA r1,0xFFFFFFFF
+sfps_d:
+ADDI r14,r14,-2
+LD r15,r14,0
+RET
+
+; st_fd_read: r1=stdio handle r2=dst byte r3=len -> bytes or -1
+; Without an fd layer, a one-byte stdin read falls back to the keyboard.
+st_fd_read:
+ST r15,r14,0
+ADDI r14,r14,3
+ST r1,r14,-3
+ST r2,r14,-2
+ST r3,r14,-1
+LD r4,r0,@ncc_fd
+CMP r4,r0
+JMP[EQ] @sfr_key
+ADDI r1,r1,-1
+CALL @nfd_read
+CMPS r1,r0
+JMP[GE] @sfr_d
+sfr_key:
+LD r1,r14,-3
+MOVI r2,1
+CMP r1,r2
+JMP[NE] @sfr_e
+LD r1,r14,-1
+CMP r1,r2
+JMP[NE] @sfr_e
+CALL @st_key_getc
+CMPS r1,r0
+JMP[LT] @sfr_e
+LD r2,r14,-2
+STB r1,r2,0
+MOVI r1,1
+JMP @sfr_d
+sfr_e:
+LA r1,0xFFFFFFFF
+sfr_d:
+ADDI r14,r14,-3
+LD r15,r14,0
+RET
+
+; st_fd_getc: stdin handle -> char or -1.  ungetc's pushback word is
+; consumed here so getchar/getc/fgetc/fgets share it.
+st_fd_getc:
+ST r15,r14,0
+ADDI r14,r14,3
+LD r1,r0,#W_STDPB
+CMP r1,r0
+JMP[EQ] @sfg_read
+ST r0,r0,#W_STDPB
+ADDI r1,r1,-1
+JMP @sfg_d
+sfg_read:
+ADD r2,r14,r0
+ADDI r2,r2,-2
+SHL r2,r2,2
+MOVI r1,1
+MOVI r3,1
+CALL @st_fd_read
+CMP r1,r13
+JMP[NE] @sfg_e
+ADD r2,r14,r0
+ADDI r2,r2,-2
+SHL r2,r2,2
+LDB r1,r2,0
+JMP @sfg_d
+sfg_e:
+LA r1,0xFFFFFFFF
+sfg_d:
+ADDI r14,r14,-3
+LD r15,r14,0
+RET
+
+; st_key_getc: blocking console character (legacy GUI path)
+st_key_getc:
+ST r15,r14,0
+ADD r14,r14,r13
+skg_l:
+KEYQ r1
+CMP r1,r0
+JMP[EQ] @skg_l
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
 ; ---- fopen/fclose -------------------------------------------------
 nbi_fopen:
 CALL @nfs_ensure
@@ -500,8 +729,9 @@ CALL @st_putc
 CALL @ni_push
 JMP @nbi_d
 fpc_std:
-LD r1,r0,#W_TB
-CALL @ncc_putc
+LD r1,r0,#W_TA
+LD r2,r0,#W_TB
+CALL @st_fd_putc
 LD r1,r0,#W_TB
 CALL @ni_push
 JMP @nbi_d
@@ -514,7 +744,14 @@ nbi_fgetc:
 CALL @ni_pop
 MOVI r2,4
 CMP r1,r2
-JMP[LT] @fgc_e
+JMP[GE] @fgc_file
+MOVI r2,1
+CMP r1,r2
+JMP[NE] @fgc_e
+CALL @st_fd_getc
+CALL @ni_push
+JMP @nbi_d
+fgc_file:
 CALL @st_entry
 CMP r1,r0
 JMP[EQ] @fgc_e
@@ -555,10 +792,13 @@ MOVI r1,0
 CALL @ni_push
 JMP @nbi_d
 fps_std:
-LD r1,r0,#W_TB
-CALL @ni_puts
-MOVI r1,10
-CALL @ncc_putc
+LD r1,r0,#W_TA
+ST r1,r0,#W_TM0
+LD r2,r0,#W_TB
+CALL @st_fd_puts
+LD r1,r0,#W_TM0
+MOVI r2,10
+CALL @st_fd_putc
 MOVI r1,0
 CALL @ni_push
 JMP @nbi_d
@@ -577,7 +817,7 @@ ST r1,r0,#W_TC
 LD r1,r0,#W_TA
 MOVI r2,4
 CMP r1,r2
-JMP[LT] @fgs_e
+JMP[LT] @fgs_std
 CALL @st_entry
 CMP r1,r0
 JMP[EQ] @fgs_e
@@ -602,6 +842,34 @@ LD r1,r0,#W_TD
 MOVI r2,10
 CMP r1,r2
 JMP[NE] @fgs_l
+JMP @fgs_done
+fgs_std:
+MOVI r2,1
+CMP r1,r2
+JMP[NE] @fgs_e
+ST r0,r0,#W_TM1
+fgs_std_l:
+LD r5,r0,#W_TM1
+LD r2,r0,#W_TB
+SUB r2,r2,r13
+CMP r5,r2
+JMP[GE] @fgs_std_done
+CALL @st_fd_getc
+CMPS r1,r0
+JMP[LT] @fgs_std_done
+LD r2,r0,#W_TC
+LD r5,r0,#W_TM1
+ADD r2,r2,r5
+STB r1,r2,0
+ST r1,r0,#W_TD
+ADD r5,r5,r13
+ST r5,r0,#W_TM1
+LD r1,r0,#W_TD
+MOVI r2,10
+CMP r1,r2
+JMP[NE] @fgs_std_l
+fgs_std_done:
+LD r5,r0,#W_TM1
 fgs_done:
 LD r2,r0,#W_TC
 ADD r2,r2,r5
@@ -636,7 +904,7 @@ JMP[EQ] @frd_zero
 LD r1,r0,#W_TA
 MOVI r2,4
 CMP r1,r2
-JMP[LT] @frd_e
+JMP[LT] @frd_std
 CALL @st_entry
 CMP r1,r0
 JMP[EQ] @frd_e
@@ -649,6 +917,24 @@ LD r1,r0,#W_TM0
 LD r2,r0,#W_TD
 LD r3,r0,#W_TM1
 CALL @st_read_buf
+LD r2,r0,#W_TC
+DIVU r1,r1,r2
+CALL @ni_push
+JMP @nbi_d
+frd_std:
+MOVI r2,1
+CMP r1,r2
+JMP[NE] @frd_e
+LD r1,r0,#W_TC
+LD r2,r0,#W_TB
+MUL r1,r1,r2
+ST r1,r0,#W_TM1
+MOVI r1,1
+LD r2,r0,#W_TD
+LD r3,r0,#W_TM1
+CALL @st_fd_read
+CMPS r1,r0
+JMP[LT] @frd_zero
 LD r2,r0,#W_TC
 DIVU r1,r1,r2
 CALL @ni_push
@@ -695,26 +981,20 @@ DIVU r1,r1,r2
 CALL @ni_push
 JMP @nbi_d
 fwr_std:
+LD r1,r0,#W_TA
+ST r1,r0,#W_TM0
 LD r1,r0,#W_TC
 LD r2,r0,#W_TB
 MUL r1,r1,r2
 ST r1,r0,#W_TM1
-LD r4,r0,#W_TD
-LD r5,r0,#W_TM1
-fwr_l:
-CMP r5,r0
-JMP[EQ] @fwr_ok
-LDB r1,r4,0
-ST r4,r0,#W_TD
-ST r5,r0,#W_TM1
-CALL @ncc_putc
-LD r4,r0,#W_TD
-LD r5,r0,#W_TM1
-ADD r4,r4,r13
-SUB r5,r5,r13
-JMP @fwr_l
-fwr_ok:
-LD r1,r0,#W_TC
+LD r1,r0,#W_TM0
+LD r2,r0,#W_TD
+LD r3,r0,#W_TM1
+CALL @st_fd_write
+CMPS r1,r0
+JMP[LT] @fwr_zero
+LD r2,r0,#W_TC
+DIVU r1,r1,r2
 CALL @ni_push
 JMP @nbi_d
 fwr_zero:
@@ -774,20 +1054,10 @@ LD r3,r0,#W_TC
 CALL @st_write_buf
 JMP @stfp_ret
 ststfp_std2:
-LA r4,#FMTBUF
-LD r5,r0,#W_TC
-ststfp_l2:
-CMP r5,r0
-JMP[EQ] @stfp_ret
-LDB r1,r4,0
-ST r4,r0,#W_TM2
-ST r5,r0,#W_TM3
-CALL @ncc_putc
-LD r4,r0,#W_TM2
-LD r5,r0,#W_TM3
-ADD r4,r4,r13
-SUB r5,r5,r13
-JMP @ststfp_l2
+LD r1,r0,#W_TE
+LA r2,#FMTBUF
+LD r3,r0,#W_TC
+CALL @st_fd_write
 stfp_ret:
 MOVI r1,0
 CALL @ni_push
@@ -950,27 +1220,12 @@ CALL @ni_push
 JMP @nbi_d
 
 ; ---- stdio convenience wrappers -----------------------------------
-; Blocking console character for stdin.
+; Blocking console character for stdin (legacy name; now fd 0 first).
 st_stdin_getc:
-ST r15,r14,0
-ADD r14,r14,r13
-LD r1,r0,#W_STDPB
-CMP r1,r0
-JMP[EQ] @ssg_key
-ST r0,r0,#W_STDPB
-ADDI r1,r1,-1
-JMP @ssg_d
-ssg_key:
-KEYQ r1
-CMP r1,r0
-JMP[EQ] @ssg_key
-ssg_d:
-SUB r14,r14,r13
-LD r15,r14,0
-RET
+JMP @st_fd_getc
 
 nbi_getchar:
-CALL @st_stdin_getc
+CALL @st_fd_getc
 CALL @ni_push
 JMP @nbi_d
 
@@ -1043,8 +1298,9 @@ LD r1,r0,#W_TA
 MOVI r2,4
 CMP r1,r2
 JMP[GE] @npc_file
-LD r1,r0,#W_TB
-CALL @ncc_putc
+LD r1,r0,#W_TA
+LD r2,r0,#W_TB
+CALL @st_fd_putc
 LD r1,r0,#W_TB
 CALL @ni_push
 JMP @nbi_d

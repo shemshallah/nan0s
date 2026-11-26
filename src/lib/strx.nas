@@ -464,6 +464,15 @@ JMP @nbi_d
 nbi_perror:
 ST r15,r14,0
 ADD r14,r14,r13
+; perror is stderr: use fd 2 when the NANIX fd layer is active, else keep
+; the legacy ncc_out/Terminal path.
+LD r1,r0,@ncc_fd
+ST r1,r0,#W_TM0
+CMP r1,r0
+JMP[EQ] @per_nofd
+MOVI r1,3
+ST r1,r0,@ncc_fd
+per_nofd:
 CALL @ni_pop
 CMP r1,r0
 JMP[EQ] @per_nopre
@@ -478,6 +487,8 @@ SHL r1,r1,2
 CALL @ni_puts
 MOVI r1,10
 CALL @ncc_putc
+LD r1,r0,#W_TM0
+ST r1,r0,@ncc_fd
 MOVI r1,0
 CALL @ni_push
 SUB r14,r14,r13

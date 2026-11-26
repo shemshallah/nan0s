@@ -493,6 +493,13 @@ nbi_assert:
 CALL @ni_pop
 CMP r1,r0
 JMP[NE] @exa_ok
+; assertion text is stderr when descriptors are active.
+LD r2,r0,@ncc_fd
+CMP r2,r0
+JMP[EQ] @exa_nofd
+MOVI r2,3
+ST r2,r0,@ncc_fd
+exa_nofd:
 LA r1,@ex_assert_msg
 SHL r1,r1,2
 CALL @ni_puts

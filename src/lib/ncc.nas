@@ -1712,6 +1712,7 @@ ST r0,r0,#W_Q2N
 ST r0,r0,#W_Q2SKIP
 ST r0,r0,#W_SNOUT
 ST r0,r0,#W_SNPOS
+ST r0,r0,@ncc_fd
 LA r1,0xFFFFFFFF
 ST r1,r0,#W_SNLIM
 ST r0,r0,#W_Q2DEPTH
@@ -1833,6 +1834,17 @@ ADD r14,r14,r13
 CALL @ncc_mem_setup
 ST r0,r0,#W_SNOUT
 ST r0,r0,#W_SNPOS
+; stdout fd 1 / stderr fd 2 are for the NANIX process console.  A GUI cart
+; installs ncc_out (gui_c_out) and must keep the legacy Terminal path even
+; when the same image also links nixfd, so fd routing is enabled only when
+; no ncc_out hook is active.
+ST r0,r0,@ncc_fd
+LD r1,r0,@ncc_out
+CMP r1,r0
+JMP[NE] @nrun_fd_done
+MOVI r1,2
+ST r1,r0,@ncc_fd
+nrun_fd_done:
 ; fresh C heap for this run: discard compiler-side allocations and start
 ; with one free block spanning C_HEAP..C_HEAP_END
 ST r0,r0,#W_HEAP_INIT
@@ -1879,6 +1891,7 @@ nrun_status_zero:
 ST r0,r0,#W_EXITCODE
 nrun_status_done:
 LD r1,r0,#W_EXITCODE
+ST r0,r0,@ncc_fd
 SUB r14,r14,r13
 LD r15,r14,0
 LD r14,r0,#W_PSAVE2
@@ -1886,9 +1899,19 @@ RET
 
 ; ------------------------------------------------------------------ output
 ; Every character the compiler/runtime prints goes through ncc_putc.
-; ncc_out = 0 -> COM1; otherwise it is a guest function pointer called with
-; r1=char and must preserve r2..r12 (the GUI terminal hook does).
+; ncc_fd = 0 -> the classic ncc_out path (Terminal hook, or COM1 when the
+; hook is 0).  ncc_fd = 1/2/3 -> that stdio handle, which stdio maps to the
+; NANIX descriptor 0/1/2 and falls back to this same classic path when the
+; fd layer is absent.  Compiler diagnostics run with ncc_fd = 0; ncc_run
+; selects handle 2 (stdout) so printf/puts/putchar reach fd 1.
 ncc_putc:
+LD r2,r0,#W_SNOUT
+CMP r2,r0
+JMP[NE] @npc_buf
+LD r2,r0,@ncc_fd
+CMP r2,r0
+JMP[NE] @npc_fd
+ncc_putc_base:
 LD r2,r0,#W_SNOUT
 CMP r2,r0
 JMP[NE] @npc_buf
@@ -1899,6 +1922,42 @@ ST r15,r14,0
 ADD r14,r14,r13
 CALLR r2
 SUB r14,r14,r13
+LD r15,r14,0
+RET
+npc_fd:
+; ncc_putc's historical contract preserves r2..r12 across a character
+; (putdec/ni_printf keep counters there).  stdio and nfd_write are ordinary
+; NaN16 routines, so save the full caller set here.
+ST r15,r14,0
+ADDI r14,r14,15
+ST r1,r14,-14
+ST r2,r14,-12
+ST r3,r14,-11
+ST r4,r14,-10
+ST r5,r14,-9
+ST r6,r14,-8
+ST r7,r14,-7
+ST r8,r14,-6
+ST r9,r14,-5
+ST r10,r14,-4
+ST r11,r14,-3
+ST r12,r14,-2
+LD r2,r14,-14
+LD r1,r0,@ncc_fd
+CALL @st_fd_putc
+LD r2,r14,-12
+LD r3,r14,-11
+LD r4,r14,-10
+LD r5,r14,-9
+LD r6,r14,-8
+LD r7,r14,-7
+LD r8,r14,-6
+LD r9,r14,-5
+LD r10,r14,-4
+LD r11,r14,-3
+LD r12,r14,-2
+LD r1,r14,-14
+ADDI r14,r14,-15
 LD r15,r14,0
 RET
 npc_buf:
@@ -4030,6 +4089,8 @@ RET
 
 ; ---- output hook + constant tables --------------------------------
 ncc_out:
+.word 0
+ncc_fd:
 .word 0
 k_fnv0:
 .word 0x811C9DC5
