@@ -497,6 +497,8 @@ nsch_svc_region:
   LD r10,r2,#NS_FP
   LD r3,r10,1
   ST r3,r14,1
+  LD r4,r0,#NSH_NEXT
+  ST r4,r14,7
   CMP r3,r0
   JMP[EQ] @nsch_region_fail
   LD r7,r10,2
@@ -557,6 +559,8 @@ nsch_region_prot:
   ST r1,r10,21
   JMP @nsch_region_out
 nsch_region_fail:
+  LD r1,r14,7
+  ST r1,r0,#NSH_NEXT
   LA r2,#NS_BASE
   LD r10,r2,#NS_FP
   ST r0,r10,21
