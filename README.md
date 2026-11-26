@@ -59,7 +59,12 @@ at 64 MiB and 128 MiB and allocate up to 64 MiB from that heap.
 The `execbig` path allocates an RWX region, fills it with valid NOP words,
 copies a base-relative tail addressed through `r12`, calls it and verifies
 its result, so a 70,000-word program runs from a runtime heap base rather
-than the 64K cart slot.
+than the 64K cart slot.  A separate PAE kernel (`src/native/kan16_pae.xa`)
+uses a 1 GiB bank window for large RAM: the raw-NaN16 gate passes at 7 GiB
+(8 banks, 7,165 MiB usable) and at a demand-paged 16 GiB guest (17 banks,
+16,381 MiB usable, preserving the PCI hole).  A PMEM map at guest word
+`0x3F800` publishes usable/reserved/ACPI/device ranges; the S1 and native
+producers feed the top-usable scheduler and hole-safe heap.
 The published GUI/museum image still uses the legacy single-cart boot until
 that image is promoted.
 

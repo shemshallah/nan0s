@@ -115,6 +115,17 @@ Raw-NaN gates, not oracle claims:
   RW regions from the bump heap and returns their bases.  This is the
   allocation primitive for variable-size program images; the region spans
   the machine's discovered RAM.
+- `tools/memmap_gate.sh` — PMEM v1 map at guest word `0x3F800`: S1 and
+  native producers publish usable/reserved/ACPI/device ranges; the boot
+  places NS/NP/NPVARS in the highest usable range and the SVC 2 heap walks
+  usable ranges, skipping a 1M-word ACPI hole.  A 9.5M-word allocation
+  lands at `0x1500000`; an oversized allocation rolls back.  `PASS`.
+- `tools/pae16_gate.sh` — the separate 32-bit PAE kernel: 1 GiB bank
+  window, 2 MiB pages, E820/PMEM producer, per-bank isolation, bank-0
+  boundary and cross-bank BCOPY.  Local gates pass at 3.5 GiB, 4 GiB,
+  7 GiB (8 banks, 7,165 MiB usable) and demand-paged 16 GiB (17 banks,
+  16,381 MiB usable).  The 7 GiB job runs on `ubuntu-latest`; the
+  full-resident 16 GiB job is guarded for a 32 GiB+ host.
 - `tools/execbig_scale_gate.sh` — the base-relative executable path:
   `execbig 70000` allocates a 70,000-word RWX region, fills it with valid
   NOP words, copies a tail that uses `r12` as its runtime base, calls it,
@@ -212,6 +223,10 @@ service table.
 - [x] Scheduler block and nanproc table placed at top-of-RAM from runtime
       configuration words; no fixed `NS_BASE`/`NP_BASE` in the boot path.
 - [x] `SVC 2` bump heap sized from MEMQ (4K and 64 MiB allocations gated).
+- [x] PMEM v1 usable/reserved/ACPI/device map, top-usable scheduler and
+      hole-safe multi-range heap (S1 + native producer).
+- [x] Separate PAE kernel: 7 GiB and demand-paged 16 GiB banks proven;
+      full-resident 16 GiB CI job guarded for 32 GiB+ hosts.
 - [x] Base-relative variable-size executable path on the SVC 2 heap
       (`execbig 70000`, 70,000 words, >64K code window).
 - [ ] General executable format with data/code relocation tables and a

@@ -32,6 +32,18 @@ runs at a runtime base (`tools/execbig_scale_gate.sh`).  Still open for M1:
 a general executable format with code/data relocation tables, a
 filesystem-backed loader, and VRAM/DEV windows sized from the real device
 BAR rather than a fixed S1 test aperture.
+
+## PAE large-RAM path (separate kernel)
+
+`src/native/kan16_pae.xa` is a separate 32-bit PAE kernel with 2 MiB pages
+and a 1 GiB bank window at linear `0x40200000`.  It keeps the MEMMAP direct
+map `(physical - G)/8`, so the PCI hole stays a hole.  `pae16_gate.sh`
+proves MEMQ/PMEM, every address bank, the bank-0 last word and cross-bank
+BCOPY.  Local QEMU results: 7 GiB = 8 banks / 7,165 MiB usable; 16 GiB
+demand-paged = 17 banks / 16,381 MiB usable.  The 7 GiB job uses a standard
+`ubuntu-latest` runner; the full-resident 16 GiB job is a separate guarded
+workflow for a 32 GiB+ host.  The legacy non-PAE kernel remains the v86
+path.
 M2: x86-64 long-mode kernel (nasm1 gains REX/64-bit encodings), identity-mapped large pages, guest word array above 4 GB, 16 GB = 2^31 words. Register word index stays 32-bit; word index 2^31 and up is reserved.
 M3: PCIe enumeration (config space), find the GPU, map its BARs (resizable BAR for a full VRAM aperture), RAWMAP window ops, DMA block copy RAM <-> window with seal-on-transfer.
 M4: GPU compute: command submission and kernels emitted from NaN source (a GPU emitter like nasm1 is for x86). Honest risk: this needs a documented GPU ISA and a bring-up path without a vendor driver. AMD publishes ISA documents and has open drivers to read; NVIDIA keeps SASS and firmware closed. Choice of GPU decides feasibility.
