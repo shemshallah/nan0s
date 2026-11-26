@@ -1289,6 +1289,6 @@ Qed.
 
 Print Assumptions lp_exec_SHL_refines.
 
-Search N2Nat.inj_land.
-Search N2Nat.inj_lor.
-Search N2Nat.inj_lxor.
+Search Nat2N.inj_land.
+Search Nat2N.inj_lor.
+Search Nat2N.inj_lxor.
