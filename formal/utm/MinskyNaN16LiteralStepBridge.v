@@ -864,7 +864,9 @@ Proof.
         by (rewrite Hlen; lia).
       rewrite (to_nat_mod32N_add_small
         (lget_regN (lp_reg L) a) (lget_regN (lp_reg L) b) Hnc).
-      rewrite HA', HB'. reflexivity.
+      rewrite HA', HB'.
+      rewrite Nat.mod_small by exact Hnc.
+      reflexivity.
     + rewrite (set_reg_neq _ _ _ _ Hne).
       rewrite (lget_regN_lset_word_neq (lp_reg L) d
         (mod32N (N.add (lget_regN (lp_reg L) a)
