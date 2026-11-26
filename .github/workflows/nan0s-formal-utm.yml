@@ -1,0 +1,78 @@
+name: NaN0S formal UTM
+
+on:
+  push:
+    paths:
+      - 'formal/utm/**'
+      - 'tests/minsky_table.inc'
+      - 'mth/tests/**'
+      - '.github/workflows/nan0s-formal-utm.yml'
+  pull_request:
+    paths:
+      - 'formal/utm/**'
+      - 'tests/minsky_table.inc'
+      - 'mth/tests/**'
+      - '.github/workflows/nan0s-formal-utm.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  coq:
+    name: Coq 8.20 cone and certificates
+    runs-on: ubuntu-latest
+    container:
+      image: coqorg/coq:8.20
+      options: --user root
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Locate the pinned Coq 8.20 toolchain
+        run: |
+          set -euo pipefail
+          if command -v coqc >/dev/null 2>&1; then
+            COQBIN=$(dirname "$(command -v coqc)")
+          else
+            COQC=$(find /home/coq/.opam -name coqc -type f | head -1)
+            test -n "$COQC"
+            COQBIN=$(dirname "$COQC")
+          fi
+          test -x "$COQBIN/coqc"
+          echo "$COQBIN" >> "$GITHUB_PATH"
+          "$COQBIN/coqc" --version | head -1
+
+      - name: Build the consolidated formal UTM cone
+        run: |
+          set -euo pipefail
+          ulimit -s unlimited 2>/dev/null || ulimit -s 65536
+          cd formal/utm
+          coq_makefile -f _CoqProject -o Makefile.coq
+          make -f Makefile.coq -j1
+
+      - name: Kernel-check the system certificates
+        run: |
+          set -euo pipefail
+          ulimit -s unlimited 2>/dev/null || ulimit -s 65536
+          cd formal/utm
+          coqchk -Q . NaNLM MinskyNaN16Universality.vo
+          coqchk -Q . NaNLM MinskyNaN16LiteralRun.vo
+          coqchk -Q . NaNLM MinskyNaN16LiteralBridge.vo
+
+  gates:
+    name: Independent source and image gates
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run the NaN0S table, step, image and word gates
+        run: |
+          set -euo pipefail
+          python3 formal/utm/check_minsky_table.py
+          python3 formal/utm/check_minsky_nan16_step.py
+          python3 formal/utm/check_nan16_literal_image.py
+          python3 formal/utm/check_minsky_nan16_words.py

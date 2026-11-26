@@ -1,0 +1,424 @@
+#!/usr/bin/env python3
+"""Independent executable gate for concrete source-row and buffer branches.
+
+Reads the frozen native table, not the Coq transcription.  Exhausts all
+seven-bit fixed-width rows under both delimiter contexts, then probes
+arbitrarily wider binary tails and positive buffer widths.  The zero-width
+case is explicitly excluded from the Coq variable-buffer macro.  These
+checks supplement Coq; finite tests cannot prove unbounded universality.
+"""
+
+from __future__ import annotations
+
+import itertools
+import random
+import re
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[2]
+TABLE_FILE = ROOT / "tests/minsky_table.inc"
+ENTRY = re.compile(
+    r"\{\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(-?\d+)\s*,"
+    r"\s*(\d+)\s*,\s*(true|false)\s*\}"
+)
+
+
+def load_table() -> list[tuple[int, int, int, int, int, bool]]:
+    rows = [
+        (int(q), int(read), int(write), int(move), int(next_q), halt == "true")
+        for q, read, write, move, next_q, halt in ENTRY.findall(
+            TABLE_FILE.read_text(encoding="utf-8")
+        )
+    ]
+    if len(rows) != 184:
+        raise AssertionError(f"expected 184 rows, received {len(rows)}")
+    for q in range(23):
+        for s in range(8):
+            if rows[q * 8 + s][:2] != (q, s):
+                raise AssertionError(f"invalid row-major entry {q},{s}")
+    return rows
+
+
+def check_branch(
+    table: list[tuple[int, int, int, int, int, bool]],
+    first_bit: int,
+    tail: tuple[int, ...],
+    next_marker: int,
+    buffer_width: int = 3,
+) -> None:
+    if buffer_width < 1:
+        raise ValueError("the variable-buffer macro requires a positive width")
+    # The original head is on X at coordinate zero. The Y delimiter and
+    # buffer_width zero cells are immediately to its left.
+    delimiter = -buffer_width - 1
+    tape = {delimiter: 5, 0: 4, 1: first_bit}
+    tape.update({p: 0 for p in range(-buffer_width, 0)})
+    tape.update({i + 2: value for i, value in enumerate(tail)})
+    boundary = len(tail) + 2
+    tape[boundary] = next_marker
+    tape.update({delimiter - 1: 6, delimiter - 2: 1,
+                 delimiter - 3: 3, boundary + 1: 7})
+    before = tape.copy()
+    state = 5
+    head = 0
+    halted = False
+    total = (2 * buffer_width + 5 + len(tail)) if first_bit else (
+        3 * buffer_width + 6
+    )
+    for count in range(total):
+        if halted:
+            raise AssertionError(f"premature halt at step {count}")
+        symbol = tape.get(head, 2)
+        source, read, write, move, new_state, stop = table[state * 8 + symbol]
+        if (source, read) != (state, symbol):
+            raise AssertionError("table indexing mismatch")
+        tape[head] = write
+        head += move
+        state = new_state
+        halted = stop
+
+    if first_bit:
+        expected = (5, boundary - 1, False) if next_marker == 4 else (
+            0, boundary, True
+        )
+        if (state, head, halted) != expected:
+            raise AssertionError((first_bit, tail, next_marker, state, head, halted))
+        if tape[1] != 3 or any(tape[i + 2] != bit for i, bit in enumerate(tail)):
+            raise AssertionError("forward scan failed to preserve binary tail")
+    else:
+        if (state, head, halted) != (1, -buffer_width, False):
+            raise AssertionError(
+                (buffer_width, first_bit, tail, next_marker, state, head, halted)
+            )
+        if tape[1] != 2:
+            raise AssertionError("low branch did not mark first state bit")
+        if any(tape[i + 2] != bit for i, bit in enumerate(tail)):
+            raise AssertionError("low branch failed to preserve binary tail")
+
+    expected_prefix = [5, 0] + [2] * (buffer_width - 1) + [4]
+    if [tape[i] for i in range(delimiter, 1)] != expected_prefix:
+        raise AssertionError("delimiter, buffer or marker altered")
+    outer = (delimiter - 3, delimiter - 2, delimiter - 1,
+             boundary, boundary + 1)
+    if any(tape[k] != before[k] for k in outer):
+        raise AssertionError("surrounding tape changed")
+
+
+def check_zero_buffer_exception(
+    table: list[tuple[int, int, int, int, int, bool]],
+) -> None:
+    # At width 0 the native table does not reach state 2/3 in four steps.
+    # This counterexample makes the positive-width theorem precondition
+    # observable in the regression gate.
+    for first_bit, expected_state in ((0, 8), (1, 7)):
+        tape = {-1: 5, 0: 4, 1: first_bit}
+        state, head, halted = 5, 0, False
+        for _ in range(4):
+            symbol = tape.get(head, 2)
+            _, _, written, movement, state, halted = table[state * 8 + symbol]
+            tape[head] = written
+            head += movement
+        if (state, head, halted) != (expected_state, 0, False):
+            raise AssertionError("unexpected zero-buffer control path")
+
+
+def check_q1_matching_roundtrip(
+    table: list[tuple[int, int, int, int, int, bool]],
+    skipped: tuple[int, ...],
+    matching_bit: int,
+) -> None:
+    """Independently test the Coq q1→q0/q4→q2→q1 table macro."""
+    n = len(skipped)
+    marker = 3 if matching_bit else 2
+    tape = {-2: 6, -1: 5, n: marker, n + 1: matching_bit,
+            n + 2: 7, n + 3: 4}
+    tape.update(enumerate(skipped))
+    original = tape.copy()
+    state, head, halted = 1, 0, False
+    for microstep in range(2 * n + 4):
+        if halted:
+            raise AssertionError(f"q1 macro halted prematurely at {microstep}")
+        symbol = tape.get(head, 2)
+        _, _, write, movement, state, halted = table[state * 8 + symbol]
+        tape[head] = write
+        head += movement
+
+    if (state, head, halted) != (1, 0, False):
+        raise AssertionError((skipped, matching_bit, state, head, halted))
+    expected = original.copy()
+    expected[n], expected[n + 1] = matching_bit, marker
+    if tape != expected:
+        raise AssertionError((skipped, matching_bit, tape, expected))
+
+
+def check_q1_marked_match(
+    table: list[tuple[int, int, int, int, int, bool]],
+    skipped: tuple[int, ...],
+    marks: tuple[int, ...],
+    matching_bit: int,
+) -> None:
+    """Check a matching bit after an arbitrary already-marked A/B block."""
+    marker = 3 if matching_bit else 2
+    source = skipped + (marker,) + marks + (matching_bit, 7, 4)
+    expected = skipped + (matching_bit,) + marks + (marker, 7, 4)
+    tape = {-2: 6, -1: 5, **dict(enumerate(source))}
+    state, head, halted = 1, 0, False
+    fuel = 2 * len(skipped) + 2 * len(marks) + 4
+    for microstep in range(fuel):
+        if halted:
+            raise AssertionError(("early halt", skipped, marks, microstep))
+        _, _, write, movement, state, halted = table[state * 8 + tape.get(head, 2)]
+        tape[head] = write
+        head += movement
+    if (state, head, halted) != (1, 0, False):
+        raise AssertionError((skipped, marks, matching_bit, state, head, halted))
+    if tape != {-2: 6, -1: 5, **dict(enumerate(expected))}:
+        raise AssertionError(("incorrect marked-match tape", skipped, marks, matching_bit))
+
+
+def check_q1_full_matching_prefix(
+    table: list[tuple[int, int, int, int, int, bool]],
+    skipped: tuple[int, ...],
+    bits: tuple[int, ...],
+) -> None:
+    """Execute successive comparisons; no source-interpreter shortcut."""
+    marks = tuple(3 if bit else 2 for bit in bits)
+    source = skipped + marks + bits + (7, 4)
+    expected = skipped + bits + marks + (7, 4)
+    tape = {-2: 6, -1: 5, **dict(enumerate(source))}
+    state, head, halted = 1, 0, False
+    n = len(bits)
+    fuel = 2 * n * len(skipped) + 3 * n * n + n
+    for microstep in range(fuel):
+        if halted:
+            raise AssertionError(("early halt", skipped, bits, microstep))
+        _, _, write, movement, state, halted = table[state * 8 + tape.get(head, 2)]
+        tape[head] = write
+        head += movement
+    if (state, head, halted) != (1, 0, False):
+        raise AssertionError((skipped, bits, state, head, halted))
+    if tape != {-2: 6, -1: 5, **dict(enumerate(expected))}:
+        raise AssertionError(("incorrect multi-bit tape", skipped, bits))
+
+
+def check_q1_mismatch_restart(
+    table: list[tuple[int, int, int, int, int, bool]],
+    skipped: tuple[int, ...],
+    marks: tuple[int, ...],
+    right_scan: tuple[int, ...],
+    selected_bit: int,
+) -> None:
+    """Execute q1 selection, mismatch, X turnaround and q5/Y cleanup."""
+    marker = 3 if selected_bit else 2
+    mismatch = 1 - selected_bit
+    mismatch_marker = 2 if selected_bit else 3
+    source = skipped + (marker,) + marks + (mismatch,) + right_scan + (4, 7)
+    rewritten = skipped + (selected_bit,) + marks + (mismatch_marker,) + right_scan
+    expected = tuple(2 if symbol == 0 else 3 if symbol == 1 else symbol
+                     for symbol in rewritten) + (4, 7)
+    tape = {-2: 6, -1: 5, **dict(enumerate(source))}
+    state, head, halted = 1, 0, False
+    fuel = 2 * (len(skipped) + len(marks) + len(right_scan)) + 6
+    for microstep in range(fuel):
+        if halted:
+            raise AssertionError(("early mismatch halt", skipped, marks, microstep))
+        _, _, write, movement, state, halted = table[state * 8 + tape.get(head, 2)]
+        tape[head] = write
+        head += movement
+    if (state, head, halted) != (1, 0, False):
+        raise AssertionError(("mismatch restart", state, head, halted))
+    if tape != {-2: 6, -1: 5, **dict(enumerate(expected))}:
+        raise AssertionError(("incorrect mismatch tape", skipped, marks, right_scan))
+
+
+def check_q1_first_mismatch_after_matches(
+    table: list[tuple[int, int, int, int, int, bool]],
+    skipped: tuple[int, ...],
+    matching_bits: tuple[int, ...],
+    right_scan: tuple[int, ...],
+    selected_bit: int,
+) -> None:
+    """Native-table first mismatch after any matching prefix, exact clock."""
+    marks = tuple(3 if b else 2 for b in matching_bits)
+    selected_mark = 3 if selected_bit else 2
+    opposite_mark = 2 if selected_bit else 3
+    source = (skipped + marks + (selected_mark,) + matching_bits +
+              (1 - selected_bit,) + right_scan + (4, 7))
+    restored_order = (skipped + matching_bits + (selected_bit,) +
+                      marks + (opposite_mark,) + right_scan)
+    expected = tuple(2 if x == 0 else 3 if x == 1 else x
+                     for x in restored_order) + (4, 7)
+    erase = lambda x: 0 if x == 2 else 1 if x == 3 else x
+    if tuple(map(erase, source)) != tuple(map(erase, expected)):
+        raise AssertionError(("first mismatch lost logical data", source, expected))
+    tape = {-2: 6, -1: 5, **dict(enumerate(source))}
+    state, head, halted = 1, 0, False
+    n, p, r = len(matching_bits), len(skipped), len(right_scan)
+    clock = 3 * n * n + 2 * n * p + 7 * n + 2 * p + 2 * r + 6
+    for microstep in range(clock):
+        if halted:
+            raise AssertionError(("early first mismatch halt", microstep))
+        _, _, write, movement, state, halted = table[state * 8 + tape.get(head, 2)]
+        tape[head] = write
+        head += movement
+    if (state, head, halted) != (1, 0, False):
+        raise AssertionError(("first mismatch restart", state, head, halted))
+    if tape != {-2: 6, -1: 5, **dict(enumerate(expected))}:
+        raise AssertionError(("first mismatch tape", skipped, matching_bits,
+                              right_scan, selected_bit))
+
+
+def check_writeback_return_cycle(
+    table: list[tuple[int, int, int, int, int, bool]],
+    write_state: int,
+    skipped: tuple[int, ...],
+    returned: tuple[int, ...],
+    input_bit: int,
+) -> None:
+    """Exact frozen-table q9/q10 write -> q11 return -> q6 cycle."""
+    if write_state not in (9, 10) or input_bit not in (0, 1):
+        raise ValueError("writeback requires q9/q10 and a raw binary bit")
+    if any(s not in (2, 3, 5, 6, 7) for s in skipped):
+        raise ValueError("unsupported q9/q10 pass symbol")
+    if any(s not in (0, 1, 2, 3, 5, 6, 7) for s in returned):
+        raise ValueError("unsupported q11 pass symbol")
+    source = skipped + (input_bit,) + returned + (4, 0, 7)
+    tape = {-3: 6, -2: 5, -1: 7, **dict(enumerate(source))}
+    expected = tape.copy()
+    expected[len(skipped)] = 3 if write_state == 9 else 2
+    state, head, halted = write_state, 0, False
+    clock = len(skipped) + len(returned) + 2
+    for microstep in range(clock):
+        if halted:
+            raise AssertionError(("early writeback halt", write_state, microstep))
+        symbol = tape.get(head, 2)
+        old_state, old_symbol, write, movement, next_state, stop = (
+            table[state * 8 + symbol]
+        )
+        if (old_state, old_symbol) != (state, symbol):
+            raise AssertionError("writeback table lookup mismatch")
+        state, halted = next_state, stop
+        tape[head] = write
+        head += movement
+    if (state, head, halted) != (6, len(skipped) + len(returned) + 2, False):
+        raise AssertionError(("writeback return state", write_state, state, head))
+    if tape != expected:
+        raise AssertionError(("writeback changed surrounding tape", write_state,
+                              skipped, returned, tape, expected))
+
+
+def main() -> None:
+    table = load_table()
+    check_zero_buffer_exception(table)
+    cases = 0
+    for bits in itertools.product((0, 1), repeat=7):
+        for marker in (4, 5):
+            check_branch(table, bits[0], bits[1:], marker)
+            cases += 1
+    rng = random.Random(0x238)
+    for width in (0, 1, 2, 3, 7, 15, 32, 64, 129):
+        for _ in range(40):
+            bits = tuple(rng.randrange(2) for _ in range(width))
+            for high, marker in itertools.product((0, 1), (4, 5)):
+                check_branch(table, high, bits, marker)
+                cases += 1
+    for buffer_width in (1, 2, 4, 5, 7, 16, 32, 65, 129):
+        for tail_width in (0, 1, 2, 7, 17):
+            for _ in range(8):
+                bits = tuple(rng.randrange(2) for _ in range(tail_width))
+                for high, marker in itertools.product((0, 1), (4, 5)):
+                    check_branch(table, high, bits, marker, buffer_width)
+                    cases += 1
+    matching_cases = 0
+    for width in range(9):
+        for skipped in itertools.product((0, 1), repeat=width):
+            for bit in (0, 1):
+                check_q1_matching_roundtrip(table, skipped, bit)
+                matching_cases += 1
+    marked_cases = 0
+    for skip_width in range(6):
+        for skipped in itertools.product((0, 1), repeat=skip_width):
+            for mark_width in range(6):
+                for marks in itertools.product((2, 3), repeat=mark_width):
+                    for bit in (0, 1):
+                        check_q1_marked_match(table, skipped, marks, bit)
+                        marked_cases += 1
+    sequence_cases = 0
+    for skip_width in range(4):
+        for skipped in itertools.product((0, 1), repeat=skip_width):
+            for bit_width in range(7):
+                for bits in itertools.product((0, 1), repeat=bit_width):
+                    check_q1_full_matching_prefix(table, skipped, bits)
+                    sequence_cases += 1
+    # Exercise lengths far beyond the exhaustive small examples, while
+    # keeping the test deterministic and preserving the exact clock gate.
+    for bit_width in (7, 16, 32, 64, 129):
+        for _ in range(8):
+            skipped = tuple(rng.randrange(2) for _ in range(rng.randrange(17)))
+            bits = tuple(rng.randrange(2) for _ in range(bit_width))
+            check_q1_full_matching_prefix(table, skipped, bits)
+            sequence_cases += 1
+    mismatch_cases = 0
+    for skip_width in range(4):
+        for skipped in itertools.product((0, 1), repeat=skip_width):
+            for mark_width in range(4):
+                for marks in itertools.product((2, 3), repeat=mark_width):
+                    for scan_width in range(4):
+                        for right_scan in itertools.product((0, 1, 2, 3, 6, 7),
+                                                            repeat=scan_width):
+                            for selected_bit in (0, 1):
+                                check_q1_mismatch_restart(table, skipped, marks,
+                                                          right_scan, selected_bit)
+                                mismatch_cases += 1
+    for _ in range(96):
+        skipped = tuple(rng.randrange(2) for _ in range(rng.randrange(65)))
+        marks = tuple(rng.choice((2, 3)) for _ in range(rng.randrange(65)))
+        right_scan = tuple(rng.choice((0, 1, 2, 3, 6, 7))
+                           for _ in range(rng.randrange(129)))
+        check_q1_mismatch_restart(table, skipped, marks, right_scan,
+                                  rng.randrange(2))
+        mismatch_cases += 1
+    first_mismatch_cases = 0
+    for bit_width in range(5):
+        for bits in itertools.product((0, 1), repeat=bit_width):
+            for skip_width in range(4):
+                for skipped in itertools.product((0, 1), repeat=skip_width):
+                    for scan_width in range(3):
+                        for right_scan in itertools.product((0, 1, 2, 3, 6, 7),
+                                                            repeat=scan_width):
+                            for selected_bit in (0, 1):
+                                check_q1_first_mismatch_after_matches(
+                                    table, skipped, bits, right_scan, selected_bit)
+                                first_mismatch_cases += 1
+    for bit_width in (8, 16, 32, 64, 129, 256, 512):
+        for _ in range(16 if bit_width <= 129 else 4):
+            skipped = tuple(rng.randrange(2) for _ in range(rng.randrange(17)))
+            bits = tuple(rng.randrange(2) for _ in range(bit_width))
+            right_scan = tuple(rng.choice((0, 1, 2, 3, 6, 7))
+                               for _ in range(rng.randrange(65)))
+            check_q1_first_mismatch_after_matches(
+                table, skipped, bits, right_scan, rng.randrange(2))
+            first_mismatch_cases += 1
+    writeback_cases = 0
+    for write_state in (9, 10):
+        for _ in range(4096):
+            skipped = tuple(rng.choice((2, 3, 5, 6, 7))
+                            for _ in range(rng.randrange(33)))
+            returned = tuple(rng.choice((0, 1, 2, 3, 5, 6, 7))
+                             for _ in range(rng.randrange(33)))
+            check_writeback_return_cycle(table, write_state, skipped,
+                                         returned, rng.randrange(2))
+            writeback_cases += 1
+    print(f"MINSKY CONCRETE DISPATCH PASS ({cases} exhaustive/seeded cases; "
+          f"positive buffers 1..129 and zero-buffer counterexample; "
+          f"{matching_cases} q1 matching roundtrips; "
+          f"{marked_cases} marked-prefix roundtrips; "
+          f"{sequence_cases} complete matching sequences; "
+          f"{mismatch_cases} mismatch restarts; "
+          f"{first_mismatch_cases} first-mismatch-after-matches cases; "
+          f"{writeback_cases} q9/q10-to-q6 writeback cycles)")
+
+
+if __name__ == "__main__":
+    main()
