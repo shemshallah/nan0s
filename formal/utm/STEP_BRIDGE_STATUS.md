@@ -13,6 +13,7 @@ Verified one-step refinements in `MinskyNaN16LiteralStepBridge.v`:
 | CMP | `lp_exec_CMP_refines` | PASS |
 | JMP | `lp_exec_JMP_refines` (requires `k <> 3`) | PASS |
 | RETP | `lp_exec_RETP_refines` (requires `k <> 3`) | PASS |
+| SHR | `lp_exec_SHR_refines` | PASS |
 
 All six preserve the full `Rlp` relation, including the opaque memory
 view, register bounds, flags, halt state and the link register.
@@ -23,7 +24,7 @@ view, register bounds, flags, halt state and the link register.
   update agreement.
 - SHL / ADD / SUB: need explicit 32-bit no-overflow/no-borrow
   invariants.
-- SHR, BOOL: shift/truth-table agreement.
+- BOOL: truth-table agreement.
 - Then: a supported-instruction dispatcher and an inductive run
   theorem from `lp_run` to the VM.
 
