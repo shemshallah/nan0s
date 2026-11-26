@@ -40,3 +40,7 @@ compiled C++ implementation.  The remaining system obligations are the
 literal executor step simulation, the loader/assembler semantics, the
 finite-memory/unbounded-tape bridge and the native allocator/runtime
 refinement.
+
+## Step bridge
+
+See `STEP_BRIDGE_STATUS.md` for the verified literal-executor one-step cases and remaining opcodes.

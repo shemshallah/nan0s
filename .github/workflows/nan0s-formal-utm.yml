@@ -64,6 +64,15 @@ jobs:
           coqchk -Q . NaNLM MinskyNaN16LiteralRun.vo
           coqchk -Q . NaNLM MinskyNaN16LiteralBridge.vo
 
+      - name: Upload complete Coq object graph for fast step debug
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nan0s-formal-utm-allvo-${{ github.run_id }}
+          path: formal/utm/*.vo
+          if-no-files-found: warn
+          retention-days: 7
+
   gates:
     name: Independent source and image gates
     runs-on: ubuntu-24.04

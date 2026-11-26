@@ -1,0 +1,69 @@
+name: NaN0S formal UTM debug
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Successful NaN0S formal UTM run id supplying cached .vo artifacts'
+        required: true
+
+permissions:
+  actions: read
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  step-bridge:
+    name: Compile the literal step bridge
+    runs-on: ubuntu-latest
+    container:
+      image: coqorg/coq:8.20
+      options: --user root
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download cached .vo artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: nan0s-formal-utm-allvo-${{ inputs.run_id }}
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: artifacts
+
+      - name: Restore cached .vo files
+        run: |
+          set -euo pipefail
+          cp artifacts/*.vo formal/utm/
+          test -f formal/utm/MinskyNaN16LiteralMachine.vo
+          echo "restored $(ls formal/utm/*.vo | wc -l) .vo files"
+
+      - name: Locate the pinned Coq 8.20 toolchain
+        run: |
+          set -euo pipefail
+          if command -v coqc >/dev/null 2>&1; then
+            COQBIN=$(dirname "$(command -v coqc)")
+          else
+            COQC=$(find /home/coq/.opam -name coqc -type f | head -1)
+            test -n "$COQC"
+            COQBIN=$(dirname "$COQC")
+          fi
+          test -x "$COQBIN/coqc"
+          echo "$COQBIN" >> "$GITHUB_PATH"
+          "$COQBIN/coqc" --version | head -1
+
+      - name: Compile the bridge modules
+        timeout-minutes: 6
+        run: |
+          set -euo pipefail
+          ulimit -s unlimited 2>/dev/null || ulimit -s 65536
+          for f in MinskyNaN16LiteralBridge MinskyNaN16LiteralStepBridge; do
+            echo "=== coqc $f"
+            coqc -Q formal/utm NaNLM \
+              -w -notation-overridden,-stdlib-vector \
+              "formal/utm/$f.v"
+          done
+          echo "NAN0S STEP BRIDGE COMPILE PASS"
