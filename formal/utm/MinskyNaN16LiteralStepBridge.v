@@ -998,6 +998,8 @@ Proof.
     = 2 ^ 32 + (N.to_nat x - N.to_nat y)) by lia.
   rewrite Hshape.
   rewrite Nat.add_comm.
+  change ((N.to_nat x - N.to_nat y + 1 * 2 ^ 32) mod 2 ^ 32 =
+          N.to_nat x - N.to_nat y).
   rewrite Nat.mod_add.
   apply Nat.mod_small. lia.
 Qed.
