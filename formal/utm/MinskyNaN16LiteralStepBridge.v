@@ -414,3 +414,7 @@ Proof.
 Qed.
 
 Print Assumptions lp_exec_CALL_refines.
+
+Search N.ltb.
+Search N.eqb.
+Search N2Nat.
