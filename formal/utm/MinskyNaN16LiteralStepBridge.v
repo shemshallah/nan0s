@@ -1146,6 +1146,145 @@ Qed.
 
 Print Assumptions lp_exec_SUB_refines.
 
-Search (N.to_nat (N.mul _ _)).
-Search (N.to_nat (N.shiftl _ _)).
-Search (N.to_nat (N.land _ _)).
+(** ** SHL *)
+
+Lemma to_nat_shl32N :
+  forall x n,
+    (x < 2 ^ 32)%N ->
+    N.to_nat x * 2 ^ n < 2 ^ 32 ->
+    N.to_nat (shl32N x n) = Nat.shiftl (N.to_nat x) n.
+Proof.
+  intros x n Hx Hov.
+  unfold shl32N.
+  assert (Hsh : (N.shiftl x (N.of_nat n) < 2 ^ 32)%N).
+  { rewrite N.shiftl_mul_pow2.
+    apply N_lt_two32_of_nat.
+    rewrite N2Nat.inj_mul.
+    rewrite N2Nat.inj_pow.
+    rewrite Nat2N.id.
+    exact Hov. }
+  rewrite (N_land_mask_small _ Hsh).
+  rewrite N.shiftl_mul_pow2.
+  rewrite N2Nat.inj_mul.
+  rewrite N2Nat.inj_pow.
+  rewrite Nat2N.id.
+  rewrite Nat.shiftl_mul_pow2.
+  reflexivity.
+Qed.
+
+Theorem lp_exec_SHL_refines :
+  forall L vm prog d a imm,
+    Rlp L vm ->
+    List.length (lp_reg L) = 16 ->
+    d < 16 ->
+    d <> 15 ->
+    a < 16 ->
+    imm < 32 ->
+    N.to_nat (lget_regN (lp_reg L) a) * 2 ^ imm < 2 ^ 32 ->
+    decode_word_p (lp_mem_at L (lp_pc L)) = Some (pSHL d a imm) ->
+    nth_error prog (vm_pc vm) = Some (pSHL d a imm) ->
+    Rlp (lp_exec L (pSHL d a imm)) (exec_instr_p prog vm).
+Proof.
+  intros L vm prog d a imm HR Hlen Hd Hd15 Ha Himm Hov Hdec Hnth.
+  pose proof HR as HR_R.
+  unfold Rlp in *.
+  destruct HR as
+    (Hpc & Hregs & Hreg15 & Hlink & Hmem & Hzf & Hlf & Hk & Hhalt & Hbound).
+  pose proof (R_reg_eq (lp_to_LState L) vm a HR_R Ha) as HA.
+  assert (HA' : vm_reg vm a = N.to_nat (lget_regN (lp_reg L) a)).
+  { unfold l_reg, lp_to_LState in HA. exact HA. }
+  assert (Hx : (lget_regN (lp_reg L) a < 2 ^ 32)%N)
+    by (apply N_lt_two32_of_nat; exact (Hbound a Ha)).
+  assert (Himm32 : imm mod 32 = imm)
+    by (apply Nat.mod_small; exact Himm).
+  unfold lp_exec, exec_instr_p.
+  rewrite Hnth. cbn.
+  unfold R, lp_to_LState.
+  split_conj_step.
+  - change (S (vm_pc vm) = S (lp_pc L)). rewrite Hpc. reflexivity.
+  - intros i Hi.
+    change (set_reg (vm_reg vm) d (Nat.shiftl (vm_reg vm a) imm) i =
+            N.to_nat
+              (lget_regN
+                (lset_word (lp_reg L) d
+                  (shl32N (lget_regN (lp_reg L) a) (imm mod 32))) i)
+              mod 2 ^ 32).
+    destruct (Nat.eq_dec i d) as [-> | Hne].
+    + rewrite set_reg_eq.
+      rewrite (lget_regN_lset_word_eq (lp_reg L) d
+        (shl32N (lget_regN (lp_reg L) a) (imm mod 32)))
+        by (rewrite Hlen; lia).
+      rewrite (to_nat_shl32N _ _ Hx) by (rewrite Himm32; exact Hov).
+      rewrite Himm32.
+      rewrite HA'.
+      rewrite Nat.mod_small.
+      2:{ rewrite Nat.shiftl_mul_pow2. exact Hov. }
+      reflexivity.
+    + rewrite (set_reg_neq _ _ _ _ Hne).
+      rewrite (lget_regN_lset_word_neq (lp_reg L) d
+        (shl32N (lget_regN (lp_reg L) a) (imm mod 32)) i Hne).
+      exact (Hregs i Hi).
+  - change (set_reg (vm_reg vm) d (Nat.shiftl (vm_reg vm a) imm) 15 =
+            N.to_nat
+              (lget_regN
+                (lset_word (lp_reg L) d
+                  (shl32N (lget_regN (lp_reg L) a) (imm mod 32))) 15)
+              mod 2 ^ 32).
+    rewrite (set_reg_neq _ _ _ _ (not_eq_sym Hd15)).
+    rewrite (lget_regN_lset_word_neq (lp_reg L) d
+      (shl32N (lget_regN (lp_reg L) a) (imm mod 32)) 15
+      (not_eq_sym Hd15)).
+    exact Hreg15.
+  - change (vm_link vm =
+            N.to_nat
+              (lget_regN
+                (lset_word (lp_reg L) d
+                  (shl32N (lget_regN (lp_reg L) a) (imm mod 32))) 15)).
+    rewrite (lget_regN_lset_word_neq (lp_reg L) d
+      (shl32N (lget_regN (lp_reg L) a) (imm mod 32)) 15
+      (not_eq_sym Hd15)).
+    exact Hlink.
+  - intro x.
+    change (vm_mem vm x =
+            payload_word (lp_mem_at (lp_exec L (pSHL d a imm)) x)).
+    rewrite lp_mem_at_lp_exec_SHL. exact (Hmem x).
+  - change (Nat.eqb (Nat.shiftl (vm_reg vm a) imm) 0 =
+            Nat.eqb
+              (((pack_k
+                  (N.eqb
+                    (shl32N (lget_regN (lp_reg L) a) (imm mod 32)) 0)
+                  false) / 2) mod 2) 1).
+    rewrite pack_k_zf.
+    rewrite HA'.
+    rewrite N_eqb_to_nat.
+    rewrite (to_nat_shl32N _ _ Hx) by (rewrite Himm32; exact Hov).
+    rewrite Himm32.
+    reflexivity.
+  - change (false =
+            Nat.eqb
+              ((pack_k
+                  (N.eqb
+                    (shl32N (lget_regN (lp_reg L) a) (imm mod 32)) 0)
+                  false) mod 2) 1).
+    rewrite pack_k_lf. reflexivity.
+  - apply pack_k_lt_4.
+  - change (vm_halted vm = lp_halted L). exact Hhalt.
+  - intros i Hi.
+    change (N.to_nat
+              (lget_regN
+                (lset_word (lp_reg L) d
+                  (shl32N (lget_regN (lp_reg L) a) (imm mod 32))) i)
+            < 2 ^ 32).
+    destruct (Nat.eq_dec i d) as [-> | Hne].
+    + rewrite (lget_regN_lset_word_eq (lp_reg L) d
+        (shl32N (lget_regN (lp_reg L) a) (imm mod 32)))
+        by (rewrite Hlen; lia).
+      rewrite (to_nat_shl32N _ _ Hx) by (rewrite Himm32; exact Hov).
+      rewrite Himm32.
+      rewrite Nat.shiftl_mul_pow2. exact Hov.
+    + rewrite (lget_regN_lset_word_neq (lp_reg L) d
+        (shl32N (lget_regN (lp_reg L) a) (imm mod 32)) i Hne).
+      exact (Hbound i Hi).
+Qed.
+
+Print Assumptions lp_exec_SHL_refines.
