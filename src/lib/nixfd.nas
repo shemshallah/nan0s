@@ -37,6 +37,7 @@
 .equ NFD_PC     0x240070             ; pipe reference counts (id 1..8)
 .equ NFD_INPOS  0x240078             ; byte position in FNB
 .equ NFD_CHAR   0x240079             ; 1-byte nfd_putc scratch (word addr)
+.equ NFD_FNB_DONE 0x24007B           ; command line consumed; fd0 is tty stdin
 .equ NFD_G      0x240080             ; cross-call state block
 
 ; cross-call state, one small set per operation
@@ -525,6 +526,10 @@ nfd_r_term:
   LD r1,r2,2
   CMP r1,r0
   JMP[NE] @nfd_r_no
+  LA r1,#NFD_FNB_DONE
+  LD r2,r1,0
+  CMP r2,r0
+  JMP[NE] @nfd_r_stdin
   LA r1,#NFD_INPOS
   LD r2,r1,0
   LA r3,#FNB
@@ -549,7 +554,74 @@ nfd_r_t_done:
   LD r2,r1,0
   ADD r2,r2,r6
   ST r2,r1,0
+  CMP r6,r0
+  JMP[NE] @nfd_r_t_ret
+  LA r1,#NFD_FNB_DONE
+  MOVI r2,1
+  ST r2,r1,0
+  JMP @nfd_r_stdin
+nfd_r_t_ret:
   ADD r1,r6,r0
+  JMP @nfd_r_d
+
+; fd 0 has consumed the command line.  Blocking tty read: wait for the
+; Terminal process to queue a completed stdin line in INB (phase 2).
+nfd_r_stdin:
+  LD r1,r0,@g_stdin_ready
+  CMP r1,r0
+  JMP[NE] @nfd_r_s_have
+  LD r1,r0,@g_stdin_eof
+  CMP r1,r0
+  JMP[NE] @nfd_r_s_eof
+  MOVI r1,1
+  ST r1,r0,@g_stdin_want
+nfd_r_s_wait:
+  MOVI r1,1
+  SVC 24
+  LD r1,r0,@g_stdin_ready
+  CMP r1,r0
+  JMP[EQ] @nfd_r_s_wait
+nfd_r_s_have:
+  ST r0,r0,@g_stdin_want
+  LD r2,r0,@g_stdin_len
+  CMP r2,r0
+  JMP[NE] @nfd_r_s_copy
+  ; An empty line is the terminal EOF.
+  ST r0,r0,@g_stdin_ready
+  MOVI r1,1
+  ST r1,r0,@g_stdin_eof
+nfd_r_s_eof:
+  MOVI r1,0
+  JMP @nfd_r_d
+nfd_r_s_copy:
+  LD r3,r0,@g_stdin_pos
+  LA r4,#INB
+  ADD r4,r4,r3
+  LD r5,r0,#NFD_R_DST
+  LD r6,r0,#NFD_R_LEN
+  MOVI r7,0
+nfd_r_s_l:
+  CMP r6,r0
+  JMP[EQ] @nfd_r_s_done
+  CMP r3,r2
+  JMP[GE] @nfd_r_s_done
+  LDB r8,r4,0
+  STB r8,r5,0
+  ADD r4,r4,r13
+  ADD r5,r5,r13
+  ADD r7,r7,r13
+  ADD r3,r3,r13
+  SUB r6,r6,r13
+  JMP @nfd_r_s_l
+nfd_r_s_done:
+  ST r3,r0,@g_stdin_pos
+  CMP r3,r2
+  JMP[LT] @nfd_r_s_ret
+  ST r0,r0,@g_stdin_ready
+  ST r0,r0,@g_stdin_pos
+  ST r0,r0,@g_stdin_len
+nfd_r_s_ret:
+  ADD r1,r7,r0
   JMP @nfd_r_d
 nfd_r_no:
   LA r1,0xFFFFFFFF
@@ -600,6 +672,7 @@ nfd_w_term:
   LD r3,r0,#NFD_W_LEN
   CMP r3,r0
   JMP[EQ] @nfd_w_zero
+  CALL @vc_line_lock
   LD r4,r0,#NFD_W_SRC
   ST r4,r0,#NFD_W_CUR
   ST r0,r0,#NFD_W_CNT
@@ -620,6 +693,7 @@ nfd_w_t_l:
   ST r5,r0,#NFD_W_CNT
   JMP @nfd_w_t_l
 nfd_w_t_done:
+  CALL @vc_line_unlock
   LD r1,r0,#NFD_W_CNT
   JMP @nfd_w_d
 nfd_w_zero:
@@ -993,8 +1067,22 @@ nfd_rs_d:
   LD r15,r14,0
   RET
 
-; nfd_fd0_line: phase 1.5 stdin is the current completed FNB line.
+; nfd_fd0_line: the command line itself is not stdin.  Start at the NUL so
+; the first fd 0 read goes to the Terminal's blocking stdin queue.
 nfd_fd0_line:
-  LA r1,#NFD_INPOS
+  LA r1,#NFD_FNB_DONE
   ST r0,r1,0
+  ST r0,r0,@g_stdin_want
+  LA r1,#NFD_INPOS
+  LA r2,#FNB
+  MOVI r3,0
+nfd_fdl_l:
+  LDB r4,r2,0
+  CMP r4,r0
+  JMP[EQ] @nfd_fdl_d
+  ADD r2,r2,r13
+  ADD r3,r3,r13
+  JMP @nfd_fdl_l
+nfd_fdl_d:
+  ST r3,r1,0
   RET

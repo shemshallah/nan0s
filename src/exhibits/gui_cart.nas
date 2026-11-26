@@ -155,6 +155,30 @@ g_shell_req:
 .word 0
 g_shell_done:
 .word 0
+; Serialize Terminal cell/cursor updates between PID 1 (echo/input) and
+; PID 2 (command output).  A process that finds it busy yields and retries.
+g_vc_lock:
+.word 0
+g_line_lock:
+.word 0
+; Phase-2 tty input: while PID 2 runs a command, completed Terminal lines
+; are queued here instead of being treated as new shell commands.
+g_shell_busy:
+.word 0
+g_stdin_ready:
+.word 0
+g_stdin_len:
+.word 0
+g_stdin_pos:
+.word 0
+g_stdin_eof:
+.word 0
+g_stdin_want:
+.word 0
+g_in_start:
+.word 0
+g_in_active:
+.word 0
 ; Actual guest word count reported by the kernel boot (0 in the legacy
 ; single-cart image).  Programs and the shell use this instead of a constant.
 g_mem_words:
@@ -578,12 +602,36 @@ LD r15,r14,0
 RET
 s_banner:
 .str "NaN/0S TERMINAL\nNANIX POSIX shell\nh = help\n> "
+; ---- vc_line_lock/unlock: serialize whole Terminal input/output lines ----
+vc_line_lock:
+LD r3,r0,@g_line_lock
+CMP r3,r0
+JMP[EQ] @vll_ok
+SVC 0
+JMP @vc_line_lock
+vll_ok:
+MOVI r3,1
+ST r3,r0,@g_line_lock
+RET
+vc_line_unlock:
+ST r0,r0,@g_line_lock
+RET
+
 ; ---- vc_putc: r1=id r2=char ----
 vc_putc:
 ST r15,r14,0
 ADD r14,r14,r13
 ST r1,r0,@vp_id
 ST r2,r0,@vp_ch
+vc_lock:
+LD r3,r0,@g_vc_lock
+CMP r3,r0
+JMP[EQ] @vc_locked
+SVC 0
+JMP @vc_lock
+vc_locked:
+MOVI r3,1
+ST r3,r0,@g_vc_lock
 CALL @wm_wbase
 ST r1,r0,@vp_wb
 LD r2,r0,@vp_ch
@@ -663,6 +711,7 @@ ADD r5,r5,r6
 ADD r5,r1,r5
 ST r0,r5,0
 vp_done:
+ST r0,r0,@g_vc_lock
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -845,6 +894,22 @@ ST r15,r14,0
 ADD r14,r14,r13
 ST r1,r0,@tk_id
 ST r3,r0,@tk_k
+LD r4,r0,@g_shell_busy
+CMP r4,r0
+JMP[EQ] @tk_key_nostart
+LD r4,r0,@g_in_active
+CMP r4,r0
+JMP[NE] @tk_key_active
+CALL @vc_line_lock
+CALL @wm_wbase
+LD r4,r1,#W_A2
+ST r4,r0,@g_in_start
+MOVI r4,1
+ST r4,r0,@g_in_active
+JMP @tk_key_nostart
+tk_key_active:
+tk_key_nostart:
+LD r3,r0,@tk_k
 MOVI r4,13
 CMP r3,r4
 JMP[EQ] @tk_enter
@@ -914,6 +979,19 @@ LD r1,r0,@tk_id
 CALL @term_draw
 JMP @tk_ret
 tk_line_mode:
+; While the shell runs, the same Terminal row is a stdin record, not a new
+; command: slice from the first key column and do not expect "> ".
+LD r5,r0,@g_shell_busy
+CMP r5,r0
+JMP[EQ] @tk_lm_cmd
+LD r5,r0,@g_in_start
+ST r5,r0,@fs_pcol
+ST r0,r0,@fs_rprompt
+JMP @tk_lm_read
+tk_lm_cmd:
+MOVI r5,2
+ST r5,r0,@fs_rprompt
+tk_lm_read:
 CALL @fs_readline
 ; End the echoed line before either the full-line dispatcher or the
 ; single-letter legacy command runs.  This is the line discipline for the
@@ -927,15 +1005,57 @@ CALL @vc_putc
 LD r1,r0,@g_shell_pid
 CMP r1,r0
 JMP[EQ] @tk_line_local
+LD r5,r0,@g_shell_busy
+CMP r5,r0
+JMP[EQ] @tk_lm_shell_cmd
+; busy: this line belongs on fd 0, not in the command parser.  Wait until
+; the shell has consumed the previous line so INB is never overwritten.
+tk_lm_store_wait:
+LD r5,r0,@g_stdin_ready
+CMP r5,r0
+JMP[EQ] @tk_lm_store
+LD r5,r0,@g_shell_done
+CMP r5,r0
+JMP[NE] @tk_lm_store
+LD r5,r0,@g_shell_busy
+CMP r5,r0
+JMP[EQ] @tk_lm_store
+MOVI r1,1
+SVC 24
+JMP @tk_lm_store_wait
+tk_lm_store:
+CALL @fs_stdin_store
+ST r0,r0,@g_in_active
+CALL @vc_line_unlock
+JMP @tk_ret
+tk_lm_shell_cmd:
 ST r0,r0,@g_shell_done
 MOVI r1,1
 ST r1,r0,@g_shell_req
+MOVI r1,1
+ST r1,r0,@g_shell_busy
+ST r0,r0,@g_in_active
 tk_shell_wait:
+; Only service keys while a command is actually blocked in fd 0.  Otherwise
+; leave normal command type-ahead in the keyboard ring, as before.
+LD r5,r0,@g_stdin_want
+CMP r5,r0
+JMP[EQ] @tk_sw_yield
+CALL @kbd_poll
+CALL @kbd_get
+MOVI r4,0xFFFF
+BOOL.8 r1,r1,r4
+CMP r1,r0
+JMP[EQ] @tk_sw_yield
+ST r1,r0,@g_key
+CALL @g_onkey
+tk_sw_yield:
 SVC 0
 LD r1,r0,@g_shell_done
 CMP r1,r0
 JMP[EQ] @tk_shell_wait
 ST r0,r0,@g_shell_done
+ST r0,r0,@g_shell_busy
 JMP @tk_line_prompt
 tk_line_local:
 CALL @fs_dispatch
@@ -946,6 +1066,8 @@ LD r1,r0,@tk_id
 CALL @wm_wbase
 LD r5,r1,#W_A2
 ST r5,r0,@fs_pcol
+MOVI r5,2
+ST r5,r0,@fs_rprompt
 LD r1,r0,@tk_id
 MOVI r2,@fs_s_prompt
 CALL @vc_puts
@@ -7514,6 +7636,8 @@ bk_ret:
 ; Commands are full-line: ls, pwd, cat PATH, cc PATH, run PATH, rm PATH,
 ; mkdir PATH, write PATH, edit PATH. The C editor adds .save.
 .equ FNB    10640000
+.equ INB    10641000
+.equ INB_MAX 1024
 .equ FNPATH 10640400
 .equ FIPB   10644000
 .equ EXB    10680000
@@ -7538,11 +7662,13 @@ MOVI r6,#VCW
 MUL r5,r5,r6
 LD r7,r0,@fs_pcol
 ADD r5,r5,r7
-ADDI r5,r5,2
+LD r9,r0,@fs_rprompt
+ADD r5,r5,r9
 ST r5,r0,@fs_start
 LD r6,r0,@fs_col
 LD r7,r0,@fs_pcol
-ADDI r7,r7,2
+LD r9,r0,@fs_rprompt
+ADD r7,r7,r9
 SUB r6,r6,r7
 CMP r6,r0
 JMP[GE] @fs_rl_ok
@@ -7566,6 +7692,43 @@ JMP @fs_rl_l
 fs_rl_d:
 STB r0,r8,0
 LD r1,r0,@fs_n
+SUB r14,r14,r13
+LD r15,r14,0
+RET
+
+; fs_stdin_store: queue the line fs_readline just copied into FNB.  A stdin
+; line keeps its newline (cat/read see a terminated record); an empty line
+; queues a zero-length record which nfd_read turns into EOF.
+fs_stdin_store:
+ST r15,r14,0
+ADD r14,r14,r13
+LD r6,r0,@fs_n
+LA r4,#FNB
+LA r5,#INB
+MOVI r7,0
+fs_ss_l:
+CMP r7,r6
+JMP[GE] @fs_ss_done
+LDB r1,r4,0
+STB r1,r5,0
+ADD r4,r4,r13
+ADD r5,r5,r13
+ADD r7,r7,r13
+JMP @fs_ss_l
+fs_ss_done:
+CMP r6,r0
+JMP[EQ] @fs_ss_empty
+MOVI r1,10
+STB r1,r5,0
+ADD r5,r5,r13
+ADD r6,r6,r13
+fs_ss_empty:
+STB r0,r5,0
+ST r6,r0,@g_stdin_len
+ST r0,r0,@g_stdin_pos
+MOVI r1,1
+ST r1,r0,@g_stdin_ready
+ST r0,r0,@g_stdin_eof
 SUB r14,r14,r13
 LD r15,r14,0
 RET
@@ -8614,6 +8777,8 @@ fs_col:
 .word 0
 fs_pcol:
 .word 0
+fs_rprompt:
+.word 2
 fs_start:
 .word 0
 fs_base:

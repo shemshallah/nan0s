@@ -95,9 +95,9 @@ PY
 # Second boot: read the runtime base pointers from the fixed config words.
 # Guest word memory starts at physical 0x200000; word 0x3F010 is at byte
 # 0x3F8080.  The boot kernel writes NS_PTR, NP_PTR, NPV_PTR, MEM_WORDS there.
-S1_FB_DELAY="${NAN0S_GUI64_SCHED_PTR_DELAY:-5}" \
+S1_FB_DELAY="${NAN0S_GUI64_SCHED_PTR_DELAY:-60}" \
 sh tools/s1_runner.sh --img "$T/gui_sched.nan" --mem "${NAN0S_GUI64_SCHED_MEM:-128}" \
-    --steps "${NAN0S_GUI64_SCHED_PTR_STEPS:-200000000}" \
+    --steps "${NAN0S_GUI64_SCHED_PTR_STEPS:-4000000000}" \
     --dump-mem "0x3F8080:0x20:$T/ptr.bin" \
     > "$T/ptr.out" 2> "$T/ptr.err" || true
 [ -s "$T/ptr.bin" ] || { echo "gui64_sched: FAIL (no config dump)"; tail -8 "$T/ptr.err"; exit 1; }

@@ -1,4 +1,4 @@
-# NANIX fd / stdio contract (phase 1.5)
+# NANIX fd / stdio contract (phase 1.5 + blocking tty stdin)
 
 Status: coordination contract for shell-I/O, persistence and stdio wiring.
 
@@ -8,7 +8,7 @@ Each shell process has a small fd table (16 entries) in raw NaN16:
 
 | fd | default | backing |
 |---:|---|---|
-| 0 | terminal input | FNB / line queue |
+| 0 | terminal input | command line, then blocking Terminal line queue (INB) |
 | 1 | terminal output | Terminal `vc_putc` |
 | 2 | terminal error | Terminal `vc_putc` (separate slot, same display) |
 | 3..15 | free | NPAF file stream or pipe |
@@ -28,8 +28,11 @@ Descriptor entry: `{used, kind, handle, flags, pipe_id}`.
 - `nfd_pipe r1=out_fd_ptr` -> writes read fd, write fd; returns 0/-1.
   - Pipes use `nanpipe.nas` (`NPIPE_MAX`).
 - `nfd_putc r1=fd r2=char`; `nfd_puts r1=fd r2=word string`.
-- `nfd_fd0_line` supplies the current shell line; `cat` with no file reads the
-  current line then EOF for phase 1.5 (a blocking tty read is phase 2).
+- `nfd_fd0_line` marks the command line consumed; the next fd 0 read blocks
+  on the Terminal stdin queue.  A completed stdin line carries its newline; an
+  empty line is the tty EOF.  The Terminal only services keys while
+  `g_stdin_want` is set, so ordinary command type-ahead still queues in the
+  keyboard ring and is not mistaken for stdin.
 
 Do not access the fd table directly outside `nixfd.nas`; the shell and stdio
 libraries use this ABI.
@@ -40,7 +43,9 @@ libraries use this ABI.
 - `cmd < FILE`
 - `cmd1 | cmd2` — sequential pipe execution first: run left with fd 1
   connected to the pipe, then right with fd 0 connected.  True concurrent
-  pipelines need process/thread spawn and are phase 2.
+  pipelines still need process/thread spawn and remain phase 2.
+- `cat` with no file reads fd 0 until an empty line (tty EOF); `cat FILE`
+  and redirections are unchanged.
 - Redirections restore fd 1/2/0 after the command.
 - Builtins and external command functions write through fd 1; diagnostics
   through fd 2.
@@ -56,7 +61,9 @@ image back into `nanfs/` for a commit.  Runtime writes remain volatile until
 ## Ownership
 
 - shell-I/O agent: `src/lib/nixfd.nas`, `src/nix/nixsh.nas`,
-  `src/lib/nanpipe.nas`, `tools/nixsh_gate.sh`.
+  `src/lib/nanpipe.nas`, `tools/nixsh_gate.sh`,
+  `tools/nixsh_io_gate.sh`, `tools/nixsh_stdin_gate.sh`.
+  Terminal tty glue and line locking live in `src/exhibits/gui_cart.nas`.
 - persistence agent: `src/lib/nfs2.nas`, `src/lib/bare.nas`,
   `src/exhibits/gui_cart.nas` NFS boot block, `tools/rootfs_sync.sh`,
   `tools/nfs_persist_gate.sh`, `nanfs/`.
