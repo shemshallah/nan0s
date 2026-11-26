@@ -516,3 +516,50 @@ Proof.
 Qed.
 
 Print Assumptions lp_exec_CMP_refines.
+
+(** ** JMP *)
+
+Theorem lp_exec_JMP_refines :
+  forall L vm prog p target,
+    Rlp L vm ->
+    lp_k L <> 3 ->
+    decode_word_p (lp_mem_at L (lp_pc L)) = Some (pJMP p target) ->
+    nth_error prog (vm_pc vm) = Some (pJMP p target) ->
+    Rlp (lp_exec L (pJMP p target)) (exec_instr_p prog vm).
+Proof.
+  intros L vm prog p target HR Hk3 Hdec Hnth.
+  unfold Rlp in *.
+  destruct HR as
+    (Hpc & Hregs & Hreg15 & Hlink & Hmem & Hzf & Hlf & Hk & Hhalt & Hbound).
+  unfold lp_exec, exec_instr_p.
+  rewrite Hnth. cbn.
+  unfold R, lp_to_LState.
+  split_conj_step.
+  - change
+      ((if pred_holds p (vm_zf vm) (vm_lf vm)
+        then target else S (vm_pc vm)) =
+       (if pred_passes (pred_nat p) (lp_k L)
+        then target else S (lp_pc L))).
+    rewrite Hpc, Hzf, Hlf.
+    rewrite (pred_agrees p (lp_k L) Hk Hk3).
+    reflexivity.
+  - intros i Hi.
+    change (vm_reg vm i = N.to_nat (lget_regN (lp_reg L) i) mod 2 ^ 32).
+    exact (Hregs i Hi).
+  - change (vm_reg vm 15 =
+            N.to_nat (lget_regN (lp_reg L) 15) mod 2 ^ 32).
+    exact Hreg15.
+  - change (vm_link vm = N.to_nat (lget_regN (lp_reg L) 15)). exact Hlink.
+  - intro x.
+    change (vm_mem vm x = payload_word (lp_mem_at (lp_exec L (pJMP p target)) x)).
+    rewrite lp_mem_at_lp_exec_JMP. exact (Hmem x).
+  - change (vm_zf vm = Nat.eqb ((lp_k L / 2) mod 2) 1). exact Hzf.
+  - change (vm_lf vm = Nat.eqb (lp_k L mod 2) 1). exact Hlf.
+  - change (lp_k L < 4). exact Hk.
+  - change (vm_halted vm = lp_halted L). exact Hhalt.
+  - intros i Hi.
+    change (N.to_nat (lget_regN (lp_reg L) i) < 2 ^ 32).
+    exact (Hbound i Hi).
+Qed.
+
+Print Assumptions lp_exec_JMP_refines.
