@@ -108,6 +108,13 @@ Raw-NaN gates, not oracle claims:
   `term_cmd` and writes into the shared virtual console.  The gate requires
   the complete NANIX transcript plus live PID 1/PID 2 states and non-zero
   timer preemption on x86_64 S1.
+- `tools/mem_scale_gate.sh` — boots the kernel image at 64 MiB and 128 MiB
+  and requires the NANIX shell's `mem` command to report `16777216` and
+  `33554432` words.  The count comes from MEMQ, not a guest constant.
+- `tools/alloc_scale_gate.sh` — `SVC 2` carves 4,096-word and 8,388,608-word
+  RW regions from the bump heap and returns their bases.  This is the
+  allocation primitive for variable-size program images; the region spans
+  the machine's discovered RAM.
 - `tools/nanpipe_libc_gate.sh` — guest libc `pipe()/dup2()/read()/write()`
   over the NaN byte-pipe table; `PIPE PASS` on x86_64 S1.
 - `tools/nansched_gate.sh` — the kernel scheduler (`src/lib/nansched.nas`):
@@ -195,6 +202,11 @@ service table.
       under the kernel scheduler.
 - [x] Kernel-boot image: desktop PID 1 + NANIX shell PID 2 under
       `nankernel` + `nansched`, gated on x86_64 S1.
+- [x] Runtime MEMQ word count, both process region tables and the boot region
+      table widened to real RAM (64 MiB/128 MiB gates).
+- [x] `SVC 2` bump heap sized from MEMQ (4K and 64 MiB allocations gated).
+- [ ] Relocatable variable-size executable loader on the SVC 2 heap.
+- [ ] VRAM/DEV windows sized from the device's real BAR, with sealed DMA.
 - [ ] Promote the kernel-boot image to the default published image.
 - [ ] Per-thread preemption and per-process nanthr state.
 - [x] SMP 2/4-CPU prototype (AP startup, per-CPU timers, IPIs, NaN atomics).

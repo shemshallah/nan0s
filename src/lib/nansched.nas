@@ -5,6 +5,7 @@
 ;
 ;   SVC  0 yield              -> 0 (thread yield in thread mode)
 ;   SVC  1 exit(code)         -> does not return
+;   SVC  2 region_map(words)  -> base word of a fresh RW bump region, or 0
 ;   SVC  9 spawn(descriptor)  -> pid or 0
 ;   SVC 10 wait(pid|0|-1)     -> exit status (blocks; pid 0/-1 = any child)
 ;   SVC 13 thread_create(entry, stack, arg) -> tid or 0
@@ -113,6 +114,12 @@
 .include "nanproc.nas"
 .include "nanthr.nas"
 
+; Bump heap for SVC 2.  The kernel boot sets both words from MEMQ; tests that
+; do not call SVC 2 can leave them zero.  The words live above the GUI cart
+; code and below the default nanproc table.
+.equ NSH_NEXT 0x3F000
+.equ NSH_END  0x3F001
+
 .equ NS_MAX_PROCS  1024
 .equ NS_NPRIO      32
 .equ NS_FRAME      9
@@ -189,12 +196,17 @@
 ;   ns_init            initialise nanproc + scheduler, program S1 ports
 ;   ns_svc(frame)      SVC/timer entry, owns SVCRET
 ;   ns_start(pid|0)    enter the first process, owns SVCRET
+;   ns_heap_init       r1=heap base r2=heap end (exclusive words)
 ns_init:
   JMP @nsch_init
 ns_svc:
   JMP @nsch_svc
 ns_start:
   JMP @nsch_start
+ns_heap_init:
+  ST r1,r0,#NSH_NEXT
+  ST r2,r0,#NSH_END
+  RET
 
 ; ---------------------------------------------------------------------------
 ; nsch_init - initialise nanproc and the scheduler, then activate the S1 ABI.
@@ -308,6 +320,9 @@ nsch_ke_svc:
   JMP[NE] @nsch_ke_fwd
   JMP @nsch_ke_thread
 nsch_ke_13:
+  MOVI r4,2
+  CMP r3,r4
+  JMP[EQ] @nsch_ke_new
   MOVI r4,13
   CMP r3,r4
   JMP[LT] @nsch_ke_25
@@ -371,6 +386,9 @@ nsch_dispatch:
   MOVI r4,1
   CMP r3,r4
   JMP[EQ] @nsch_svc_exit
+  MOVI r4,2
+  CMP r3,r4
+  JMP[EQ] @nsch_svc_region
   MOVI r4,9
   CMP r3,r4
   JMP[EQ] @nsch_svc_spawn
@@ -467,6 +485,74 @@ nsch_exit_nothr:
   LD r1,r2,#NS_CUR
   CALL @np_reap
   JMP @nsch_sched_save_switch
+
+; ---------------------------------------------------------------------------
+; SVC 2 - region_map(words): carve a RW region from the boot-time bump heap,
+; append it to the current process's nanproc/S1 region table, return its base.
+nsch_svc_region:
+  ST r15,r14,0
+  ADDI r14,r14,#NS_FRAME
+  LA r2,#NS_BASE
+  LD r10,r2,#NS_FP
+  LD r3,r10,1
+  ST r3,r14,1
+  CMP r3,r0
+  JMP[EQ] @nsch_region_fail
+  LD r4,r0,#NSH_NEXT
+  ADD r5,r4,r3
+  LD r6,r0,#NSH_END
+  CMP r5,r6
+  JMP[GT] @nsch_region_fail
+  ST r5,r0,#NSH_NEXT
+  ST r4,r14,2
+  LA r2,#NS_BASE
+  LD r1,r2,#NS_CUR
+  ST r1,r14,3
+  CALL @nsch_slot
+  ST r1,r14,4
+  LD r1,r14,3
+  CALL @np_lookup
+  CMP r1,r0
+  JMP[EQ] @nsch_region_fail
+  LD r3,r1,#NP_E_NREG
+  MOVI r4,8
+  CMP r3,r4
+  JMP[GE] @nsch_region_fail
+  ST r3,r14,5
+  LD r1,r14,3
+  LD r2,r14,2
+  LD r3,r14,1
+  MOVI r4,#NP_K_HEAP
+  MOVI r5,#NP_PROT_RW
+  CALL @np_region_add
+  CMP r1,r0
+  JMP[NE] @nsch_region_fail
+  LD r1,r14,4
+  CALL @nsch_rt_ptr
+  LD r3,r14,5
+  SHL r3,r3,2
+  ADD r2,r1,r3
+  LD r3,r14,2
+  ST r3,r2,0
+  LD r3,r14,1
+  ST r3,r2,1
+  MOVI r3,#NP_K_HEAP
+  ST r3,r2,2
+  MOVI r3,#NP_PROT_RW
+  ST r3,r2,3
+  LA r2,#NS_BASE
+  LD r10,r2,#NS_FP
+  LD r1,r14,2
+  ST r1,r10,21
+  JMP @nsch_region_out
+nsch_region_fail:
+  LA r2,#NS_BASE
+  LD r10,r2,#NS_FP
+  ST r0,r10,21
+nsch_region_out:
+  ADDI r14,r14,#NS_FRAME_NEG
+  LD r15,r14,0
+  SVCRET
 
 ; ---------------------------------------------------------------------------
 ; SVC 9 - spawn(descriptor).

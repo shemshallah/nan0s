@@ -7663,6 +7663,11 @@ CALL @fs_prefix
 CMP r1,r0
 JMP[NE] @fs_d_rm
 LA r1,#FNB
+LA r2,@fs_s_alloc
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @fs_d_alloc
+LA r1,#FNB
 LA r2,@fs_s_mem
 CALL @fs_prefix
 CMP r1,r0
@@ -7979,6 +7984,51 @@ MOVI r2,10
 CALL @vc_putc
 JMP @fs_ls_l
 fs_ls_d:
+JMP @fs_disp_y
+fs_d_alloc:
+LA r1,#FNB
+ADDI r1,r1,6
+CALL @fs_skipsp
+MOVI r5,0
+fs_al_num:
+LDB r2,r1,0
+CMP r2,r0
+JMP[EQ] @fs_al_go
+MOVI r4,48
+CMP r2,r4
+JMP[LT] @fs_al_bad
+MOVI r4,57
+CMP r2,r4
+JMP[GT] @fs_al_bad
+MOVI r4,10
+MUL r5,r5,r4
+MOVI r4,48
+SUB r2,r2,r4
+ADD r5,r5,r2
+ADD r1,r1,r13
+JMP @fs_al_num
+fs_al_go:
+LD r6,r0,@g_shell_pid
+CMP r6,r0
+JMP[EQ] @fs_al_bad
+ADD r1,r5,r0
+SVC 2
+CMP r1,r0
+JMP[EQ] @fs_al_bad
+ST r1,r0,@fs_alloc_base
+LD r1,r0,@tk_id
+MOVI r2,@fs_s_base
+CALL @vc_puts
+LD r5,r0,@fs_alloc_base
+CALL @fs_putdec
+LD r1,r0,@tk_id
+MOVI r2,10
+CALL @vc_putc
+JMP @fs_disp_y
+fs_al_bad:
+LD r1,r0,@tk_id
+MOVI r2,@fs_s_allocbad
+CALL @vc_puts
 JMP @fs_disp_y
 fs_d_mem:
 LD r1,r0,@tk_id
@@ -8339,6 +8389,12 @@ fs_s_mkdir:
 .str "mkdir "
 fs_s_rm:
 .str "rm "
+fs_s_alloc:
+.str "alloc "
+fs_s_base:
+.str "base "
+fs_s_allocbad:
+.str "alloc fail\n"
 fs_s_mem:
 .str "mem"
 fs_s_memout:
@@ -8400,6 +8456,8 @@ fs_textp:
 fs_textlen:
 .word 0
 fs_num:
+.word 0
+fs_alloc_base:
 .word 0
 fs_typ:
 .word 0

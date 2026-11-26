@@ -83,8 +83,15 @@ gui_mem_have:
   ADD r4,r4,r5
   ST r11,r4,1
 
+  ; Bump heap from HEAP_BASE to the top of real RAM (minus one guard page).
+  LA r1,#HEAP_BASE
+  ADD r2,r11,r0
+  LA r4,0x10000
+  SUB r2,r2,r4
+  CALL @ns_heap_init
+  SUB r5,r2,r1
   LA r4,@g_heap_free
-  ST r0,r4,0
+  ST r5,r4,0
 
   MOVI r1,0
   LA r2,@gui_desc_desktop

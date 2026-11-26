@@ -13,7 +13,16 @@ M1a DONE: high-data `LDS`/`STS` forms address the 0xF0000 compiler scratch windo
 M1c DONE: control port 0x4E07 relocates the `LDS`/`STS` window; the default remains 0xF0000. The C core, native x86 core, host core and x86_64 S1 all honor it, so compiler scratch can become a per-process mapping without changing `nmk` output.
 
 M1b DONE: the frozen kernel ABI v0.1 is in the product tree. The C core and x86_64 S1 both enforce regions, traps, timers and kernel-only control ports. `kabi_proc_demo.nas` proves a region-isolated process, a `region_map` heap grant backed by nalloc, and fault recovery; `tools/kabi_proc_gate.sh` compares the C and x86_64 transcripts exactly.
-M1: mask becomes a variable (not an assembler constant); RAM size from the BIOS memory map (E820) read in the boot sector; guest array sized to what exists, up to about 2 GB (2^28 words) in 32-bit flat mode. Needs memory-operand forms in nasm1 or a register-held mask.
+M1 (implemented in the current kernel-boot slice): the guest asks MEMQ
+(CPUID leaf `0x4E4D00FF`, subleaf 1) for the actual word count, refuses
+less than 16M words, widens the boot region table and both process region
+tables, and reports the count through the NANIX `mem` command.
+`tools/mem_scale_gate.sh` proves 64 MiB and 128 MiB machines return
+different counts from the same raw image.  `SVC 2` carves RW regions from
+a bump heap spanning `HEAP_BASE..top-of-RAM`; `tools/alloc_scale_gate.sh`
+allocates 4K and 64 MiB regions.  Still open for M1: a relocatable
+variable-size executable loader, and VRAM/DEV windows sized from the real
+device BAR rather than a fixed S1 test aperture.
 M2: x86-64 long-mode kernel (nasm1 gains REX/64-bit encodings), identity-mapped large pages, guest word array above 4 GB, 16 GB = 2^31 words. Register word index stays 32-bit; word index 2^31 and up is reserved.
 M3: PCIe enumeration (config space), find the GPU, map its BARs (resizable BAR for a full VRAM aperture), RAWMAP window ops, DMA block copy RAM <-> window with seal-on-transfer.
 M4: GPU compute: command submission and kernels emitted from NaN source (a GPU emitter like nasm1 is for x86). Honest risk: this needs a documented GPU ISA and a bring-up path without a vendor driver. AMD publishes ISA documents and has open drivers to read; NVIDIA keeps SASS and firmware closed. Choice of GPU decides feasibility.
