@@ -415,6 +415,6 @@ Qed.
 
 Print Assumptions lp_exec_CALL_refines.
 
-Search N.ltb.
-Search N.eqb.
-Search N2Nat.
+Search (N.to_nat _ < N.to_nat _).
+Search (N.to_nat _ = N.to_nat _).
+Search (N.to_nat _ <= N.to_nat _).
