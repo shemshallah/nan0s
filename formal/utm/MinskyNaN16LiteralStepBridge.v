@@ -993,8 +993,8 @@ Proof.
   rewrite N2Nat.inj_add.
   rewrite N2Nat.inj_sub.
   rewrite to_nat_two32.
-  set (M := 2 ^ 32).
-  change (N.to_nat x < M) in Hxn.
+  remember (2 ^ 32) as M eqn:HM.
+  rewrite <- HM in Hxn.
   assert (Hshape :
     N.to_nat x + (M - N.to_nat y)
     = M + (N.to_nat x - N.to_nat y)) by lia.
