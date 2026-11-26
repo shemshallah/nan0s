@@ -2,6 +2,16 @@
 # SCAFFOLD build: base image (nasm0 proofs), generated Baby data, then the unified image. See tools/mkall.sh for the image rule (max 2 images in build/).
 set -e
 cd "$(dirname "$0")/.."
+# Product guest sources are raw NaN16: .nas/.nan (and the native x86 boot
+# trampoline .xa).  C, .s/.S assembly or objects in these trees would mean a
+# host artifact leaked into the system; refuse to build.
+for d in src/nan src/nix src/lib src/exhibits src/boot; do
+  bad=$(find "$d" -type f \( -name '*.c' -o -name '*.s' -o -name '*.S' -o -name '*.o' \) -print -quit)
+  if [ -n "$bad" ]; then
+    echo "build: non-NaN source in $d: $bad" >&2
+    exit 1
+  fi
+done
 sh tools/mkbase.sh
 sh tools/rootfs_seed.sh
 awk -f tools/nmk.awk -v CMD=emit src/museum/museum.nas > src/nan/museum.nan

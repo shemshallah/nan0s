@@ -18,6 +18,8 @@
 .include "../lib/nanpipe.nas"
 .include "../lib/nixfd.nas"
 .include "../lib/nixcmds.nas"
+.include "../lib/nixjobs.nas"
+.include "../lib/nixjobs_sh.nas"
 
 .equ NX_STACK   0x250000             ; words, below the heap
 .equ NX_SCAN    0x200                ; low globals, direct LD/ST
@@ -100,6 +102,17 @@
 .equ NX_F_PAT   0x2C5
 .equ NX_F_FILE  0x2C6
 .equ NX_F_TMP   0x2C7
+.equ NX_JOB_READY 0x2C8
+.equ NX_BG_ID    0x2C9
+.equ NX_BG_TICKS 0x2CA
+.equ NX_BG_JOB   0x2CB
+.equ NX_JOBTAB   0x110000
+.equ NX_JOBCTX1  0x110100
+.equ NX_JOBFD1   0x110300
+.equ NX_JOBSCR   0x110800
+.equ NX_JOBSTK1  0x108000
+.equ NX_JOBARENA 0x110000
+.equ NX_JOBCAP   8
 
 ; POSIX variable lane: 16 entries of 16-byte name + 64-byte value.  The
 ; table and its string scratches are byte addressed and live above the GUI
@@ -155,8 +168,16 @@ nx_run:
   ADDI r14,r14,9
   CALL @nfd_fd0_line
   LA r1,#FNB
+  CALL @nx_bg_tail
+  CMP r1,r0
+  JMP[NE] @nx_bg_run
+  LA r1,#FNB
   LA r2,0xFFFFFFFF
   CALL @nx_exec_line
+  JMP @nx_run_done
+nx_bg_run:
+  CALL @nx_exec_bg
+nx_run_done:
   MOVI r1,0
   ADDI r14,r14,-9
   LD r15,r14,0
@@ -526,6 +547,16 @@ nx_dispatch:
   CALL @nx_streq
   CMP r1,r0
   JMP[NE] @nx_uniq
+  LA r1,#NX_CMD
+  LA r2,@nx_c_jobs
+  CALL @nx_streq
+  CMP r1,r0
+  JMP[NE] @nx_jobs
+  LA r1,#NX_CMD
+  LA r2,@nx_c_wait
+  CALL @nx_streq
+  CMP r1,r0
+  JMP[NE] @nx_wait
   LA r1,#NX_CMD
   LA r2,@nx_c_read
   CALL @nx_streq
@@ -2250,6 +2281,213 @@ nx_wc_bad:
   ST r1,r0,#NX_STATUS
   JMP @nx_done
 
+; nx_bg_tail: strip one trailing unquoted '&' from FNB.  r1=1 if found.
+nx_bg_tail:
+  LA r1,#FNB
+  MOVI r2,0
+nx_bt_l:
+  LDB r3,r1,0
+  CMP r3,r0
+  JMP[EQ] @nx_bt_end
+  MOVI r4,32
+  CMP r3,r4
+  JMP[EQ] @nx_bt_next
+  ADD r2,r1,r0
+nx_bt_next:
+  ADD r1,r1,r13
+  JMP @nx_bt_l
+nx_bt_end:
+  CMP r2,r0
+  JMP[EQ] @nx_bt_no
+  LDB r3,r2,0
+  MOVI r4,38
+  CMP r3,r4
+  JMP[NE] @nx_bt_no
+  STB r0,r2,0
+  MOVI r1,1
+  RET
+nx_bt_no:
+  MOVI r1,0
+  RET
+
+; nx_job_ensure: initialize the shell job table once.
+nx_job_ensure:
+  ST r15,r14,0
+  ADDI r14,r14,9
+  LD r1,r0,#NX_JOB_READY
+  CMP r1,r0
+  JMP[NE] @nx_je_d
+  LA r1,#NX_JOBTAB
+  MOVI r2,#NX_JOBCAP
+  CALL @nj_job_init
+  CMP r1,r0
+  JMP[NE] @nx_je_d
+  MOVI r1,1
+  ST r1,r0,#NX_JOB_READY
+nx_je_d:
+  ADDI r14,r14,-9
+  LD r15,r14,0
+  RET
+
+; nx_exec_bg: currently supports `sleep N &` on a real SVC 9 worker.
+nx_exec_bg:
+  ST r15,r14,0
+  ADDI r14,r14,9
+  LA r1,#FNB
+  LA r2,#NX_CMD
+  CALL @nx_next_token
+  LA r1,#NX_CMD
+  LA r2,@nx_c_sleep
+  CALL @nx_streq
+  CMP r1,r0
+  JMP[EQ] @nx_bg_unsup
+  LA r1,#NX_A1
+  CALL @nx_next_arg
+  LA r1,#NX_A1
+  CALL @nx_atoi
+  ST r1,r0,#NX_BG_TICKS
+  CALL @nx_job_ensure
+  LA r1,#NX_JOBCTX1
+  LA r2,@njs_sleep
+  LA r3,#NX_JOBSTK1
+  MOVI r4,0x800
+  MOVI r5,0
+  LA r6,#NX_JOBARENA
+  MOVI r7,0x1000
+  LA r8,0x80000
+  LA r9,0x83000
+  LA r10,#NX_JOBFD1
+  LA r11,#NX_JOBSCR
+  LA r12,0x400
+  CALL @nj_ctx_init
+  CMP r1,r0
+  JMP[EQ] @nx_bg_fail
+  LA r1,#NX_JOBCTX1
+  LD r2,r0,#NX_BG_TICKS
+  ST r2,r1,#NJ_C_TICKS
+  LA r1,#NX_JOBTAB
+  LA r2,#NX_JOBCTX1
+  CALL @nj_job_start
+  CMP r1,r0
+  JMP[EQ] @nx_bg_fail
+  ST r1,r0,#NX_BG_JOB
+  LA r1,@nx_s_job
+  CALL @nx_puts
+  LD r1,r0,#NX_BG_JOB
+  CALL @nx_dec
+  CALL @nx_nl
+  JMP @nx_bg_d
+nx_bg_unsup:
+  LA r1,@nx_s_bgunsup
+  CALL @nx_eputs
+  JMP @nx_bg_d
+nx_bg_fail:
+  LA r1,@nx_s_bgfail
+  CALL @nx_eputs
+nx_bg_d:
+  ADDI r14,r14,-9
+  LD r15,r14,0
+  RET
+
+; nx_jobs: list live job slots as `job ID STATE`.
+nx_jobs:
+  ST r15,r14,0
+  ADDI r14,r14,9
+  CALL @nx_job_ensure
+  MOVI r2,1
+  ST r2,r0,#NX_BG_ID
+nx_jobs_l:
+  LD r2,r0,#NX_BG_ID
+  MOVI r3,#NX_JOBCAP
+  CMP r2,r3
+  JMP[GT] @nx_jobs_d
+  LA r1,#NX_JOBTAB
+  CALL @nj_job_state
+  CMP r1,r0
+  JMP[LE] @nx_jobs_n
+  ST r1,r0,#NX_BG_TICKS
+  LA r1,@nx_s_job
+  CALL @nx_puts
+  LD r1,r0,#NX_BG_ID
+  CALL @nx_dec
+  MOVI r1,32
+  CALL @nx_putc
+  LD r1,r0,#NX_BG_TICKS
+  CALL @nx_dec
+  CALL @nx_nl
+nx_jobs_n:
+  LD r2,r0,#NX_BG_ID
+  ADD r2,r2,r13
+  ST r2,r0,#NX_BG_ID
+  JMP @nx_jobs_l
+nx_jobs_d:
+  ADDI r14,r14,-9
+  LD r15,r14,0
+  RET
+
+; nx_wait: wait and reap every live job as `done ID STATUS`.
+nx_wait:
+  ST r15,r14,0
+  ADDI r14,r14,9
+  CALL @nx_job_ensure
+  MOVI r2,1
+  ST r2,r0,#NX_BG_ID
+nx_wait_l:
+  LD r2,r0,#NX_BG_ID
+  MOVI r3,#NX_JOBCAP
+  CMP r2,r3
+  JMP[GT] @nx_wait_d
+  LA r1,#NX_JOBTAB
+  CALL @nj_job_state
+  CMP r1,r0
+  JMP[LE] @nx_wait_n
+  ST r1,r0,#NX_BG_TICKS
+  MOVI r3,1
+  CMP r1,r3
+  JMP[NE] @nx_wait_reap
+  ; Let a just-spawned worker reach its stage before blocking in SVC 10.
+  MOVI r6,64
+nx_wait_yield:
+  LA r1,#NX_JOBCTX1
+  LD r2,r1,#NJ_C_TMP1
+  CMP r2,r0
+  JMP[NE] @nx_wait_go
+  SVC 0
+  SUB r6,r6,r13
+  CMP r6,r0
+  JMP[NE] @nx_wait_yield
+nx_wait_go:
+  LA r1,#NX_JOBTAB
+  LD r2,r0,#NX_BG_ID
+  CALL @nj_job_wait
+  CMP r1,r0
+  JMP[LT] @nx_wait_n
+nx_wait_reap:
+  LA r1,#NX_JOBTAB
+  LD r2,r0,#NX_BG_ID
+  CALL @nj_job_reap
+  CMP r1,r0
+  JMP[LT] @nx_wait_n
+  ST r1,r0,#NX_BG_JOB
+  LA r1,@nx_s_done
+  CALL @nx_puts
+  LD r1,r0,#NX_BG_ID
+  CALL @nx_dec
+  MOVI r1,32
+  CALL @nx_putc
+  LD r1,r0,#NX_BG_JOB
+  CALL @nx_dec
+  CALL @nx_nl
+nx_wait_n:
+  LD r2,r0,#NX_BG_ID
+  ADD r2,r2,r13
+  ST r2,r0,#NX_BG_ID
+  JMP @nx_wait_l
+nx_wait_d:
+  ADDI r14,r14,-9
+  LD r15,r14,0
+  RET
+
 nx_head:
   MOVI r1,0
   JMP @nx_filter
@@ -2723,6 +2961,10 @@ nx_c_sort:
 .str "sort"
 nx_c_uniq:
 .str "uniq"
+nx_c_jobs:
+.str "jobs"
+nx_c_wait:
+.str "wait"
 
 nx_s_opt_n:
 .str "-n"
@@ -2734,6 +2976,14 @@ nx_s_opt_nv:
 .str "-nv"
 nx_s_opt_c:
 .str "-c"
+nx_s_job:
+.str "job "
+nx_s_done:
+.str "done "
+nx_s_bgunsup:
+.str "bg: unsupported\n"
+nx_s_bgfail:
+.str "bg: spawn failed\n"
 nx_c_sync:
 .str "sync"
 nx_c_help:

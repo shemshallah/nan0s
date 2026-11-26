@@ -241,3 +241,12 @@ service table.
 - [ ] libc POSIX switched to NaN; C bodies deleted.
 - [ ] Suite as a NaN cartridge under `build/nan0s.img`.
 - [ ] C removed from normal operation; `s1_kabi.c`/`nan_cli` remain test only.
+
+## Enforcement
+
+`tools/build.sh` refuses `.c`, `.s`, `.S` or `.o` files anywhere in the
+product guest trees (`src/nan`, `src/nix`, `src/lib`, `src/exhibits`,
+`src/boot`).  `tools/guest_raw_only_gate.sh` additionally checks that every
+OS cart is `.nan` and that `build/nan0s.img`/`build/disk.nanfs` contain no ELF
+magic.  C files in `nanfs/` are inert NPAF demo inputs for the raw-NaN16
+`ncc`; they are data, never compiled into the running system.
