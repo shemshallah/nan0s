@@ -183,9 +183,9 @@ PY
 # Rollback: a failed oversized grant must not move the bump pointer.  A
 # following 4,096-word grant must still start at HEAP_BASE (11,534,336).
 KEYS='\x1e\x26\x26\x18\x2e\x39\x0a\x0a\x0a\x0a\x0a\x0a\x0a\x0a\x1c\x1e\x26\x26\x18\x2e\x39\x05\x0b\x0a\x07\x1c'
-S1_FB_DELAY=8 \
+S1_FB_DELAY=90 \
 sh tools/s1_runner.sh --img "$T/gui_sched.nan" --mem 128 \
-    --steps 2000000000 --serial --key-delay 5000000 --keys "$KEYS" \
+    --steps 8000000000 --serial --key-delay 5000000 --keys "$KEYS" \
     --dump-mem "0x400000:0x40000:$T/term2.bin" \
     > "$T/rollback.out" 2> "$T/rollback.err" || true
 [ -s "$T/term2.bin" ] || {

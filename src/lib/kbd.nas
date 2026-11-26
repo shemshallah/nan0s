@@ -1,7 +1,7 @@
 ; kbd.nas - raw PS/2 scancode-set-1 keyboard driver, pure NaN16 (hand-edited source; the Python generator was removed).
 ; API (r13=1, r14=soft stack; clobbers r1-r12):
 ;   kbd_init  : DISPSET raw mode, clear state/queue
-;   kbd_poll  : drain KEYQ, track Shift/Ctrl/Alt/Caps, push press events into a 16-entry ring
+;   kbd_poll  : drain KEYQ, track Shift/Ctrl/Alt/Caps, push press events into a 64-entry ring
 ;   kbd_get   : r1 = next event or 0
 ;   kbd_mods  : r1 = current mods (1 shift,2 ctrl,4 alt,8 caps)
 ; event = code | mods<<16 ; F1..F12 = 0x101..0x10C, arrows = 0x110..0x113.
@@ -47,7 +47,7 @@ MOVI r4,@kb_q
 ADD r4,r4,r2
 LD r1,r4,0
 ADD r2,r2,r13
-MOVI r5,15
+MOVI r5,63
 BOOL.8 r2,r2,r5
 ST r2,r0,@kb_h
 RET
@@ -57,7 +57,7 @@ ADD r14,r14,r13
 kp_loop:
 LD r3,r0,@kb_t
 ADD r3,r3,r13
-MOVI r5,15
+MOVI r5,63
 BOOL.8 r3,r3,r5
 LD r4,r0,@kb_h
 CMP r3,r4
@@ -198,7 +198,7 @@ SHL r1,r1,16
 ADD r9,r9,r1
 LD r2,r0,@kb_t
 ADD r3,r2,r13
-MOVI r5,15
+MOVI r5,63
 BOOL.8 r3,r3,r5
 LD r4,r0,@kb_h
 CMP r3,r4
@@ -271,6 +271,9 @@ kp_e:
 kp_code:
 .word 0
 kb_q:
+.word 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+.word 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+.word 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 .word 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 kt_n:
 .word 0,27,49,50,51,52,53,54,55,56,57,48,45,61,8,9

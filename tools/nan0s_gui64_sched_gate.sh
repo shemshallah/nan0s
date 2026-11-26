@@ -74,15 +74,15 @@ for r in range(64):
         v = (w >> 16) & 0xffffffff
         ch.append(chr(v) if 0 < v < 128 else ' ')
     rows.append(''.join(ch).rstrip())
+# `cat` writes exactly the file bytes, so a file without a trailing newline
+# leaves the next prompt on the same Terminal row.
 want = [
     '> mkdir /x', 'ok',
     '> write /x/a hello', 'saved',
-    '> cat /x/a', 'hello',
-    '> ls /x', 'a',
+    '> cat /x/a', 'hello> ls /x', 'a',
     '> stat /x/a', 'file size=5 mode=33188',
     '> truncate /x/a 2', 'ok',
-    '> cat /x/a', 'he',
-    '> rm /x/a', 'removed',
+    '> cat /x/a', 'he> rm /x/a', 'removed',
     '> rmdir /x', 'removed',
 ]
 missing = [w for w in want if not any(line == w for line in rows)]

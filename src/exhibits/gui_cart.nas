@@ -943,6 +943,10 @@ CMP r1,r0
 JMP[EQ] @tk_enter_normal
 tk_line_prompt:
 LD r1,r0,@tk_id
+CALL @wm_wbase
+LD r5,r1,#W_A2
+ST r5,r0,@fs_pcol
+LD r1,r0,@tk_id
 MOVI r2,@fs_s_prompt
 CALL @vc_puts
 LD r1,r0,@tk_id
@@ -7532,10 +7536,13 @@ ST r1,r0,@fs_base
 LD r5,r0,@fs_row
 MOVI r6,#VCW
 MUL r5,r5,r6
+LD r7,r0,@fs_pcol
+ADD r5,r5,r7
 ADDI r5,r5,2
 ST r5,r0,@fs_start
 LD r6,r0,@fs_col
-MOVI r7,2
+LD r7,r0,@fs_pcol
+ADDI r7,r7,2
 SUB r6,r6,r7
 CMP r6,r0
 JMP[GE] @fs_rl_ok
@@ -8604,6 +8611,8 @@ fs_tmp:
 fs_row:
 .word 0
 fs_col:
+.word 0
+fs_pcol:
 .word 0
 fs_start:
 .word 0
