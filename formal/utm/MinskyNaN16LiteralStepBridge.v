@@ -541,8 +541,10 @@ Proof.
        (if pred_passes (pred_nat p) (lp_k L)
         then target else S (lp_pc L))).
     rewrite Hpc, Hzf, Hlf.
-    rewrite (pred_agrees p (lp_k L) Hk Hk3).
-    reflexivity.
+    change (pred_holds p (Nat.eqb ((lp_k L / 2) mod 2) 1)
+                        (Nat.eqb (lp_k L mod 2) 1) =
+            pred_passes (pred_nat p) (lp_k L)).
+    apply pred_agrees; assumption.
   - intros i Hi.
     change (vm_reg vm i = N.to_nat (lget_regN (lp_reg L) i) mod 2 ^ 32).
     exact (Hregs i Hi).
