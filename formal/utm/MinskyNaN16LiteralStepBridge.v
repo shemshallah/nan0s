@@ -853,7 +853,7 @@ Proof.
         by (rewrite Hlen; lia).
       rewrite to_nat_mod32N.
       rewrite N2Nat.inj_add.
-      rewrite Nat.mod_small by exact Hnc.
+      rewrite !Nat.mod_small by exact Hnc.
       rewrite HA', HB'. reflexivity.
     + rewrite (set_reg_neq _ _ _ _ Hne).
       rewrite (lget_regN_lset_word_neq (lp_reg L) d
@@ -903,7 +903,7 @@ Proof.
     rewrite N_eqb_to_nat.
     rewrite to_nat_mod32N.
     rewrite N2Nat.inj_add.
-    rewrite Nat.mod_small by exact Hnc.
+    rewrite !Nat.mod_small by exact Hnc.
     reflexivity.
   - change (false =
             Nat.eqb
