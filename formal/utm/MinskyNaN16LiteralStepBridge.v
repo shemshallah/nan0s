@@ -1145,3 +1145,7 @@ Proof.
 Qed.
 
 Print Assumptions lp_exec_SUB_refines.
+
+Search (N.to_nat (N.mul _ _)).
+Search (N.to_nat (N.shiftl _ _)).
+Search (N.to_nat (N.land _ _)).
