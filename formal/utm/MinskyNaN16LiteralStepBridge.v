@@ -506,11 +506,8 @@ Proof.
   - change (Nat.ltb (vm_reg vm a) (vm_reg vm b) =
             Nat.eqb
               ((pack_k
-                  (N.eqb
-                    (sub32N (lget_regN (lp_reg L) a)
-                            (lget_regN (lp_reg L) b)) 0)
-                  (N.ltb (lget_regN (lp_reg L) a)
-                         (lget_regN (lp_reg L) b)))
+                  (N.eqb (lget_regN (lp_reg L) a) (lget_regN (lp_reg L) b))
+                  (N.ltb (lget_regN (lp_reg L) a) (lget_regN (lp_reg L) b)))
                mod 2) 1).
     rewrite pack_k_lf.
     rewrite HA', HB'.
@@ -1112,12 +1109,13 @@ Proof.
     reflexivity.
   - change (Nat.ltb (vm_reg vm a) (vm_reg vm b) =
             Nat.eqb
-              (pack_k
-                 (N.eqb
-                   (sub32N (lget_regN (lp_reg L) a)
-                           (lget_regN (lp_reg L) b)) 0)
-                 (N.ltb (lget_regN (lp_reg L) a)
-                        (lget_regN (lp_reg L) b)) mod 2) 1).
+              ((pack_k
+                  (N.eqb
+                    (sub32N (lget_regN (lp_reg L) a)
+                            (lget_regN (lp_reg L) b)) 0)
+                  (N.ltb (lget_regN (lp_reg L) a)
+                         (lget_regN (lp_reg L) b)))
+               mod 2) 1).
     rewrite pack_k_lf.
     rewrite HA', HB'.
     rewrite N_ltb_to_nat.
