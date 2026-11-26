@@ -280,7 +280,7 @@ NaN16 VM / S1 / bare metal
 | milestone | slice | gate |
 | --- | --- | --- |
 | M0 | POSIX compatibility: fds, redirection, pipelines, tty, persistence | existing suite |
-| M1a | object table + capability checks | `tools/nanobj_gate.sh` — **PASS** |
+| M1a | object table + capability checks + revocation | `tools/nanobj_gate.sh` — **PASS** |
 | M1b | 32-word entries + tensor metadata + namespace object | tensor create/view/shape/rights + namespace resolve |
 | M1c | object persistence and checksum validation | create, save, reboot, verify |
 | M2a | agent process image | checkpoint a counter, resume, state continues |

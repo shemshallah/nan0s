@@ -33,4 +33,4 @@ grep -q 'NOBJ PASS' "$COM" || {
 grep -q '@@NAN16 END 3' "$COM" || {
   echo "nanobj_gate: FAIL (guest did not halt cleanly)"; cat -v "$COM"; exit 1; }
 
-echo "nanobj_gate: PASS (typed objects, capability rights, forged-generation rejection, free)"
+echo "nanobj_gate: PASS (typed objects, capability rights, revocation, forged-generation rejection, free)"

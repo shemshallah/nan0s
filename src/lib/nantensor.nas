@@ -25,6 +25,8 @@
 
 .include "nanobj.nas"
 
+; LD/ST have a 16-bit immediate.  Tensor/namespace cross-call words live in
+; the reserved low block 0x3B0..0x3BB; high buffers use LA base registers.
 .equ NT_CLASS_BLOB   2
 .equ NT_CLASS_TENSOR 10
 .equ NT_CLASS_NS     11

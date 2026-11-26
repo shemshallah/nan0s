@@ -93,12 +93,40 @@ start:
   CMP r1,r5
   JMP[NE] @fail
 
-  ; release both capabilities; the first table entry must become free
+  ; revoke by generation bump: cap1 is replaced, capro becomes stale
+  LD r1,r0,@cap1
+  CALL @nobj_revoke
+  CMP r1,r0
+  JMP[EQ] @fail
+  ST r1,r0,@capnew
+
+  ; stale read-only capability must fail
+  LD r1,r0,@capro
+  LA r2,@rbuf
+  MOVI r3,0
+  MOVI r4,1
+  CALL @nobj_read
+  LA r5,0xFFFFFFFF
+  CMP r1,r5
+  JMP[NE] @fail
+
+  ; new capability works
+  LD r1,r0,@capnew
+  LA r2,@rbuf
+  MOVI r3,0
+  MOVI r4,1
+  CALL @nobj_read
+  MOVI r5,1
+  CMP r1,r5
+  JMP[NE] @fail
+
+  ; stale release fails; new release frees the entry
   LD r1,r0,@capro
   CALL @nobj_release
-  CMP r1,r0
+  LA r5,0xFFFFFFFF
+  CMP r1,r5
   JMP[NE] @fail
-  LD r1,r0,@cap1
+  LD r1,r0,@capnew
   CALL @nobj_release
   CMP r1,r0
   JMP[NE] @fail
@@ -137,6 +165,8 @@ failmsg:
 cap1:
 .word 0
 capro:
+.word 0
+capnew:
 .word 0
 wbuf:
 .word 0,0

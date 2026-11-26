@@ -10,6 +10,7 @@
 ;   nobj_read   r1=cap r2=dst word ptr r3=offset r4=len -> words / -1
 ;   nobj_write  r1=cap r2=src word ptr r3=offset r4=len -> words / -1
 ;   nobj_grant  r1=cap r2=new rights -> new cap or 0
+;   nobj_revoke r1=cap -> new generation, old caps invalidated
 ;   nobj_release r1=cap -> 0 / -1
 ;   nobj_check  r1=cap r2=required rights -> entry ptr or 0
 ;
@@ -24,14 +25,16 @@
 ;   6 flags, 7 checksum, 8..31 payload (24 words).
 ;
 ; Cross-call state lives in globals, never in caller stack words above SP:
-; NANIX callees are allowed to overwrite those.
+; NANIX callees are allowed to overwrite those.  LD/ST have a 16-bit immediate,
+; so these words are deliberately in the reserved low block 0x3A0..0x3A9;
+; high buffers must be addressed through an LA base register.
 
 .equ NOBJ_TAB     0x340000
 .equ NOBJ_MAX     64
 .equ NOBJ_ENT     32
 .equ NOBJ_TOTAL   2048
 .equ NOBJ_MAGIC   0x4E4F424A       ; "NOBJ"
-.equ NOBJ_G       0x350000
+.equ NOBJ_G       0x3A0
 .equ NOBJ_G_CAP    0x3A0
 .equ NOBJ_G_DST    0x3A1
 .equ NOBJ_G_OFF    0x3A2
@@ -356,6 +359,48 @@ nobj_grant:
 nobj_g_n:
   MOVI r1,0
 nobj_g_d:
+  SUB r14,r14,r13
+  LD r15,r14,0
+  RET
+
+; nobj_revoke: r1=cap -> new cap with a new generation, or 0.
+; Requires replace right.  Old capabilities fail the generation check; the
+; reference count is reset to the one new capability (old holders are stale).
+nobj_revoke:
+  ST r15,r14,0
+  ADD r14,r14,r13
+  ST r1,r0,#NOBJ_G_CAP
+  MOVI r2,#NOBJ_R_REPL
+  CALL @nobj_check
+  CMP r1,r0
+  JMP[EQ] @nobj_rv_n
+  ST r1,r0,#NOBJ_G_ENT
+  LD r2,r1,2
+  ADD r2,r2,r13
+  CMP r2,r0
+  JMP[NE] @nobj_rv_gen
+  MOVI r2,1
+nobj_rv_gen:
+  ST r2,r1,2
+  MOVI r2,1
+  ST r2,r1,5
+  LA r7,@nobj_cap_magic
+  CALLR r7
+  LD r4,r0,#NOBJ_G_ENT
+  LD r5,r4,1
+  SHL r5,r5,16
+  ADD r1,r1,r5
+  LD r5,r4,2
+  SHL r5,r5,8
+  ADD r1,r1,r5
+  LD r5,r0,#NOBJ_G_CAP
+  MOVI r6,0xFF
+  BOOL.8 r5,r5,r6
+  ADD r1,r1,r5
+  JMP @nobj_rv_d
+nobj_rv_n:
+  MOVI r1,0
+nobj_rv_d:
   SUB r14,r14,r13
   LD r15,r14,0
   RET
