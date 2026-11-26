@@ -1002,6 +1002,7 @@ Proof.
     with ((N.to_nat x - N.to_nat y) + 1 * M) by lia.
   rewrite Nat.mod_add.
   apply Nat.mod_small. lia.
+  all: lia.
 Qed.
 
 Theorem lp_exec_SUB_refines :
