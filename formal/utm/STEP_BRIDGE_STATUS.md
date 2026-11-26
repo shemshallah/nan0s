@@ -10,14 +10,14 @@ Verified one-step refinements in `MinskyNaN16LiteralStepBridge.v`:
 | PUTC | `lp_exec_PUTC_refines` | PASS |
 | RET | `lp_exec_RET_refines` | PASS |
 | CALL | `lp_exec_CALL_refines` (explicit link invariant) | PASS |
+| CMP | `lp_exec_CMP_refines` | PASS |
+| JMP | `lp_exec_JMP_refines` (requires `k <> 3`) | PASS |
 
 All six preserve the full `Rlp` relation, including the opaque memory
 view, register bounds, flags, halt state and the link register.
 
 ## Remaining opcodes
 
-- CMP / JMP: need `N.eqb`/`N.ltb` agreement with the `nat` VM flags and
-  the `pred_agrees` side condition `k <> 3`.
 - ST: needs the `nan_mkwordN` / `nan_mkword` payload bridge and memory
   update agreement.
 - SHL / ADD / SUB: need explicit 32-bit no-overflow/no-borrow
