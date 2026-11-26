@@ -972,6 +972,13 @@ Print Assumptions lp_exec_ADD_refines.
 
 (** ** SUB *)
 
+Lemma to_nat_two32 : N.to_nat two32 = 2 ^ 32.
+Proof.
+  unfold two32.
+  change (N.to_nat (2 ^ 32)%N = 2 ^ 32).
+  apply N_to_nat_two32.
+Qed.
+
 Lemma to_nat_sub32N :
   forall x y,
     (x < 2 ^ 32)%N ->
@@ -983,8 +990,7 @@ Proof.
   rewrite to_nat_land_mask.
   rewrite N2Nat.inj_add.
   rewrite N2Nat.inj_sub.
-  unfold two32.
-  rewrite N_to_nat_two32.
+  rewrite to_nat_two32.
   assert (Hshape :
     N.to_nat x + (2 ^ 32 - N.to_nat y)
     = 2 ^ 32 + (N.to_nat x - N.to_nat y)) by lia.
