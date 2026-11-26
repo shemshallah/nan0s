@@ -998,9 +998,8 @@ Proof.
     N.to_nat x + (M - N.to_nat y)
     = M + (N.to_nat x - N.to_nat y)) by lia.
   rewrite Hshape.
-  rewrite Nat.add_comm.
-  change ((N.to_nat x - N.to_nat y + 1 * M) mod M =
-          N.to_nat x - N.to_nat y).
+  replace (M + (N.to_nat x - N.to_nat y))
+    with ((N.to_nat x - N.to_nat y) + 1 * M) by lia.
   rewrite Nat.mod_add.
   apply Nat.mod_small. lia.
 Qed.
