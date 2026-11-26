@@ -55,7 +55,7 @@ if [ -n "${S1_QEMU_MEM:-}" ]; then QMEM=$S1_QEMU_MEM
 else
     # --mem is MiB of C payload; guest words are 8 bytes and hold four C
     # bytes, so the machine needs twice that plus the kernel/BIOS/stack.
-    QMEM=$((MEM_MB * 2 + 128))
+    QMEM=$((MEM_MB * 2 + 256))
     [ "$QMEM" -lt 256 ] && QMEM=256
 fi
 
@@ -238,7 +238,7 @@ rm -f "$T/com" "$T/dbg"
 if [ -n "$DUMPFB" ] || [ -n "$DUMPMEM" ]; then
   ( sleep "${S1_FB_DELAY:-8}"
     if [ -n "$DUMPFB" ]; then
-      printf 'pmemsave 0x10000000 0x300000 "%s"\n' "$DUMPFB"
+      printf 'pmemsave 0x11000000 0x300000 "%s"\n' "$DUMPFB"
     fi
     if [ -n "$DUMPMEM" ]; then
       printf 'pmemsave %s %s "%s"\n' \

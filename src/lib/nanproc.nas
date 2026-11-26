@@ -67,6 +67,9 @@
 ; 3 zero length / duplicate / invalid hook, as documented per routine.
 
 .equ NP_MAX_PROCS 64
+; Runtime base pointers (0 -> compile-time default).
+.equ NP_PTR       0x3F011
+.equ NPV_PTR      0x3F012
 .equ NP_ENTRY 96
 .equ NP_VAR_WORDS 16
 .equ NP_MAX_REGIONS 8
@@ -165,7 +168,19 @@
 np_init:
   ST r15,r14,0
   ADDI r14,r14,#NP_FRAME
-  LA r3,#NP_BASE
+  LA r1,#NP_PTR
+  LD r1,r1,0
+  CMP r1,r0
+  JMP[NE] @np_ptr_ok
+  LA r1,#NP_BASE
+  LA r2,#NP_PTR
+  ST r1,r2,0
+  LA r1,#NP_VARS
+  LA r2,#NPV_PTR
+  ST r1,r2,0
+np_ptr_ok:
+  LA r3,#NP_PTR
+  LD r3,r3,0
   MOVI r4,#NP_MAX_PROCS
 np_init_t:
   MOVI r5,#NP_ENTRY
@@ -178,7 +193,8 @@ np_init_w:
   SUB r4,r4,r13
   CMP r4,r0
   JMP[NE] @np_init_t
-  LA r3,#NP_VARS
+  LA r3,#NPV_PTR
+  LD r3,r3,0
   MOVI r4,#NP_VAR_WORDS
 np_init_v:
   ST r0,r3,0
@@ -187,7 +203,8 @@ np_init_v:
   CMP r4,r0
   JMP[NE] @np_init_v
   MOVI r1,1
-  LA r3,#NP_VARS
+  LA r3,#NPV_PTR
+  LD r3,r3,0
   ST r1,r3,#NP_V_NEXT
   MOVI r1,0
   ADDI r14,r14,#NP_FRAME_NEG
@@ -207,14 +224,16 @@ np_lookup:
   SUB r2,r1,r13
   MOVI r5,#NP_ENTRY
   MUL r2,r2,r5
-  LA r4,#NP_BASE
+  LA r4,#NP_PTR
+  LD r4,r4,0
   ADD r4,r4,r2
   LD r5,r4,#NP_E_PID
   CMP r5,r1
   JMP[EQ] @npl_found
 npl_linear:
   MOVI r3,0
-  LA r4,#NP_BASE
+  LA r4,#NP_PTR
+  LD r4,r4,0
 npl_loop:
   LD r5,r4,#NP_E_PID
   CMP r5,r1
@@ -285,7 +304,8 @@ np_alloc:
   ST r15,r14,0
   ADDI r14,r14,#NP_FRAME
   MOVI r2,0
-  LA r3,#NP_BASE
+  LA r3,#NP_PTR
+  LD r3,r3,0
 npa_loop:
   LD r4,r3,#NP_E_PID
   CMP r4,r0
@@ -303,16 +323,19 @@ npa_free:
   MOVI r1,0
   ADD r1,r3,r0
   CALL @np_zero_entry
-  LA r12,#NP_VARS
+  LA r12,#NPV_PTR
+  LD r12,r12,0
   LD r1,r12,#NP_V_NEXT
   CMP r1,r0
   JMP[NE] @npa_pid
   MOVI r1,1
 npa_pid:
-  LA r12,#NP_VARS
+  LA r12,#NPV_PTR
+  LD r12,r12,0
   ST r1,r12,#NP_V_NEXT
   ADD r2,r1,r13
-  LA r12,#NP_VARS
+  LA r12,#NPV_PTR
+  LD r12,r12,0
   ST r2,r12,#NP_V_NEXT
   LD r3,r14,1
   ST r1,r3,#NP_E_PID
@@ -320,10 +343,12 @@ npa_pid:
   ST r4,r3,#NP_E_STATE
   MOVI r4,#NP_F_LIVE
   ST r4,r3,#NP_E_FLAGS
-  LA r12,#NP_VARS
+  LA r12,#NPV_PTR
+  LD r12,r12,0
   LD r4,r12,#NP_V_LIVE
   ADD r4,r4,r13
-  LA r12,#NP_VARS
+  LA r12,#NPV_PTR
+  LD r12,r12,0
   ST r4,r12,#NP_V_LIVE
   LD r1,r3,#NP_E_PID
 npa_out:
@@ -458,10 +483,12 @@ np_create:
   ; rollback the slot on region-table failure
   LD r1,r14,6
   CALL @np_zero_entry
-  LA r12,#NP_VARS
+  LA r12,#NPV_PTR
+  LD r12,r12,0
   LD r3,r12,#NP_V_LIVE
   SUB r3,r3,r13
-  LA r12,#NP_VARS
+  LA r12,#NPV_PTR
+  LD r12,r12,0
   ST r3,r12,#NP_V_LIVE
   MOVI r1,0
   JMP @npc_out
@@ -494,10 +521,12 @@ npc_parent:
   LD r2,r14,5
   CALL @np_link_child
 npc_count:
-  LA r12,#NP_VARS
+  LA r12,#NPV_PTR
+  LD r12,r12,0
   LD r3,r12,#NP_V_SPAWN
   ADD r3,r3,r13
-  LA r12,#NP_VARS
+  LA r12,#NPV_PTR
+  LD r12,r12,0
   ST r3,r12,#NP_V_SPAWN
   LD r1,r14,5
   JMP @npc_out
@@ -596,10 +625,12 @@ npx_orphan:
   JMP[NE] @npx_orphan_pp
   MOVI r5,#NP_ST_DEAD
   ST r5,r1,#NP_E_STATE
-  LA r12,#NP_VARS
+  LA r12,#NPV_PTR
+  LD r12,r12,0
   LD r5,r12,#NP_V_ZOMB
   SUB r5,r5,r13
-  LA r12,#NP_VARS
+  LA r12,#NPV_PTR
+  LD r12,r12,0
   ST r5,r12,#NP_V_ZOMB
 npx_orphan_pp:
   ST r0,r1,#NP_E_PPID
@@ -730,7 +761,8 @@ npr_okstate:
   CALL @np_unlink_child
 npr_unlinked:
   ; global region words
-  LA r12,#NP_VARS
+  LA r12,#NPV_PTR
+  LD r12,r12,0
   LD r3,r12,#NP_V_MEM
   LD r4,r14,5
   CMP r3,r4
@@ -740,29 +772,36 @@ npr_unlinked:
 npr_memok:
   SUB r3,r3,r4
 npr_memstore:
-  LA r12,#NP_VARS
+  LA r12,#NPV_PTR
+  LD r12,r12,0
   ST r3,r12,#NP_V_MEM
-  LA r12,#NP_VARS
+  LA r12,#NPV_PTR
+  LD r12,r12,0
   LD r3,r12,#NP_V_LIVE
   SUB r3,r3,r13
-  LA r12,#NP_VARS
+  LA r12,#NPV_PTR
+  LD r12,r12,0
   ST r3,r12,#NP_V_LIVE
   LD r3,r14,3
   MOVI r4,#NP_ST_ZOMBIE
   CMP r3,r4
   JMP[NE] @npr_clear
-  LA r12,#NP_VARS
+  LA r12,#NPV_PTR
+  LD r12,r12,0
   LD r3,r12,#NP_V_ZOMB
   SUB r3,r3,r13
-  LA r12,#NP_VARS
+  LA r12,#NPV_PTR
+  LD r12,r12,0
   ST r3,r12,#NP_V_ZOMB
 npr_clear:
   LD r1,r14,2
   CALL @np_zero_entry
-  LA r12,#NP_VARS
+  LA r12,#NPV_PTR
+  LD r12,r12,0
   LD r3,r12,#NP_V_REAP
   ADD r3,r3,r13
-  LA r12,#NP_VARS
+  LA r12,#NPV_PTR
+  LD r12,r12,0
   ST r3,r12,#NP_V_REAP
   MOVI r1,0
   LD r2,r14,4
@@ -790,10 +829,12 @@ np_kill:
   MOVI r4,#NP_ST_ZOMBIE
   CMP r3,r4
   JMP[GE] @npk_term
-  LA r12,#NP_VARS
+  LA r12,#NPV_PTR
+  LD r12,r12,0
   LD r3,r12,#NP_V_KILL
   ADD r3,r3,r13
-  LA r12,#NP_VARS
+  LA r12,#NPV_PTR
+  LD r12,r12,0
   ST r3,r12,#NP_V_KILL
   LD r2,r14,2
   MOVI r4,128
@@ -898,37 +939,45 @@ nps_commit:
   MOVI r5,#NP_ST_RUNNING
   CMP r3,r5
   JMP[NE] @nps_notoldrun
-  LA r12,#NP_VARS
+  LA r12,#NPV_PTR
+  LD r12,r12,0
   LD r5,r12,#NP_V_RUN
   SUB r5,r5,r13
-  LA r12,#NP_VARS
+  LA r12,#NPV_PTR
+  LD r12,r12,0
   ST r5,r12,#NP_V_RUN
 nps_notoldrun:
   MOVI r5,#NP_ST_RUNNING
   CMP r4,r5
   JMP[NE] @nps_notnewrun
-  LA r12,#NP_VARS
+  LA r12,#NPV_PTR
+  LD r12,r12,0
   LD r5,r12,#NP_V_RUN
   ADD r5,r5,r13
-  LA r12,#NP_VARS
+  LA r12,#NPV_PTR
+  LD r12,r12,0
   ST r5,r12,#NP_V_RUN
 nps_notnewrun:
   MOVI r5,#NP_ST_ZOMBIE
   CMP r3,r5
   JMP[NE] @nps_notoldz
-  LA r12,#NP_VARS
+  LA r12,#NPV_PTR
+  LD r12,r12,0
   LD r5,r12,#NP_V_ZOMB
   SUB r5,r5,r13
-  LA r12,#NP_VARS
+  LA r12,#NPV_PTR
+  LD r12,r12,0
   ST r5,r12,#NP_V_ZOMB
 nps_notoldz:
   MOVI r5,#NP_ST_ZOMBIE
   CMP r4,r5
   JMP[NE] @nps_store
-  LA r12,#NP_VARS
+  LA r12,#NPV_PTR
+  LD r12,r12,0
   LD r5,r12,#NP_V_ZOMB
   ADD r5,r5,r13
-  LA r12,#NP_VARS
+  LA r12,#NPV_PTR
+  LD r12,r12,0
   ST r5,r12,#NP_V_ZOMB
 nps_store:
   LD r1,r14,3
@@ -986,10 +1035,12 @@ np_region_add:
   LD r3,r1,#NP_E_MEM_WORDS
   ADD r3,r3,r2
   ST r3,r1,#NP_E_MEM_WORDS
-  LA r12,#NP_VARS
+  LA r12,#NPV_PTR
+  LD r12,r12,0
   LD r3,r12,#NP_V_MEM
   ADD r3,r3,r2
-  LA r12,#NP_VARS
+  LA r12,#NPV_PTR
+  LD r12,r12,0
   ST r3,r12,#NP_V_MEM
   MOVI r1,0
   JMP @nra_out
@@ -1050,7 +1101,8 @@ np_region_clear:
   JMP[EQ] @nrc_bad
   ST r1,r14,2
   LD r3,r1,#NP_E_MEM_WORDS
-  LA r12,#NP_VARS
+  LA r12,#NPV_PTR
+  LD r12,r12,0
   LD r4,r12,#NP_V_MEM
   CMP r4,r3
   JMP[GE] @nrc_sub
@@ -1059,7 +1111,8 @@ np_region_clear:
 nrc_sub:
   SUB r4,r4,r3
 nrc_store:
-  LA r12,#NP_VARS
+  LA r12,#NPV_PTR
+  LD r12,r12,0
   ST r4,r12,#NP_V_MEM
   LD r1,r14,2
   ST r0,r1,#NP_E_NREG
@@ -1434,15 +1487,20 @@ ncc_out:
 
 ; np_counts -> r1=live r2=running r3=zombies r4=spawns r5=reaps.
 np_counts:
-  LA r12,#NP_VARS
+  LA r12,#NPV_PTR
+  LD r12,r12,0
   LD r1,r12,#NP_V_LIVE
-  LA r12,#NP_VARS
+  LA r12,#NPV_PTR
+  LD r12,r12,0
   LD r2,r12,#NP_V_RUN
-  LA r12,#NP_VARS
+  LA r12,#NPV_PTR
+  LD r12,r12,0
   LD r3,r12,#NP_V_ZOMB
-  LA r12,#NP_VARS
+  LA r12,#NPV_PTR
+  LD r12,r12,0
   LD r4,r12,#NP_V_SPAWN
-  LA r12,#NP_VARS
+  LA r12,#NPV_PTR
+  LD r12,r12,0
   LD r5,r12,#NP_V_REAP
   RET
 

@@ -3,7 +3,7 @@
 (() => {
 "use strict";
 const $=id=>document.getElementById(id), canvas=$("guest"), ctx=canvas.getContext("2d",{alpha:false});
-const BASE=0x200000+0xE8000*8, VRAM=0x10000000, GUEST=0x4E363447, HOST=0x4E363457;
+const BASE=0x200000+0xE8000*8, VRAM=0x11000000, GUEST=0x4E363447, HOST=0x4E363457;
 let vm, ready=false, queue=[], head=0, mirror="", prior=null, frame, palette, tick=0;
 const status=s=>$("status").textContent=s;
 function word(v){const a=new Uint8Array(8);a.set([0x7f,0xf8]);new DataView(a.buffer).setUint32(2,v>>>0,true);a.set([0xf8,0x7f],6);return a;}

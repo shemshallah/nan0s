@@ -16,11 +16,16 @@ M1b DONE: the frozen kernel ABI v0.1 is in the product tree. The C core and x86_
 M1 (implemented in the current kernel-boot slice): the guest asks MEMQ
 (CPUID leaf `0x4E4D00FF`, subleaf 1) for the actual word count, refuses
 less than 16M words, widens the boot region table and both process region
-tables, and reports the count through the NANIX `mem` command.
+tables, and reports the count through the NANIX `mem` command.  The
+scheduler block, nanproc table and nanproc variables are placed at the top
+of real RAM with guard pages; `NS_BASE`, `NP_BASE` and `NP_VARS` are
+runtime configuration words, not link-time constants.  The heap ends just
+below them, so RAM size, kernel placement and heap size are decoupled.
 `tools/mem_scale_gate.sh` proves 64 MiB and 128 MiB machines return
-different counts from the same raw image.  `SVC 2` carves RW regions from
-a bump heap spanning `HEAP_BASE..top-of-RAM`; `tools/alloc_scale_gate.sh`
-allocates 4K and 64 MiB regions.  `execbig 70000` allocates an RWX region,
+different counts from the same raw image; the scheduler gate reads the
+runtime pointers and verifies PID 1/PID 2 above 268 MB on the 128 MiB
+image.  `SVC 2` carves RW regions from the bump heap;
+`tools/alloc_scale_gate.sh` allocates 4K and 64 MiB regions.  `execbig 70000` allocates an RWX region,
 fills it with valid NOP words, copies a tail that addresses through `r12`,
 calls it, and verifies its result, so code larger than the 64K cart slot
 runs at a runtime base (`tools/execbig_scale_gate.sh`).  Still open for M1:

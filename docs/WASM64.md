@@ -8,7 +8,7 @@ commit `c394574477b57eadfc859f593b4aecb08fa37cb6`.
   NaN-word payload, and packages it with the existing S1 x86-64 boot fixture.
 - The floppy contains S1; the IDE disk contains the actual system word image.
   This is not the original legacy floppy relabeled as a 64-bit image.
-- S1 indexed VRAM is read at physical 0x10000000. The host uses the guest's
+- S1 indexed VRAM is read at physical 0x11000000. The host uses the guest's
   source palette; it does not reconstruct native widgets.
 - Raw NaN mailbox at word 0xE8000 carries guest readiness, dimensions, and a
   256-byte host-to-guest PS/2 ring. Both the existing keyboard driver and

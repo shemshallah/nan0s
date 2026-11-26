@@ -248,7 +248,7 @@ static uint32_t key_pop(void) {
 static uint32_t disp_vmode, disp_fbw, disp_fbh, disp_fbtot;
 /* GUI framebuffer.  The S1 runs with identity-mapped RAM; keep the VRAM in
    high physical memory, clear of the S1 image, guest word memory and stack. */
-#define S1_VRAM_BASE  0x10000000u
+#define S1_VRAM_BASE  0x11000000u
 #define S1_VRAM_BYTES (1024u * 768u * 4u)
 static uint8_t *const s1_vram = (uint8_t *)S1_VRAM_BASE;
 static int text_plane_ok(void) {

@@ -50,8 +50,9 @@ raise SystemExit(1)
 PY
 ) || {
     echo "mem_scale: FAIL (no 'mem' response at $mb MiB)"; exit 1; }
-  if [ "$got" != "mem $words free 0" ]; then
-    echo "mem_scale: FAIL ($mb MiB: got '$got', want 'mem $words free 0')"
+  set -- $got
+  if [ "$1" != "mem" ] || [ "$2" != "$words" ] || [ "$3" != "free" ] || [ "${4:-0}" -le 0 ]; then
+    echo "mem_scale: FAIL ($mb MiB: got '$got', want 'mem $words free N>0')"
     exit 1
   fi
   echo "mem_scale: $mb MiB -> $got"

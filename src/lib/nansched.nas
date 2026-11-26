@@ -111,6 +111,10 @@
 .equ NP_BASE      0x40000
 .equ NP_VARS      0x69000
 .equ NS_BASE      0x58000
+; Runtime base pointers.  nsch_config writes these; zero means "use the
+; compile-time default" so every existing test image still works.
+.equ NS_PTR       0x3F010
+.equ NSH_MEMWORDS 0x3F013
 
 .include "nanproc.nas"
 .include "nanthr.nas"
@@ -205,8 +209,20 @@ ns_svc:
 ns_start:
   JMP @nsch_start
 ns_heap_init:
-  ST r1,r0,#NSH_NEXT
-  ST r2,r0,#NSH_END
+  LA r3,#NSH_NEXT
+  ST r1,r3,0
+  LA r3,#NSH_END
+  ST r2,r3,0
+  RET
+ns_config:
+  LA r5,#NS_PTR
+  ST r1,r5,0
+  LA r5,#NP_PTR
+  ST r2,r5,0
+  LA r5,#NPV_PTR
+  ST r3,r5,0
+  LA r5,#NSH_MEMWORDS
+  ST r4,r5,0
   RET
 
 ; ---------------------------------------------------------------------------
@@ -216,10 +232,25 @@ ns_heap_init:
 nsch_init:
   ST r15,r14,0
   ADDI r14,r14,#NS_FRAME
+  LA r1,#NS_PTR
+  LD r1,r1,0
+  CMP r1,r0
+  JMP[NE] @nsch_ptr_ok
+  LA r1,#NS_BASE
+  LA r2,#NS_PTR
+  ST r1,r2,0
+  LA r1,#NP_BASE
+  LA r2,#NP_PTR
+  ST r1,r2,0
+  LA r1,#NP_VARS
+  LA r2,#NPV_PTR
+  ST r1,r2,0
+nsch_ptr_ok:
   CALL @np_init
 
   ; zero the scheduler block
-  LA r3,#NS_BASE
+  LA r3,#NS_PTR
+  LD r3,r3,0
   LA r4,#NS_BYTES
 nsch_init_z:
   ST r0,r3,0
@@ -229,7 +260,8 @@ nsch_init_z:
   JMP[NE] @nsch_init_z
 
   ; quantum and initial slice
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   MOVI r1,#NS_QUANTUM_DEFAULT
   ST r1,r2,#NS_QUANTUM
   ST r1,r2,#NS_SLICE
@@ -239,11 +271,17 @@ nsch_init_z:
   ; boot region table: whole low image/tables/stacks (RWX), then the
   ; nankernel stack/frame/hook block (RWX).  Terminator is the zero word
   ; written by the clear loop.
-  LA r3,#NS_BASE
+  LA r3,#NS_PTR
+  LD r3,r3,0
   LA r1,#NS_BOOTTAB
   ADD r3,r3,r1
   ST r0,r3,0
+  LA r1,#NSH_MEMWORDS
+  LD r1,r1,0
+  CMP r1,r0
+  JMP[NE] @nsch_bootmem
   LA r1,#NS_BOOTMEM
+nsch_bootmem:
   ST r1,r3,1
   ST r0,r3,2
   MOVI r1,7
@@ -270,7 +308,8 @@ nsch_init_z:
   OUTL r2,r1
   ; boot region table
   MOVI r1,#NS_P_REGIONS
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LA r3,#NS_BOOTTAB
   ADD r2,r2,r3
   OUTL r2,r1
@@ -312,7 +351,8 @@ nsch_ke_svc:
   ; SVC 0 is a thread yield while the current process owns thread mode.
   CMP r3,r0
   JMP[NE] @nsch_ke_13
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r4,r2,#NS_THRPID
   CMP r4,r0
   JMP[EQ] @nsch_ke_fwd
@@ -351,7 +391,8 @@ nsch_ke_thread:
 ; Owns SVCRET; never returns to the caller.
 nsch_svc:
   ADD r10,r1,r0
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   ST r10,r2,#NS_FP
   LD r3,r10,19
   CMP r3,r0
@@ -370,7 +411,8 @@ nsch_svc:
 
 nsch_svc_call:
   LD r3,r10,20
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r4,r2,#NS_CUR
   CMP r4,r0
   JMP[NE] @nsch_dispatch
@@ -424,7 +466,8 @@ nsch_dispatch:
   CMP r3,r4
   JMP[EQ] @nsch_svc_limit
 nsch_svc_bad:
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r2,r2,#NS_FP
   LA r1,0xFFFFFFFF
   ST r1,r2,21
@@ -433,13 +476,15 @@ nsch_svc_bad:
 ; ---------------------------------------------------------------------------
 ; SVC 0 - yield: current -> ready tail, pick the highest ready.
 nsch_svc_yield:
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r10,r2,#NS_FP
   ST r0,r10,21
   LD r1,r2,#NS_CUR
   MOVI r2,#NP_ST_READY
   CALL @np_set_state
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r1,r2,#NS_CUR
   CALL @nsch_slot
   CALL @nsch_enqueue
@@ -448,17 +493,20 @@ nsch_svc_yield:
 ; ---------------------------------------------------------------------------
 ; SVC 1 - exit(code).
 nsch_svc_exit:
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r10,r2,#NS_FP
   LD r1,r10,1              ; status
   ST r1,r2,#NS_TMP0
   ; np_exit(current, status)
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r1,r2,#NS_CUR
   LD r2,r2,#NS_TMP0
   CALL @np_exit
   ; drop thread mode if the owner is exiting (all joins must be done first)
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r1,r2,#NS_CUR
   LD r3,r2,#NS_THRPID
   CMP r1,r3
@@ -468,12 +516,14 @@ nsch_svc_exit:
   ST r3,r2,#NS_THRSLOT
 nsch_exit_nothr:
   ; wake parent waiters, then reap the zombie when a parent consumed it
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r1,r2,#NS_CUR
   LD r2,r2,#NS_TMP0
   CALL @nsch_wake_waiters
   ; an orphan/dead process has no later waiter: reap it now
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r1,r2,#NS_CUR
   CALL @np_lookup
   CMP r1,r0
@@ -482,7 +532,8 @@ nsch_exit_nothr:
   MOVI r4,#NP_ST_DEAD
   CMP r3,r4
   JMP[NE] @nsch_sched_save_switch
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r1,r2,#NS_CUR
   CALL @np_reap
   JMP @nsch_sched_save_switch
@@ -493,11 +544,13 @@ nsch_exit_nothr:
 nsch_svc_region:
   ST r15,r14,0
   ADDI r14,r14,#NS_FRAME
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r10,r2,#NS_FP
   LD r3,r10,1
   ST r3,r14,1
-  LD r4,r0,#NSH_NEXT
+  LA r4,#NSH_NEXT
+  LD r4,r4,0
   ST r4,r14,7
   CMP r3,r0
   JMP[EQ] @nsch_region_fail
@@ -511,14 +564,18 @@ nsch_region_rw:
   MOVI r7,#NP_PROT_RW
 nsch_region_prot:
   ST r7,r14,6
-  LD r4,r0,#NSH_NEXT
+  LA r4,#NSH_NEXT
+  LD r4,r4,0
   ADD r5,r4,r3
-  LD r6,r0,#NSH_END
+  LA r6,#NSH_END
+  LD r6,r6,0
   CMP r5,r6
   JMP[GT] @nsch_region_fail
-  ST r5,r0,#NSH_NEXT
+  LA r6,#NSH_NEXT
+  ST r5,r6,0
   ST r4,r14,2
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r1,r2,#NS_CUR
   ST r1,r14,3
   CALL @nsch_slot
@@ -553,15 +610,18 @@ nsch_region_prot:
   ST r3,r2,2
   LD r3,r14,6
   ST r3,r2,3
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r10,r2,#NS_FP
   LD r1,r14,2
   ST r1,r10,21
   JMP @nsch_region_out
 nsch_region_fail:
   LD r1,r14,7
-  ST r1,r0,#NSH_NEXT
-  LA r2,#NS_BASE
+  LA r2,#NSH_NEXT
+  ST r1,r2,0
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r10,r2,#NS_FP
   ST r0,r10,21
 nsch_region_out:
@@ -572,13 +632,15 @@ nsch_region_out:
 ; ---------------------------------------------------------------------------
 ; SVC 9 - spawn(descriptor).
 nsch_svc_spawn:
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r10,r2,#NS_FP
   LD r3,r10,1              ; descriptor word address
   LD r1,r2,#NS_CUR         ; ppid = current
   ADD r2,r3,r0
   CALL @nsch_spawn_desc
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r10,r2,#NS_FP
   ST r1,r10,21
   SVCRET
@@ -586,7 +648,8 @@ nsch_svc_spawn:
 ; ---------------------------------------------------------------------------
 ; SVC 10 - wait(pid|0|-1).
 nsch_svc_wait:
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r10,r2,#NS_FP
   LD r3,r10,1              ; wanted pid
   LA r4,0xFFFFFFFF
@@ -600,22 +663,26 @@ nsch_svc_wait:
   CMP r1,r0
   JMP[EQ] @nsch_wait_block
   ; zombie child already available: copy status, then reap
-  LA r3,#NS_BASE
+  LA r3,#NS_PTR
+  LD r3,r3,0
   ST r1,r3,#NS_TMP0
   ST r2,r3,#NS_TMP2
   ADD r1,r1,r0
   CALL @np_reap
-  LA r3,#NS_BASE
+  LA r3,#NS_PTR
+  LD r3,r3,0
   LD r10,r3,#NS_FP
   LD r2,r3,#NS_TMP2
   ST r2,r10,21
   SVCRET
 nsch_wait_block:
   ; record wait kind and target on the current slot
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r1,r2,#NS_CUR
   CALL @nsch_slot
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   ST r1,r2,#NS_TMP0
   LD r3,r2,#NS_TMP1        ; wanted
   ADDI r4,r2,#NS_WAITPID
@@ -629,7 +696,8 @@ nsch_wait_block:
   ADD r4,r4,r1
   ST r0,r4,0
   ; blocked
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r1,r2,#NS_CUR
   MOVI r2,#NP_ST_BLOCKED
   CALL @np_set_state
@@ -638,17 +706,20 @@ nsch_wait_block:
 ; ---------------------------------------------------------------------------
 ; SVC 20/21 - getpid/getppid.
 nsch_svc_getpid:
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r1,r2,#NS_CUR
   LD r2,r2,#NS_FP
   ST r1,r2,21
   SVCRET
 nsch_svc_getppid:
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r1,r2,#NS_CUR
   CALL @np_lookup
   LD r1,r1,#NP_E_PPID
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r2,r2,#NS_FP
   ST r1,r2,21
   SVCRET
@@ -656,7 +727,8 @@ nsch_svc_getppid:
 ; ---------------------------------------------------------------------------
 ; SVC 25 - setpriority(pid, prio 0..31).
 nsch_svc_setprio:
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r10,r2,#NS_FP
   LD r3,r10,1
   LD r4,r10,2
@@ -667,7 +739,8 @@ nsch_svc_setprio:
   ADD r1,r3,r0
   ADD r2,r4,r0
   CALL @np_set_priority
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   ST r1,r2,#NS_TMP2
   CMP r1,r0
   JMP[NE] @nsch_setprio_fin
@@ -680,10 +753,12 @@ nsch_svc_setprio:
   MOVI r4,#NP_ST_READY
   CMP r3,r4
   JMP[NE] @nsch_setprio_ok
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r1,r2,#NS_TMP0
   CALL @nsch_remove_pid
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r1,r2,#NS_TMP0
   CALL @nsch_slot
   CALL @nsch_enqueue
@@ -693,7 +768,8 @@ nsch_setprio_ok:
 nsch_setprio_range:
   MOVI r1,2
 nsch_setprio_fin:
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r10,r2,#NS_FP
   ST r1,r10,21
   SVCRET
@@ -701,7 +777,8 @@ nsch_setprio_fin:
 ; ---------------------------------------------------------------------------
 ; SVC 26 - getpriority(pid) -> prio or -1.
 nsch_svc_getprio:
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r10,r2,#NS_FP
   LD r1,r10,1
   CALL @np_lookup
@@ -712,7 +789,8 @@ nsch_svc_getprio:
 nsch_getprio_bad:
   LA r1,0xFFFFFFFF
 nsch_getprio_fin:
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r10,r2,#NS_FP
   ST r1,r10,21
   SVCRET
@@ -721,13 +799,15 @@ nsch_getprio_fin:
 ; SVC 27 - proc_count() -> live processes; SVC 28 - proc_limit().
 nsch_svc_count:
   CALL @np_counts
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r10,r2,#NS_FP
   ST r1,r10,21
   SVCRET
 nsch_svc_limit:
   MOVI r1,#NP_MAX_PROCS
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r10,r2,#NS_FP
   ST r1,r10,21
   SVCRET
@@ -735,12 +815,14 @@ nsch_svc_limit:
 ; ---------------------------------------------------------------------------
 ; SVC 22 - kill(pid, sig).
 nsch_svc_kill:
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r10,r2,#NS_FP
   LD r1,r10,1
   LD r2,r10,2
   CALL @nsch_kill
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r10,r2,#NS_FP
   ST r1,r10,21
   SVCRET
@@ -748,7 +830,8 @@ nsch_svc_kill:
 ; ---------------------------------------------------------------------------
 ; SVC 24 - sleep(ticks).
 nsch_svc_sleep:
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r10,r2,#NS_FP
   LD r1,r10,1
   CMP r1,r0
@@ -756,13 +839,15 @@ nsch_svc_sleep:
   ST r0,r10,21
   SVCRET
 nsch_sleep_go:
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r3,r2,#NS_TICKS
   ADD r3,r3,r1
   ST r3,r2,#NS_TMP1        ; wake tick
   LD r1,r2,#NS_CUR
   CALL @nsch_slot
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   ST r1,r2,#NS_TMP0
   LD r3,r2,#NS_TMP1
   ADDI r4,r2,#NS_WAKE
@@ -775,7 +860,8 @@ nsch_sleep_go:
   ADDI r4,r2,#NS_WAITPID
   ADD r4,r4,r1
   ST r0,r4,0
-  LA r4,#NS_BASE
+  LA r4,#NS_PTR
+  LD r4,r4,0
   LD r3,r4,#NS_NSLEEP
   CMP r3,r0
   JMP[NE] @nsch_sleep_have
@@ -800,12 +886,14 @@ nsch_sleep_inc:
 ; ---------------------------------------------------------------------------
 ; IRQ - tick, wake sleepers, preempt when the slice expires.
 nsch_svc_irq:
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r3,r2,#NS_CUR
   CMP r3,r0
   JMP[EQ] @nsch_irq_ret     ; boot context before the first process
   CALL @nsch_tick
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r3,r2,#NS_SLICE
   CMP r3,r0
   JMP[NE] @nsch_irq_ret
@@ -854,7 +942,8 @@ nsch_start_dead:
 nsch_sched_save_switch:
   ST r15,r14,0
   ADDI r14,r14,#NS_FRAME
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r1,r2,#NS_CUR
   CMP r1,r0
   JMP[EQ] @nsch_ss_pick
@@ -863,7 +952,8 @@ nsch_sched_save_switch:
   CMP r1,r2
   JMP[EQ] @nsch_ss_pick
   ST r1,r14,1
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r3,r2,#NS_THRSLOT
   LD r4,r14,1
   CMP r3,r4
@@ -902,7 +992,8 @@ nsch_activate_slot:
   ; entry pointer
   MOVI r2,#NP_ENTRY
   MUL r2,r1,r2
-  LA r3,#NP_BASE
+  LA r3,#NP_PTR
+  LD r3,r3,0
   ADD r3,r3,r2
   ST r3,r14,2
   LD r1,r3,#NP_E_PID
@@ -910,11 +1001,13 @@ nsch_activate_slot:
   ; ready (or blocked wake) -> running
   MOVI r2,#NP_ST_RUNNING
   CALL @np_set_state
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r1,r14,3
   ST r1,r2,#NS_CUR
   ; frame -> kframe (current TCB frame in thread mode)
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r3,r2,#NS_THRSLOT
   LD r4,r14,1
   CMP r3,r4
@@ -939,7 +1032,8 @@ nsch_act_copy:
   MOVI r2,#NS_P_REGIONS
   OUTL r1,r2
   ; fresh quantum
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r3,r2,#NS_QUANTUM
   ST r3,r2,#NS_SLICE
   SVCRET
@@ -949,15 +1043,18 @@ nsch_act_copy:
 nsch_preempt_current:
   ST r15,r14,0
   ADDI r14,r14,#NS_FRAME
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r3,r2,#NS_PREEMPT
   ADD r3,r3,r13
   ST r3,r2,#NS_PREEMPT
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r1,r2,#NS_CUR
   MOVI r2,#NP_ST_READY
   CALL @np_set_state
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r1,r2,#NS_CUR
   CALL @nsch_slot
   CALL @nsch_enqueue
@@ -971,12 +1068,14 @@ nsch_preempt_current:
 nsch_tick:
   ST r15,r14,0
   ADDI r14,r14,#NS_FRAME
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r3,r2,#NS_TICKS
   ADD r3,r3,r13
   ST r3,r2,#NS_TICKS
   CALL @nsch_wake_sleepers
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r3,r2,#NS_SLICE
   SUB r3,r3,r13
   ST r3,r2,#NS_SLICE
@@ -991,7 +1090,8 @@ nsch_tick:
 nsch_wake_sleepers:
   ST r15,r14,0
   ADDI r14,r14,#NS_FRAME
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r3,r2,#NS_NSLEEP
   CMP r3,r0
   JMP[EQ] @nsch_ws_ret
@@ -1000,7 +1100,8 @@ nsch_wake_sleepers:
   CMP r4,r3
   JMP[LT] @nsch_ws_ret
   ; current priority (0xFFFF if none)
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r1,r2,#NS_CUR
   MOVI r3,#NS_NONE
   ST r3,r14,2
@@ -1024,7 +1125,8 @@ nsch_ws_loop:
   ; entry = NP_BASE + slot*96
   MOVI r2,#NP_ENTRY
   MUL r2,r1,r2
-  LA r3,#NP_BASE
+  LA r3,#NP_PTR
+  LD r3,r3,0
   ADD r3,r3,r2
   ST r3,r14,3
   LD r4,r3,#NP_E_PID
@@ -1035,7 +1137,8 @@ nsch_ws_loop:
   CMP r5,r6
   JMP[NE] @nsch_ws_next
   ; wait kind must be sleep
-  LA r6,#NS_BASE
+  LA r6,#NS_PTR
+  LD r6,r6,0
   ADDI r6,r6,#NS_WAITK
   ADD r6,r6,r1
   LD r5,r6,0
@@ -1043,11 +1146,13 @@ nsch_ws_loop:
   CMP r5,r7
   JMP[NE] @nsch_ws_next
   ; wake tick
-  LA r6,#NS_BASE
+  LA r6,#NS_PTR
+  LD r6,r6,0
   ADDI r6,r6,#NS_WAKE
   ADD r6,r6,r1
   LD r5,r6,0
-  LA r6,#NS_BASE
+  LA r6,#NS_PTR
+  LD r6,r6,0
   LD r7,r6,#NS_TICKS
   CMP r7,r5
   JMP[LT] @nsch_ws_notdue
@@ -1058,12 +1163,14 @@ nsch_ws_loop:
   LD r1,r14,1
   CALL @nsch_enqueue
   ; clear wait kind and count the sleeper out
-  LA r6,#NS_BASE
+  LA r6,#NS_PTR
+  LD r6,r6,0
   ADDI r6,r6,#NS_WAITK
   LD r1,r14,1
   ADD r6,r6,r1
   ST r0,r6,0
-  LA r6,#NS_BASE
+  LA r6,#NS_PTR
+  LD r6,r6,0
   LD r7,r6,#NS_NSLEEP
   SUB r7,r7,r13
   ST r7,r6,#NS_NSLEEP
@@ -1076,7 +1183,8 @@ nsch_ws_loop:
   JMP[EQ] @nsch_ws_next
   CMP r4,r5
   JMP[GE] @nsch_ws_next
-  LA r6,#NS_BASE
+  LA r6,#NS_PTR
+  LD r6,r6,0
   ST r0,r6,#NS_SLICE
 nsch_ws_next:
   LD r1,r14,1
@@ -1090,7 +1198,8 @@ nsch_ws_notdue:
   ST r5,r14,4
   JMP @nsch_ws_next
 nsch_ws_done:
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r3,r2,#NS_NSLEEP
   CMP r3,r0
   JMP[NE] @nsch_ws_setmin
@@ -1142,14 +1251,16 @@ nsch_wake_waiters:
   CMP r1,r2
   JMP[EQ] @nsch_ww_done
   ST r1,r14,5
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   ADDI r2,r2,#NS_WAITK
   ADD r2,r2,r1
   LD r3,r2,0
   MOVI r4,#NS_WK_WAIT
   CMP r3,r4
   JMP[NE] @nsch_ww_done
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   ADDI r2,r2,#NS_WAITPID
   ADD r2,r2,r1
   LD r3,r2,0
@@ -1173,12 +1284,14 @@ nsch_ww_match:
   LD r2,r14,1
   ST r2,r1,2
   ; clear wait record
-  LA r6,#NS_BASE
+  LA r6,#NS_PTR
+  LD r6,r6,0
   ADDI r6,r6,#NS_WAITK
   LD r1,r14,5
   ADD r6,r6,r1
   ST r0,r6,0
-  LA r6,#NS_BASE
+  LA r6,#NS_PTR
+  LD r6,r6,0
   ADDI r6,r6,#NS_WAITPID
   ADD r6,r6,r1
   ST r0,r6,0
@@ -1199,7 +1312,8 @@ nsch_kill:
   ST r1,r14,1
   ST r2,r14,2
   ; self?
-  LA r3,#NS_BASE
+  LA r3,#NS_PTR
+  LD r3,r3,0
   LD r3,r3,#NS_CUR
   LD r4,r14,1
   CMP r3,r4
@@ -1213,27 +1327,31 @@ nsch_kill:
   ; unlink from any run queue and clear wait metadata
   LD r1,r14,1
   CALL @nsch_remove_pid
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r1,r14,1
   CALL @nsch_slot
   MOVI r2,#NS_NONE
   CMP r1,r2
   JMP[EQ] @nsch_kill_out
   ST r1,r14,4
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   ADDI r2,r2,#NS_WAITK
   ADD r2,r2,r1
   LD r3,r2,0
   MOVI r4,#NS_WK_SLEEP
   CMP r3,r4
   JMP[NE] @nsch_kill_notsleep
-  LA r4,#NS_BASE
+  LA r4,#NS_PTR
+  LD r4,r4,0
   LD r3,r4,#NS_NSLEEP
   SUB r3,r3,r13
   ST r3,r4,#NS_NSLEEP
 nsch_kill_notsleep:
   ST r0,r2,0
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   ADDI r2,r2,#NS_WAKE
   ADD r2,r2,r1
   ST r0,r2,0
@@ -1270,7 +1388,8 @@ nsch_kill_self:
 nsch_thread_svc:
   ADD r10,r1,r0
   LD r3,r10,20
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   ST r3,r2,#NS_TMP0
   LD r4,r2,#NS_THRPID
   CMP r4,r0
@@ -1278,7 +1397,8 @@ nsch_thread_svc:
   ADD r1,r10,r0
   CALL @nsch_thread_boot
 nsch_ts_have:
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r4,r2,#NS_THRPID
   LD r5,r2,#NS_CUR
   CMP r4,r5
@@ -1290,7 +1410,8 @@ nsch_ts_have:
   JMP[NE] @nsch_ts_disp
   CALL @nthr_self
   ADD r2,r1,r0
-  LA r3,#NS_BASE
+  LA r3,#NS_PTR
+  LD r3,r3,0
   LD r1,r3,#NS_CUR
   CALL @np_thread_remove
 nsch_ts_disp:
@@ -1299,7 +1420,8 @@ nsch_ts_disp:
   ADD r1,r10,r0
   CALL @nthr_syscall_dispatch
   ; thread_create: the tid is in the restored r1/frame[1]
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r3,r2,#NS_TMP0
   MOVI r4,13
   CMP r3,r4
@@ -1310,13 +1432,15 @@ nsch_ts_disp:
   CMP r1,r0
   JMP[EQ] @nsch_ts_ret
   ADD r2,r1,r0
-  LA r3,#NS_BASE
+  LA r3,#NS_PTR
+  LD r3,r3,0
   LD r1,r3,#NS_CUR
   CALL @np_thread_add
 nsch_ts_ret:
   SVCRET
 nsch_ts_bad:
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r10,r2,#NS_FP
   LA r1,0xFFFFFFFF
   ST r1,r10,21
@@ -1340,12 +1464,14 @@ nsch_thread_boot:
   MOVI r3,24
   BCOPY r2,r1,r3
   ; owner pid/slot
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r3,r2,#NS_CUR
   ST r3,r2,#NS_THRPID
   ADD r1,r3,r0
   CALL @nsch_slot
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   ST r1,r2,#NS_THRSLOT
   ADDI r14,r14,#NS_FRAME_NEG
   LD r15,r14,0
@@ -1372,7 +1498,8 @@ nsch_spawn_desc:
   JMP[LE] @nsch_sd_nreg
   MOVI r3,8
 nsch_sd_nreg:
-  LA r4,#NS_BASE
+  LA r4,#NS_PTR
+  LD r4,r4,0
   ST r3,r4,#NS_TMP3
   LD r3,r14,5
   MOVI r4,#NS_NPRIO
@@ -1388,16 +1515,19 @@ nsch_sd_prio:
   CALL @np_create
   CMP r1,r0
   JMP[EQ] @nsch_sd_fail
-  LA r4,#NS_BASE
+  LA r4,#NS_PTR
+  LD r4,r4,0
   ST r1,r4,#NS_TMP0
   CALL @nsch_slot
   MOVI r2,#NS_NONE
   CMP r1,r2
   JMP[EQ] @nsch_sd_rollback
-  LA r4,#NS_BASE
+  LA r4,#NS_PTR
+  LD r4,r4,0
   ST r1,r4,#NS_TMP1
   CALL @nsch_rt_ptr
-  LA r4,#NS_BASE
+  LA r4,#NS_PTR
+  LD r4,r4,0
   ST r1,r4,#NS_TMP4
   MOVI r3,36
 nsch_sd_rtz:
@@ -1406,10 +1536,12 @@ nsch_sd_rtz:
   SUB r3,r3,r13
   CMP r3,r0
   JMP[NE] @nsch_sd_rtz
-  LA r4,#NS_BASE
+  LA r4,#NS_PTR
+  LD r4,r4,0
   ST r0,r4,#NS_TMP2
 nsch_sd_loop:
-  LA r4,#NS_BASE
+  LA r4,#NS_PTR
+  LD r4,r4,0
   LD r3,r4,#NS_TMP2
   LD r5,r4,#NS_TMP3
   CMP r3,r5
@@ -1424,13 +1556,16 @@ nsch_sd_loop:
   LD r6,r2,1
   ST r6,r14,8
   LD r6,r2,2
-  LA r4,#NS_BASE
+  LA r4,#NS_PTR
+  LD r4,r4,0
   ST r6,r4,#NS_TMP5
   LD r6,r2,3
-  LA r4,#NS_BASE
+  LA r4,#NS_PTR
+  LD r4,r4,0
   ST r6,r4,#NS_TMP6
   ; mirror into the per-slot S1 table before the nanproc call
-  LA r4,#NS_BASE
+  LA r4,#NS_PTR
+  LD r4,r4,0
   LD r2,r4,#NS_TMP4
   LD r3,r4,#NS_TMP2
   MOVI r5,4
@@ -1445,7 +1580,8 @@ nsch_sd_loop:
   LD r6,r4,#NS_TMP6
   ST r6,r2,3
   ; np_region_add(pid, base, words, kind, prot)
-  LA r6,#NS_BASE
+  LA r6,#NS_PTR
+  LD r6,r6,0
   LD r1,r6,#NS_TMP0
   LD r2,r14,7
   LD r3,r14,8
@@ -1454,46 +1590,57 @@ nsch_sd_loop:
   CALL @np_region_add
   CMP r1,r0
   JMP[NE] @nsch_sd_rollback
-  LA r4,#NS_BASE
+  LA r4,#NS_PTR
+  LD r4,r4,0
   LD r3,r4,#NS_TMP2
   ADD r3,r3,r13
   ST r3,r4,#NS_TMP2
   JMP @nsch_sd_loop
 nsch_sd_regions:
-  LA r4,#NS_BASE
+  LA r4,#NS_PTR
+  LD r4,r4,0
   LD r1,r4,#NS_TMP0
   LD r2,r14,5
   CALL @np_set_priority
-  LA r4,#NS_BASE
+  LA r4,#NS_PTR
+  LD r4,r4,0
   LD r1,r4,#NS_TMP0
   MOVI r2,1
   CALL @np_thread_add
-  LA r4,#NS_BASE
+  LA r4,#NS_PTR
+  LD r4,r4,0
   LD r1,r4,#NS_TMP0
   CALL @np_lookup
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   LD r3,r2,#NS_TICKS
   ST r3,r1,#NP_E_START_TICK
-  LA r4,#NS_BASE
+  LA r4,#NS_PTR
+  LD r4,r4,0
   LD r1,r4,#NS_TMP1
   LD r2,r14,3
   LD r3,r14,4
   CALL @nsch_init_frame
-  LA r4,#NS_BASE
+  LA r4,#NS_PTR
+  LD r4,r4,0
   LD r1,r4,#NS_TMP1
   CALL @nsch_enqueue
-  LA r4,#NS_BASE
+  LA r4,#NS_PTR
+  LD r4,r4,0
   LD r1,r4,#NS_TMP0
   JMP @nsch_sd_out
 nsch_sd_rollback:
-  LA r4,#NS_BASE
+  LA r4,#NS_PTR
+  LD r4,r4,0
   LD r1,r4,#NS_TMP0
   CALL @np_region_clear
-  LA r4,#NS_BASE
+  LA r4,#NS_PTR
+  LD r4,r4,0
   LD r1,r4,#NS_TMP0
   LA r2,0xFFFFFFFF
   CALL @np_exit
-  LA r4,#NS_BASE
+  LA r4,#NS_PTR
+  LD r4,r4,0
   LD r1,r4,#NS_TMP0
   CALL @np_reap
 nsch_sd_fail:
@@ -1564,7 +1711,8 @@ nsch_enqueue:
   ; leaf
   MOVI r2,#NP_ENTRY
   MUL r3,r1,r2
-  LA r2,#NP_BASE
+  LA r2,#NP_PTR
+  LD r2,r2,0
   ADD r3,r2,r3
   LD r4,r3,#NP_E_PRIO
   MOVI r5,#NS_NPRIO
@@ -1572,12 +1720,14 @@ nsch_enqueue:
   JMP[LT] @nsch_eq_prio
   MOVI r4,#NS_NPRIO-1
 nsch_eq_prio:
-  LA r5,#NS_BASE
+  LA r5,#NS_PTR
+  LD r5,r5,0
   ADDI r5,r5,#NS_QUEUE
   SHL r4,r4,1
   ADD r5,r5,r4              ; queue pair
   ; link[slot] = 0
-  LA r6,#NS_BASE
+  LA r6,#NS_PTR
+  LD r6,r6,0
   ADDI r6,r6,#NS_LINK
   ADD r6,r6,r1
   ST r0,r6,0
@@ -1587,7 +1737,8 @@ nsch_eq_prio:
   JMP[EQ] @nsch_eq_empty
   ; link[tail-1] = enc
   SUB r8,r8,r13
-  LA r6,#NS_BASE
+  LA r6,#NS_PTR
+  LD r6,r6,0
   ADDI r6,r6,#NS_LINK
   ADD r6,r6,r8
   ST r7,r6,0
@@ -1602,7 +1753,8 @@ nsch_eq_empty:
 ; nsch_dequeue_head - r1=priority level -> r1=slot or NS_NONE.
 nsch_dequeue_head:
   ; leaf
-  LA r2,#NS_BASE
+  LA r2,#NS_PTR
+  LD r2,r2,0
   ADDI r2,r2,#NS_QUEUE
   SHL r3,r1,1
   ADD r2,r2,r3
@@ -1610,7 +1762,8 @@ nsch_dequeue_head:
   CMP r3,r0
   JMP[EQ] @nsch_dq_none
   SUB r4,r3,r13             ; slot
-  LA r5,#NS_BASE
+  LA r5,#NS_PTR
+  LD r5,r5,0
   ADDI r5,r5,#NS_LINK
   ADD r5,r5,r4
   LD r6,r5,0                ; next enc
@@ -1651,7 +1804,8 @@ nsch_remove_slot:
   MOVI r2,0
   ST r2,r14,3              ; level
 nsch_rs_level:
-  LA r3,#NS_BASE
+  LA r3,#NS_PTR
+  LD r3,r3,0
   ADDI r3,r3,#NS_QUEUE
   LD r4,r14,3
   SHL r4,r4,1
@@ -1666,7 +1820,8 @@ nsch_rs_level:
 nsch_rs_prev:
   LD r4,r14,4
   SUB r5,r4,r13
-  LA r6,#NS_BASE
+  LA r6,#NS_PTR
+  LD r6,r6,0
   ADDI r6,r6,#NS_LINK
   ADD r6,r6,r5
   LD r5,r6,0
@@ -1681,11 +1836,13 @@ nsch_rs_mid:
   ; link[prev] = link[slot]
   LD r4,r14,4
   SUB r4,r4,r13
-  LA r6,#NS_BASE
+  LA r6,#NS_PTR
+  LD r6,r6,0
   ADDI r6,r6,#NS_LINK
   ADD r6,r6,r4
   LD r5,r14,1
-  LA r7,#NS_BASE
+  LA r7,#NS_PTR
+  LD r7,r7,0
   ADDI r7,r7,#NS_LINK
   ADD r7,r7,r5
   LD r8,r7,0
@@ -1700,7 +1857,8 @@ nsch_rs_mid:
   JMP @nsch_rs_clear
 nsch_rs_head:
   LD r5,r14,1
-  LA r6,#NS_BASE
+  LA r6,#NS_PTR
+  LD r6,r6,0
   ADDI r6,r6,#NS_LINK
   ADD r6,r6,r5
   LD r5,r6,0
@@ -1710,7 +1868,8 @@ nsch_rs_head:
   ST r0,r3,1
 nsch_rs_clear:
   LD r5,r14,1
-  LA r6,#NS_BASE
+  LA r6,#NS_PTR
+  LD r6,r6,0
   ADDI r6,r6,#NS_LINK
   ADD r6,r6,r5
   ST r0,r6,0
@@ -1737,7 +1896,8 @@ nsch_slot:
   CALL @np_lookup
   CMP r1,r0
   JMP[EQ] @nsch_slot_bad
-  LA r2,#NP_BASE
+  LA r2,#NP_PTR
+  LD r2,r2,0
   SUB r1,r1,r2
   MOVI r2,#NP_ENTRY
   DIVU r1,r1,r2
@@ -1753,7 +1913,8 @@ nsch_slot_out:
 nsch_frame_ptr:
   MOVI r2,24
   MUL r2,r1,r2
-  LA r1,#NS_BASE
+  LA r1,#NS_PTR
+  LD r1,r1,0
   ADDI r1,r1,#NS_FRAMES
   ADD r1,r1,r2
   RET
@@ -1762,7 +1923,8 @@ nsch_frame_ptr:
 nsch_rt_ptr:
   MOVI r2,36
   MUL r2,r1,r2
-  LA r1,#NS_BASE
+  LA r1,#NS_PTR
+  LD r1,r1,0
   ADDI r1,r1,#NS_REGT
   ADD r1,r1,r2
   RET

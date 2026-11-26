@@ -50,11 +50,8 @@ JMPR r1
 gui_kernel_boot:
   MOVI r13,1
   LA r14,#KBOOT_STACK
-  CALL @nsch_init
-  LA r1,@ns_svc
-  CALL @nk_install_proc
 
-  ; MEMQ: the kernel publishes the actual word count through CPUID
+  ; MEMQ first: the kernel publishes the actual word count through CPUID
   ; 0x4E4D00FF, subleaf 1.  Never compile a RAM size into the boot path.
   LA r1,0x4E4D00FF
   MOVI r2,1
@@ -67,26 +64,59 @@ gui_mem_have:
   CMP r3,r4
   JMP[LT] @gui_boot_fail
   ADD r11,r3,r0
-
-  ; Publish the word count to the desktop shell and to both region tables.
   LA r4,@g_mem_words
-  ST r11,r4,0
+  ST r3,r4,0
+
+  ; Place the process table and scheduler at the top of real RAM.  The heap
+  ; ends below them, so RAM size and kernel placement are not linked.
+  LA r1,#NS_BYTES
+  SUB r4,r3,r1
+  LA r5,0x1000
+  SUB r4,r4,r5                 ; NS_BASE
+  LA r1,#NP_MAX_PROCS
+  MOVI r2,#NP_ENTRY
+  MUL r1,r1,r2
+  SUB r5,r4,r1
+  LA r1,0x1000
+  SUB r5,r5,r1                 ; NP_BASE
+  LA r1,#NP_VAR_WORDS
+  SUB r6,r5,r1
+  LA r1,0x1000
+  SUB r6,r6,r1                 ; NP_VARS
+  LA r7,#HEAP_BASE
+  LA r1,0x10000
+  ADD r7,r7,r1
+  CMP r6,r7
+  JMP[LE] @gui_boot_fail
+  ADD r1,r4,r0
+  ADD r2,r5,r0
+  ADD r3,r6,r0
+  ADD r4,r11,r0
+  CALL @ns_config
+  CALL @nsch_init
+  LA r1,@ns_svc
+  CALL @nk_install_proc
+
+  ; nsch_init clobbers r1..r12; reload the published values.
+  LA r4,@g_mem_words
+  LD r11,r4,0
   LA r4,@gui_desc_desktop
   ADDI r4,r4,6
   ST r11,r4,0
   LA r4,@gui_desc_shell
   ADDI r4,r4,6
   ST r11,r4,0
-  ; The boot region table was built before MEMQ; widen it to real RAM.
-  LA r4,#NS_BASE
+  LA r4,#NS_PTR
+  LD r4,r4,0
   LA r5,#NS_BOOTTAB
   ADD r4,r4,r5
   ST r11,r4,1
 
-  ; Bump heap from HEAP_BASE to the top of real RAM (minus one guard page).
+  ; Bump heap from HEAP_BASE to just below NP_VARS.
   LA r1,#HEAP_BASE
-  ADD r2,r11,r0
-  LA r4,0x10000
+  LA r4,#NPV_PTR
+  LD r2,r4,0
+  LA r4,0x1000
   SUB r2,r2,r4
   CALL @ns_heap_init
   SUB r5,r2,r1

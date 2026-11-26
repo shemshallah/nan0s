@@ -52,9 +52,10 @@ the remaining scheduler work.  A raw-NaN16 kernel-boot image
 NANIX shell as PID 2 under `nankernel` + `nansched`; the scheduler-boot gate
 proves the full Terminal transcript, live PID 1/PID 2 and timer preemption
 on x86_64 S1.  The boot kernel asks MEMQ (CPUID leaf `0x4E4D00FF`) for the
-real word count instead of compiling one in, widens both process region
-tables to actual RAM, and exposes a bump heap through `SVC 2`; the memory
-gates boot at 64 MiB and 128 MiB and allocate up to 64 MiB from that heap.
+real word count instead of compiling one in, places the scheduler block and
+nanproc table at the top of real RAM, widens both process region tables to
+actual RAM, and exposes a bump heap through `SVC 2`; the memory gates boot
+at 64 MiB and 128 MiB and allocate up to 64 MiB from that heap.
 The `execbig` path allocates an RWX region, fills it with valid NOP words,
 copies a base-relative tail addressed through `r12`, calls it and verifies
 its result, so a 70,000-word program runs from a runtime heap base rather

@@ -209,6 +209,8 @@ service table.
       `nankernel` + `nansched`, gated on x86_64 S1.
 - [x] Runtime MEMQ word count, both process region tables and the boot region
       table widened to real RAM (64 MiB/128 MiB gates).
+- [x] Scheduler block and nanproc table placed at top-of-RAM from runtime
+      configuration words; no fixed `NS_BASE`/`NP_BASE` in the boot path.
 - [x] `SVC 2` bump heap sized from MEMQ (4K and 64 MiB allocations gated).
 - [x] Base-relative variable-size executable path on the SVC 2 heap
       (`execbig 70000`, 70,000 words, >64K code window).
