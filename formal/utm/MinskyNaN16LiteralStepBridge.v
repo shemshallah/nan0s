@@ -983,6 +983,7 @@ Proof.
   rewrite to_nat_land_mask.
   rewrite N2Nat.inj_add.
   rewrite N2Nat.inj_sub.
+  unfold two32.
   rewrite N_to_nat_two32.
   assert (Hshape :
     N.to_nat x + (2 ^ 32 - N.to_nat y)
