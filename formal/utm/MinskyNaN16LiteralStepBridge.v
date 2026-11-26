@@ -961,6 +961,13 @@ Print Assumptions lp_exec_ADD_refines.
 
 (** ** SUB *)
 
+Lemma to_nat_two32 : N.to_nat two32 = 2 ^ 32.
+Proof.
+  unfold two32.
+  change (N.to_nat (2 ^ 32)%N = 2 ^ 32).
+  apply N_to_nat_two32.
+Qed.
+
 Lemma to_nat_sub32N :
   forall x y,
     (x < 2 ^ 32)%N ->
