@@ -55,6 +55,18 @@
 .equ XLEN 0x80D0
 .equ XPC 0x80D4
 .equ AVX2F 0x80E4
+; KABI v0.1 control-port state (spec/KERNEL_ABI.md).  Addresses are guest
+; word indices; 0xFFFFFFFF means unset.  KIN is 1 while kernel code runs.
+.equ KENTRY  0x80E8
+.equ KFRAME  0x80EC
+.equ KTIMER  0x80F0
+.equ KTIMERL 0x80F4
+.equ KSTACK  0x80F8
+.equ KREGIONS 0x80FC
+.equ KTCB    0x8100
+.equ KIN     0x8104
+.equ KDATA   0x8108
+.equ KSTATUS 0x810C
 _start:
   CLD
   CALL @sse_init
@@ -68,6 +80,16 @@ _start:
   MOVB $0,[RAWKB]
   MOVL $0,[XLEN]
   MOVL $0,[XPC]
+  MOVL $0xFFFFFFFF,[KENTRY]
+  MOVL $0,[KFRAME]
+  MOVL $0,[KTIMER]
+  MOVL $0,[KTIMERL]
+  MOVL $0,[KSTACK]
+  MOVL $0,[KREGIONS]
+  MOVL $0,[KTCB]
+  MOVL $0,[KIN]
+  MOVL $0xF0000,[KDATA]
+  MOVL $0,[KSTATUS]
   MOV $G,%EDI
   XOR %EAX,%EAX
   ; Zero the C globals/compiler-table window (first 8 MiB of payload).
@@ -109,6 +131,9 @@ loop:
   JAE @done
   INC %EAX
   MOV %EAX,[STEPS]
+  ; KABI timer: count guest instructions; vector cause=1 when the interval
+  ; expires.  The helper lives after the fixed table/ATA regions.
+  CALL @kabi_tick
   MOV %ESI,%ECX
   AND [MASKM],%ECX
   CALL @nib
@@ -711,16 +736,11 @@ osw_done:
   POP %ESI
   JMP @loop
 h_outl:
-  MOV [R+EBP],%EAX
-  MOV %ECX,%EDX
-  AND $0xFFFF,%EDX
-  CMP $0x4E07,%EDX
-  JNE @ol_out
-  MOV %EAX,[DATAB]
-  JMP @loop
-ol_out:
-  OUT %EAX,%DX
-  JMP @loop
+  JMP @h_outl_full
+
+h_inl:
+  JMP @h_inl_full
+
 h_mul:
   MOV %ECX,%EBX
   IMUL %EDX,%EBX
@@ -1720,7 +1740,7 @@ tbl:
   .long @h_fadd,@h_fsub,@h_fmul,@h_fdiv,@h_fsqrt,@h_fcmp,@h_cvtif,@h_cvtfi,@h_jmpf,@h_callf
   .long @h_fbinfo,@h_vsync,@h_fbcopy,@h_fbfill,@h_outb,@h_inb,@h_inw,@h_outw,@h_outsw,@h_outl,@h_cpuid,@h_rdtsc
   .long @badop,@badop,@badop,@badop,@h_dp4b
-  .long @badop,@h_vdp4b4,@badop,@badop,@badop
+  .long @badop,@h_vdp4b4,@h_inl,@h_svc,@h_svcret
   .long @h_vzero,@h_vbcast,@h_vload_sse2,@h_vstore_sse2,@h_vadd8_disp,@h_vsub8_disp,@h_vadd32_disp,@h_vsub32_disp,@h_vmul32_disp,@h_vdp4b_disp,@badop,@badop,@badop,@badop,@h_vget,@h_vset
   .long @h_codelen,@h_execn
 
@@ -2652,4 +2672,279 @@ mb_count:
   POP %EDX
   POP %ECX
   POP %EBX
+  RET
+
+; ---- KABI v0.1 trap path (native side of spec/KERNEL_ABI.md) ----------------
+; Frame words are ordinary guest words: payload at +2, valid heads.  putw
+; writes them, LD/LDB in the kernel reads them.  The interpreter keeps the
+; guest register file in R; ESI is the guest pc (already advanced past the
+; trapping instruction when a handler runs).
+h_svc:
+  PUSH %EAX
+  MOV [KENTRY],%EAX
+  CMP $0xFFFFFFFF,%EAX
+  JE @badop
+  MOV [KIN],%EAX
+  TEST %EAX,%EAX
+  JNZ @badop
+  MOV [KFRAME],%EDI
+  XOR %EBP,%EBP
+hsv_l:
+  MOV [R+EBP*4],%EBX
+  MOV %EDI,%EAX
+  ADD %EBP,%EAX
+  CALL @putw
+  INC %EBP
+  CMP $16,%EBP
+  JB @hsv_l
+  MOV %ESI,%EBX
+  MOV %EDI,%EAX
+  ADD $16,%EAX
+  CALL @putw
+  MOV [FLAGM],%EBX
+  MOV %EDI,%EAX
+  ADD $17,%EAX
+  CALL @putw
+  XOR %EBX,%EBX
+  MOV %EDI,%EAX
+  ADD $18,%EAX
+  CALL @putw
+  MOV %EDI,%EAX
+  ADD $19,%EAX
+  CALL @putw
+  POP %EBX
+  AND $0xFFFF,%EBX
+  MOV %EDI,%EAX
+  ADD $20,%EAX
+  CALL @putw
+  XOR %EBX,%EBX
+  MOV %EDI,%EAX
+  ADD $21,%EAX
+  CALL @putw
+  MOV [R+56],%EBX
+  MOV %EDI,%EAX
+  ADD $22,%EAX
+  CALL @putw
+  XOR %EBX,%EBX
+  MOV %EDI,%EAX
+  ADD $23,%EAX
+  CALL @putw
+  MOV [KSTACK],%EBX
+  CMP $0xFFFFFFFF,%EBX
+  JE @hsv_nostk
+  MOV %EBX,[R+56]
+hsv_nostk:
+  MOVL $1,[KIN]
+  MOV [KENTRY],%ESI
+  JMP @loop
+
+h_svcret:
+  MOV [KIN],%EAX
+  TEST %EAX,%EAX
+  JZ @badop
+  MOV [KFRAME],%EDI
+  XOR %EBP,%EBP
+hsvr_l:
+  MOV %EDI,%EAX
+  ADD %EBP,%EAX
+  MOV [G+2+EAX*8],%EBX
+  MOV %EBX,[R+EBP*4]
+  INC %EBP
+  CMP $16,%EBP
+  JB @hsvr_l
+  MOV %EDI,%EAX
+  ADD $16,%EAX
+  MOV [G+2+EAX*8],%ESI
+  MOV %EDI,%EAX
+  ADD $17,%EAX
+  MOV [G+2+EAX*8],%EBX
+  MOV %EBX,[FLAGM]
+  MOV %EDI,%EAX
+  ADD $19,%EAX
+  MOV [G+2+EAX*8],%EBX
+  TEST $3,%EBX
+  JNZ @hsvr_noret
+  MOV %EDI,%EAX
+  ADD $21,%EAX
+  MOV [G+2+EAX*8],%EBX
+  MOV %EBX,[R+4]
+hsvr_noret:
+  MOVL $0,[KIN]
+  MOVL $0,[KSTATUS]
+  JMP @loop
+
+kabi_irq:
+  MOV [KFRAME],%EDI
+  XOR %EBP,%EBP
+kirq_l:
+  MOV [R+EBP*4],%EBX
+  MOV %EDI,%EAX
+  ADD %EBP,%EAX
+  CALL @putw
+  INC %EBP
+  CMP $16,%EBP
+  JB @kirq_l
+  MOV %ESI,%EBX
+  MOV %EDI,%EAX
+  ADD $16,%EAX
+  CALL @putw
+  MOV [FLAGM],%EBX
+  MOV %EDI,%EAX
+  ADD $17,%EAX
+  CALL @putw
+  XOR %EBX,%EBX
+  MOV %EDI,%EAX
+  ADD $18,%EAX
+  CALL @putw
+  MOV $1,%EBX
+  MOV %EDI,%EAX
+  ADD $19,%EAX
+  CALL @putw
+  XOR %EBX,%EBX
+  MOV %EDI,%EAX
+  ADD $20,%EAX
+  CALL @putw
+  MOV %EDI,%EAX
+  ADD $21,%EAX
+  CALL @putw
+  MOV [R+56],%EBX
+  MOV %EDI,%EAX
+  ADD $22,%EAX
+  CALL @putw
+  XOR %EBX,%EBX
+  MOV %EDI,%EAX
+  ADD $23,%EAX
+  CALL @putw
+  MOV [KSTACK],%EBX
+  CMP $0xFFFFFFFF,%EBX
+  JE @kirq_nostk
+  MOV %EBX,[R+56]
+kirq_nostk:
+  MOVL $1,[KIN]
+  MOV [KENTRY],%ESI
+  RET
+
+; Full KABI port handlers, kept after the fixed .org regions.
+h_outl_full:
+  MOV [R+EBP],%EAX
+  MOV %ECX,%EDX
+  AND $0xFFFF,%EDX
+  CMP $0x4E00,%EDX
+  JB @ol_raw
+  CMP $0x4E07,%EDX
+  JA @ol_raw
+  ; Control ports are writable during boot and by kernel code only.
+  MOV [KENTRY],%EBX
+  CMP $0xFFFFFFFF,%EBX
+  JE @ol_store
+  MOV [KIN],%EBX
+  TEST %EBX,%EBX
+  JZ @badop
+ol_store:
+  CMP $0x4E00,%EDX
+  JE @ol_kentry
+  CMP $0x4E01,%EDX
+  JE @ol_kframe
+  CMP $0x4E02,%EDX
+  JE @ol_ktimer
+  CMP $0x4E03,%EDX
+  JE @ol_kstack
+  CMP $0x4E04,%EDX
+  JE @ol_kregions
+  CMP $0x4E05,%EDX
+  JE @ol_ktcb
+  CMP $0x4E06,%EDX
+  JE @loop
+  MOV %EAX,[KDATA]
+  MOV %EAX,[DATAB]
+  JMP @loop
+ol_kentry:
+  MOV %EAX,[KENTRY]
+  JMP @loop
+ol_kframe:
+  MOV %EAX,[KFRAME]
+  JMP @loop
+ol_ktimer:
+  MOV %EAX,[KTIMER]
+  MOV %EAX,[KTIMERL]
+  JMP @loop
+ol_kstack:
+  MOV %EAX,[KSTACK]
+  JMP @loop
+ol_kregions:
+  MOV %EAX,[KREGIONS]
+  JMP @loop
+ol_ktcb:
+  MOV %EAX,[KTCB]
+  JMP @loop
+ol_raw:
+  OUT %EAX,%DX
+  JMP @loop
+
+h_inl_full:
+  MOV %ECX,%EDX
+  AND $0xFFFF,%EDX
+  CMP $0x4E00,%EDX
+  JB @il_raw
+  CMP $0x4E07,%EDX
+  JA @il_raw
+  CMP $0x4E00,%EDX
+  JE @il_kentry
+  CMP $0x4E01,%EDX
+  JE @il_kframe
+  CMP $0x4E02,%EDX
+  JE @il_ktimer
+  CMP $0x4E03,%EDX
+  JE @il_kstack
+  CMP $0x4E04,%EDX
+  JE @il_kregions
+  CMP $0x4E05,%EDX
+  JE @il_ktcb
+  CMP $0x4E06,%EDX
+  JE @il_status
+  MOV [KDATA],%EBX
+  JMP @st
+il_kentry:
+  MOV [KENTRY],%EBX
+  JMP @st
+il_kframe:
+  MOV [KFRAME],%EBX
+  JMP @st
+il_ktimer:
+  MOV [KTIMER],%EBX
+  JMP @st
+il_kstack:
+  MOV [KSTACK],%EBX
+  JMP @st
+il_kregions:
+  MOV [KREGIONS],%EBX
+  JMP @st
+il_ktcb:
+  MOV [KTCB],%EBX
+  JMP @st
+il_status:
+  MOV [KSTATUS],%EBX
+  JMP @st
+il_raw:
+  IN %DX,%EAX
+  MOV %EAX,%EBX
+  JMP @st
+
+kabi_tick:
+  MOV [KTIMER],%EAX
+  TEST %EAX,%EAX
+  JZ @kt_ret
+  MOV [KENTRY],%EBX
+  CMP $0xFFFFFFFF,%EBX
+  JE @kt_ret
+  MOV [KIN],%EBX
+  TEST %EBX,%EBX
+  JNZ @kt_ret
+  MOV [KTIMERL],%EBX
+  DEC %EBX
+  MOV %EBX,[KTIMERL]
+  JNZ @kt_ret
+  MOV %EAX,[KTIMERL]
+  CALL @kabi_irq
+kt_ret:
   RET
