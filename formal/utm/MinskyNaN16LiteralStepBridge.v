@@ -802,6 +802,17 @@ Proof.
   reflexivity.
 Qed.
 
+Lemma to_nat_mod32N_add_small :
+  forall x y,
+    N.to_nat x + N.to_nat y < 2 ^ 32 ->
+    N.to_nat (mod32N (N.add x y)) = N.to_nat x + N.to_nat y.
+Proof.
+  intros x y H.
+  rewrite to_nat_mod32N.
+  rewrite N2Nat.inj_add.
+  apply Nat.mod_small. exact H.
+Qed.
+
 Theorem lp_exec_ADD_refines :
   forall L vm prog d a b,
     Rlp L vm ->
@@ -851,9 +862,8 @@ Proof.
         (mod32N (N.add (lget_regN (lp_reg L) a)
                         (lget_regN (lp_reg L) b))))
         by (rewrite Hlen; lia).
-      rewrite to_nat_mod32N.
-      rewrite N2Nat.inj_add.
-      rewrite !Nat.mod_small by exact Hnc.
+      rewrite (to_nat_mod32N_add_small
+        (lget_regN (lp_reg L) a) (lget_regN (lp_reg L) b) Hnc).
       rewrite HA', HB'. reflexivity.
     + rewrite (set_reg_neq _ _ _ _ Hne).
       rewrite (lget_regN_lset_word_neq (lp_reg L) d
@@ -901,10 +911,9 @@ Proof.
     rewrite pack_k_zf.
     rewrite HA', HB'.
     rewrite N_eqb_to_nat.
-    rewrite to_nat_mod32N.
-    rewrite N2Nat.inj_add.
-    rewrite !Nat.mod_small by exact Hnc.
-    reflexivity.
+    rewrite (to_nat_mod32N_add_small
+      (lget_regN (lp_reg L) a) (lget_regN (lp_reg L) b) Hnc).
+    rewrite HA', HB'. reflexivity.
   - change (false =
             Nat.eqb
               (pack_k
