@@ -903,13 +903,14 @@ Proof.
     rewrite lp_mem_at_lp_exec_ADD. exact (Hmem x).
   - change (Nat.eqb (vm_reg vm a + vm_reg vm b) 0 =
             Nat.eqb
-              ((pack_k
-                 (N.eqb
-                   (mod32N (N.add (lget_regN (lp_reg L) a)
-                                   (lget_regN (lp_reg L) b))) 0)
-                 (N.leb two32
-                   (N.add (lget_regN (lp_reg L) a)
-                          (lget_regN (lp_reg L) b))) / 2 mod 2) 1).
+              (((pack_k
+                  (N.eqb
+                    (mod32N (N.add (lget_regN (lp_reg L) a)
+                                    (lget_regN (lp_reg L) b))) 0)
+                  (N.leb two32
+                    (N.add (lget_regN (lp_reg L) a)
+                           (lget_regN (lp_reg L) b)))
+                 ) / 2) mod 2) 1).
     rewrite pack_k_zf.
     rewrite HA', HB'.
     rewrite N_eqb_to_nat.
