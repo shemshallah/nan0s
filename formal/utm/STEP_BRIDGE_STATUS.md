@@ -16,6 +16,7 @@ Verified one-step refinements in `MinskyNaN16LiteralStepBridge.v`:
 | SHR | `lp_exec_SHR_refines` | PASS |
 | ADD | `lp_exec_ADD_refines` (no-carry) | PASS |
 | SUB | `lp_exec_SUB_refines` (no-borrow) | PASS |
+| SHL | `lp_exec_SHL_refines` (no-overflow) | PASS |
 
 All six preserve the full `Rlp` relation, including the opaque memory
 view, register bounds, flags, halt state and the link register.
