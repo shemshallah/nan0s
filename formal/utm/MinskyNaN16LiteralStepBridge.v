@@ -415,5 +415,100 @@ Qed.
 
 Print Assumptions lp_exec_CALL_refines.
 
-From Coq Require Import N2Nat.
-Search N2Nat.
+(** ** N comparison agreement with the nat VM *)
+
+Lemma N_eqb_to_nat :
+  forall x y, N.eqb x y = Nat.eqb (N.to_nat x) (N.to_nat y).
+Proof.
+  intros x y.
+  destruct (N.eqb x y) eqn:E.
+  - apply N.eqb_eq in E. subst. rewrite Nat.eqb_refl. reflexivity.
+  - symmetry. apply Nat.eqb_neq. intro H.
+    apply N.eqb_neq in E. apply E. apply N2Nat.inj. exact H.
+Qed.
+
+Lemma N_lt_of_to_nat_lt :
+  forall x y, N.to_nat x < N.to_nat y -> (x < y)%N.
+Proof.
+  intros x y H.
+  destruct (N.lt_trichotomy x y) as [Hlt | [Heq | Hgt]].
+  - exact Hlt.
+  - subst. rewrite N2Nat.inj_iff in Heq. subst. lia.
+  - exfalso. pose proof (N_lt_to_nat_lt y x Hgt). lia.
+Qed.
+
+Lemma N_ltb_to_nat :
+  forall x y, N.ltb x y = Nat.ltb (N.to_nat x) (N.to_nat y).
+Proof.
+  intros x y.
+  destruct (N.ltb x y) eqn:E.
+  - apply N.ltb_lt in E. apply Nat.ltb_lt.
+    apply N_lt_to_nat_lt. exact E.
+  - symmetry. apply Nat.ltb_ge. apply Nat.le_of_not_lt. intro H.
+    assert (Hlt : (x < y)%N) by (apply N_lt_of_to_nat_lt; exact H).
+    rewrite (proj2 (N.ltb_lt x y) Hlt) in E. discriminate.
+Qed.
+
+(** ** CMP *)
+
+Theorem lp_exec_CMP_refines :
+  forall L vm prog a b,
+    Rlp L vm ->
+    a < 16 ->
+    b < 16 ->
+    decode_word_p (lp_mem_at L (lp_pc L)) = Some (pCMP a b) ->
+    nth_error prog (vm_pc vm) = Some (pCMP a b) ->
+    Rlp (lp_exec L (pCMP a b)) (exec_instr_p prog vm).
+Proof.
+  intros L vm prog a b HR Ha Hb Hdec Hnth.
+  unfold Rlp in *.
+  destruct HR as
+    (Hpc & Hregs & Hreg15 & Hlink & Hmem & Hzf & Hlf & Hk & Hhalt & Hbound).
+  pose proof (Hregs a Ha) as HA.
+  pose proof (Hregs b Hb) as HB.
+  assert (HA' : vm_reg vm a = N.to_nat (lget_regN (lp_reg L) a)).
+  { rewrite HA. rewrite Nat.mod_small by (apply Hbound; lia). reflexivity. }
+  assert (HB' : vm_reg vm b = N.to_nat (lget_regN (lp_reg L) b)).
+  { rewrite HB. rewrite Nat.mod_small by (apply Hbound; lia). reflexivity. }
+  unfold lp_exec, exec_instr_p.
+  rewrite Hnth. cbn.
+  unfold R, lp_to_LState.
+  split_conj_step.
+  - change (S (vm_pc vm) = S (lp_pc L)). rewrite Hpc. reflexivity.
+  - intros i Hi.
+    change (vm_reg vm i = N.to_nat (lget_regN (lp_reg L) i) mod 2 ^ 32).
+    exact (Hregs i Hi).
+  - change (vm_reg vm 15 =
+            N.to_nat (lget_regN (lp_reg L) 15) mod 2 ^ 32).
+    exact Hreg15.
+  - change (vm_link vm = N.to_nat (lget_regN (lp_reg L) 15)).
+    exact Hlink.
+  - intro x.
+    change (vm_mem vm x = payload_word (lp_mem_at (lp_exec L (pCMP a b)) x)).
+    rewrite lp_mem_at_lp_exec_CMP. exact (Hmem x).
+  - change (Nat.eqb (vm_reg vm a) (vm_reg vm b) =
+            Nat.eqb
+              ((pack_k
+                 (N.eqb (lget_regN (lp_reg L) a) (lget_regN (lp_reg L) b))
+                 (N.ltb (lget_regN (lp_reg L) a) (lget_regN (lp_reg L) b))
+                / 2) mod 2) 1).
+    rewrite pack_k_zf.
+    rewrite HA', HB'.
+    symmetry. apply N_eqb_to_nat.
+  - change (Nat.ltb (vm_reg vm a) (vm_reg vm b) =
+            Nat.eqb
+              (pack_k
+                 (N.eqb (lget_regN (lp_reg L) a) (lget_regN (lp_reg L) b))
+                 (N.ltb (lget_regN (lp_reg L) a) (lget_regN (lp_reg L) b))
+               mod 2) 1).
+    rewrite pack_k_lf.
+    rewrite HA', HB'.
+    symmetry. apply N_ltb_to_nat.
+  - apply pack_k_lt_4.
+  - change (vm_halted vm = lp_halted L). exact Hhalt.
+  - intros i Hi.
+    change (N.to_nat (lget_regN (lp_reg L) i) < 2 ^ 32).
+    exact (Hbound i Hi).
+Qed.
+
+Print Assumptions lp_exec_CMP_refines.
