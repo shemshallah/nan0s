@@ -546,7 +546,10 @@ Proof.
         then target else S (lp_pc L))).
     rewrite Hpc, Hzf, Hlf.
     repeat rewrite l_k_lp_to_LState.
-    apply pred_agrees; assumption.
+    assert (Hk' : lp_k L < 4)
+      by (rewrite <- l_k_lp_to_LState; exact Hk).
+    rewrite (pred_agrees p (lp_k L) Hk' Hk3).
+    reflexivity.
   - intros i Hi.
     change (vm_reg vm i = N.to_nat (lget_regN (lp_reg L) i) mod 2 ^ 32).
     exact (Hregs i Hi).
