@@ -787,3 +787,6 @@ Proof.
 Qed.
 
 Print Assumptions lp_exec_SHR_refines.
+
+Search N2Nat.inj.
+Search Nat.shiftl.
