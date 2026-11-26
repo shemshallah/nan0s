@@ -22,7 +22,7 @@ grep -q 'check: 0 mismatches' "$T/check.err" || {
 
 # PS/2 set-1 make codes: "alloc 4096\n" then "alloc 8388608\n".
 KEYS='\x1e\x26\x26\x18\x2e\x39\x05\x0b\x0a\x07\x1c\x1e\x26\x26\x18\x2e\x39\x09\x04\x09\x09\x07\x0b\x09\x1c'
-S1_FB_DELAY=8 \
+S1_FB_DELAY=15 \
 sh tools/s1_runner.sh --img "$T/gui_sched.nan" --mem 128 \
     --steps 2000000000 --serial --key-delay 5000000 --keys "$KEYS" \
     --dump-mem "0x400000:0x40000:$T/term.bin" \

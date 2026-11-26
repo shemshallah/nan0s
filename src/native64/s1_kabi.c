@@ -115,6 +115,62 @@ static uint64_t mkword(uint32_t payload, int n) {
 }
 static uint32_t word_payload(uint32_t i) { return (uint32_t)(MEM[i & MEM_MASK] >> 16); }
 
+/* ---- PMEM v1 boot memory map (spec/MEMMAP.md) --------------------------
+ * S1 publishes a synthetic map at guest word 0x3F800 before guest entry.
+ * The constants mirror src/lib/memmap_defs.nas; keep them in sync.
+ * Layout (word counts): 8M RAM, 1M DEVICE hole, 11M RAM, 1M ACPI hole,
+ * RAM to the top 256K words, which are RESERVED.  At 64 MiB the second RAM
+ * range ends at the top reserve; at 128 MiB the heap has to walk across the
+ * 20-21M ACPI hole, which makes the hole-safe SVC 2 path testable. */
+#ifdef S1_GUEST
+#define MM_BASE        0x3F800u
+#define MM_MAGIC       0x4D454D50u
+#define MM_VERSION     1u
+#define MM_MAX         64u
+#define MM_HDR_WORDS   4u
+#define MM_ENT_WORDS   4u
+#define MM_F_SYNTH     2u
+#define MM_K_RAM       1u
+#define MM_K_RESERVED  2u
+#define MM_K_ACPI      3u
+#define MM_K_DEVICE    4u
+
+static void mm_put(uint32_t word, uint32_t payload) {
+  if (word < MEM_WORDS) MEM[word] = mkword(payload, 10);
+}
+static void mm_add(uint32_t base, uint32_t nwords, uint32_t kind,
+                   uint32_t limit, uint32_t *count) {
+  if (*count >= MM_MAX || base >= limit) return;
+  if (nwords > limit - base) nwords = limit - base;
+  if (!nwords) return;
+  uint32_t a = MM_BASE + MM_HDR_WORDS + *count * MM_ENT_WORDS;
+  mm_put(a + 0u, base);
+  mm_put(a + 1u, nwords);
+  mm_put(a + 2u, kind);
+  mm_put(a + 3u, 0u);
+  (*count)++;
+}
+static void memmap_publish(void) {
+  if ((uint64_t)MM_BASE + MM_HDR_WORDS > (uint64_t)MEM_WORDS) return;
+  uint32_t top_res = 0x40000u;            /* 256K words reserved at the top */
+  uint32_t top_end = MEM_WORDS > top_res ? MEM_WORDS - top_res : MEM_WORDS;
+  uint32_t n = 0;
+  mm_add(0x000000u, 0x800000u, MM_K_RAM,      top_end, &n);
+  mm_add(0x800000u, 0x100000u, MM_K_DEVICE,   top_end, &n);
+  mm_add(0x900000u, 0xB00000u, MM_K_RAM,      top_end, &n);
+  mm_add(0x1400000u, 0x100000u, MM_K_ACPI,    top_end, &n);
+  if (top_end > 0x1500000u)
+    mm_add(0x1500000u, top_end - 0x1500000u, MM_K_RAM, top_end, &n);
+  if (MEM_WORDS > top_end)
+    mm_add(top_end, MEM_WORDS - top_end, MM_K_RESERVED, MEM_WORDS, &n);
+  if (!n) mm_add(0u, MEM_WORDS, MM_K_RAM, MEM_WORDS, &n);
+  mm_put(MM_BASE + 0u, MM_MAGIC);
+  mm_put(MM_BASE + 1u, n);
+  mm_put(MM_BASE + 2u, MM_VERSION);
+  mm_put(MM_BASE + 3u, MM_F_SYNTH);
+}
+#endif
+
 /* ---- scalar FP (nan16.c/OPS.md semantics, SSE2 + freestanding helpers) ---- */
 static inline int is_nan32(uint32_t x) {
   return (x & 0x7F800000u) == 0x7F800000u && (x & 0x007FFFFFu);
@@ -279,6 +335,11 @@ static void s1_reset(void) {
   s.kentry = s.kframe = s.kstack = s.kregions = s.ktcb = UNSET;
   s.ktimer = s.ktimer_left = 0;
   s.kin = s.ktimer_pending = s.ktrap_pending = 0;
+#ifdef S1_GUEST
+  /* Zeroing sweeps the whole guest window; publish the boot map only after
+     the sweep, so s1_reset cannot erase the producer's contract. */
+  memmap_publish();
+#endif
 }
 static int frame_ok(void) {
   return s.kframe != UNSET && s.kframe <= MEM_WORDS - TF_WORDS;
@@ -1114,6 +1175,10 @@ void s1_main(void) {
     dbg_puts("S1GUEST LOAD FAIL\n");
     for (;;) __asm__ volatile("hlt");
   }
+  /* The image may extend over 0x3F800 only for test cartridges that own it;
+     product images end below the map.  Republish after the load as the
+     authoritative pre-entry producer step. */
+  memmap_publish();
   /* Loader contract: flat image at word 0; r0=0, r13=1, r14=stack top,
      PC=0, k=0.  The image owns words 0..words-1; the stack grows up from
      S1_GUEST_STACK (default mem_words - mem_words/8). */

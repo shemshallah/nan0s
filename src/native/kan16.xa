@@ -35,6 +35,20 @@
 .equ VBEARG 0x8098
 .equ RAWKB 0x809C
 .equ CPUIDR 0x80B0
+; PMEM v1 boot map (spec/MEMMAP.md; values mirror src/lib/memmap_defs.nas).
+.equ MM_BASE 0x3F800
+.equ MM_HDR0 0x3F800
+.equ MM_CNT  0x3F801
+.equ MM_VER  0x3F802
+.equ MM_FLG  0x3F803
+.equ MM_ENT0 0x3F804
+.equ MM_ENT1 0x3F805
+.equ MM_ENT2 0x3F806
+.equ MM_ENT3 0x3F807
+.equ MM_MAGIC 0x4D454D50
+.equ MM_VERSION 1
+.equ MM_F_E820 1
+.equ MM_MAX 64
 .equ IDT 0x9000
 .equ VREG 0x2000
 .equ XCODE 0x30000
@@ -87,6 +101,7 @@ z_count:
   NOP
   NOP
   CALL @hw_init
+  CALL @memmap_build
   XOR %ESI,%ESI
 loop:
   MOV [STEPS],%EAX
@@ -2492,5 +2507,149 @@ q4b_p:
   POP %EBP
   POP %EDI
   POP %ESI
+  POP %EBX
+  RET
+
+; ---- r33: E820 -> PMEM v1 boot map at guest word 0x3F800 ----
+; Copies type 1/2/3/4 E820 ranges clipped to the guest word window
+; [G, G+NWORDS*8), in BIOS order (ascending on IEEE 1275 systems).
+; Runs after the guest image load and before the interpreter enters pc 0.
+; putw writes a complete NaN word (payload + class heads), so consumers can
+; use ordinary LD.  No PAE/bank state is touched here.
+memmap_build:
+  PUSH %EBX
+  PUSH %ECX
+  PUSH %EDX
+  PUSH %ESI
+  PUSH %EDI
+  PUSH %EBP
+  MOV $MM_HDR0,%EAX
+  MOV $MM_MAGIC,%EBX
+  MOV $10,%ECX
+  CALL @putw
+  MOV $MM_CNT,%EAX
+  XOR %EBX,%EBX
+  MOV $10,%ECX
+  CALL @putw
+  MOV $MM_VER,%EAX
+  MOV $MM_VERSION,%EBX
+  MOV $10,%ECX
+  CALL @putw
+  MOV $MM_FLG,%EAX
+  MOV $MM_F_E820,%EBX
+  MOV $10,%ECX
+  CALL @putw
+  XOR %EDI,%EDI
+  MOVZWL [0x5FC],%ECX
+  TEST %ECX,%ECX
+  JZ @mb_none
+  MOV $0x600,%ESI
+mb_loop:
+  MOV [NWORDS],%EBP
+  SHL $3,%EBP
+  ADD $G,%EBP
+  MOV [ESI+16],%EAX
+  CMP $1,%EAX
+  JB @mb_next
+  CMP $4,%EAX
+  JA @mb_next
+  CMP $MM_MAX,%EDI
+  JAE @mb_next
+  MOV [ESI+4],%EDX
+  TEST %EDX,%EDX
+  JNZ @mb_next
+  MOV [ESI],%EDX
+  MOV [ESI+8],%EBX
+  MOV [ESI+12],%EAX
+  TEST %EAX,%EAX
+  JNZ @mb_lenbig
+  ADD %EDX,%EBX
+  JC @mb_lenbig
+  JMP @mb_clip
+mb_lenbig:
+  MOV $0xFFFFFFFF,%EBX
+mb_clip:
+  CMP $G,%EDX
+  JAE @mb_start_ok
+  MOV $G,%EDX
+mb_start_ok:
+  CMP %EBP,%EBX
+  JBE @mb_end_ok
+  MOV %EBP,%EBX
+mb_end_ok:
+  CMP %EBX,%EDX
+  JAE @mb_next
+  MOV %EDX,%EBP
+  SUB $G,%EBP
+  SHR $3,%EBP
+  SUB %EDX,%EBX
+  SHR $3,%EBX
+  JZ @mb_next
+  PUSH %ECX
+  PUSH %EBX
+  MOV %EDI,%EDX
+  SHL $2,%EDX
+  ADD $MM_ENT0,%EDX
+  MOV %EDX,%EAX
+  MOV %EBP,%EBX
+  MOV $10,%ECX
+  CALL @putw
+  POP %EBX
+  MOV %EDI,%EDX
+  SHL $2,%EDX
+  ADD $MM_ENT1,%EDX
+  MOV %EDX,%EAX
+  MOV $10,%ECX
+  CALL @putw
+  MOV [ESI+16],%EBX
+  MOV %EDI,%EDX
+  SHL $2,%EDX
+  ADD $MM_ENT2,%EDX
+  MOV %EDX,%EAX
+  MOV $10,%ECX
+  CALL @putw
+  MOV %EDI,%EDX
+  SHL $2,%EDX
+  ADD $MM_ENT3,%EDX
+  MOV %EDX,%EAX
+  XOR %EBX,%EBX
+  MOV $10,%ECX
+  CALL @putw
+  POP %ECX
+  INC %EDI
+mb_next:
+  ADD $24,%ESI
+  DEC %ECX
+  JNZ @mb_loop
+mb_none:
+  TEST %EDI,%EDI
+  JNZ @mb_count
+  MOV $MM_ENT0,%EAX
+  XOR %EBX,%EBX
+  MOV $10,%ECX
+  CALL @putw
+  MOV $MM_ENT1,%EAX
+  MOV [NWORDS],%EBX
+  MOV $10,%ECX
+  CALL @putw
+  MOV $MM_ENT2,%EAX
+  MOV $1,%EBX
+  MOV $10,%ECX
+  CALL @putw
+  MOV $MM_ENT3,%EAX
+  XOR %EBX,%EBX
+  MOV $10,%ECX
+  CALL @putw
+  MOV $1,%EDI
+mb_count:
+  MOV $MM_CNT,%EAX
+  MOV %EDI,%EBX
+  MOV $10,%ECX
+  CALL @putw
+  POP %EBP
+  POP %EDI
+  POP %ESI
+  POP %EDX
+  POP %ECX
   POP %EBX
   RET

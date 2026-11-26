@@ -119,11 +119,19 @@
 .include "nanproc.nas"
 .include "nanthr.nas"
 
-; Bump heap for SVC 2.  The kernel boot sets both words from MEMQ; tests that
-; do not call SVC 2 can leave them zero.  The words live above the GUI cart
-; code and below the default nanproc table.
+; Bump heap for SVC 2.  The kernel boot builds the list from the PMEM map
+; (src/lib/memmap.nas); tests that do not call SVC 2 can leave it empty.
+; The words live above the GUI cart code and below the default nanproc table.
+; NSH_NEXT is the next free word and NSH_RIDX the range containing it.  Each
+; range is {base,end} in words, exclusive end, ascending, and never overlaps
+; a reserved/ACPI/device hole.  A failed allocation leaves both words intact,
+; so SVC 2 can roll back a failed region-table append without guessing.
 .equ NSH_NEXT 0x3F000
 .equ NSH_END  0x3F001
+.equ NSH_NR   0x3F002
+.equ NSH_RIDX 0x3F003
+.equ NSH_RANGES 0x3F040
+.equ NSH_MAX_RANGES 64
 
 .equ NS_MAX_PROCS  1024
 .equ NS_NPRIO      32
@@ -201,7 +209,11 @@
 ;   ns_init            initialise nanproc + scheduler, program S1 ports
 ;   ns_svc(frame)      SVC/timer entry, owns SVCRET
 ;   ns_start(pid|0)    enter the first process, owns SVCRET
-;   ns_heap_init       r1=heap base r2=heap end (exclusive words)
+;   ns_heap_init       r1=heap base r2=heap end: reset + one usable range
+;   ns_heap_reset      empty the usable-range list (no allocation possible)
+;   ns_heap_add_range  r1=base r2=end (exclusive), append an ascending range
+;   ns_heap_alloc      r1=words -> r1=base or 0; never crosses a range hole
+;   ns_heap_free       -> r1=words available from NSH_NEXT to every range end
 ns_init:
   JMP @nsch_init
 ns_svc:
@@ -209,10 +221,181 @@ ns_svc:
 ns_start:
   JMP @nsch_start
 ns_heap_init:
+  ST r15,r14,0
+  ADDI r14,r14,#NS_FRAME
+  ST r1,r14,1
+  ST r2,r14,2
+  CALL @ns_heap_reset
+  LD r1,r14,1
+  LD r2,r14,2
+  CALL @ns_heap_add_range
+  ADDI r14,r14,#NS_FRAME_NEG
+  LD r15,r14,0
+  RET
+ns_heap_reset:
+  LA r3,#NSH_NEXT
+  ST r0,r3,0
+  LA r3,#NSH_END
+  ST r0,r3,0
+  LA r3,#NSH_NR
+  ST r0,r3,0
+  LA r3,#NSH_RIDX
+  ST r0,r3,0
+  RET
+; ns_heap_add_range r1=base r2=end (exclusive).  Callers add ranges in
+; ascending address order; the boot does so from the PMEM map.  A range that
+; ends at/below its base is ignored.  Returns r1=1 stored, 0 list full/bad.
+ns_heap_add_range:
+  CMP r2,r1
+  JMP[LE] @ns_har_bad
+  LA r3,#NSH_NR
+  LD r4,r3,0
+  LA r5,#NSH_MAX_RANGES
+  CMP r4,r5
+  JMP[GE] @ns_har_bad
+  LA r5,#NSH_RANGES
+  SHL r6,r4,1
+  ADD r6,r6,r5
+  ST r1,r6,0
+  ST r2,r6,1
+  ADD r4,r4,r13
+  ST r4,r3,0
+  CMP r4,r13
+  JMP[NE] @ns_har_ok
   LA r3,#NSH_NEXT
   ST r1,r3,0
   LA r3,#NSH_END
   ST r2,r3,0
+ns_har_ok:
+  MOVI r1,1
+  RET
+ns_har_bad:
+  MOVI r1,0
+  RET
+; ns_heap_alloc r1=words -> r1=base or 0.  It tries the current range first,
+; then advances to each later range; an allocation larger than the remainder
+; of a range is placed at the start of the next range, never across the hole.
+; The state words are only written on success.
+ns_heap_alloc:
+  ST r15,r14,0
+  ADDI r14,r14,#NS_FRAME
+  ST r1,r14,1                 ; words
+  LA r3,#NSH_NR
+  LD r4,r3,0                  ; count
+  ST r4,r14,2
+  LA r3,#NSH_RIDX
+  LD r5,r3,0                  ; index
+  ST r5,r14,3
+  LA r3,#NSH_NEXT
+  LD r6,r3,0                  ; next
+  ST r6,r14,4
+  CMP r4,r0
+  JMP[EQ] @ns_ha_fail
+  LD r7,r14,1
+  CMP r7,r0
+  JMP[EQ] @ns_ha_fail
+ns_ha_loop:
+  LD r5,r14,3
+  LD r4,r14,2
+  CMP r5,r4
+  JMP[GE] @ns_ha_fail
+  LA r3,#NSH_RANGES
+  SHL r8,r5,1
+  ADD r8,r8,r3
+  LD r9,r8,0                  ; range base
+  LD r10,r8,1                 ; range end
+  LD r6,r14,4
+  CMP r6,r9
+  JMP[GE] @ns_ha_at_base
+  ADD r6,r9,r0                ; below this range: start at its base
+  ST r6,r14,4
+ns_ha_at_base:
+  CMP r6,r10
+  JMP[GE] @ns_ha_next         ; current pointer already past this range
+  SUB r11,r10,r6
+  LD r7,r14,1
+  CMP r7,r11
+  JMP[GT] @ns_ha_next         ; does not fit: skip the hole, try next range
+  ADD r7,r6,r7                ; new next
+  LA r3,#NSH_NEXT
+  ST r7,r3,0
+  LA r3,#NSH_RIDX
+  ST r5,r3,0
+  ADD r1,r6,r0
+  JMP @ns_ha_out
+ns_ha_next:
+  ADD r5,r5,r13
+  ST r5,r14,3
+  LD r7,r14,1
+  LD r4,r14,2
+  CMP r5,r4
+  JMP[GE] @ns_ha_fail
+  LA r3,#NSH_RANGES
+  SHL r8,r5,1
+  ADD r8,r8,r3
+  LD r6,r8,0
+  ST r6,r14,4
+  JMP @ns_ha_loop
+ns_ha_fail:
+  MOVI r1,0
+ns_ha_out:
+  ADDI r14,r14,#NS_FRAME_NEG
+  LD r15,r14,0
+  RET
+; ns_heap_free -> r1 = words available from NSH_NEXT through every range end.
+ns_heap_free:
+  ST r15,r14,0
+  ADDI r14,r14,#NS_FRAME
+  MOVI r1,0
+  ST r1,r14,1                 ; total
+  LA r3,#NSH_NR
+  LD r4,r3,0
+  ST r4,r14,2                 ; count
+  LA r3,#NSH_RIDX
+  LD r5,r3,0
+  ST r5,r14,3                 ; index
+  LA r3,#NSH_NEXT
+  LD r6,r3,0
+  ST r6,r14,4                 ; next
+  CMP r4,r0
+  JMP[EQ] @ns_hf_done
+ns_hf_loop:
+  LD r5,r14,3
+  LD r4,r14,2
+  CMP r5,r4
+  JMP[GE] @ns_hf_done
+  LA r3,#NSH_RANGES
+  SHL r8,r5,1
+  ADD r8,r8,r3
+  LD r9,r8,0
+  LD r10,r8,1
+  LD r6,r14,4
+  CMP r6,r9
+  JMP[GE] @ns_hf_at_base
+  ADD r6,r9,r0
+ns_hf_at_base:
+  CMP r6,r10
+  JMP[GE] @ns_hf_next
+  SUB r11,r10,r6
+  LD r1,r14,1
+  ADD r1,r1,r11
+  ST r1,r14,1
+ns_hf_next:
+  ADD r5,r5,r13
+  ST r5,r14,3
+  LD r4,r14,2
+  CMP r5,r4
+  JMP[GE] @ns_hf_done
+  LA r3,#NSH_RANGES
+  SHL r8,r5,1
+  ADD r8,r8,r3
+  LD r6,r8,0
+  ST r6,r14,4
+  JMP @ns_hf_loop
+ns_hf_done:
+  LD r1,r14,1
+  ADDI r14,r14,#NS_FRAME_NEG
+  LD r15,r14,0
   RET
 ns_config:
   LA r5,#NS_PTR
@@ -552,6 +735,9 @@ nsch_svc_region:
   LA r4,#NSH_NEXT
   LD r4,r4,0
   ST r4,r14,7
+  LA r4,#NSH_RIDX
+  LD r4,r4,0
+  ST r4,r14,8
   CMP r3,r0
   JMP[EQ] @nsch_region_fail
   LD r7,r10,2
@@ -564,16 +750,14 @@ nsch_region_rw:
   MOVI r7,#NP_PROT_RW
 nsch_region_prot:
   ST r7,r14,6
-  LA r4,#NSH_NEXT
-  LD r4,r4,0
-  ADD r5,r4,r3
-  LA r6,#NSH_END
-  LD r6,r6,0
-  CMP r5,r6
-  JMP[GT] @nsch_region_fail
-  LA r6,#NSH_NEXT
-  ST r5,r6,0
-  ST r4,r14,2
+  ; The bump heap walks the PMEM usable ranges.  ns_heap_alloc only commits
+  ; NSH_NEXT/NSH_RIDX on success, so a failed region-table append restores
+  ; the pre-call tuple exactly.
+  LD r1,r14,1
+  CALL @ns_heap_alloc
+  CMP r1,r0
+  JMP[EQ] @nsch_region_fail
+  ST r1,r14,2
   LA r2,#NS_PTR
   LD r2,r2,0
   LD r1,r2,#NS_CUR
@@ -619,6 +803,9 @@ nsch_region_prot:
 nsch_region_fail:
   LD r1,r14,7
   LA r2,#NSH_NEXT
+  ST r1,r2,0
+  LD r1,r14,8
+  LA r2,#NSH_RIDX
   ST r1,r2,0
   LA r2,#NS_PTR
   LD r2,r2,0

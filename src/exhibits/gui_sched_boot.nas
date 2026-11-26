@@ -1,15 +1,16 @@
 ; gui_sched_boot.nas - NaN/0S kernel boot with the desktop and NANIX shell
 ; as scheduled processes.
 ;
-; Layout (word addresses):
+; Layout (word addresses; the scheduler block and process table move at
+; runtime into the highest usable PMEM range, not these fixed defaults):
 ;   0x00000  boot trampoline (this file)
 ;   0x02000  GUI desktop cartridge (unchanged; linked at 8192)
-;   0x10000  nankernel + nansched kernel image (this file)
-;   0x200000 NS_BASE scheduler block
-;   0x220000 nanproc table (1024 slots)
-;   0x240000 NP_VARS
+;   0x10000  nankernel + nansched + memmap kernel image (this file)
+;   runtime  NS_BASE scheduler block, NP_BASE nanproc table, NP_VARS
 ;   0x250000 PID 2 shell stack
 ;   0x2F0000 kernel stack / 0x2F1000 trap frame / 0x2F2000 hook
+;   runtime  SVC 2 bump heap, one span per usable PMEM range, ending below
+;            NP_VARS
 ;
 ; PID 1 is the desktop/window-manager process (entry cart_entry, the same
 ; stack the cart has always used).  PID 2 is the NANIX command process: the
@@ -29,6 +30,7 @@ JMPR r1
 .org 0x10000
 .include "../lib/nankernel.nas"
 .include "../lib/nansched.nas"
+.include "../lib/memmap.nas"
 
 ; Kernel/process map (word addresses).  Later .equ wins in nmk.
 .equ NP_BASE      0x220000
@@ -40,7 +42,7 @@ JMPR r1
 .equ KBOOT_STACK  0x2F0000
 .equ KERNEL_MEM   0x1000000
 ; The GUI's fixed compiler/terminal buffers end below this word; the SVC 2
-; heap starts here and runs to the top of the machine's discovered RAM.
+; heap starts here and is clipped to every usable PMEM range above it.
 .equ HEAP_BASE    0xB00000
 .equ MIN_MEM      0x1000000
 
@@ -67,10 +69,27 @@ gui_mem_have:
   LA r4,@g_mem_words
   ST r3,r4,0
 
-  ; Place the process table and scheduler at the top of real RAM.  The heap
-  ; ends below them, so RAM size and kernel placement are not linked.
+  ; PMEM: the highest usable range is the only legal home for the scheduler,
+  ; process table and kernel stacks.  mm_top returns the legacy single range
+  ; {0, MEMQ_words, RAM} when no map exists, so old images keep working.
+  ADD r1,r11,r0
+  CALL @mm_top
+  ; r1=top base  r2=top end (exclusive)  r3=entry index  r4=map source
+  CMP r2,r0
+  JMP[EQ] @gui_boot_fail
+  CMP r1,r2
+  JMP[GE] @gui_boot_fail
+  LA r4,@g_top_base
+  ST r1,r4,0
+  LA r4,@g_top_end
+  ST r2,r4,0
+  ADD r10,r2,r0                ; top end of the highest usable range
+
+  ; Place the process table and scheduler at that top, below its guard page.
+  ; The heap ends below them, so RAM size/holes and kernel placement are not
+  ; linked to a fixed address.
   LA r1,#NS_BYTES
-  SUB r4,r3,r1
+  SUB r4,r10,r1
   LA r5,0x1000
   SUB r4,r4,r5                 ; NS_BASE
   LA r1,#NP_MAX_PROCS
@@ -88,10 +107,15 @@ gui_mem_have:
   ADD r7,r7,r1
   CMP r6,r7
   JMP[LE] @gui_boot_fail
+  LA r1,@g_top_base
+  LD r1,r1,0
+  CMP r6,r1
+  JMP[LE] @gui_boot_fail       ; scheduler block leaves the usable range
   ADD r1,r4,r0
   ADD r2,r5,r0
   ADD r3,r6,r0
-  ADD r4,r11,r0
+  LA r4,@g_mem_words
+  LD r4,r4,0
   CALL @ns_config
   CALL @nsch_init
   LA r1,@ns_svc
@@ -112,16 +136,57 @@ gui_mem_have:
   ADD r4,r4,r5
   ST r11,r4,1
 
-  ; Bump heap from HEAP_BASE to just below NP_VARS.
-  LA r1,#HEAP_BASE
+  ; Build the SVC 2 bump heap from every usable PMEM range.  Ranges are
+  ; clipped to [HEAP_BASE, NPV_PTR-guard), so a reserved/ACPI/device hole
+  ; between two RAM ranges is never allocatable and is never crossed.
+  CALL @ns_heap_reset
   LA r4,#NPV_PTR
   LD r2,r4,0
   LA r4,0x1000
   SUB r2,r2,r4
-  CALL @ns_heap_init
-  SUB r5,r2,r1
+  LA r4,@g_heap_end
+  ST r2,r4,0
+  LA r4,@g_mem_words
+  LD r11,r4,0
+  LA r4,@g_map_i
+  ST r0,r4,0
+gui_heap_ranges:
+  LA r4,@g_map_i
+  LD r1,r4,0
+  ADD r2,r11,r0
+  CALL @mm_entry
+  CMP r5,r0
+  JMP[EQ] @gui_heap_done
+  MOVI r6,#MM_K_RAM
+  CMP r3,r6
+  JMP[NE] @gui_heap_next
+  ADD r6,r1,r2                 ; range end
+  LA r7,#HEAP_BASE
+  CMP r1,r7
+  JMP[GE] @gui_heap_base_ok
+  ADD r1,r7,r0
+gui_heap_base_ok:
+  LA r7,@g_heap_end
+  LD r7,r7,0
+  CMP r6,r7
+  JMP[LE] @gui_heap_end_ok
+  ADD r6,r7,r0
+gui_heap_end_ok:
+  CMP r6,r1
+  JMP[LE] @gui_heap_next
+  ADD r2,r6,r0
+  CALL @ns_heap_add_range
+gui_heap_next:
+  LA r4,@g_map_i
+  LD r4,r4,0
+  ADD r4,r4,r13
+  LA r5,@g_map_i
+  ST r4,r5,0
+  JMP @gui_heap_ranges
+gui_heap_done:
+  CALL @ns_heap_free
   LA r4,@g_heap_free
-  ST r5,r4,0
+  ST r1,r4,0
 
   MOVI r1,0
   LA r2,@gui_desc_desktop
@@ -199,3 +264,13 @@ gui_desc_desktop:
 gui_desc_shell:
   .word @gui_shell_proc, #SHELL_STACK, 0, 0, 1
   .word 0, #KERNEL_MEM, 4, 7
+
+; Boot scratch/evidence published for gates and for the `mem` command.
+g_top_base:
+  .word 0
+g_top_end:
+  .word 0
+g_heap_end:
+  .word 0
+g_map_i:
+  .word 0
