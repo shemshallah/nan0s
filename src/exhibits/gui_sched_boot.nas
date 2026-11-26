@@ -39,6 +39,10 @@ JMPR r1
 .equ SHELL_STACK  0x250000
 .equ KBOOT_STACK  0x2F0000
 .equ KERNEL_MEM   0x1000000
+; The GUI's fixed compiler/terminal buffers end below this word; the SVC 2
+; heap starts here and runs to the top of the machine's discovered RAM.
+.equ HEAP_BASE    0xB00000
+.equ MIN_MEM      0x1000000
 
 ; ---------------------------------------------------------------------------
 ; gui_kernel_boot - initialise the kernel, create PID 1 (desktop) and PID 2
@@ -49,6 +53,38 @@ gui_kernel_boot:
   CALL @nsch_init
   LA r1,@ns_svc
   CALL @nk_install_proc
+
+  ; MEMQ: the kernel publishes the actual word count through CPUID
+  ; 0x4E4D00FF, subleaf 1.  Never compile a RAM size into the boot path.
+  LA r1,0x4E4D00FF
+  MOVI r2,1
+  CPUID r3,r1,r2
+  CMP r3,r0
+  JMP[NE] @gui_mem_have
+  LA r3,#MIN_MEM
+gui_mem_have:
+  LA r4,#MIN_MEM
+  CMP r3,r4
+  JMP[LT] @gui_boot_fail
+  ADD r11,r3,r0
+
+  ; Publish the word count to the desktop shell and to both region tables.
+  LA r4,@g_mem_words
+  ST r11,r4,0
+  LA r4,@gui_desc_desktop
+  ADDI r4,r4,6
+  ST r11,r4,0
+  LA r4,@gui_desc_shell
+  ADDI r4,r4,6
+  ST r11,r4,0
+  ; The boot region table was built before MEMQ; widen it to real RAM.
+  LA r4,#NS_BASE
+  LA r5,#NS_BOOTTAB
+  ADD r4,r4,r5
+  ST r11,r4,1
+
+  LA r4,@g_heap_free
+  ST r0,r4,0
 
   MOVI r1,0
   LA r2,@gui_desc_desktop

@@ -175,6 +175,12 @@ g_shell_req:
 .word 0
 g_shell_done:
 .word 0
+; Actual guest word count reported by the kernel boot (0 in the legacy
+; single-cart image).  Programs and the shell use this instead of a constant.
+g_mem_words:
+.word 0
+g_heap_free:
+.word 0
 ; ---- top bar: MOVE flag and tick counter ----
 g_bar:
 ST r15,r14,0
@@ -7657,6 +7663,11 @@ CALL @fs_prefix
 CMP r1,r0
 JMP[NE] @fs_d_rm
 LA r1,#FNB
+LA r2,@fs_s_mem
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @fs_d_mem
+LA r1,#FNB
 LA r2,@fs_s_ls
 CALL @fs_prefix
 CMP r1,r0
@@ -7968,6 +7979,21 @@ MOVI r2,10
 CALL @vc_putc
 JMP @fs_ls_l
 fs_ls_d:
+JMP @fs_disp_y
+fs_d_mem:
+LD r1,r0,@tk_id
+MOVI r2,@fs_s_memout
+CALL @vc_puts
+LD r5,r0,@g_mem_words
+CALL @fs_putdec
+LD r1,r0,@tk_id
+MOVI r2,@fs_s_free
+CALL @vc_puts
+LD r5,r0,@g_heap_free
+CALL @fs_putdec
+LD r1,r0,@tk_id
+MOVI r2,10
+CALL @vc_putc
 JMP @fs_disp_y
 fs_d_pwd:
 LD r1,r0,@tk_id
@@ -8313,6 +8339,12 @@ fs_s_mkdir:
 .str "mkdir "
 fs_s_rm:
 .str "rm "
+fs_s_mem:
+.str "mem"
+fs_s_memout:
+.str "mem "
+fs_s_free:
+.str " free "
 fs_s_ls:
 .str "ls"
 fs_s_pwd:
