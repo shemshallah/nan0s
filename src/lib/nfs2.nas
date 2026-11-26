@@ -237,11 +237,9 @@ LD r4,r3,1
 ADD r4,r4,r13
 ST r4,r3,1
 ADD r1,r2,r0
-ST r1,r14,0
-ADD r14,r14,r13
+ST r1,r0,#W_NF_TMP2
 CALL @nfs_sync
-SUB r14,r14,r13
-LD r1,r14,0
+LD r1,r0,#W_NF_TMP2
 JMP @nfs_c_d
 nfs_c_n:
 MOVI r1,0
@@ -265,11 +263,9 @@ SUB r3,r3,r13
 ST r3,r2,1
 nfs_d_ok:
 MOVI r1,1
-ST r1,r14,0
-ADD r14,r14,r13
+ST r1,r0,#W_NF_TMP2
 CALL @nfs_sync
-SUB r14,r14,r13
-LD r1,r14,0
+LD r1,r0,#W_NF_TMP2
 JMP @nfs_d
 nfs_d_n:
 MOVI r1,0
@@ -334,12 +330,8 @@ ADD r1,r1,r13
 STB r0,r1,0
 ADD r1,r1,r13
 STB r0,r1,0
-LD r1,r0,#W_NF_ENT
-ST r1,r14,0
-ADD r14,r14,r13
 CALL @nfs_sync
-SUB r14,r14,r13
-LD r1,r14,0
+LD r1,r0,#W_NF_ENT
 nfs_w_d:
 SUB r14,r14,r13
 LD r15,r14,0

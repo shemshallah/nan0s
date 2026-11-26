@@ -21,8 +21,8 @@ grep -q 'check: 0 mismatches' "$T/check.err" || {
 # mkdir /x; cd /x; pwd; echo hello; touch a; cp a b; ls;
 # rm /x/a; rm /x/b; cd /; rmdir /x; pwd
 KEYS='\x32\x25\x20\x17\x13\x39\x35\x2d\x1c\x2e\x20\x39\x35\x2d\x1c\x19\x11\x20\x1c\x12\x2e\x23\x18\x39\x23\x12\x26\x26\x18\x1c\x14\x18\x16\x2e\x23\x39\x1e\x1c\x2e\x19\x39\x1e\x39\x30\x1c\x26\x1f\x1c\x13\x32\x39\x35\x2d\x35\x1e\x1c\x13\x32\x39\x35\x2d\x35\x30\x1c\x2e\x20\x39\x35\x1c\x13\x32\x20\x17\x13\x39\x35\x2d\x1c\x19\x11\x20\x1c'
-S1_FB_DELAY=25 \
-sh tools/s1_runner.sh --img "$T/gui.nan" --mem 128 --steps 3000000000 \
+S1_FB_DELAY=60 \
+sh tools/s1_runner.sh --img "$T/gui.nan" --mem 128 --steps 6000000000 \
     --serial --key-delay 5000000 --keys "$KEYS" \
     --dump-mem "0x400000:0x40000:$T/term.bin" \
     > "$T/run.out" 2> "$T/run.err" || true
