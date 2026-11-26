@@ -788,9 +788,3 @@ Qed.
 
 Print Assumptions lp_exec_SHR_refines.
 
-
-Search N2Nat.inj_add.
-Search N2Nat.inj_sub.
-Search N2Nat.inj_mod.
-Search N.leb.
-Search N2Nat.inj_mul.
