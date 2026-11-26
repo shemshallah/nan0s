@@ -789,8 +789,160 @@ Qed.
 Print Assumptions lp_exec_SHR_refines.
 
 
-Search (N.to_nat (N.add _ _)).
-Search (N.to_nat (N.sub _ _)).
-Search (N.of_nat (_ + _)).
-Search (N.of_nat (_ - _)).
-Search (Nat2N.inj_add).
+(** ** ADD *)
+
+Lemma to_nat_mod32N :
+  forall x, N.to_nat (mod32N x) = N.to_nat x mod 2 ^ 32.
+Proof.
+  intros x. unfold mod32N, word_mask32.
+  rewrite ones32.
+  rewrite N.land_ones.
+  rewrite N2Nat.inj_mod.
+  rewrite N2Nat.inj_pow.
+  reflexivity.
+Qed.
+
+Theorem lp_exec_ADD_refines :
+  forall L vm prog d a b,
+    Rlp L vm ->
+    List.length (lp_reg L) = 16 ->
+    d < 16 ->
+    d <> 15 ->
+    a < 16 ->
+    b < 16 ->
+    N.to_nat (lget_regN (lp_reg L) a) +
+      N.to_nat (lget_regN (lp_reg L) b) < 2 ^ 32 ->
+    decode_word_p (lp_mem_at L (lp_pc L)) = Some (pADD d a b) ->
+    nth_error prog (vm_pc vm) = Some (pADD d a b) ->
+    Rlp (lp_exec L (pADD d a b)) (exec_instr_p prog vm).
+Proof.
+  intros L vm prog d a b HR Hlen Hd Hd15 Ha Hb Hnc Hdec Hnth.
+  pose proof HR as HR_R.
+  unfold Rlp in *.
+  destruct HR as
+    (Hpc & Hregs & Hreg15 & Hlink & Hmem & Hzf & Hlf & Hk & Hhalt & Hbound).
+  pose proof (R_reg_eq (lp_to_LState L) vm a HR_R Ha) as HA.
+  pose proof (R_reg_eq (lp_to_LState L) vm b HR_R Hb) as HB.
+  assert (HA' : vm_reg vm a = N.to_nat (lget_regN (lp_reg L) a)).
+  { unfold l_reg, lp_to_LState in HA. exact HA. }
+  assert (HB' : vm_reg vm b = N.to_nat (lget_regN (lp_reg L) b)).
+  { unfold l_reg, lp_to_LState in HB. exact HB. }
+  assert (HsumN : (N.add (lget_regN (lp_reg L) a)
+                           (lget_regN (lp_reg L) b) < two32)%N).
+  { apply N_lt_two32_of_nat.
+    rewrite N2Nat.inj_add. exact Hnc. }
+  unfold lp_exec, exec_instr_p.
+  rewrite Hnth. cbn.
+  unfold R, lp_to_LState.
+  split_conj_step.
+  - change (S (vm_pc vm) = S (lp_pc L)). rewrite Hpc. reflexivity.
+  - intros i Hi.
+    change (set_reg (vm_reg vm) d
+              (vm_reg vm a + vm_reg vm b) i =
+            N.to_nat
+              (lget_regN
+                (lset_word (lp_reg L) d
+                  (mod32N (N.add (lget_regN (lp_reg L) a)
+                                  (lget_regN (lp_reg L) b)))) i)
+              mod 2 ^ 32).
+    destruct (Nat.eq_dec i d) as [-> | Hne].
+    + rewrite set_reg_eq.
+      rewrite (lget_regN_lset_word_eq (lp_reg L) d
+        (mod32N (N.add (lget_regN (lp_reg L) a)
+                        (lget_regN (lp_reg L) b))))
+        by (rewrite Hlen; lia).
+      rewrite to_nat_mod32N.
+      rewrite N2Nat.inj_add.
+      rewrite Nat.mod_small by exact Hnc.
+      rewrite HA', HB'. reflexivity.
+    + rewrite (set_reg_neq _ _ _ _ Hne).
+      rewrite (lget_regN_lset_word_neq (lp_reg L) d
+        (mod32N (N.add (lget_regN (lp_reg L) a)
+                        (lget_regN (lp_reg L) b))) i Hne).
+      exact (Hregs i Hi).
+  - change (set_reg (vm_reg vm) d
+              (vm_reg vm a + vm_reg vm b) 15 =
+            N.to_nat
+              (lget_regN
+                (lset_word (lp_reg L) d
+                  (mod32N (N.add (lget_regN (lp_reg L) a)
+                                  (lget_regN (lp_reg L) b)))) 15)
+              mod 2 ^ 32).
+    rewrite (set_reg_neq _ _ _ _ (not_eq_sym Hd15)).
+    rewrite (lget_regN_lset_word_neq (lp_reg L) d
+      (mod32N (N.add (lget_regN (lp_reg L) a)
+                      (lget_regN (lp_reg L) b))) 15
+      (not_eq_sym Hd15)).
+    exact Hreg15.
+  - change (vm_link vm =
+            N.to_nat
+              (lget_regN
+                (lset_word (lp_reg L) d
+                  (mod32N (N.add (lget_regN (lp_reg L) a)
+                                  (lget_regN (lp_reg L) b)))) 15)).
+    rewrite (lget_regN_lset_word_neq (lp_reg L) d
+      (mod32N (N.add (lget_regN (lp_reg L) a)
+                      (lget_regN (lp_reg L) b))) 15
+      (not_eq_sym Hd15)).
+    exact Hlink.
+  - intro x.
+    change (vm_mem vm x =
+            payload_word (lp_mem_at (lp_exec L (pADD d a b)) x)).
+    rewrite lp_mem_at_lp_exec_ADD. exact (Hmem x).
+  - change (Nat.eqb (vm_reg vm a + vm_reg vm b) 0 =
+            Nat.eqb
+              ((pack_k
+                 (N.eqb
+                   (mod32N (N.add (lget_regN (lp_reg L) a)
+                                   (lget_regN (lp_reg L) b))) 0)
+                 (N.leb two32
+                   (N.add (lget_regN (lp_reg L) a)
+                          (lget_regN (lp_reg L) b))) / 2 mod 2) 1).
+    rewrite pack_k_zf.
+    rewrite HA', HB'.
+    rewrite N_eqb_to_nat.
+    rewrite to_nat_mod32N.
+    rewrite N2Nat.inj_add.
+    rewrite Nat.mod_small by exact Hnc.
+    reflexivity.
+  - change (false =
+            Nat.eqb
+              (pack_k
+                 (N.eqb
+                   (mod32N (N.add (lget_regN (lp_reg L) a)
+                                   (lget_regN (lp_reg L) b))) 0)
+                 (N.leb two32
+                   (N.add (lget_regN (lp_reg L) a)
+                          (lget_regN (lp_reg L) b))) mod 2) 1).
+    rewrite pack_k_lf.
+    assert (Hle : (N.leb two32
+                    (N.add (lget_regN (lp_reg L) a)
+                           (lget_regN (lp_reg L) b)) = false)).
+    { apply (proj2 (N.leb_gt two32
+        (N.add (lget_regN (lp_reg L) a)
+               (lget_regN (lp_reg L) b)))).
+      exact HsumN. }
+    rewrite Hle. reflexivity.
+  - apply pack_k_lt_4.
+  - change (vm_halted vm = lp_halted L). exact Hhalt.
+  - intros i Hi.
+    change (N.to_nat
+              (lget_regN
+                (lset_word (lp_reg L) d
+                  (mod32N (N.add (lget_regN (lp_reg L) a)
+                                  (lget_regN (lp_reg L) b)))) i)
+            < 2 ^ 32).
+    destruct (Nat.eq_dec i d) as [-> | Hne].
+    + rewrite (lget_regN_lset_word_eq (lp_reg L) d
+        (mod32N (N.add (lget_regN (lp_reg L) a)
+                        (lget_regN (lp_reg L) b))))
+        by (rewrite Hlen; lia).
+      rewrite to_nat_mod32N.
+      apply Nat.mod_upper_bound. exact two32_neq_0.
+    + rewrite (lget_regN_lset_word_neq (lp_reg L) d
+        (mod32N (N.add (lget_regN (lp_reg L) a)
+                        (lget_regN (lp_reg L) b))) i Hne).
+      exact (Hbound i Hi).
+Qed.
+
+Print Assumptions lp_exec_ADD_refines.

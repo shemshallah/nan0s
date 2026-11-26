@@ -231,6 +231,11 @@ Lemma lp_mem_at_lp_exec_SHR :
     lp_mem_at (lp_exec L (pSHR d a imm)) = lp_mem_at L.
 Proof. intros. unfold lp_mem_at, lp_exec. reflexivity. Qed.
 
+Lemma lp_mem_at_lp_exec_ADD :
+  forall L d a b,
+    lp_mem_at (lp_exec L (pADD d a b)) = lp_mem_at L.
+Proof. intros. unfold lp_mem_at, lp_exec. reflexivity. Qed.
+
 Opaque lp_mem_at.
 
 Definition lp_to_LState (L : LPState) : LState :=
