@@ -414,7 +414,3 @@ Proof.
 Qed.
 
 Print Assumptions lp_exec_CALL_refines.
-
-Search (N.to_nat _ < N.to_nat _).
-Search (N.to_nat _ = N.to_nat _).
-Search (N.to_nat _ <= N.to_nat _).
