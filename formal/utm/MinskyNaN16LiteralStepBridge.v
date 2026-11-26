@@ -916,7 +916,7 @@ Proof.
     rewrite N_eqb_to_nat.
     rewrite (to_nat_mod32N_add_small
       (lget_regN (lp_reg L) a) (lget_regN (lp_reg L) b) Hnc).
-    rewrite HA', HB'. reflexivity.
+    reflexivity.
   - change (false =
             Nat.eqb
               (pack_k
