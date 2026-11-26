@@ -284,7 +284,7 @@ NaN16 VM / S1 / bare metal
 | M1b | 32-word entries + tensor metadata + namespace object | tensor create/view/shape/rights + namespace resolve |
 | M1c | object persistence and checksum validation | create, save, reboot, verify |
 | M2a | agent process image | checkpoint a counter, resume, state continues |
-| M2b | trace + replay | recorded run replays exactly |
+| M2b | trace + replay | `tools/nantrace_gate.sh` — seal/verify/tamper **PASS**; replay pending |
 | M3a | object channel / tool bus | typed cap messages, backpressure, quota/revoke |
 | M3b | concurrent pipeline / jobs | >4 KiB stream with real overlap, start/wait/reap |
 | M4a | model + KV objects | persistent KV resume, zero-copy tensor views |
