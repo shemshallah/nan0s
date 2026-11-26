@@ -116,3 +116,4 @@ MinskyTaggedHalt.v
 MinskyWideConcreteDispatch.v
 MinskyWideSource.v
 MinskyWritebackMacro.v
+MinskyNaN16LiteralStepBridge.v
