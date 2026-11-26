@@ -115,6 +115,11 @@ Raw-NaN gates, not oracle claims:
   RW regions from the bump heap and returns their bases.  This is the
   allocation primitive for variable-size program images; the region spans
   the machine's discovered RAM.
+- `tools/execbig_scale_gate.sh` — the base-relative executable path:
+  `execbig 70000` allocates a 70,000-word RWX region, fills it with valid
+  NOP words, copies a tail that uses `r12` as its runtime base, calls it,
+  and verifies the result.  This executes a program larger than the 64K
+  code window at a heap base chosen at runtime.
 - `tools/nanpipe_libc_gate.sh` — guest libc `pipe()/dup2()/read()/write()`
   over the NaN byte-pipe table; `PIPE PASS` on x86_64 S1.
 - `tools/nansched_gate.sh` — the kernel scheduler (`src/lib/nansched.nas`):
@@ -205,7 +210,10 @@ service table.
 - [x] Runtime MEMQ word count, both process region tables and the boot region
       table widened to real RAM (64 MiB/128 MiB gates).
 - [x] `SVC 2` bump heap sized from MEMQ (4K and 64 MiB allocations gated).
-- [ ] Relocatable variable-size executable loader on the SVC 2 heap.
+- [x] Base-relative variable-size executable path on the SVC 2 heap
+      (`execbig 70000`, 70,000 words, >64K code window).
+- [ ] General executable format with data/code relocation tables and a
+      filesystem-backed loader.
 - [ ] VRAM/DEV windows sized from the device's real BAR, with sealed DMA.
 - [ ] Promote the kernel-boot image to the default published image.
 - [ ] Per-thread preemption and per-process nanthr state.

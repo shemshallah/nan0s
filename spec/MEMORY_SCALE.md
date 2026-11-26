@@ -20,9 +20,13 @@ tables, and reports the count through the NANIX `mem` command.
 `tools/mem_scale_gate.sh` proves 64 MiB and 128 MiB machines return
 different counts from the same raw image.  `SVC 2` carves RW regions from
 a bump heap spanning `HEAP_BASE..top-of-RAM`; `tools/alloc_scale_gate.sh`
-allocates 4K and 64 MiB regions.  Still open for M1: a relocatable
-variable-size executable loader, and VRAM/DEV windows sized from the real
-device BAR rather than a fixed S1 test aperture.
+allocates 4K and 64 MiB regions.  `execbig 70000` allocates an RWX region,
+fills it with valid NOP words, copies a tail that addresses through `r12`,
+calls it, and verifies its result, so code larger than the 64K cart slot
+runs at a runtime base (`tools/execbig_scale_gate.sh`).  Still open for M1:
+a general executable format with code/data relocation tables, a
+filesystem-backed loader, and VRAM/DEV windows sized from the real device
+BAR rather than a fixed S1 test aperture.
 M2: x86-64 long-mode kernel (nasm1 gains REX/64-bit encodings), identity-mapped large pages, guest word array above 4 GB, 16 GB = 2^31 words. Register word index stays 32-bit; word index 2^31 and up is reserved.
 M3: PCIe enumeration (config space), find the GPU, map its BARs (resizable BAR for a full VRAM aperture), RAWMAP window ops, DMA block copy RAM <-> window with seal-on-transfer.
 M4: GPU compute: command submission and kernels emitted from NaN source (a GPU emitter like nasm1 is for x86). Honest risk: this needs a documented GPU ISA and a bring-up path without a vendor driver. AMD publishes ISA documents and has open drivers to read; NVIDIA keeps SASS and firmware closed. Choice of GPU decides feasibility.

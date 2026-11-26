@@ -7663,6 +7663,11 @@ CALL @fs_prefix
 CMP r1,r0
 JMP[NE] @fs_d_rm
 LA r1,#FNB
+LA r2,@fs_s_execbig
+CALL @fs_prefix
+CMP r1,r0
+JMP[NE] @fs_d_execbig
+LA r1,#FNB
 LA r2,@fs_s_alloc
 CALL @fs_prefix
 CMP r1,r0
@@ -7985,6 +7990,98 @@ CALL @vc_putc
 JMP @fs_ls_l
 fs_ls_d:
 JMP @fs_disp_y
+; execbig N: allocate an RWX region, fill it with valid NOP words, copy a
+; base-relative tail that writes 0x4B through r12, CALLR it, and verify the
+; result.  The region is at a runtime heap base, so this is a relocatable
+; executable path independent of the 64K GUI cart slot.
+fs_d_execbig:
+LA r1,#FNB
+ADDI r1,r1,8
+CALL @fs_skipsp
+MOVI r5,0
+eb_num:
+LDB r2,r1,0
+CMP r2,r0
+JMP[EQ] @eb_go
+MOVI r4,48
+CMP r2,r4
+JMP[LT] @eb_bad
+MOVI r4,57
+CMP r2,r4
+JMP[GT] @eb_bad
+MOVI r4,10
+MUL r5,r5,r4
+MOVI r4,48
+SUB r2,r2,r4
+ADD r5,r5,r2
+ADD r1,r1,r13
+JMP @eb_num
+eb_go:
+MOVI r4,64
+CMP r5,r4
+JMP[LT] @eb_bad
+ST r5,r0,@fs_exec_n
+LD r6,r0,@g_shell_pid
+CMP r6,r0
+JMP[EQ] @eb_bad
+ADD r1,r5,r0
+MOVI r2,7
+SVC 2
+CMP r1,r0
+JMP[EQ] @eb_bad
+ST r1,r0,@fs_exec_base
+ST r0,r0,@fs_exec_i
+eb_fill:
+LD r3,r0,@fs_exec_i
+LD r4,r0,@fs_exec_n
+CMP r3,r4
+JMP[GE] @eb_tail
+LD r1,r0,@fs_exec_base
+ADD r1,r1,r3
+LA r2,@nop_tpl
+MOVI r5,16
+SUB r6,r4,r3
+CMP r6,r5
+JMP[GE] @eb_fill_len
+ADD r5,r6,r0
+eb_fill_len:
+ST r5,r0,@fs_exec_chunk
+BCOPY r1,r2,r5
+LD r3,r0,@fs_exec_i
+LD r5,r0,@fs_exec_chunk
+ADD r3,r3,r5
+ST r3,r0,@fs_exec_i
+JMP @eb_fill
+eb_tail:
+LD r1,r0,@fs_exec_base
+LD r3,r0,@fs_exec_n
+MOVI r5,#BIG_TAIL_LEN
+SUB r3,r3,r5
+ADD r1,r1,r3
+LA r2,@big_tail
+MOVI r5,#BIG_TAIL_LEN
+BCOPY r1,r2,r5
+LD r12,r0,@fs_exec_base
+LD r11,r0,@fs_exec_n
+CALLR r12
+LD r1,r0,@fs_exec_base
+LD r3,r0,@fs_exec_n
+SUB r3,r3,r13
+SUB r3,r3,r13
+ADD r1,r1,r3
+LD r4,r1,0
+MOVI r5,75
+CMP r4,r5
+JMP[NE] @eb_bad
+LD r1,r0,@tk_id
+MOVI r2,@fs_s_bigok
+CALL @vc_puts
+JMP @fs_disp_y
+eb_bad:
+LD r1,r0,@tk_id
+MOVI r2,@fs_s_bigbad
+CALL @vc_puts
+JMP @fs_disp_y
 fs_d_alloc:
 LA r1,#FNB
 ADDI r1,r1,6
@@ -8012,6 +8109,7 @@ LD r6,r0,@g_shell_pid
 CMP r6,r0
 JMP[EQ] @fs_al_bad
 ADD r1,r5,r0
+MOVI r2,3
 SVC 2
 CMP r1,r0
 JMP[EQ] @fs_al_bad
@@ -8389,6 +8487,12 @@ fs_s_mkdir:
 .str "mkdir "
 fs_s_rm:
 .str "rm "
+fs_s_execbig:
+.str "execbig "
+fs_s_bigok:
+.str "big ok\n"
+fs_s_bigbad:
+.str "big fail\n"
 fs_s_alloc:
 .str "alloc "
 fs_s_base:
@@ -8459,6 +8563,42 @@ fs_num:
 .word 0
 fs_alloc_base:
 .word 0
+fs_exec_base:
+.word 0
+fs_exec_n:
+.word 0
+fs_exec_i:
+.word 0
+fs_exec_chunk:
+.word 0
+; 16 valid NOP words copied repeatedly into a loaded code region.
+nop_tpl:
+NOP
+NOP
+NOP
+NOP
+NOP
+NOP
+NOP
+NOP
+NOP
+NOP
+NOP
+NOP
+NOP
+NOP
+NOP
+NOP
+; Base-relative tail: r11=size, r12=base; write 0x4B at base+size-1.
+.equ BIG_TAIL_LEN 7
+big_tail:
+MOVI r13,1
+ADD r5,r12,r11
+SUB r5,r5,r13
+SUB r5,r5,r13
+MOVI r6,75
+ST r6,r5,0
+RET
 fs_typ:
 .word 0
 fs_statbuf:

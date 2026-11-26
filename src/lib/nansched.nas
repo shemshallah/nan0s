@@ -5,7 +5,8 @@
 ;
 ;   SVC  0 yield              -> 0 (thread yield in thread mode)
 ;   SVC  1 exit(code)         -> does not return
-;   SVC  2 region_map(words)  -> base word of a fresh RW bump region, or 0
+;   SVC  2 region_map(words, prot) -> base word of a fresh bump region, or 0
+;           prot 0/3 = RW, 5 = RX, 7 = RWX (used for loaded code)
 ;   SVC  9 spawn(descriptor)  -> pid or 0
 ;   SVC 10 wait(pid|0|-1)     -> exit status (blocks; pid 0/-1 = any child)
 ;   SVC 13 thread_create(entry, stack, arg) -> tid or 0
@@ -498,6 +499,16 @@ nsch_svc_region:
   ST r3,r14,1
   CMP r3,r0
   JMP[EQ] @nsch_region_fail
+  LD r7,r10,2
+  CMP r7,r0
+  JMP[EQ] @nsch_region_rw
+  MOVI r4,7
+  CMP r7,r4
+  JMP[LE] @nsch_region_prot
+nsch_region_rw:
+  MOVI r7,#NP_PROT_RW
+nsch_region_prot:
+  ST r7,r14,6
   LD r4,r0,#NSH_NEXT
   ADD r5,r4,r3
   LD r6,r0,#NSH_END
@@ -523,7 +534,7 @@ nsch_svc_region:
   LD r2,r14,2
   LD r3,r14,1
   MOVI r4,#NP_K_HEAP
-  MOVI r5,#NP_PROT_RW
+  LD r5,r14,6
   CALL @np_region_add
   CMP r1,r0
   JMP[NE] @nsch_region_fail
@@ -538,7 +549,7 @@ nsch_svc_region:
   ST r3,r2,1
   MOVI r3,#NP_K_HEAP
   ST r3,r2,2
-  MOVI r3,#NP_PROT_RW
+  LD r3,r14,6
   ST r3,r2,3
   LA r2,#NS_BASE
   LD r10,r2,#NS_FP

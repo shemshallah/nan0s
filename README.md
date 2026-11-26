@@ -55,6 +55,10 @@ on x86_64 S1.  The boot kernel asks MEMQ (CPUID leaf `0x4E4D00FF`) for the
 real word count instead of compiling one in, widens both process region
 tables to actual RAM, and exposes a bump heap through `SVC 2`; the memory
 gates boot at 64 MiB and 128 MiB and allocate up to 64 MiB from that heap.
+The `execbig` path allocates an RWX region, fills it with valid NOP words,
+copies a base-relative tail addressed through `r12`, calls it and verifies
+its result, so a 70,000-word program runs from a runtime heap base rather
+than the 64K cart slot.
 The published GUI/museum image still uses the legacy single-cart boot until
 that image is promoted.
 
