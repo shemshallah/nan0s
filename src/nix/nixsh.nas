@@ -91,6 +91,29 @@
 .equ NX_G_PUTS_STR 0x282
 .equ NX_G_EPUTC_CH 0x283
 
+; POSIX variable lane: 16 entries of 16-byte name + 64-byte value.  The
+; table and its string scratches are byte addressed and live above the GUI
+; compiler/terminal buffers, below the SVC 2 heap.
+.equ NX_VTAB     0x1200000            ; 16 * 80 bytes
+.equ NX_VNAME    0x1201000            ; 16-byte name scratch
+.equ NX_VVAL     0x1201100            ; 64-byte value scratch / read line
+; Cross-call state for the variable lane.  NX_VG is a word address (the block
+; is at byte 0x1202000); fields are word offsets.  Helpers only ever keep
+; cross-call values here, never in a frame above SP, because shell callees
+; reuse those words for their own link records.
+.equ NX_VG       0x480800
+.equ NX_VG_CNT   0
+.equ NX_VG_NAMEP 1
+.equ NX_VG_VALP  2
+.equ NX_VG_ENT   3
+.equ NX_VG_IDX   4
+.equ NX_VG_LEN   5
+.equ NX_VG_RD_NAME 6
+.equ NX_VG_ENV_IDX 7
+.equ NX_VG_NT_SCAN 8
+.equ NX_VG_NT_DST  9
+.equ NX_VG_NT_LONG 10
+
 ; ---------------------------------------------------------------------------
 nx_main:
   MOVI r13,1
@@ -100,6 +123,7 @@ nx_main:
   SHL r1,r1,2
   LA r2,#NX_CWD
   CALL @nx_copy
+  CALL @nx_var_init
 nx_loop:
   LA r2,@g_shell_req
   LD r1,r2,0
@@ -207,6 +231,11 @@ nx_exec_cmd:
   LDB r2,r1,0
   CMP r2,r0
   JMP[EQ] @nx_ec_done
+  ; NAME=value is an assignment, not a command dispatch.
+  LA r1,#NX_CMD
+  CALL @nx_try_assign
+  CMP r1,r0
+  JMP[NE] @nx_ec_done
   ; snapshot the three standard descriptors
   MOVI r1,0
   LA r2,#NX_G_SAVE0
@@ -463,6 +492,11 @@ nx_dispatch:
   CMP r1,r0
   JMP[NE] @nx_kill
   LA r1,#NX_CMD
+  LA r2,@nx_c_read
+  CALL @nx_streq
+  CMP r1,r0
+  JMP[NE] @nx_read
+  LA r1,#NX_CMD
   LA r2,@nx_c_env
   CALL @nx_streq
   CMP r1,r0
@@ -663,70 +697,524 @@ nx_se_d:
   LD r15,r14,0
   RET
 
+; nx_streqb: r1=byte string a, r2=byte string b -> r1=1/0.  Leaf.
+nx_streqb:
+  LDB r3,r1,0
+  LDB r4,r2,0
+  CMP r3,r4
+  JMP[NE] @nx_seb_n
+  CMP r3,r0
+  JMP[EQ] @nx_seb_y
+  ADD r1,r1,r13
+  ADD r2,r2,r13
+  JMP @nx_streqb
+nx_seb_y:
+  MOVI r1,1
+  RET
+nx_seb_n:
+  MOVI r1,0
+  RET
+
+; nx_copy_max: r1=src byte, r2=dst byte, r3=max bytes -> NUL-terminated copy.
+; Copies at most max bytes; leaf, registers only.
+nx_copy_max:
+  MOVI r4,0
+nx_cm_l:
+  CMP r4,r3
+  JMP[GE] @nx_cm_d
+  LDB r5,r1,0
+  CMP r5,r0
+  JMP[EQ] @nx_cm_d
+  STB r5,r2,0
+  ADD r1,r1,r13
+  ADD r2,r2,r13
+  ADD r4,r4,r13
+  JMP @nx_cm_l
+nx_cm_d:
+  STB r0,r2,0
+  RET
+
+; ---------------------------------------------------------------------------
+; Variable table helpers.  Entries are 80 bytes: name[16], value[64].
+; nx_var_find r1=name byte -> r1=entry byte ptr or 0; NX_VG_ENT holds it too.
+nx_var_find:
+  ST r15,r14,0
+  ADDI r14,r14,9
+  LA r12,#NX_VG
+  ST r0,r12,3
+  ST r0,r12,4
+nx_vf_l:
+  LA r12,#NX_VG
+  LD r2,r12,4
+  LD r3,r12,0
+  CMP r2,r3
+  JMP[GE] @nx_vf_no
+  MOVI r3,80
+  MUL r4,r2,r3
+  LA r5,#NX_VTAB
+  ADD r5,r5,r4
+  ST r5,r12,3
+  LD r1,r12,1
+  ADD r2,r5,r0
+  CALL @nx_streqb
+  CMP r1,r0
+  JMP[NE] @nx_vf_yes
+  LA r12,#NX_VG
+  LD r3,r12,4
+  ADD r3,r3,r13
+  ST r3,r12,4
+  JMP @nx_vf_l
+nx_vf_yes:
+  LA r12,#NX_VG
+  LD r1,r12,#NX_VG_ENT
+  JMP @nx_vf_d
+nx_vf_no:
+  MOVI r1,0
+nx_vf_d:
+  ADDI r14,r14,-9
+  LD r15,r14,0
+  RET
+
+; nx_var_set r1=name byte, r2=value byte -> r1=0 / -1 (table full).
+; Arguments and loop state live in NX_VG; frame is exactly the link word.
+nx_var_set:
+  ST r15,r14,0
+  ADDI r14,r14,9
+  LA r12,#NX_VG
+  ST r1,r12,#NX_VG_NAMEP
+  ST r2,r12,#NX_VG_VALP
+  CALL @nx_var_find
+  CMP r1,r0
+  JMP[EQ] @nx_vs_new
+  ; Existing variable: replace the value in place.
+  LA r12,#NX_VG
+  LD r2,r12,#NX_VG_ENT
+  ADDI r2,r2,16
+  LD r1,r12,#NX_VG_VALP
+  MOVI r3,63
+  CALL @nx_copy_max
+  MOVI r1,0
+  JMP @nx_vs_d
+nx_vs_new:
+  LA r12,#NX_VG
+  LD r3,r12,#NX_VG_CNT
+  MOVI r4,16
+  CMP r3,r4
+  JMP[GE] @nx_vs_full
+  MOVI r4,80
+  MUL r5,r3,r4
+  LA r6,#NX_VTAB
+  ADD r6,r6,r5
+  ST r6,r12,#NX_VG_ENT
+  LD r1,r12,#NX_VG_NAMEP
+  ADD r2,r6,r0
+  MOVI r3,15
+  CALL @nx_copy_max
+  LA r12,#NX_VG
+  LD r2,r12,#NX_VG_ENT
+  ADDI r2,r2,16
+  LD r1,r12,#NX_VG_VALP
+  MOVI r3,63
+  CALL @nx_copy_max
+  LA r12,#NX_VG
+  LD r3,r12,#NX_VG_CNT
+  ADD r3,r3,r13
+  ST r3,r12,#NX_VG_CNT
+  MOVI r1,0
+  JMP @nx_vs_d
+nx_vs_full:
+  LA r1,0xFFFFFFFF
+nx_vs_d:
+  ADDI r14,r14,-9
+  LD r15,r14,0
+  RET
+
+; nx_var_init - seed PWD/HOME/PATH/SHELL in insertion order.
+nx_var_init:
+  ST r15,r14,0
+  ADDI r14,r14,9
+  LA r2,#NX_VG
+  ST r0,r2,0
+  LA r1,@nx_s_pwd_n
+  SHL r1,r1,2
+  LA r2,#NX_CWD
+  CALL @nx_var_set
+  LA r1,@nx_s_home_n
+  SHL r1,r1,2
+  LA r2,@nx_root_path
+  SHL r2,r2,2
+  CALL @nx_var_set
+  LA r1,@nx_s_path_n
+  SHL r1,r1,2
+  LA r2,@nx_root_path
+  SHL r2,r2,2
+  CALL @nx_var_set
+  LA r1,@nx_s_shell_n
+  SHL r1,r1,2
+  LA r2,@nx_s_nixsh
+  SHL r2,r2,2
+  CALL @nx_var_set
+  ADDI r14,r14,-9
+  LD r15,r14,0
+  RET
+
+; nx_try_assign - NX_CMD as NAME=value -> store it, return 1; else 0.
+nx_try_assign:
+  ST r15,r14,0
+  ADDI r14,r14,9
+  LA r1,#NX_CMD
+  LDB r2,r1,0
+  ; first name character: A-Z, a-z or '_'
+  MOVI r3,65
+  CMP r2,r3
+  JMP[LT] @nx_as_lower
+  MOVI r3,90
+  CMP r2,r3
+  JMP[LE] @nx_as_first
+nx_as_lower:
+  MOVI r3,97
+  CMP r2,r3
+  JMP[LT] @nx_as_us
+  MOVI r3,122
+  CMP r2,r3
+  JMP[LE] @nx_as_first
+nx_as_us:
+  MOVI r3,95
+  CMP r2,r3
+  JMP[NE] @nx_as_no
+nx_as_first:
+  LA r4,#NX_VNAME
+  MOVI r5,0
+nx_as_l:
+  LDB r2,r1,0
+  CMP r2,r0
+  JMP[EQ] @nx_as_no
+  MOVI r3,61
+  CMP r2,r3
+  JMP[EQ] @nx_as_eq
+  ; subsequent name characters: A-Z, a-z, 0-9 or '_'
+  MOVI r3,65
+  CMP r2,r3
+  JMP[LT] @nx_as_c_lower
+  MOVI r3,90
+  CMP r2,r3
+  JMP[LE] @nx_as_store
+nx_as_c_lower:
+  MOVI r3,97
+  CMP r2,r3
+  JMP[LT] @nx_as_c_digit
+  MOVI r3,122
+  CMP r2,r3
+  JMP[LE] @nx_as_store
+nx_as_c_digit:
+  MOVI r3,48
+  CMP r2,r3
+  JMP[LT] @nx_as_c_us
+  MOVI r3,57
+  CMP r2,r3
+  JMP[LE] @nx_as_store
+nx_as_c_us:
+  MOVI r3,95
+  CMP r2,r3
+  JMP[NE] @nx_as_no
+nx_as_store:
+  MOVI r3,15
+  CMP r5,r3
+  JMP[GE] @nx_as_no
+  STB r2,r4,0
+  ADD r4,r4,r13
+  ADD r5,r5,r13
+  ADD r1,r1,r13
+  JMP @nx_as_l
+nx_as_eq:
+  CMP r5,r0
+  JMP[EQ] @nx_as_no
+  STB r0,r4,0
+  ADD r1,r1,r13
+  LA r2,#NX_VVAL
+  MOVI r3,63
+  CALL @nx_copy_max
+  LA r1,#NX_VNAME
+  LA r2,#NX_VVAL
+  CALL @nx_var_set
+  CMP r1,r0
+  JMP[NE] @nx_as_full
+  ST r0,r0,#NX_STATUS
+  MOVI r1,1
+  JMP @nx_as_d
+nx_as_full:
+  MOVI r1,1
+  ST r1,r0,#NX_STATUS
+  MOVI r1,1
+  JMP @nx_as_d
+nx_as_no:
+  MOVI r1,0
+nx_as_d:
+  ADDI r14,r14,-9
+  LD r15,r14,0
+  RET
+
 ; nx_next_token r1=scan byte, r2=dest byte -> r1=scan after token.
 ; Splits on spaces outside single/double quotes; quotes are removed.
+; $NAME expands outside single quotes (and inside double quotes); single-
+; quoted text stays literal.  All cross-call state lives in NX_VG.
 nx_next_token:
   ST r15,r14,0
   ADDI r14,r14,9
-  ST r1,r14,1
-  ST r2,r14,2
+  LA r12,#NX_VG
+  ST r1,r12,#NX_VG_NT_SCAN
+  ST r2,r12,#NX_VG_NT_DST
 nx_nt_skip:
-  LD r1,r14,1
+  LA r12,#NX_VG
+  LD r1,r12,#NX_VG_NT_SCAN
   LDB r3,r1,0
   MOVI r4,32
   CMP r3,r4
   JMP[NE] @nx_nt_start
   ADD r1,r1,r13
-  ST r1,r14,1
+  ST r1,r12,#NX_VG_NT_SCAN
   JMP @nx_nt_skip
 nx_nt_start:
   CMP r3,r0
   JMP[NE] @nx_nt_copy
+  LA r12,#NX_VG
+  LD r2,r12,#NX_VG_NT_DST
   STB r0,r2,0
   JMP @nx_nt_d
 nx_nt_copy:
-  LD r1,r14,1
+  LA r12,#NX_VG
+  LD r1,r12,#NX_VG_NT_SCAN
   LDB r3,r1,0
   CMP r3,r0
   JMP[EQ] @nx_nt_end
   MOVI r4,34
   CMP r3,r4
-  JMP[EQ] @nx_nt_quote
+  JMP[EQ] @nx_nt_dquote
   MOVI r4,39
   CMP r3,r4
-  JMP[EQ] @nx_nt_quote
+  JMP[EQ] @nx_nt_squote
   MOVI r4,32
   CMP r3,r4
   JMP[EQ] @nx_nt_end
+  MOVI r4,36
+  CMP r3,r4
+  JMP[EQ] @nx_nt_dollar
+  LA r12,#NX_VG
+  LD r2,r12,#NX_VG_NT_DST
   STB r3,r2,0
   ADD r1,r1,r13
-  ST r1,r14,1
+  ST r1,r12,#NX_VG_NT_SCAN
   ADD r2,r2,r13
+  ST r2,r12,#NX_VG_NT_DST
   JMP @nx_nt_copy
-nx_nt_quote:
+nx_nt_dquote:
+  LA r12,#NX_VG
   ADD r1,r1,r13
-  ST r1,r14,1
-  ADD r5,r3,r0                  ; closing quote
-nx_nt_ql:
-  LD r1,r14,1
+  ST r1,r12,#NX_VG_NT_SCAN
+nx_nt_dq_l:
+  LA r12,#NX_VG
+  LD r1,r12,#NX_VG_NT_SCAN
   LDB r3,r1,0
   CMP r3,r0
   JMP[EQ] @nx_nt_end
-  CMP r3,r5
-  JMP[EQ] @nx_nt_qdone
+  MOVI r4,34
+  CMP r3,r4
+  JMP[EQ] @nx_nt_dq_done
+  MOVI r4,36
+  CMP r3,r4
+  JMP[EQ] @nx_nt_dq_dollar
+  LD r2,r12,#NX_VG_NT_DST
   STB r3,r2,0
   ADD r1,r1,r13
-  ST r1,r14,1
+  ST r1,r12,#NX_VG_NT_SCAN
   ADD r2,r2,r13
-  JMP @nx_nt_ql
-nx_nt_qdone:
+  ST r2,r12,#NX_VG_NT_DST
+  JMP @nx_nt_dq_l
+nx_nt_dq_done:
+  LA r12,#NX_VG
   ADD r1,r1,r13
-  ST r1,r14,1
+  ST r1,r12,#NX_VG_NT_SCAN
   JMP @nx_nt_copy
+nx_nt_squote:
+  LA r12,#NX_VG
+  ADD r1,r1,r13
+  ST r1,r12,#NX_VG_NT_SCAN
+nx_nt_sq_l:
+  LA r12,#NX_VG
+  LD r1,r12,#NX_VG_NT_SCAN
+  LDB r3,r1,0
+  CMP r3,r0
+  JMP[EQ] @nx_nt_end
+  MOVI r4,39
+  CMP r3,r4
+  JMP[EQ] @nx_nt_sq_done
+  LD r2,r12,#NX_VG_NT_DST
+  STB r3,r2,0
+  ADD r1,r1,r13
+  ST r1,r12,#NX_VG_NT_SCAN
+  ADD r2,r2,r13
+  ST r2,r12,#NX_VG_NT_DST
+  JMP @nx_nt_sq_l
+nx_nt_sq_done:
+  LA r12,#NX_VG
+  ADD r1,r1,r13
+  ST r1,r12,#NX_VG_NT_SCAN
+  JMP @nx_nt_copy
+nx_nt_dollar:
+  CALL @nx_nt_expand
+  CMP r1,r0
+  JMP[NE] @nx_nt_copy
+  ; '$' not followed by a name: keep it literally.
+  LA r12,#NX_VG
+  LD r1,r12,#NX_VG_NT_SCAN
+  LD r2,r12,#NX_VG_NT_DST
+  MOVI r3,36
+  STB r3,r2,0
+  ADD r1,r1,r13
+  ST r1,r12,#NX_VG_NT_SCAN
+  ADD r2,r2,r13
+  ST r2,r12,#NX_VG_NT_DST
+  JMP @nx_nt_copy
+nx_nt_dq_dollar:
+  CALL @nx_nt_expand
+  CMP r1,r0
+  JMP[NE] @nx_nt_dq_l
+  LA r12,#NX_VG
+  LD r1,r12,#NX_VG_NT_SCAN
+  LD r2,r12,#NX_VG_NT_DST
+  MOVI r3,36
+  STB r3,r2,0
+  ADD r1,r1,r13
+  ST r1,r12,#NX_VG_NT_SCAN
+  ADD r2,r2,r13
+  ST r2,r12,#NX_VG_NT_DST
+  JMP @nx_nt_dq_l
 nx_nt_end:
+  LA r12,#NX_VG
+  LD r2,r12,#NX_VG_NT_DST
   STB r0,r2,0
 nx_nt_d:
-  LD r1,r14,1
+  LA r12,#NX_VG
+  LD r1,r12,#NX_VG_NT_SCAN
+  ADDI r14,r14,-9
+  LD r15,r14,0
+  RET
+
+; nx_nt_expand - scan points at '$'; append the named variable's value to the
+; current token destination.  Returns 1 when a valid NAME followed the '$'
+; (even if unset -> empty expansion), 0 when '$' is literal.  Parsing state is
+; in NX_VG; only leaf nx_streqb is called below nx_var_find.
+nx_nt_expand:
+  ST r15,r14,0
+  ADDI r14,r14,9
+  LA r12,#NX_VG
+  LD r1,r12,#NX_VG_NT_SCAN
+  ADD r1,r1,r13
+  LDB r2,r1,0
+  ; first name character: A-Z, a-z or '_'
+  MOVI r3,65
+  CMP r2,r3
+  JMP[LT] @nx_nx_lower
+  MOVI r3,90
+  CMP r2,r3
+  JMP[LE] @nx_nx_first
+nx_nx_lower:
+  MOVI r3,97
+  CMP r2,r3
+  JMP[LT] @nx_nx_us
+  MOVI r3,122
+  CMP r2,r3
+  JMP[LE] @nx_nx_first
+nx_nx_us:
+  MOVI r3,95
+  CMP r2,r3
+  JMP[NE] @nx_nx_none
+nx_nx_first:
+  LA r4,#NX_VNAME
+  MOVI r5,0
+  LA r12,#NX_VG
+  ST r0,r12,10               ; truncation flag
+nx_nx_copy:
+  LDB r2,r1,0
+  CMP r2,r0
+  JMP[EQ] @nx_nx_name
+  ; subsequent name characters: A-Z, a-z, 0-9 or '_'
+  MOVI r3,65
+  CMP r2,r3
+  JMP[LT] @nx_nx_c_lower
+  MOVI r3,90
+  CMP r2,r3
+  JMP[LE] @nx_nx_store
+nx_nx_c_lower:
+  MOVI r3,97
+  CMP r2,r3
+  JMP[LT] @nx_nx_c_digit
+  MOVI r3,122
+  CMP r2,r3
+  JMP[LE] @nx_nx_store
+nx_nx_c_digit:
+  MOVI r3,48
+  CMP r2,r3
+  JMP[LT] @nx_nx_c_us
+  MOVI r3,57
+  CMP r2,r3
+  JMP[LE] @nx_nx_store
+nx_nx_c_us:
+  MOVI r3,95
+  CMP r2,r3
+  JMP[NE] @nx_nx_name
+nx_nx_store:
+  MOVI r3,15
+  CMP r5,r3
+  JMP[GE] @nx_nx_long
+  STB r2,r4,0
+  ADD r4,r4,r13
+  ADD r5,r5,r13
+  ADD r1,r1,r13
+  JMP @nx_nx_copy
+nx_nx_long:
+  ; Too long for the 16-byte field: consume the rest and expand to empty.
+  LA r12,#NX_VG
+  MOVI r3,1
+  ST r3,r12,10
+  ADD r1,r1,r13
+  JMP @nx_nx_copy
+nx_nx_name:
+  LA r12,#NX_VG
+  LD r6,r12,#NX_VG_NT_LONG
+  CMP r6,r0
+  JMP[EQ] @nx_nx_term
+  LA r4,#NX_VNAME
+nx_nx_term:
+  STB r0,r4,0
+  LA r12,#NX_VG
+  ST r1,r12,#NX_VG_NT_SCAN
+  LA r1,#NX_VNAME
+  ST r1,r12,#NX_VG_NAMEP
+  CALL @nx_var_find
+  CMP r1,r0
+  JMP[EQ] @nx_nx_done
+  LA r12,#NX_VG
+  LD r2,r12,#NX_VG_ENT
+  ADDI r2,r2,16
+  LD r4,r12,#NX_VG_NT_DST
+nx_nx_app:
+  LDB r3,r2,0
+  CMP r3,r0
+  JMP[EQ] @nx_nx_app_done
+  STB r3,r4,0
+  ADD r2,r2,r13
+  ADD r4,r4,r13
+  JMP @nx_nx_app
+nx_nx_app_done:
+  LA r12,#NX_VG
+  ST r4,r12,#NX_VG_NT_DST
+nx_nx_done:
+  MOVI r1,1
+  JMP @nx_nx_d
+nx_nx_none:
+  MOVI r1,0
+nx_nx_d:
   ADDI r14,r14,-9
   LD r15,r14,0
   RET
@@ -1142,6 +1630,10 @@ nx_cd_norm:
   CMP r2,r0
   JMP[EQ] @nx_cd_bad
 nx_cd_ok:
+  LA r1,@nx_s_pwd_n
+  SHL r1,r1,2
+  LA r2,#NX_CWD
+  CALL @nx_var_set
   JMP @nx_done
 nx_cd_bad:
   LA r1,@nx_s_cdbad
@@ -1796,19 +2288,97 @@ nx_kill:
   CALL @nx_nl
   JMP @nx_done
 
+; env: print all stored variables as NAME=value in insertion order.
 nx_env:
-  LA r1,@nx_s_pwd
-  CALL @nx_puts
-  LA r1,#NX_CWD
+  LA r12,#NX_VG
+  ST r0,r12,#NX_VG_ENV_IDX
+nx_env_l:
+  LA r12,#NX_VG
+  LD r1,r12,#NX_VG_ENV_IDX
+  LD r2,r12,#NX_VG_CNT
+  CMP r1,r2
+  JMP[GE] @nx_done
+  MOVI r3,80
+  MUL r4,r1,r3
+  LA r5,#NX_VTAB
+  ADD r5,r5,r4
+  ST r5,r12,#NX_VG_ENT
+  ADD r1,r5,r0
+  CALL @nx_putb
+  MOVI r1,61
+  CALL @nx_putc
+  LA r12,#NX_VG
+  LD r1,r12,#NX_VG_ENT
+  ADDI r1,r1,16
   CALL @nx_putb
   CALL @nx_nl
-  LA r1,@nx_s_home
-  CALL @nx_puts
-  LA r1,@nx_s_path
-  CALL @nx_puts
-  LA r1,@nx_s_shell
-  CALL @nx_puts
+  LA r12,#NX_VG
+  LD r1,r12,#NX_VG_ENV_IDX
+  ADD r1,r1,r13
+  ST r1,r12,#NX_VG_ENV_IDX
+  JMP @nx_env_l
+
+; read [NAME] - one blocking fd 0 line; strip the newline, store, EOF -> 1.
+nx_read:
+  LA r1,#NX_A1
+  CALL @nx_next_arg
+  LA r1,#NX_A1
+  LDB r2,r1,0
+  CMP r2,r0
+  JMP[NE] @nx_read_name
+  LA r1,@nx_s_reply
+  SHL r1,r1,2
+nx_read_name:
+  LA r12,#NX_VG
+  ST r1,r12,#NX_VG_RD_NAME
+  MOVI r1,0
+  LA r2,#NX_VVAL
+  MOVI r3,63
+  CALL @nfd_read
+  CMP r1,r0
+  JMP[EQ] @nx_read_eof
+  LA r4,0xFFFFFFFF
+  CMP r1,r4
+  JMP[EQ] @nx_read_eof
+  LA r12,#NX_VG
+  ST r1,r12,#NX_VG_LEN
+  LA r2,#NX_VVAL
+  ADD r2,r2,r1
+  STB r0,r2,0
+  ; strip the first line terminator in the received bytes
+  LA r2,#NX_VVAL
+  MOVI r4,0
+nx_read_lf:
+  LA r12,#NX_VG
+  LD r5,r12,#NX_VG_LEN
+  CMP r4,r5
+  JMP[GE] @nx_read_store
+  LDB r6,r2,0
+  MOVI r7,10
+  CMP r6,r7
+  JMP[NE] @nx_read_next
+  STB r0,r2,0
+  JMP @nx_read_store
+nx_read_next:
+  ADD r2,r2,r13
+  ADD r4,r4,r13
+  JMP @nx_read_lf
+nx_read_store:
+  LA r12,#NX_VG
+  LD r1,r12,#NX_VG_RD_NAME
+  LA r2,#NX_VVAL
+  CALL @nx_var_set
+  CMP r1,r0
+  JMP[NE] @nx_read_eof
+  MOVI r1,0
+  ST r1,r0,#NX_STATUS
   JMP @nx_done
+nx_read_eof:
+  MOVI r1,1
+  ST r1,r0,#NX_STATUS
+  ADDI r14,r14,-9
+  LD r15,r14,0
+  RET
 
 nx_sync:
   ; Persistence ABI: nfs_save -> r1=0 saved / -1 no ATA or bad store.
@@ -1882,6 +2452,8 @@ nx_c_kill:
 .str "kill"
 nx_c_env:
 .str "env"
+nx_c_read:
+.str "read"
 nx_c_sync:
 .str "sync"
 nx_c_help:
@@ -1939,5 +2511,17 @@ nx_s_path:
 .str "PATH=/\n"
 nx_s_shell:
 .str "SHELL=/nixsh\n"
+nx_s_pwd_n:
+.str "PWD"
+nx_s_home_n:
+.str "HOME"
+nx_s_path_n:
+.str "PATH"
+nx_s_shell_n:
+.str "SHELL"
+nx_s_reply:
+.str "REPLY"
+nx_s_nixsh:
+.str "/nixsh"
 nx_s_help:
-.str "NANIX shell (phase 1.5)\ncd pwd echo printf test true false cp mv touch rm mkdir rmdir ls cat wc stat truncate sleep kill env sync help exit\nio: > >> < 2> 2>&1 | (sequential)\nlegacy: write edit cc run debug mem alloc execbig\n"
+.str "NANIX shell (phase 1.5)\ncd pwd echo printf test true false cp mv touch rm mkdir rmdir ls cat wc stat truncate sleep kill read env sync help exit\nio: > >> < 2> 2>&1 | (sequential)\nvars: NAME=value, $NAME, read [NAME]\nlegacy: write edit cc run debug mem alloc execbig\n"
