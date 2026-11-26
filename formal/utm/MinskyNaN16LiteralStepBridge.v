@@ -753,7 +753,7 @@ Proof.
                  false) / 2 mod 2) 1).
     rewrite pack_k_zf.
     rewrite HA'.
-    rewrite <- N_eqb_to_nat.
+    rewrite N_eqb_to_nat.
     rewrite (to_nat_shr32N (lget_regN (lp_reg L) a) (imm mod 32) Hx).
     rewrite Himm32.
     reflexivity.
