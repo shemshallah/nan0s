@@ -991,6 +991,8 @@ Proof.
   rewrite N2Nat.inj_add.
   rewrite N2Nat.inj_sub.
   rewrite to_nat_two32.
+  assert (Hxn : N.to_nat x < 2 ^ 32).
+  { rewrite <- to_nat_two32. apply N_lt_to_nat_lt. exact Hx. }
   assert (Hshape :
     N.to_nat x + (2 ^ 32 - N.to_nat y)
     = 2 ^ 32 + (N.to_nat x - N.to_nat y)) by lia.
