@@ -169,3 +169,116 @@ Proof.
 Qed.
 
 Print Assumptions mem_get_mem_set_eq.
+
+Lemma mem_get_mem_set_data_neq :
+  forall m a v x,
+    MemP_wf m -> code_hi <= a -> a < data_hi -> x < 4366 -> x <> a ->
+    mem_get (mem_set m a v) x = mem_get m x.
+Proof.
+  intros m a v x (H1 & H2 & H3 & H4 & H5) Hlo Hhi Hx Hneq.
+  unfold mem_set, mem_get.
+  assert (A1 : (a <? tape_lo) = true)
+    by (apply Nat.ltb_lt; unfold data_hi, tape_lo in *; lia).
+  assert (A2 : (a <? data_hi) = true)
+    by (apply Nat.ltb_lt; exact Hhi).
+  assert (A3 : (a <? code_hi) = false)
+    by (apply Nat.ltb_ge; exact Hlo).
+  rewrite A1, A2, A3.
+  destruct (x <? tape_lo) eqn:X1;
+    destruct (x <? data_hi) eqn:X2;
+    destruct (x <? code_hi) eqn:X3;
+    destruct (x <? tape_hi) eqn:X4;
+    cbn.
+  all: try reflexivity.
+  all: apply nth_lset_word_neq; lia.
+Qed.
+
+Lemma mem_get_mem_set_pad_neq :
+  forall m a v x,
+    MemP_wf m -> data_hi <= a -> a < tape_lo -> x < 4366 -> x <> a ->
+    mem_get (mem_set m a v) x = mem_get m x.
+Proof.
+  intros m a v x (H1 & H2 & H3 & H4 & H5) Hlo Hhi Hx Hneq.
+  unfold mem_set, mem_get.
+  assert (A1 : (a <? tape_lo) = true)
+    by (apply Nat.ltb_lt; exact Hhi).
+  assert (A2 : (a <? data_hi) = false)
+    by (apply Nat.ltb_ge; exact Hlo).
+  rewrite A1, A2.
+  destruct (x <? tape_lo) eqn:X1;
+    destruct (x <? data_hi) eqn:X2;
+    destruct (x <? code_hi) eqn:X3;
+    destruct (x <? tape_hi) eqn:X4;
+    cbn.
+  all: try reflexivity.
+  all: apply nth_lset_word_neq; lia.
+Qed.
+
+Lemma mem_get_mem_set_tape_neq :
+  forall m a v x,
+    MemP_wf m -> tape_lo <= a -> a < tape_hi -> x < 4366 -> x <> a ->
+    mem_get (mem_set m a v) x = mem_get m x.
+Proof.
+  intros m a v x (H1 & H2 & H3 & H4 & H5) Hlo Hhi Hx Hneq.
+  unfold mem_set, mem_get.
+  assert (A1 : (a <? tape_lo) = false)
+    by (apply Nat.ltb_ge; exact Hlo).
+  assert (A4 : (a <? tape_hi) = true)
+    by (apply Nat.ltb_lt; exact Hhi).
+  rewrite A1, A4.
+  destruct (x <? tape_lo) eqn:X1;
+    destruct (x <? data_hi) eqn:X2;
+    destruct (x <? code_hi) eqn:X3;
+    destruct (x <? tape_hi) eqn:X4;
+    cbn.
+  all: try reflexivity.
+  all: apply nth_lset_word_neq; lia.
+Qed.
+
+Lemma mem_get_mem_set_str_neq :
+  forall m a v x,
+    MemP_wf m -> tape_hi <= a -> a < 4366 -> x < 4366 -> x <> a ->
+    mem_get (mem_set m a v) x = mem_get m x.
+Proof.
+  intros m a v x (H1 & H2 & H3 & H4 & H5) Hlo Hhi Hx Hneq.
+  unfold mem_set, mem_get.
+  assert (A1 : (a <? tape_lo) = false)
+    by (apply Nat.ltb_ge; unfold tape_lo, tape_hi in *; lia).
+  assert (A4 : (a <? tape_hi) = false)
+    by (apply Nat.ltb_ge; exact Hlo).
+  rewrite A1, A4.
+  destruct (x <? tape_lo) eqn:X1;
+    destruct (x <? data_hi) eqn:X2;
+    destruct (x <? code_hi) eqn:X3;
+    destruct (x <? tape_hi) eqn:X4;
+    cbn.
+  all: try reflexivity.
+  all: apply nth_lset_word_neq; lia.
+Qed.
+
+Lemma mem_get_mem_set_neq :
+  forall m a v x,
+    MemP_wf m -> a < 4366 -> x < 4366 -> x <> a ->
+    mem_get (mem_set m a v) x = mem_get m x.
+Proof.
+  intros m a v x Hwf Ha Hx Hneq.
+  destruct (a <? code_hi) eqn:A3.
+  - apply Nat.ltb_lt in A3.
+    apply mem_get_mem_set_low_neq; auto.
+  - apply Nat.ltb_ge in A3.
+    destruct (a <? data_hi) eqn:A2.
+    + apply Nat.ltb_lt in A2.
+      apply mem_get_mem_set_data_neq; auto.
+    + apply Nat.ltb_ge in A2.
+      destruct (a <? tape_lo) eqn:A1.
+      * apply Nat.ltb_lt in A1.
+        apply mem_get_mem_set_pad_neq; auto.
+      * apply Nat.ltb_ge in A1.
+        destruct (a <? tape_hi) eqn:A4.
+        -- apply Nat.ltb_lt in A4.
+           apply mem_get_mem_set_tape_neq; auto.
+        -- apply Nat.ltb_ge in A4.
+           apply mem_get_mem_set_str_neq; auto.
+Qed.
+
+Print Assumptions mem_get_mem_set_neq.
