@@ -164,7 +164,8 @@ Proof.
         destruct (a <? tape_hi) eqn:E4.
         -- apply mem_get_mem_set_tape; auto.
            apply Nat.ltb_lt in E4. exact E4.
-        -- apply mem_get_mem_set_str; auto.
+        -- apply Nat.ltb_ge in E4.
+           apply mem_get_mem_set_str; auto.
            exact Ha.
 Qed.
 
