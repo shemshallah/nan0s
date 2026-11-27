@@ -16,12 +16,12 @@ From NaNLM Require Import MinskyNaN16VM MinskyNaN16LiteralMachine
 Theorem fixture_bridge_and_final :
   Rlp (lp_run 21025 lp_reset)
       (vm_run_p 21025 fixture_prog_full (vm_of_lp lp_reset)) /\
-  lp_halted (lp_run 21025 lp_reset) = true /\
-  lp_pc (lp_run 21025 lp_reset) = 28 /\
-  payload_word (mem_get (lp_mem (lp_run 21025 lp_reset)) action_state_addr) = 2 /\
-  payload_word (mem_get (lp_mem (lp_run 21025 lp_reset)) action_head_addr) = 166 /\
-  payload_word (mem_get (lp_mem (lp_run 21025 lp_reset)) action_halt_addr) = 0 /\
-  lget_reg (lp_reg (lp_run 21025 lp_reset)) 1 = 4357.
+  lp_halted literal_final = true /\
+  lp_pc literal_final = 28 /\
+  payload_word (mem_get (lp_mem literal_final) action_state_addr) = 2 /\
+  payload_word (mem_get (lp_mem literal_final) action_head_addr) = 166 /\
+  payload_word (mem_get (lp_mem literal_final) action_halt_addr) = 0 /\
+  lget_reg (lp_reg literal_final) 1 = 4357.
 Proof.
   destruct fixture_lp_run_refines as (HR & _ & _).
   destruct literal_full_run_pass as
