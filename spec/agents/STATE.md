@@ -2,8 +2,8 @@
 
 Dispatch cap: 2 agents at a time.
 Slot A: nansched (F2) session ses_de4cee689ffeMm0auSLCqjcPFm
-Slot B: smpblock (F1) session ses_de4b6d794ffeI6zd5ZfoUxsrfe
-Completed: nnuma (F3) gate PASS, commit 01f36fe.
+Slot B: ncscale  (F4) session ses_de4acf399ffeMNIMEC2XsB8xl3
+Completed: nnuma (F3) commit 01f36fe; smpblock (F1) commit 9985ea4.
 Started: 2026-11-26
 Loop: background-result returns or 30-minute automation tick. When both
 slots have passing reports: commit, mark F items, then dispatch the next two
