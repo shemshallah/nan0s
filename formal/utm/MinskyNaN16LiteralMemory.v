@@ -169,3 +169,42 @@ Proof.
 Qed.
 
 Print Assumptions mem_get_mem_set_eq.
+
+Lemma nth_lset_word_neq :
+  forall (l : list N) i v j,
+    j <> i ->
+    nth j (lset_word l i v) 0%N = nth j l 0%N.
+Proof.
+  intros l. induction l as [|x xs IH]; intros i v j Hneq.
+  - destruct i, j; simpl; reflexivity.
+  - destruct i as [|i], j as [|j].
+    + exfalso. apply Hneq. reflexivity.
+    + reflexivity.
+    + reflexivity.
+    + simpl. apply IH. intro H. apply Hneq. now f_equal.
+Qed.
+
+Lemma mem_get_mem_set_low_neq :
+  forall m a v x,
+    MemP_wf m -> a < code_hi -> x < 4366 -> x <> a ->
+    mem_get (mem_set m a v) x = mem_get m x.
+Proof.
+  intros m a v x (H1 & H2 & H3 & H4 & H5) Ha Hx Hneq.
+  unfold mem_set, mem_get.
+  assert (A1 : (a <? tape_lo) = true)
+    by (apply Nat.ltb_lt; unfold code_hi, tape_lo in *; lia).
+  assert (A2 : (a <? data_hi) = true)
+    by (apply Nat.ltb_lt; unfold code_hi, data_hi in *; lia).
+  assert (A3 : (a <? code_hi) = true)
+    by (apply Nat.ltb_lt; exact Ha).
+  rewrite A1, A2, A3. cbn.
+  destruct (x <? tape_lo) eqn:X1;
+    destruct (x <? data_hi) eqn:X2;
+    destruct (x <? code_hi) eqn:X3;
+    destruct (x <? tape_hi) eqn:X4;
+    cbn.
+  all: try reflexivity.
+  all: apply nth_lset_word_neq; lia.
+Qed.
+
+Print Assumptions mem_get_mem_set_low_neq.
