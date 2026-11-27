@@ -1656,3 +1656,82 @@ Proof.
 Qed.
 
 Print Assumptions lp_exec_mem_wf.
+
+(** ** Inductive run refinement
+
+    [lp_run_safe] is the step-indexed safety certificate consumed by the
+    run theorem.  It decodes the current word, checks that the Coq VM
+    program has the same instruction at the same PC, checks the
+    opcode-specific side conditions, and recurses on the two post-states.
+    It is a [Prop] so the theorem stays independent of any reflection
+    layer. *)
+
+Fixpoint lp_run_safe
+    (fuel : nat) (L : LPState) (vm : VM) (prog : list InstrP) : Prop :=
+  match fuel with
+  | 0 => True
+  | S f =>
+      if lp_halted L then True
+      else
+        match decode_word_p (lp_mem_at L (lp_pc L)) with
+        | Some ins =>
+            nth_error prog (vm_pc vm) = Some ins /\
+            LPInstrSide L vm ins /\
+            lp_run_safe f (lp_exec L ins) (exec_instr_p prog vm) prog
+        | None => False
+        end
+  end.
+
+Fixpoint vm_run_p
+    (fuel : nat) (prog : list InstrP) (vm : VM) : VM :=
+  match fuel with
+  | 0 => vm
+  | S f => if vm_halted vm then vm
+           else vm_run_p f prog (exec_instr_p prog vm)
+  end.
+
+Theorem lp_run_refines :
+  forall fuel L vm prog,
+    Rlp L vm ->
+    List.length (lp_reg L) = 16 ->
+    MemP_wf (lp_mem L) ->
+    lp_run_safe fuel L vm prog ->
+    Rlp (lp_run fuel L) (vm_run_p fuel prog vm) /\
+    List.length (lp_reg (lp_run fuel L)) = 16 /\
+    MemP_wf (lp_mem (lp_run fuel L)).
+Proof.
+  intros fuel. induction fuel as [|fuel IH]; intros L vm prog HR Hlen Hwf Hsafe.
+  - cbn. repeat split; assumption.
+  - cbn [lp_run vm_run_p].
+    destruct (lp_halted L) eqn:Hhalt.
+    + assert (Hvm : vm_halted vm = true).
+      { pose proof HR as HR'.
+        unfold Rlp in HR'.
+        destruct HR' as
+          (_ & _ & _ & _ & _ & _ & _ & _ & Hvm & _).
+        rewrite Hvm. exact Hhalt. }
+      rewrite Hvm. cbn. repeat split; assumption.
+    + assert (Hvm : vm_halted vm = false).
+      { pose proof HR as HR'.
+        unfold Rlp in HR'.
+        destruct HR' as
+          (_ & _ & _ & _ & _ & _ & _ & _ & Hvm & _).
+        rewrite Hvm. exact Hhalt. }
+      rewrite Hvm. cbn.
+      rewrite Hhalt in Hsafe.
+      cbn [lp_run_safe] in Hsafe.
+      destruct (decode_word_p (lp_mem_at L (lp_pc L))) as [ins|] eqn:Hdec.
+      2: { rewrite Hdec in Hsafe. cbn in Hsafe. contradiction. }
+      rewrite Hdec in Hsafe. cbn in Hsafe.
+      destruct Hsafe as (Hnth & Hside & Hsafe').
+      assert (Hstep : lp_step L = lp_exec L ins).
+      { unfold lp_step. rewrite <- lp_mem_at_eq. rewrite Hdec. reflexivity. }
+      rewrite Hstep.
+      apply IH.
+      * exact (lp_exec_instr_refines L vm prog ins HR Hlen Hwf Hside Hdec Hnth).
+      * rewrite lp_exec_reg_length. exact Hlen.
+      * apply lp_exec_mem_wf. exact Hwf.
+      * exact Hsafe'.
+Qed.
+
+Print Assumptions lp_run_refines.
