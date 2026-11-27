@@ -2,9 +2,9 @@
 
 Dispatch cap: 2 agents at a time.
 Slot A: nreplay (F8) session ses_de48b3f9dffenx8xMQ9F2EusKS
-Slot B: nkv     (F6) session ses_de4991ebaffeuHvFX761Qpib6L
+Slot B: nmodel  (F7) session ses_de4856cd2ffe3i7oGRXdcZ5nNo
 Completed: F3 nnuma 01f36fe; F1 smpblock 9985ea4; F2 nansched 49905d8;
-           F4 ncscale ef07f18; F5 nagent 1f8db01.
+           F4 ncscale ef07f18; F5 nagent 1f8db01; F6 nkv a5d7a30.
 Started: 2026-11-26
 Loop: background-result returns or 30-minute automation tick. When both
 slots have passing reports: commit, mark F items, then dispatch the next two
