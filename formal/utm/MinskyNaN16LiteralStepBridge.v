@@ -1836,8 +1836,12 @@ Lemma instr_eqb_eq :
 Proof.
   intros a b. unfold instr_eqb.
   destruct (InstrP_eq_dec a b) as [E | N].
-  - split; intros _; exact E.
-  - split; intros H; [discriminate H | exfalso; apply N; exact H].
+  - split.
+    + intros _. exact E.
+    + intros _. reflexivity.
+  - split.
+    + discriminate.
+    + intros H. exfalso. apply N. exact H.
 Qed.
 
 Definition lp_instr_side_bool (L : LPState) (ins : InstrP) : bool :=
