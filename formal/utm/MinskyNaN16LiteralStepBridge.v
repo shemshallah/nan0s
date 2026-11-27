@@ -1584,7 +1584,7 @@ Print Assumptions lp_exec_ST_refines.
     length are kept separate because they are preserved by every
     instruction and only need to be maintained once per run. *)
 
-Definition LPInstrSide (L : LPState) (vm : VM) (ins : InstrP) : Prop :=
+Definition LPInstrSide (L : LPState) (ins : InstrP) : Prop :=
   match ins with
   | pCMP a b => a < 16 /\ b < 16
   | pJMP p target => lp_k L <> 3
@@ -1606,7 +1606,7 @@ Definition LPInstrSide (L : LPState) (vm : VM) (ins : InstrP) : Prop :=
   | pMOVI d imm => d < 16 /\ d <> 15 /\ imm < 2 ^ 32
   | pBOOL tbl d a b =>
       tbl = 8 /\ d < 16 /\ d <> 15 /\ a < 16 /\ b < 16 /\
-      lget_regN (lp_reg L) b = 255%N /\ vm_reg vm b = 255
+      lget_regN (lp_reg L) b = 255%N
   | pPUTC d => True
   | pCALL target => S (lp_pc L) < 2 ^ 32
   | pRET => True
@@ -1619,7 +1619,7 @@ Theorem lp_exec_instr_refines :
     Rlp L vm ->
     List.length (lp_reg L) = 16 ->
     MemP_wf (lp_mem L) ->
-    LPInstrSide L vm ins ->
+    LPInstrSide L ins ->
     decode_word_p (lp_mem_at L (lp_pc L)) = Some ins ->
     nth_error prog (vm_pc vm) = Some ins ->
     Rlp (lp_exec L ins) (exec_instr_p prog vm).
@@ -1647,8 +1647,19 @@ Proof.
   - red in Hside. destruct Hside as (Hd & Hd15 & Himm).
     apply lp_exec_MOVI_refines; assumption.
   - red in Hside.
-    destruct Hside as (Htbl & Hd & Hd15 & Ha & Hb & Hbn & Hvb).
-    subst tbl. apply lp_exec_BOOL8_255_refines; assumption.
+    destruct Hside as (Htbl & Hd & Hd15 & Ha & Hb & Hbn).
+    subst tbl.
+    assert (Hvb : vm_reg vm b = 255).
+    { pose proof HR as HRv. unfold Rlp in HRv.
+      destruct HRv as
+        (_ & Hregs & Hreg15 & _ & _ & _ & _ & _ & _ & _).
+      destruct (Nat.eq_dec b 15) as [-> | Hb15].
+      - rewrite Hreg15, Hbn, N2Nat.id.
+        rewrite Nat.mod_small by lia. reflexivity.
+      - assert (Hb15' : b < 15) by lia.
+        rewrite (Hregs b Hb15'), Hbn, N2Nat.id.
+        rewrite Nat.mod_small by lia. reflexivity. }
+    apply lp_exec_BOOL8_255_refines; assumption.
   - red in Hside.
     apply lp_exec_PUTC_refines; assumption.
   - red in Hside. apply lp_exec_CALL_refines; assumption.
@@ -1691,7 +1702,7 @@ Print Assumptions lp_exec_mem_wf.
     layer. *)
 
 Fixpoint lp_run_safe
-    (fuel : nat) (L : LPState) (vm : VM) (prog : list InstrP) : Prop :=
+    (fuel : nat) (L : LPState) (prog : list InstrP) : Prop :=
   match fuel with
   | 0 => True
   | S f =>
@@ -1699,9 +1710,9 @@ Fixpoint lp_run_safe
       else
         match decode_word_p (lp_mem_at L (lp_pc L)) with
         | Some ins =>
-            nth_error prog (vm_pc vm) = Some ins /\
-            LPInstrSide L vm ins /\
-            lp_run_safe f (lp_exec L ins) (exec_instr_p prog vm) prog
+            nth_error prog (lp_pc L) = Some ins /\
+            LPInstrSide L ins /\
+            lp_run_safe f (lp_exec L ins) prog
         | None => False
         end
   end.
@@ -1715,14 +1726,14 @@ Fixpoint vm_run_p
   end.
 
 Lemma lp_run_safe_step :
-  forall fuel L vm prog,
+  forall fuel L prog,
     lp_halted L = false ->
-    lp_run_safe (S fuel) L vm prog =
+    lp_run_safe (S fuel) L prog =
       match decode_word_p (lp_mem_at L (lp_pc L)) with
       | Some ins =>
-          nth_error prog (vm_pc vm) = Some ins /\
-          LPInstrSide L vm ins /\
-          lp_run_safe fuel (lp_exec L ins) (exec_instr_p prog vm) prog
+          nth_error prog (lp_pc L) = Some ins /\
+          LPInstrSide L ins /\
+          lp_run_safe fuel (lp_exec L ins) prog
       | None => False
       end.
 Proof.
@@ -1734,7 +1745,7 @@ Theorem lp_run_refines :
     Rlp L vm ->
     List.length (lp_reg L) = 16 ->
     MemP_wf (lp_mem L) ->
-    lp_run_safe fuel L vm prog ->
+    lp_run_safe fuel L prog ->
     Rlp (lp_run fuel L) (vm_run_p fuel prog vm) /\
     List.length (lp_reg (lp_run fuel L)) = 16 /\
     MemP_wf (lp_mem (lp_run fuel L)).
@@ -1766,17 +1777,22 @@ Proof.
                 (vm_run_p fuel prog (exec_instr_p prog vm)) /\
               List.length (lp_reg (lp_run fuel (lp_step L))) = 16 /\
               MemP_wf (lp_mem (lp_run fuel (lp_step L)))).
-      rewrite (lp_run_safe_step fuel L vm prog Hhalt) in Hsafe.
+      rewrite (lp_run_safe_step fuel L prog Hhalt) in Hsafe.
       remember (decode_word_p (lp_mem_at L (lp_pc L))) as ins_opt eqn:Hdec.
       destruct ins_opt as [ins|].
       2: { cbn in Hsafe. contradiction. }
       cbn in Hsafe.
       destruct Hsafe as (Hnth & Hside & Hsafe').
+      assert (Hnth_vm : nth_error prog (vm_pc vm) = Some ins).
+      { pose proof HR as HRp. unfold Rlp in HRp.
+        destruct HRp as (Hpc & _ & _ & _ & _ & _ & _ & _ & _ & _).
+        rewrite Hpc. exact Hnth. }
       assert (Hstep : lp_step L = lp_exec L ins).
       { unfold lp_step. rewrite <- lp_mem_at_eq. rewrite (eq_sym Hdec). reflexivity. }
       rewrite Hstep.
       apply IH.
-      * exact (lp_exec_instr_refines L vm prog ins HR Hlen Hwf Hside (eq_sym Hdec) Hnth).
+      * exact (lp_exec_instr_refines L vm prog ins HR Hlen Hwf Hside
+                 (eq_sym Hdec) Hnth_vm).
       * rewrite lp_exec_reg_length. exact Hlen.
       * apply lp_exec_mem_wf. exact Hwf.
       * exact Hsafe'.
