@@ -2115,3 +2115,15 @@ nsch_rt_ptr:
   ADDI r1,r1,#NS_REGT
   ADD r1,r1,r2
   RET
+
+; ---------------------------------------------------------------------------
+; F2 per-CPU NanCore scheduler layer.
+;
+; The kernel scheduler above is the single-core policy for the nan0s process
+; table.  The module below is the multi-core policy layer: per-CPU FIFOs in
+; the NanCore records, work stealing, affinity, migration, budget/deadline
+; accounting and per-CPU stats.  It is self-contained and has no unresolved
+; symbols, so every existing image that includes nansched.nas keeps working.
+; A kernel binds the atomic table with src/lib/nansched_nansmp.nas (which must
+; be included together with src/lib/nansmp.nas).
+.include "nansched_mp.nas"

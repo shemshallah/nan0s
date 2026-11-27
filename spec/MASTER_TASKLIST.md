@@ -19,8 +19,9 @@ each item needs a real gate, a short proof, and a frontier note.
 - [x] F1 Real AP block runtime: 2 CPUs execute one immutable block with
       per-core CR3 and shared guest memory; `qgate64smpblock` PASS in raw
       assembly/NaN only.
-- [ ] F2 NaN per-CPU scheduler: queues, work stealing, affinity, migration,
-      budgets/deadlines, preemption hooks; exact gate.
+- [x] F2 NaN per-CPU scheduler: queues, work stealing, affinity, migration,
+      budgets/deadlines, preemption hooks; `nansched_mp_gate` PASS (2/4 CPU,
+      exact stats; existing nansched/stress/jobs/GUI gates retained).
 - [x] F3 E820/SRAT/NUMA topology: usable RAM and holes, node ids, CPU/APIC
       mapping, `nheap` integration; `nnuma_gate` PASS (sparse nodes, 5 GiB
       bases, holes/reserved/ACPI/MMIO skipped, per-node 4K/2M/1G heaps).
@@ -68,6 +69,11 @@ Agent rule:
 - [ ] (smpblock) Enable AP-local LAPIC timer and reschedule IPI after the F1 block, require timer/IPI counters on both CPUs, and fold the block path into the nansmp scheduler.
 - [ ] (smpblock) Add a cross-core block handoff: CPU0 publishes a work item and wakes CPU1 with nsp_ipi; CPU1 runs the handed block under its own CR3 root.
 - [ ] (smpblock) Add per-AP TSS/IST trap entry, a per-core SVC state frame, and CR3/TLB generation + shootdown for block reload and migration gates.
+- [ ] (nansched) Wire nsched_* per-CPU current/trap-frame switching into the F1 AP runtime; keep nsch_* process policy above the substrate queue layer.
+- [ ] (nansched) Add per-task KV slab id, byte count and NUMA node fields and make nsched_steal prefer same-node victims with deadline slack before queue length.
+- [ ] (nansched) Widen task affinity to a 4096-bit bitmap, keep the 32-CPU fast path, and include nancore NC_NODE hints and steal/topology policy.
+- [ ] (nansched) Add speculative tool-call admission with reserved budget classes and deadline-miss parking; gate an admitted and a rejected speculative call.
+- [ ] (nansched) Add live-generation handoff: migrate with task epoch, KV epoch, trace head and a destination epoch fence; gate old-generation drain plus new-generation start.
 <!-- AGENT-APPEND -->
 
 ## P0. ISO C parity (language + library + ABI)
