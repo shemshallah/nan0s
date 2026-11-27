@@ -38,7 +38,7 @@ Definition tape_word (x : nat) : N :=
   nan_mkwordN (N.of_nat x) 0.
 
 Lemma payload_word_tape_word :
-  forall x, payload_word (tape_word x) = x mod 2 ^ 32.
+  forall (x : nat), payload_word (tape_word x) = (x mod 2 ^ 32)%nat.
 Proof.
   intros x. unfold tape_word, payload_word.
   rewrite nan_mkwordN_payload.
