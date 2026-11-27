@@ -21,8 +21,9 @@ each item needs a real gate, a short proof, and a frontier note.
       assembly/NaN only.
 - [ ] F2 NaN per-CPU scheduler: queues, work stealing, affinity, migration,
       budgets/deadlines, preemption hooks; exact gate.
-- [ ] F3 E820/SRAT/NUMA topology: usable RAM and holes, node ids, CPU/APIC
-      mapping, `nheap` integration; synthetic-map gate.
+- [x] F3 E820/SRAT/NUMA topology: usable RAM and holes, node ids, CPU/APIC
+      mapping, `nheap` integration; `nnuma_gate` PASS (sparse nodes, 5 GiB
+      bases, holes/reserved/ACPI/MMIO skipped, per-node 4K/2M/1G heaps).
 - [ ] F4 4096-core scale: dynamic CPU count, x2APIC, per-core stacks/online
       bitmap, no global lock on dispatch; layout + 2/4-CPU gate.
 - [ ] F5 AI ABI: capability generations/revocation, checkpoint/restore/fork,
@@ -59,6 +60,10 @@ Agent rule:
 4. Add 3-5 directives with `sh tools/tasklist_append.sh <agent> "<text>"`.
 5. End with `NEXT: F# ...` so the main loop can dispatch the next pair.
 
+- [ ] (nnuma) Import real E820/ACPI SRAT+MADT (and QEMU/SeaBIOS dumps) into the nnuma word table; add a differential gate against the synthetic map.
+- [ ] (nnuma) Add SRAT distance and HMAT latency/bandwidth entries plus a node-distance API; feed nansched affinity hints and nheap remote fallback.
+- [ ] (nnuma) Add per-node 64-bit free/high-water counters and 4K->2M->1G compaction/coalescing over nheap, gated by fragmentation and no-cross-node allocation checks.
+- [ ] (nnuma) Add CXL/PMEM and ACPI-reclaim tiers with explicit migration/eviction policy and a tiering gate; keep ACPI reclaim opt-in.
 <!-- AGENT-APPEND -->
 
 ## P0. ISO C parity (language + library + ABI)

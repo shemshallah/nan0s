@@ -31,7 +31,9 @@
 
 .include "n64.nas"
 
-.equ NH_TMP 0x3B0
+; Scratch is above the low code window: larger linked images (nnuma_test is
+; ~1.1K words of code) must not be overwritten by allocator bookkeeping.
+.equ NH_TMP 0x7800
 
 ; r1=size index -> r1=page bytes lo r2=hi
 nh_pagesize:
@@ -215,8 +217,9 @@ nh_alloc_loop:
   LD r3,r0,#NH_TMP+3
   LD r4,r0,#NH_TMP+4
   CALL @n64_cmp
-  CMP r1,r0
-  JMP[LT] @nh_alloc_next
+  LA r8,0xFFFFFFFF
+  CMP r1,r8
+  JMP[EQ] @nh_alloc_next
 
   LD r5,r0,#NH_TMP+5
   LD r1,r0,#NH_TMP+8
