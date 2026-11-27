@@ -197,14 +197,14 @@ Proof.
     by (apply Nat.ltb_lt; unfold code_hi, data_hi in *; lia).
   assert (A3 : (a <? code_hi) = true)
     by (apply Nat.ltb_lt; exact Ha).
-  rewrite A1, A2, A3. cbn.
+  rewrite A1, A2, A3.
   destruct (x <? tape_lo) eqn:X1;
     destruct (x <? data_hi) eqn:X2;
     destruct (x <? code_hi) eqn:X3;
     destruct (x <? tape_hi) eqn:X4;
     cbn.
   all: try reflexivity.
-  all: match goal with |- ?G => idtac "NEQ:" G end.
+  all: apply nth_lset_word_neq; lia.
 Qed.
 
 Print Assumptions mem_get_mem_set_low_neq.
