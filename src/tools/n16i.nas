@@ -1,5 +1,6 @@
 ; n16i.nas - a NaN16 interpreter written in NaN16 (r23, Stage 3 of NAN_MIGRATION_PLAN).
-; Runs a guest program of NaN16 words (all 73 ops 0x00-0x48 + HALT) on top of the host machine.
+; Runs a guest program of NaN16 words (ops 0x00-0x4F + HALT, 24-bit PC) on top of the host machine.
+; The custom NaN ABI (SVC/SVCRET, control words, timer, guest CPUID) is emulated here.
 ;   entry:  r1 = guest start pc, r2 = host word address of guest word 0 (GB), r3 = guest mask (size-1)
 ;           CALL @n16i_run     -> returns r1 = guest steps executed (every fetch counts, as in the model)
 ; Host needs the integer ext ops (MUL/DIVU/...), r0=0, r13=1. Clobbers r1-r12,r14,r15.
@@ -19,6 +20,18 @@ n16i_run:
   ADD r10,r2,r0
   MOVI r11,0
   ST r0,r0,@ni_steps
+  LA r1,0xFFFFFFFF
+  ST r1,r0,@ni_kentry
+  ST r0,r0,@ni_kframe
+  ST r0,r0,@ni_ktimer
+  ST r0,r0,@ni_ktimerl
+  ST r0,r0,@ni_kstack
+  ST r0,r0,@ni_kregions
+  ST r0,r0,@ni_ktcb
+  ST r0,r0,@ni_kin
+  LA r1,0xF0000
+  ST r1,r0,@ni_kdata
+  ST r0,r0,@ni_kstatus
   MOVI r5,0
 ni_z:
   ST r0,r5,@ni_regs
@@ -28,11 +41,29 @@ ni_z:
   JMP[LT] @ni_z
 ; ---- fetch / gate / predicate / decode ---------------------------------------
 ni_loop:
+  LD r1,r0,@ni_ktimer
+  CMP r1,r0
+  JMP[EQ] @ni_no_timer
+  LD r2,r0,@ni_kin
+  CMP r2,r0
+  JMP[NE] @ni_no_timer
+  LD r2,r0,@ni_kentry
+  LA r3,0xFFFFFFFF
+  CMP r2,r3
+  JMP[EQ] @ni_no_timer
+  LD r2,r0,@ni_ktimerl
+  SUB r2,r2,r13
+  ST r2,r0,@ni_ktimerl
+  CMP r2,r0
+  JMP[NE] @ni_no_timer
+  ST r1,r0,@ni_ktimerl
+  CALL @ni_irq
+ni_no_timer:
   LD r1,r0,@ni_mask
   BOOL.8 r1,r12,r1
   ADD r1,r1,r10
   ADD r12,r12,r13
-  MOVI r4,65535
+  LD r4,r0,@ni_mask
   BOOL.8 r12,r12,r4
   LD r4,r0,@ni_steps
   ADD r4,r4,r13
@@ -46,7 +77,7 @@ ni_loop:
   MOVI r5,255
   CMP r4,r5
   JMP[EQ] @ni_halt
-  MOVI r5,72
+  MOVI r5,79
   CMP r4,r5
   JMP[GT] @ni_trapo
   CMP r4,r0
@@ -233,8 +264,18 @@ ni_h_call:
 ni_h_ret:
   MOVI r14,15
   LD r12,r14,@ni_regs
-  MOVI r14,65535
+  LA r14,0xFFFFFF
   BOOL.8 r12,r12,r14
+  JMP @ni_loop
+ni_h_jmpf:
+  LA r14,0xFFFFFF
+  BOOL.8 r12,r3,r14
+  JMP @ni_loop
+ni_h_callf:
+  MOVI r14,15
+  ST r12,r14,@ni_regs
+  LA r14,0xFFFFFF
+  BOOL.8 r12,r3,r14
   JMP @ni_loop
 ni_h_jmpr:
   MOVI r14,65535
@@ -457,6 +498,16 @@ ni_h_cvtfi:
   CVTFI r4,r8
   JMP @ni_t_stf
 ni_h_cpuid:
+  LA r1,0x4E4D00FF
+  CMP r8,r1
+  JMP[NE] @ni_cpuid_zero
+  MOVI r1,1
+  CMP r9,r1
+  JMP[NE] @ni_cpuid_zero
+  LD r4,r0,@ni_mask
+  ADD r4,r4,r13
+  JMP @ni_t_st
+ni_cpuid_zero:
   MOVI r4,0
   JMP @ni_t_st
 ni_h_rdtsc:
@@ -507,8 +558,232 @@ ni_h_outsw:
   JMP @ni_loop
 ni_h_outl:
   LD r4,r5,@ni_regs
+  MOVI r1,0x4E00
+  CMP r8,r1
+  JMP[LT] @ni_outl_host
+  MOVI r1,0x4E07
+  CMP r8,r1
+  JMP[GT] @ni_outl_host
+  LD r1,r0,@ni_kentry
+  LA r2,0xFFFFFFFF
+  CMP r1,r2
+  JMP[EQ] @ni_outl_store
+  LD r1,r0,@ni_kin
+  CMP r1,r0
+  JMP[EQ] @ni_h_bad
+ni_outl_store:
+  MOVI r1,0x4E00
+  CMP r8,r1
+  JMP[EQ] @ni_ol_entry
+  MOVI r1,0x4E01
+  CMP r8,r1
+  JMP[EQ] @ni_ol_frame
+  MOVI r1,0x4E02
+  CMP r8,r1
+  JMP[EQ] @ni_ol_timer
+  MOVI r1,0x4E03
+  CMP r8,r1
+  JMP[EQ] @ni_ol_stack
+  MOVI r1,0x4E04
+  CMP r8,r1
+  JMP[EQ] @ni_ol_regions
+  MOVI r1,0x4E05
+  CMP r8,r1
+  JMP[EQ] @ni_ol_tcb
+  MOVI r1,0x4E06
+  CMP r8,r1
+  JMP[EQ] @ni_loop
+  ST r4,r0,@ni_kdata
   OUTL r4,r8
   JMP @ni_loop
+ni_ol_entry:
+  ST r4,r0,@ni_kentry
+  JMP @ni_loop
+ni_ol_frame:
+  ST r4,r0,@ni_kframe
+  JMP @ni_loop
+ni_ol_timer:
+  ST r4,r0,@ni_ktimer
+  ST r4,r0,@ni_ktimerl
+  JMP @ni_loop
+ni_ol_stack:
+  ST r4,r0,@ni_kstack
+  JMP @ni_loop
+ni_ol_regions:
+  ST r4,r0,@ni_kregions
+  JMP @ni_loop
+ni_ol_tcb:
+  ST r4,r0,@ni_ktcb
+  JMP @ni_loop
+ni_outl_host:
+  OUTL r4,r8
+  JMP @ni_loop
+
+ni_h_inl:
+  MOVI r1,0x4E00
+  CMP r8,r1
+  JMP[LT] @ni_inl_host
+  MOVI r1,0x4E07
+  CMP r8,r1
+  JMP[GT] @ni_inl_host
+  MOVI r1,0x4E00
+  CMP r8,r1
+  JMP[EQ] @ni_il_entry
+  MOVI r1,0x4E01
+  CMP r8,r1
+  JMP[EQ] @ni_il_frame
+  MOVI r1,0x4E02
+  CMP r8,r1
+  JMP[EQ] @ni_il_timer
+  MOVI r1,0x4E03
+  CMP r8,r1
+  JMP[EQ] @ni_il_stack
+  MOVI r1,0x4E04
+  CMP r8,r1
+  JMP[EQ] @ni_il_regions
+  MOVI r1,0x4E05
+  CMP r8,r1
+  JMP[EQ] @ni_il_tcb
+  MOVI r1,0x4E06
+  CMP r8,r1
+  JMP[EQ] @ni_il_status
+  LD r4,r0,@ni_kdata
+  JMP @ni_t_st
+ni_il_entry:
+  LD r4,r0,@ni_kentry
+  JMP @ni_t_st
+ni_il_frame:
+  LD r4,r0,@ni_kframe
+  JMP @ni_t_st
+ni_il_timer:
+  LD r4,r0,@ni_ktimer
+  JMP @ni_t_st
+ni_il_stack:
+  LD r4,r0,@ni_kstack
+  JMP @ni_t_st
+ni_il_regions:
+  LD r4,r0,@ni_kregions
+  JMP @ni_t_st
+ni_il_tcb:
+  LD r4,r0,@ni_ktcb
+  JMP @ni_t_st
+ni_il_status:
+  LD r4,r0,@ni_kstatus
+  JMP @ni_t_st
+ni_inl_host:
+  INL r4,r8
+  JMP @ni_t_st
+
+ni_h_svc:
+  LD r1,r0,@ni_kentry
+  LA r2,0xFFFFFFFF
+  CMP r1,r2
+  JMP[EQ] @ni_h_bad
+  LD r1,r0,@ni_kin
+  CMP r1,r0
+  JMP[NE] @ni_h_bad
+  ST r7,r0,@ni_svcno
+  LD r1,r0,@ni_kframe
+  ADD r1,r1,r10
+  LA r2,@ni_regs
+  MOVI r3,16
+ni_svc_save:
+  LD r4,r2,0
+  ST r4,r1,0
+  ADD r2,r2,r13
+  ADD r1,r1,r13
+  SUB r3,r3,r13
+  CMP r3,r0
+  JMP[NE] @ni_svc_save
+  ST r12,r1,0
+  ST r11,r1,1
+  ST r0,r1,2
+  ST r0,r1,3
+  LD r2,r0,@ni_svcno
+  ST r2,r1,4
+  ST r0,r1,5
+  LA r3,@ni_regs
+  LD r2,r3,14
+  ST r2,r1,6
+  ST r0,r1,7
+  MOVI r2,1
+  ST r2,r0,@ni_kin
+  LD r2,r0,@ni_kstack
+  LA r3,0xFFFFFFFF
+  CMP r2,r3
+  JMP[EQ] @ni_svc_nostk
+  LA r3,@ni_regs
+  ST r2,r3,14
+ni_svc_nostk:
+  LD r12,r0,@ni_kentry
+  JMP @ni_loop
+
+ni_h_svcret:
+  LD r1,r0,@ni_kin
+  CMP r1,r0
+  JMP[EQ] @ni_h_bad
+  LD r1,r0,@ni_kframe
+  ADD r1,r1,r10
+  LA r2,@ni_regs
+  MOVI r3,16
+ni_svcret_l:
+  LD r4,r1,0
+  ST r4,r2,0
+  ADD r1,r1,r13
+  ADD r2,r2,r13
+  SUB r3,r3,r13
+  CMP r3,r0
+  JMP[NE] @ni_svcret_l
+  LD r12,r1,0
+  LD r11,r1,1
+  MOVI r2,3
+  BOOL.8 r11,r11,r2
+  LD r4,r1,3
+  BOOL.8 r4,r4,r2
+  CMP r4,r0
+  JMP[NE] @ni_svcret_noret
+  LD r4,r1,5
+  LA r2,@ni_regs
+  ST r4,r2,1
+ni_svcret_noret:
+  ST r0,r0,@ni_kin
+  JMP @ni_loop
+
+ni_irq:
+  LD r1,r0,@ni_kframe
+  ADD r1,r1,r10
+  LA r2,@ni_regs
+  MOVI r3,16
+ni_irq_save:
+  LD r4,r2,0
+  ST r4,r1,0
+  ADD r2,r2,r13
+  ADD r1,r1,r13
+  SUB r3,r3,r13
+  CMP r3,r0
+  JMP[NE] @ni_irq_save
+  ST r12,r1,0
+  ST r11,r1,1
+  ST r0,r1,2
+  MOVI r2,1
+  ST r2,r1,3
+  ST r0,r1,4
+  ST r0,r1,5
+  LA r3,@ni_regs
+  LD r2,r3,14
+  ST r2,r1,6
+  ST r0,r1,7
+  MOVI r2,1
+  ST r2,r0,@ni_kin
+  LD r2,r0,@ni_kstack
+  LA r3,0xFFFFFFFF
+  CMP r2,r3
+  JMP[EQ] @ni_irq_nostk
+  LA r3,@ni_regs
+  ST r2,r3,14
+ni_irq_nostk:
+  LD r12,r0,@ni_kentry
+  RET
 ; ---- state and tables ------------------------------------------------------------
 ni_lnk:
 .word 0
@@ -519,6 +794,28 @@ ni_gb:
 ni_mask:
 .word 0
 ni_steps:
+.word 0
+ni_kentry:
+.word 0
+ni_kframe:
+.word 0
+ni_ktimer:
+.word 0
+ni_ktimerl:
+.word 0
+ni_kstack:
+.word 0
+ni_kregions:
+.word 0
+ni_ktcb:
+.word 0
+ni_kin:
+.word 0
+ni_kdata:
+.word 0
+ni_kstatus:
+.word 0
+ni_svcno:
 .word 0
 ni_regs:
 .word 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
@@ -537,6 +834,7 @@ ni_optab:
 .word @ni_h_mul,@ni_h_mulh,@ni_h_mulhu,@ni_h_div,@ni_h_mod,@ni_h_divu,@ni_h_modu,@ni_h_sar
 .word @ni_h_cmps,@ni_h_addi,@ni_h_ldb,@ni_h_stb,@ni_h_callr,@ni_h_bcopy,@ni_h_bfill,@ni_h_nop2
 .word @ni_h_fadd,@ni_h_fsub,@ni_h_fmul,@ni_h_fdiv,@ni_h_fsqrt,@ni_h_fcmp,@ni_h_cvtif,@ni_h_cvtfi
-.word @ni_h_jmp,@ni_h_call,@ni_h_fbinfo,@ni_h_vsync,@ni_h_fbcopy,@ni_h_fbfill,@ni_h_outb,@ni_h_inb
+.word @ni_h_jmpf,@ni_h_callf,@ni_h_fbinfo,@ni_h_vsync,@ni_h_fbcopy,@ni_h_fbfill,@ni_h_outb,@ni_h_inb
 .word @ni_h_inw,@ni_h_outw,@ni_h_outsw,@ni_h_outl
 .word @ni_h_cpuid,@ni_h_rdtsc,@ni_h_fexp,@ni_h_ftanh,@ni_h_flog
+.word @ni_h_bad,@ni_h_bad,@ni_h_bad,@ni_h_bad,@ni_h_inl,@ni_h_svc,@ni_h_svcret
