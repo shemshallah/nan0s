@@ -89,9 +89,9 @@ Proof.
        try (apply Nat.ltb_lt in E4);
        try (apply Nat.ltb_ge in E4).
   all: try (exfalso; lia).
-  all: try (apply nth_lset_word_eq;
-            rewrite ?H1, ?H2, ?H3, ?H4, ?H5; lia).
-  all: match goal with |- ?G => idtac "REMAIN2:" G end.
+  all: apply nth_lset_word_eq.
+  all: rewrite ?H1, ?H2, ?H3, ?H4, ?H5.
+  all: lia.
 Qed.
 
 Print Assumptions mem_get_mem_set_eq.
