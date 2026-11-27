@@ -59,8 +59,9 @@ each item needs a real gate, a short proof, and a frontier note.
       transport; `nnvme_gate` + `nfabric_gate` PASS (64-bit LBA 2^32, queue
       wrap/doorbells, trim/flush, two-node RDMA send/recv/write/read, stale
       rkey, remote KV, NAGC checkpoint epochs).
-- [ ] F12 Observability/ops: per-core stats, OOM/eviction, quotas, scheduler
-      traces; gate.
+- [x] F12 Observability/ops: per-core stats, OOM/eviction, quotas, scheduler
+      traces; `nobs_gate` PASS (4 CPUs, exact core/mem/quota/ring/health,
+      pressure eviction + OOM, deterministic trace hashes).
 - [~] F13 Frontier capabilities: speculative decoding, MoE routing,
       long-context KV paging, live generations, symbiotic multi-agent
       scheduling; design + prototype gate.  Paged KV + incremental decode
@@ -141,6 +142,14 @@ Agent rule:
 - [ ] (nfabric) Add paged remote KV: per-2 MiB-block rkeys and generations, parallel queue-pair transfer, partial-failure rollback, and a COW prefix moved between nodes with stable logical tokens.
 - [ ] (nfabric) Layer nnvme queue pairs on nfabric as NVMe-oF capsules plus data buffers; add controller-id/namespace generation checks and gate remote READ/WRITE/FLUSH/TRIM with exact bytes and stale-controller rejection.
 - [ ] (nfabric) Extend NAGC checkpoint transport to a 4-node ring with per-link epoch fences and a quorum seal; gate torn-write, duplicate-epoch and rollback rejection, then restore an nagent record on another node without rewinding its capability generation.
+- [ ] (nobs) Wire nobs core samples, quotas and health into nagent: bind agent id to scheduler slot/cpu/node, include the trace head and remaining quota, and gate a two-agent dashboard where one denial leaves the other's counters exact.
+- [ ] (nobs) Replace the fixed cold-FIFO eviction path with a scored OOM policy (recency, KV attention mass, node distance, quota overage), keep the deny/OOM event shape, and gate deterministic victim choice plus a no-cross-node eviction rule.
+- [ ] (nobs) Feed nobs quota headroom into nansched_mp admission: park an agent before dispatch at its CPU-step, memory or KV limit, reserve a class for interactive agents, and gate admit/park/resume with exact per-core budget and deadline counters.
+- [ ] (nobs) Export the nobs trace ring into nantrace/nreplay chunks with the same hash chain; gate that replaying an exported scheduler window reproduces the ring head and health totals, and that a mutated window diverges at its exact event index.
+- [ ] (nspec) Add tree speculation over a small draft stream sharing the nattn weight root: per-branch causal masks, one batched paged verifier pass, longest root-to-leaf accept, and exact token/logit equality against sequential speculative decode.
+- [ ] (nspec) Add per-record branch/owner tags and scratch page slots so a tree verifier can append all draft candidates, promote the accepted branch and trim the rest with npaged_trim; gate an exact sequential-vs-batched logits comparison.
+- [ ] (nspec) Add KV page refcounts and copy-on-write draft branches: immutable prefix pages shared read-only, private suffix pages per branch, accepted-branch publication, and a parent/child plus divergent-suffix isolation gate tied to nagent_fork.
+- [ ] (nspec) Bind nspec seeds, trace head and accepted/rejected counts to nagent/nreplay turn checkpoints; add an include guard or split nrng core, gate restore+replay head equality, and report tokens-per-verifier-pass before any speedup claim.
 <!-- AGENT-APPEND -->
 
 ## P0. ISO C parity (language + library + ABI)
