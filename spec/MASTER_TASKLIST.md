@@ -70,8 +70,10 @@ each item needs a real gate, a short proof, and a frontier note.
       Speculative decode (`nspec_gate`: draft/verifier, forced rejection,
       exact ids/logits, paged-KV trim rollback, deterministic trace head) and
       tree speculation (`nspectree_gate`: 6-candidate depth-2 tree, batched
-      verifier, longest-branch promote/trim, tree==plain) are also gated.
-      MoE, live generations and symbiotic scheduling remain.
+      verifier, longest-branch promote/trim, tree==plain) and MoE routing
+      (`nmoe_gate`: top-2 Q4 router, 4 expert FFNs, capacity drops, load and
+      NUMA/VRAM placement accounting, exact combine) are also gated.  Live
+      generations and symbiotic scheduling remain.
 - [x] F14 Verification: Coq/UTM trace, translation validation, reproducible
       build; `nverify_gate` PASS (reproducible nmk/translator output, byte
       goldens, native/n16i trace sha equality, non-ELF product images,
@@ -165,6 +167,10 @@ Agent rule:
 - [ ] (nspectree) Add variable-depth/top-k draft trees with per-node masks, a longest-path accept, an accepted-length histogram and a natural (no-anchor) accept-rate gate over fixed prompts/seeds.
 - [ ] (nspectree) Bind nspectree seeds, trace head, accepted/rejected/trimmed counters and promoted generations to nagent/nreplay turn checkpoints; gate restore+replay head equality and report tokens per verifier pass before any speedup claim.
 - [ ] (nspectree) Move branch/owner tags, record relocation and per-page refcounts into npaged as first-class fields so nspectree no longer copies record payloads; keep stable logical indices and generation-checked views, and rerun npaged/nspectree gates.
+- [ ] (nmoe) Add capacity-aware overflow rerouting: when an expert is full, try the next ranked expert and gate a no-drop fallback with exact renormalized combine weights.
+- [ ] (nmoe) Wire expert-parallel dispatch to nansched per-expert queues with deterministic token order, same-node affinity and per-expert accept/drop counters.
+- [ ] (nmoe) Add per-expert KV slab residency hints and a decode gate that keeps selected experts resident across tokens, evicting cold experts through nkv/nheap.
+- [ ] (nmoe) Import GGUF MoE router and expert tensors with one-time f16-to-f32 scale conversion and gate bit-equal logits against the hand-built Q4_0 table.
 <!-- AGENT-APPEND -->
 
 ## P0. ISO C parity (language + library + ABI)
