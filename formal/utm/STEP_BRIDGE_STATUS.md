@@ -91,7 +91,20 @@ bound and lifted once via `le_2_16_2_32`; the fixture fits.
           (vm_run_p 21025 fixture_prog_full (vm_of_lp lp_reset)) /      length (lp_reg (lp_run 21025 lp_reset)) = 16 /      MemP_wf (lp_mem (lp_run 21025 lp_reset)).
 
 Both are checked by the Coq 8.20 cone; the 21,025-step checker runs in
-about a minute.
+about a minute.  `MinskyNaN16LiteralCapstone.v` packages the relation
+with the published final state:
+
+    Theorem fixture_bridge_and_final :
+      Rlp (lp_run 21025 lp_reset)
+          (vm_run_p 21025 fixture_prog_full (vm_of_lp lp_reset)) /\
+      lp_halted literal_final = true /\
+      lp_pc literal_final = 28 /\
+      payload_word (mem_get (lp_mem literal_final) action_state_addr) = 2 /\
+      ... /\
+      lget_reg (lp_reg literal_final) 1 = 4357.
+
+The literal half is stated on `literal_final` so the kernel never
+converts through the 21,025-step VM term.
 
 ## Remaining work
 

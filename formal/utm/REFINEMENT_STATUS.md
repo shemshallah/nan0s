@@ -113,7 +113,9 @@ GitHub Actions run does not make them interchangeable.
    under the LP-only certificate `lp_run_safe`.  `lp_run_check` is a
    computable, per-opcode reflected checker; it certifies the full
    21,025-step fixture (`fixture_run_check_true`), yielding
-   `fixture_lp_run_refines`.  The native `r15` / `vm_link` calling
+   `fixture_lp_run_refines`.  `MinskyNaN16LiteralCapstone.v` packages
+   that relation with the published final literal state in
+   `fixture_bridge_and_final`.  The native `r15` / `vm_link` calling
    convention is reconciled on CALL and on `LD 15`.  Loader/assembler
    semantics and the finite-memory/unbounded-tape bridge remain open.
 
