@@ -11,7 +11,7 @@ Open Scope nat_scope.
 
 From NaNLM Require Import MinskyNaN16VM MinskyNaN16LiteralMachine
   MinskyNaN16LiteralDecode MinskyNaN16LiteralPuts MinskyNaN16LiteralExec
-  MinskyNaN16LiteralBridge.
+  MinskyNaN16LiteralBridge MinskyNaN16LiteralMemory.
 
 (** ** Register-file update lemmas *)
 
@@ -1439,3 +1439,117 @@ Proof.
 Qed.
 
 Print Assumptions lp_exec_BOOL8_255_refines.
+
+
+(** ** ST *)
+
+Lemma nan_mkwordN_payload :
+  forall (v : N) (n : nat),
+    word_payload (nan_mkwordN v n) = (v mod 2 ^ 32)%N.
+Proof.
+  intros v n.
+  unfold nan_mkwordN.
+  set (u := (N.land v word_mask32)%N).
+  fold u.
+  unfold word_payload.
+  rewrite ones32.
+  rewrite N.land_ones.
+  rewrite N.shiftr_div_pow2.
+  set (near := nan_head ((n / 4) mod 4)).
+  set (far := swap16 (nan_head (n mod 4))).
+  assert (Hshape :
+    (N.shiftl near 48 + N.shiftl u 16 + far)%N
+    = ((near * 2 ^ 32 + u) * 2 ^ 16 + far)%N).
+  { rewrite !N.shiftl_mul_pow2. nia. }
+  rewrite Hshape.
+  rewrite N.div_add_l by (vm_compute; discriminate).
+  assert (Hfar : (far / 2 ^ 16 = 0)%N).
+  { apply N.div_small. unfold far. apply nan_head_swap16_lt. }
+  rewrite Hfar. rewrite N.add_0_r.
+  rewrite N.add_comm.
+  rewrite N.Div0.mod_add.
+  unfold u, word_mask32.
+  rewrite ones32.
+  rewrite N.land_ones.
+  apply N.mod_mod.
+Qed.
+
+Lemma payload_word_nan_mkwordN :
+  forall (v : N) (n : nat),
+    payload_word (nan_mkwordN v n) = N.to_nat v mod 2 ^ 32.
+Proof.
+  intros v n.
+  unfold payload_word.
+  rewrite nan_mkwordN_payload.
+  rewrite N2Nat.inj_mod.
+  rewrite N2Nat.inj_pow.
+  reflexivity.
+Qed.
+
+Theorem lp_exec_ST_refines :
+  forall L vm prog d a imm,
+    Rlp L vm ->
+    MemP_wf (lp_mem L) ->
+    d < 16 ->
+    a < 16 ->
+    lget_reg (lp_reg L) a + imm < 4366 ->
+    decode_word_p (lp_mem_at L (lp_pc L)) = Some (pST d a imm) ->
+    nth_error prog (vm_pc vm) = Some (pST d a imm) ->
+    Rlp (lp_exec L (pST d a imm)) (exec_instr_p prog vm).
+Proof.
+  intros L vm prog d a imm HR Hwf Hd Ha Haddr_b Hdec Hnth.
+  pose proof HR as HR_R.
+  unfold Rlp in *.
+  destruct HR as
+    (Hpc & Hregs & Hreg15 & Hlink & Hmem & Hzf & Hlf & Hk & Hhalt & Hbound).
+  pose proof (R_reg_eq (lp_to_LState L) vm a HR_R Ha) as Hreg_a.
+  assert (Haddr : vm_reg vm a = lget_reg (lp_reg L) a).
+  { unfold lget_reg. exact Hreg_a. }
+  unfold lp_exec, exec_instr_p.
+  rewrite Hnth. cbn.
+  unfold R, lp_to_LState.
+  split_conj_step.
+  - change (S (vm_pc vm) = S (lp_pc L)). rewrite Hpc. reflexivity.
+  - intros i Hi.
+    change (vm_reg vm i = N.to_nat (lget_regN (lp_reg L) i) mod 2 ^ 32).
+    exact (Hregs i Hi).
+  - change (vm_reg vm 15 = N.to_nat (lget_regN (lp_reg L) 15) mod 2 ^ 32).
+    exact Hreg15.
+  - change (vm_link vm = N.to_nat (lget_regN (lp_reg L) 15)).
+    exact Hlink.
+  - intro x.
+    rewrite lp_mem_at_lp_exec_ST.
+    change ((if Nat.eqb x (vm_reg vm a + imm) then vm_reg vm d
+             else vm_mem vm x) =
+            payload_word
+              (mem_get
+                 (mem_set (lp_mem L)
+                    (lget_reg (lp_reg L) a + imm)
+                    (nan_mkwordN (lget_regN (lp_reg L) d) 10)) x)).
+    rewrite Haddr.
+    destruct (Nat.eqb x (lget_reg (lp_reg L) a + imm)) eqn:Ex.
+    + apply Nat.eqb_eq in Ex. subst x. cbn.
+      rewrite (mem_get_mem_set_eq (lp_mem L)
+        (lget_reg (lp_reg L) a + imm)
+        (nan_mkwordN (lget_regN (lp_reg L) d) 10) Hwf Haddr_b).
+      rewrite payload_word_nan_mkwordN.
+      destruct (Nat.eq_dec d 15) as [-> | Hd15].
+      * exact Hreg15.
+      * apply (Hregs d). lia.
+    + apply Nat.eqb_neq in Ex. cbn.
+      rewrite (mem_get_mem_set_neq_all (lp_mem L)
+        (lget_reg (lp_reg L) a + imm)
+        (nan_mkwordN (lget_regN (lp_reg L) d) 10) x
+        Hwf Haddr_b Ex).
+      rewrite <- lp_mem_at_eq.
+      exact (Hmem x).
+  - change (vm_zf vm = Nat.eqb ((lp_k L / 2) mod 2) 1). exact Hzf.
+  - change (vm_lf vm = Nat.eqb (lp_k L mod 2) 1). exact Hlf.
+  - change (lp_k L < 4). exact Hk.
+  - change (vm_halted vm = lp_halted L). exact Hhalt.
+  - intros i Hi.
+    change (N.to_nat (lget_regN (lp_reg L) i) < 2 ^ 32).
+    exact (Hbound i Hi).
+Qed.
+
+Print Assumptions lp_exec_ST_refines.
