@@ -1603,36 +1603,36 @@ Proof.
   destruct ins as
     [a b | p target | d a imm | d a imm | d a b | d a b | d a imm
     | d a imm | d imm | tbl d a b | d | target | | p |].
-  - simpl in Hside. destruct Hside as (Ha & Hb).
+  - red in Hside. destruct Hside as (Ha & Hb).
     apply lp_exec_CMP_refines; assumption.
-  - simpl in Hside.
+  - red in Hside.
     exact (lp_exec_JMP_refines L vm prog p target HR Hside Hdec Hnth).
-  - simpl in Hside. destruct Hside as (Hd & Hd15 & Ha & Himm & Hprod).
+  - red in Hside. destruct Hside as (Hd & Hd15 & Ha & Himm & Hprod).
     apply lp_exec_SHL_refines; assumption.
-  - simpl in Hside. destruct Hside as (Hd & Hd15 & Ha & Himm).
+  - red in Hside. destruct Hside as (Hd & Hd15 & Ha & Himm).
     apply lp_exec_SHR_refines; assumption.
-  - simpl in Hside. destruct Hside as (Hd & Hd15 & Ha & Hb & Hsum).
+  - red in Hside. destruct Hside as (Hd & Hd15 & Ha & Hb & Hsum).
     apply lp_exec_ADD_refines; assumption.
-  - simpl in Hside. destruct Hside as (Hd & Hd15 & Ha & Hb & Hle).
+  - red in Hside. destruct Hside as (Hd & Hd15 & Ha & Hb & Hle).
     apply lp_exec_SUB_refines; assumption.
-  - simpl in Hside. destruct Hside as (Hd & Hd15 & Ha).
+  - red in Hside. destruct Hside as (Hd & Hd15 & Ha).
     apply lp_exec_LD_refines; assumption.
-  - simpl in Hside. destruct Hside as (Hd & Ha & Haddr).
+  - red in Hside. destruct Hside as (Hd & Ha & Haddr).
     apply lp_exec_ST_refines; assumption.
-  - simpl in Hside. destruct Hside as (Hd & Hd15 & Himm).
+  - red in Hside. destruct Hside as (Hd & Hd15 & Himm).
     apply lp_exec_MOVI_refines; assumption.
-  - simpl in Hside.
+  - red in Hside.
     destruct Hside as (Htbl & Hd & Hd15 & Ha & Hb & Hbn & Hvb).
     subst tbl. apply lp_exec_BOOL8_255_refines; assumption.
-  - simpl in Hside.
+  - red in Hside.
     apply lp_exec_PUTC_refines; assumption.
-  - simpl in Hside. destruct Hside as (Hnext & Hlink).
+  - red in Hside. destruct Hside as (Hnext & Hlink).
     apply lp_exec_CALL_refines; assumption.
-  - simpl in Hside.
+  - red in Hside.
     apply lp_exec_RET_refines; assumption.
-  - simpl in Hside.
+  - red in Hside.
     apply lp_exec_RETP_refines; assumption.
-  - simpl in Hside.
+  - red in Hside.
     apply lp_exec_HALT_refines; assumption.
 Qed.
 
