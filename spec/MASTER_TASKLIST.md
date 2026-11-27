@@ -68,8 +68,10 @@ each item needs a real gate, a short proof, and a frontier note.
       gated (`npaged_gate`: 2 MiB blocks, stable logical map, prefill+decode
       bit-equal to full recompute, remap/generation, pressure/eviction).
       Speculative decode (`nspec_gate`: draft/verifier, forced rejection,
-      exact ids/logits, paged-KV trim rollback, deterministic trace head) is
-      also gated.  MoE, live generations and symbiotic scheduling remain.
+      exact ids/logits, paged-KV trim rollback, deterministic trace head) and
+      tree speculation (`nspectree_gate`: 6-candidate depth-2 tree, batched
+      verifier, longest-branch promote/trim, tree==plain) are also gated.
+      MoE, live generations and symbiotic scheduling remain.
 - [x] F14 Verification: Coq/UTM trace, translation validation, reproducible
       build; `nverify_gate` PASS (reproducible nmk/translator output, byte
       goldens, native/n16i trace sha equality, non-ELF product images,
@@ -158,6 +160,11 @@ Agent rule:
 - [ ] (nverify) Add proof-carrying block certificates for MOVI/ADD/ADDI/JMP/RET and verify them at gate/load time; fail closed on uncertified opcodes and keep the Coq scope explicit.
 - [ ] (nverify) When coqc is present, build and coqchk the formal/utm universality/literal-run/bridge cone in the F14 gate; keep the Python literal-image/table/step anchors as separate pre-checks.
 - [ ] (nverify) Investigate the ngate_n16i trap-case mismatches (gate-trap and native bad-op), fix or scope them, then fold the trap cases into the F14 differential.
+- [ ] (nspectree) Replace the serial per-candidate masked verifier with a fused tree-attention kernel: pack six candidate Q rows and branch masks, share each distinct ancestor K/V fetch, keep the exact f32 score/softmax order, and gate tokens-per-verifier-pass plus bit-equal logits against the current nspectree path.
+- [ ] (nspectree) Add refcounted COW KV branch pages: shared read-only prefix pages, private suffix pages per draft branch, accepted-branch publication without payload relocation, and a parent/child plus divergent-suffix isolation gate tied to nagent_fork.
+- [ ] (nspectree) Add variable-depth/top-k draft trees with per-node masks, a longest-path accept, an accepted-length histogram and a natural (no-anchor) accept-rate gate over fixed prompts/seeds.
+- [ ] (nspectree) Bind nspectree seeds, trace head, accepted/rejected/trimmed counters and promoted generations to nagent/nreplay turn checkpoints; gate restore+replay head equality and report tokens per verifier pass before any speedup claim.
+- [ ] (nspectree) Move branch/owner tags, record relocation and per-page refcounts into npaged as first-class fields so nspectree no longer copies record payloads; keep stable logical indices and generation-checked views, and rerun npaged/nspectree gates.
 <!-- AGENT-APPEND -->
 
 ## P0. ISO C parity (language + library + ABI)
