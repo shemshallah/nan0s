@@ -1727,8 +1727,9 @@ Proof.
                 (vm_run_p fuel prog (exec_instr_p prog vm)) /\
               List.length (lp_reg (lp_run fuel (lp_step L))) = 16 /\
               MemP_wf (lp_mem (lp_run fuel (lp_step L)))).
-      rewrite Hhalt in Hsafe.
       cbn [lp_run_safe] in Hsafe.
+      rewrite Hhalt in Hsafe.
+      cbn in Hsafe.
       destruct (decode_word_p (lp_mem_at L (lp_pc L))) as [ins|] eqn:Hdec.
       2: { rewrite Hdec in Hsafe. cbn in Hsafe. contradiction. }
       rewrite Hdec in Hsafe. cbn in Hsafe.
