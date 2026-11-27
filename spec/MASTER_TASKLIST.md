@@ -70,8 +70,10 @@ each item needs a real gate, a short proof, and a frontier note.
       Speculative decode (`nspec_gate`: draft/verifier, forced rejection,
       exact ids/logits, paged-KV trim rollback, deterministic trace head) is
       also gated.  MoE, live generations and symbiotic scheduling remain.
-- [ ] F14 Verification: Coq/UTM trace, translation validation, reproducible
-      build; gate.
+- [x] F14 Verification: Coq/UTM trace, translation validation, reproducible
+      build; `nverify_gate` PASS (reproducible nmk/translator output, byte
+      goldens, native/n16i trace sha equality, non-ELF product images,
+      C-free source, Python UTM anchors; Coq SKIP because no coqc on PATH).
 - [ ] F15 Product raw substrate: replace C harnesses with raw assembly/NaN
       boot/AP/page-table paths; product image boots with no C.
 
@@ -151,6 +153,11 @@ Agent rule:
 - [ ] (nspec) Add per-record branch/owner tags and scratch page slots so a tree verifier can append all draft candidates, promote the accepted branch and trim the rest with npaged_trim; gate an exact sequential-vs-batched logits comparison.
 - [ ] (nspec) Add KV page refcounts and copy-on-write draft branches: immutable prefix pages shared read-only, private suffix pages per branch, accepted-branch publication, and a parent/child plus divergent-suffix isolation gate tied to nagent_fork.
 - [ ] (nspec) Bind nspec seeds, trace head and accepted/rejected counts to nagent/nreplay turn checkpoints; add an include guard or split nrng core, gate restore+replay head equality, and report tokens-per-verifier-pass before any speedup claim.
+- [ ] (nverify) Make the F14 gate rebuild the full product image twice in a hermetic environment, compare sha256, and fail if build/nan0s.img is stale; keep the current nmk/translator checks as the fast path.
+- [ ] (nverify) Add an independent translator oracle for the covered opcode subset (second encoder or SMT/bit-vector equivalence) plus randomized block fuzzing; promote the loop-block sha pin to checked bytes.
+- [ ] (nverify) Add proof-carrying block certificates for MOVI/ADD/ADDI/JMP/RET and verify them at gate/load time; fail closed on uncertified opcodes and keep the Coq scope explicit.
+- [ ] (nverify) When coqc is present, build and coqchk the formal/utm universality/literal-run/bridge cone in the F14 gate; keep the Python literal-image/table/step anchors as separate pre-checks.
+- [ ] (nverify) Investigate the ngate_n16i trap-case mismatches (gate-trap and native bad-op), fix or scope them, then fold the trap cases into the F14 differential.
 <!-- AGENT-APPEND -->
 
 ## P0. ISO C parity (language + library + ABI)
