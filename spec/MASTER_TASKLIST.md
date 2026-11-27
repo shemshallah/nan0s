@@ -73,7 +73,9 @@ each item needs a real gate, a short proof, and a frontier note.
       verifier, longest-branch promote/trim, tree==plain) and MoE routing
       (`nmoe_gate`: top-2 Q4 router, 4 expert FFNs, capacity drops, load and
       NUMA/VRAM placement accounting, exact combine) are also gated.  Live
-      generations and symbiotic scheduling remain.
+      generations (`ngen_gate`: publish/drain/start, stale/dup rejection,
+      forced abort, two-agent isolation) are gated too.  Symbiotic
+      multi-agent scheduling remains.
 - [x] F14 Verification: Coq/UTM trace, translation validation, reproducible
       build; `nverify_gate` PASS (reproducible nmk/translator output, byte
       goldens, native/n16i trace sha equality, non-ELF product images,
@@ -171,6 +173,11 @@ Agent rule:
 - [ ] (nmoe) Wire expert-parallel dispatch to nansched per-expert queues with deterministic token order, same-node affinity and per-expert accept/drop counters.
 - [ ] (nmoe) Add per-expert KV slab residency hints and a decode gate that keeps selected experts resident across tokens, evicting cold experts through nkv/nheap.
 - [ ] (nmoe) Import GGUF MoE router and expert tensors with one-time f16-to-f32 scale conversion and gate bit-equal logits against the hand-built Q4_0 table.
+- [ ] (ngen) Wire ngen enter/publish/drain into nagent records and nansched_mp on two CPUs; gate a live handoff where the old generation's in-flight turn drains on CPU0 while CPU1 starts the new generation, with exact per-CPU and epoch counters.
+- [ ] (ngen) Tag nkv/npaged KV block headers and views with the ngen generation, reject cross-generation reads at the view layer, and gate a COW fork that publishes a new KV generation without copying shared prefix pages.
+- [ ] (ngen) Add per-draining-generation deadlines to ngen: account ticks, force abort at expiry with an exact reason, and gate early completion, deadline abort and stale post-abort rejection.
+- [ ] (ngen) Add bounded generation rollback: keep the last four drained descriptors and permit rollback only when no newer checkpoint, capability epoch or KV generation exists; gate the accepted rollback and each rejection reason.
+- [ ] (ngen) Make publish atomic under real SMP by driving a per-agent CAS/fence through the nansmp ops seam, with a two-CPU publish race gate that proves one winner, one EDUP loser and no partial drain/start state.
 <!-- AGENT-APPEND -->
 
 ## P0. ISO C parity (language + library + ABI)
