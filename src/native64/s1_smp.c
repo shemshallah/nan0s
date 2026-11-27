@@ -18,7 +18,7 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#define NCPU_MAX   8
+#define NCPU_MAX   256
 #define NTASK      2
 #define QUANTUM    1024
 #define GMEM_BASE  0x200000UL

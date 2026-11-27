@@ -48,3 +48,10 @@
   `qgate64abi`), then M2 per-core NanCore dispatch on 2 CPUs.
 - No x86-64 -> NaN lifter in the product path; source recompilation / ncc is
   the compatibility route.
+
+## Scale
+- 4096 logical NanCore records at 0x400000 (64 words each), online bitmap at
+  0x440000; `tools/nancore_scale_gate.sh` PASS.
+- x86-64 S1 prototype compiles with NCPU_MAX=256; 2/4-CPU nansmp gate PASS.
+- Target >256 cores: x2APIC + ACPI SRAT/MADT, NaN topology mapping, 16 KiB
+  per-core stacks; no global lock on the dispatch path.

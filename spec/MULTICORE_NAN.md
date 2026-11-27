@@ -139,3 +139,25 @@ multicore it adds:
   generations on 2+ cores.
 
 n16i gates remain the differential reference for M1/M3.
+
+
+## Scale: modern core counts
+
+The NaN layer is sized for 4096 logical cores:
+
+- records at `0x400000`, 64 words each, 4096 entries, end `0x440000`;
+- online bitmap at `0x440000` (4096 bits = 128 words);
+- per-core APIC id, NUMA node, state, stack/top, quantum/budget, deadline,
+  trace head, queue head/tail/count, steal queue, block-cache base/generation;
+- block code is shared and immutable; only the per-core lookup/cache is local.
+
+The x86-64 S1 prototype is raised to 256 APs for the current APIC path.  The
+target substrate uses x2APIC and ACPI SRAT/MADT for >256 cores, with APIC-id
+to logical-index mapping in NaN topology code.  Per-core stacks are sized in
+the substrate; 16 KiB is the target for 4096-core builds, with 64 KiB only in
+the small QEMU prototype.
+
+No global lock is on the dispatch path.  Queue/steal/online/counter operations
+use `nansmp` CAS/fetch-add/fence; a core that has no work can halt until a
+timer or reschedule IPI.  NUMA placement is a hint carried in the NanCore
+record; the NaN scheduler owns the policy.

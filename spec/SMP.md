@@ -450,3 +450,12 @@ single-core scheduler with a multi-core execution substrate.
 
 No commit is created by the gate; all artifacts live under the temporary
 directory selected by `NANSMP_TMP`/`TMPDIR`.
+
+
+## Scale note
+
+The QEMU prototype now compiles with `NCPU_MAX=256`; the verified gates remain
+2 and 4 CPUs.  The product target is 4096 logical cores with x2APIC, ACPI
+SRAT/MADT topology, per-core `NanCore` records (see
+`spec/MULTICORE_NAN.md`) and 16 KiB per-core stacks.  APIC IDs are mapped to
+logical indices in NaN topology code; the substrate only reports the topology.
