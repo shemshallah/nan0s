@@ -77,3 +77,9 @@
   ABI scratch 0x50E00, frame payload at word byte +2.
 - Next: 2-core NanCore block dispatch with per-core register files, then
   NaN per-CPU queues/work stealing/affinity/migration.
+
+## Multicore block runtime
+- `qgate64core2` PASS: one immutable 111-byte block, two CR3 roots,
+  per-core state window at 0x50000, shared guest memory; r1=0x11/0x21.
+- Next: install those roots on real APs (MADT/INIT-SIPI-SIPI), per-CPU block
+  cache, then NaN per-CPU queues/work stealing/affinity/migration.

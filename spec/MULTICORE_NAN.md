@@ -161,3 +161,31 @@ No global lock is on the dispatch path.  Queue/steal/online/counter operations
 use `nansmp` CAS/fetch-add/fence; a core that has no work can halt until a
 timer or reschedule IPI.  NUMA placement is a hint carried in the NanCore
 record; the NaN scheduler owns the policy.
+
+## Per-core state without per-core code
+
+The immutable block image uses fixed virtual addresses (`0x50000` register
+file, `0x50400` FLAGM/mask, `0x50800` XPC, `0x50C00` halt/trap, `0x60000`
+vector file).  Rather than copy or relocate the block for every core, each
+core gets its own 4-level CR3 root:
+
+- guest memory (`0x200000`), the block pages (`0x51000`), and the kernel
+  remain shared identity mappings;
+- the state window (`0x50000..0x50fff`) maps to a private 4 KiB state page
+  per core (for example core0 `0x70000`, core1 `0x71000`);
+- the same block bytes execute under either root and see different
+  r0..r15/XPC/flags/halt, while shared guest memory is genuinely shared.
+
+`tools/qgate64core2.sh` runs one NaN-emitted 111-byte block under roots
+`0x38000` and `0x3C000`, with per-core `r1=0x10/0x20` and `r2=0x100/0x101`.
+Transcript:
+
+```
+CORE2 core0 r1=00000011 slot=00000011 halt=1
+CORE2 core1 r1=00000021 slot=00000021 halt=1
+CORE2 PASS
+```
+
+This is the NanCore record/block-cache mechanism validated without needing
+two physical CPUs.  The next slice puts the same roots and block scheduler
+on real APs via the MADT/INIT-SIPI-SIPI path already proven by `nansmp`.
