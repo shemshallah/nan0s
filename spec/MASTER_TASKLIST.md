@@ -78,8 +78,11 @@ each item needs a real gate, a short proof, and a frontier note.
       (`nsym_gate`: 3-agent WFQ, bounded ratio, no starvation, shared-root
       refcounts), and COW prefix fork (`nkvgen_gate`: gen5 prefix, gen6 fork
       shares pages, cross-gen/old-gen rejection, boundary COW, exact
-      refcounts) are gated.  F13 core complete; multi-agent prefix DAG,
-      generation deadlines and SMP publish are queued follow-ups.
+      refcounts) and a three-agent shared-prefix tree (`nkvtree_gate`: root
+      gen5 10-token prefix, child1 gen2/child2 gen3, boundary COW, both close
+      orders, 3344-word deterministic snapshot) are gated.  F13 core
+      complete; content-hash prefix DAG, sibling joins, generation deadlines
+      and SMP publish are queued follow-ups.
 - [x] F14 Verification: Coq/UTM trace, translation validation, reproducible
       build; `nverify_gate` PASS (reproducible nmk/translator output, byte
       goldens, native/n16i trace sha equality, non-ELF product images,
@@ -209,6 +212,10 @@ Agent rule:
 - [ ] (rawsmp) Add a BSP/AP exception trap matrix (#PF/#GP/#DF) over the per-AP TSS/IST and a per-core SVC state frame; gate exact vector/RIP/CR2 and non-colliding IST1/IST2 stacks.
 - [ ] (rawsmp) Add a CR3/TLB generation shootdown IPI (vector 0x42) with per-core ack counters; gate block reload or address-space migration so no core executes under a stale root.
 - [ ] (rawsmp) Add a bounded periodic LAPIC tick with per-core quantum/tick accounting and a cross-core reschedule seam into nansched_mp/nansmp; gate preemption after N ticks on 4 cores.
+- [ ] (nkvtree) Gate a content-hash prefix-page DAG shared by three or more agents/adapters without duplicate page headers; assert exact per-page refs, dedup hits and per-branch ngen tags.
+- [ ] (nkvtree) Add sibling joins, identical-COW-page merging and orphan reclamation to nkvtree; gate a multi-level fork/close tree with a deterministic tree-generation trace and exact page/root refcounts.
+- [ ] (nkvtree) Add generation-tagged tree checkpoint/replay: save a branch page table plus ngen generation, replay its suffix through the view gate, and assert exact token/value equality and old-view divergence at the exact event index.
+- [ ] (nkvtree) Bind nkvtree fork/close to nansched_mp task slots with CAS/fence refcounts; gate concurrent sibling fork/close on two CPUs with one winner per refcount op, exact per-CPU counters and unchanged shared-root refs when only scheduling changes.
 <!-- AGENT-APPEND -->
 
 ## P0. ISO C parity (language + library + ABI)
