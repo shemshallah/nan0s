@@ -96,7 +96,7 @@ Proof.
     by (apply Nat.ltb_ge; exact Hlo).
   rewrite E1, E2, E3. cbn.
   apply nth_lset_word_eq.
-  rewrite H2. unfold data_lo, code_hi in *. lia.
+  rewrite H2. unfold data_lo, data_hi, code_hi in *. lia.
 Qed.
 
 Lemma mem_get_mem_set_pad :
