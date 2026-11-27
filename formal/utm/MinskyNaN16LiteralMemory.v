@@ -388,9 +388,10 @@ Proof.
   - apply Nat.ltb_lt in Hx.
     apply mem_get_mem_set_neq; auto.
   - apply Nat.ltb_ge in Hx.
-    rewrite (mem_get_high (mem_set m a v) x)
-      by (apply MemP_wf_mem_set; auto; lia).
-    rewrite (mem_get_high m x) by auto.
+    assert (Hwf' : MemP_wf (mem_set m a v))
+      by (apply MemP_wf_mem_set; exact Hwf).
+    rewrite (mem_get_high (mem_set m a v) x Hwf' Hx).
+    rewrite (mem_get_high m x Hwf Hx).
     reflexivity.
 Qed.
 
