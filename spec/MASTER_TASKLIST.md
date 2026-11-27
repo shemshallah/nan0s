@@ -246,6 +246,10 @@ Agent rule:
 - [ ] (nkvmerkle) Save root-only checkpoints {DAG root hash, ngen generation, nagent KV root, trace head}, verify page and token proofs without the node registry, replay a branch suffix through the view gate, and gate exact token equality plus old-view divergence at the exact event index.
 - [ ] (nkvmerkle) Add cross-node proof assembly: publish a multi-parent root whose parents live on different shards, fetch and verify each shard's chain against the root hash, and gate missing/mutated-shard fail-closed plus a distributed parent-ref count.
 - [ ] (nkvmerkle) Attach inclusion proofs to nkvmerkle page/token views and verify them at the view or transport boundary so an untrusted adapter/cache can serve KV; gate a forged page and a forged token rejected before the value is returned.
+- [ ] (nkcas) Persist nkcas records on NVMe through nnvme and hydrate by root hash across a cold QEMU restart; gate exact dedup/bytes avoided.
+- [ ] (nkcas) Add CAS epoch GC and orphan reclamation with a live-view fence; gate no free of a record visible to a proof or agent view.
+- [ ] (nkcas) Add a 4 KiB page-store variant and a 64-bit record index so a TB-scale CAS does not depend on the 48-word fixed record count.
+- [ ] (nkcas) Bind nkcas roots to nagent checkpoints and nreplay trace heads; gate restore+hydrate+replay with an exact divergence index.
 <!-- AGENT-APPEND -->
 
 ## P0. ISO C parity (language + library + ABI)
