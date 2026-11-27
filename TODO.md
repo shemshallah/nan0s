@@ -55,3 +55,10 @@
 - x86-64 S1 prototype compiles with NCPU_MAX=256; 2/4-CPU nansmp gate PASS.
 - Target >256 cores: x2APIC + ACPI SRAT/MADT, NaN topology mapping, 16 KiB
   per-core stacks; no global lock on the dispatch path.
+
+## Frontier scope
+- `spec/FRONTIER_AI_OS.md`: TBs RAM is necessary, not sufficient.
+- Credible target: single-node memory-centric verifiable inference/agent
+  appliance.  Frontier training needs accelerators, fabric and ecosystem.
+- Next memory code: `nmem` 64-bit memory objects/caps, 1 TB page-table gate,
+  NUMA/hugepage allocator; then model runtime and accelerator boundary.
