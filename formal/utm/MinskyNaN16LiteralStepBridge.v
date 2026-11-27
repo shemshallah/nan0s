@@ -402,11 +402,10 @@ Proof.
     rewrite (lget_regN_lset_word_neq (lp_reg L) 15
       (N.of_nat (S (lp_pc L))) i) by lia.
     exact (Hregs i Hi).
-  - change (set_reg (vm_reg vm) 15 (instr_succ (vm_pc vm)) 15 =
+  - change (instr_succ (vm_pc vm) =
             N.to_nat
               (lget_regN (lset_word (lp_reg L) 15 (N.of_nat (S (lp_pc L)))) 15)
               mod 2 ^ 32).
-    rewrite set_reg_eq.
     unfold instr_succ. rewrite Hpc.
     rewrite (lget_regN_lset_word_eq (lp_reg L) 15
       (N.of_nat (S (lp_pc L)))) by (rewrite Hlen; lia).
