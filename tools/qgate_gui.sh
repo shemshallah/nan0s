@@ -10,6 +10,10 @@ T="${TMPDIR:-/tmp}/nan0s_qgate_gui"
 rm -rf "$T"; mkdir -p "$T"
 [ -f build/nan0s.img ] || { echo "qgate_gui: build/nan0s.img missing"; exit 1; }
 cp build/nan0s.img "$T/disk.img"
+# The image is a raw IDE image; QEMU floppy geometry is unreliable above
+# 2.88 MiB.  Stage boot+kernel on a 1.44 MiB floppy and use the full IDE copy.
+truncate -s 1474560 "$T/floppy.img"
+dd if=build/nan0s.img of="$T/floppy.img" conv=notrunc bs=512 count=2880 status=none
 : > "$T/wh"
 (
   sleep 3
@@ -25,7 +29,7 @@ cp build/nan0s.img "$T/disk.img"
   done
   echo quit
 ) | timeout 30 qemu-system-i386 -m 512 -boot order=a \
-    -drive format=raw,if=floppy,file=build/nan0s.img \
+    -drive format=raw,if=floppy,file="$T/floppy.img" \
     -drive format=raw,if=ide,file="$T/disk.img" \
     -display none -serial "file:$T/com1.txt" -monitor stdio \
     >"$T/mon.txt" 2>"$T/err" || true

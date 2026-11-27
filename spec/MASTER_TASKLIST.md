@@ -83,8 +83,10 @@ each item needs a real gate, a short proof, and a frontier note.
       build; `nverify_gate` PASS (reproducible nmk/translator output, byte
       goldens, native/n16i trace sha equality, non-ELF product images,
       C-free source, Python UTM anchors; Coq SKIP because no coqc on PATH).
-- [ ] F15 Product raw substrate: replace C harnesses with raw assembly/NaN
-      boot/AP/page-table paths; product image boots with no C.
+- [x] F15 Product raw substrate: replace C harnesses with raw assembly/NaN
+      boot/AP/page-table paths; `noc_product_gate` PASS (hermetic two-build
+      image, full product boot to NANIX SHELL READY, raw64 2-AP block path,
+      no C linked, C-free product source).
 
 Agent rule:
 
@@ -186,6 +188,10 @@ Agent rule:
 - [ ] (nsym) Add team-level budgets and deadlines to nsym: a team share with producer/consumer handoff (drafter/verifier or tool agent), team admission, and a gate that team fairness holds while each member's reservation and root reference stay independent.
 - [ ] (nsym) Integrate deadline-aware KV reservation: couple nsym admission to nobs quota headroom and npaged residency, reject/defer jobs whose deadline is infeasible after eviction, and gate eviction-vs-deadline decisions with exact park and miss accounting.
 - [ ] (nsym) Add cooperative migration of an nsym agent (queue, vrt, reservation, budget, generation tag and root reference) between CPUs with a destination epoch fence and two-lock handoff; gate no double service and unchanged root refcount.
+- [ ] (noc) Extend src/native64/raw64_smp_body.S with per-AP TSS/IST, AP-local LAPIC timers and reschedule IPIs, a per-core block cache and x2APIC 4096-core discovery; gate 2/4/4096 CPUs and retire the s1_smp.c comparator for the F1/F4 paths.
+- [ ] (noc) Add a signed product-image manifest over boot+kernel+guest and verify it in the native boot path before the first guest fetch; gate a one-byte mutation in each region and fail closed.
+- [ ] (noc) Run the NaN translator under raw n16i in the gate, compare emitted bytes against the nan_cli oracle, then regenerate src/native/nan16_x86.nan with xgold.sh and fix the stale xgold kernel-row count so the checked-in GOLD is source-derived.
+- [ ] (noc) Add a headless COM1 NANIX shell transcript (mkdir/write/cat/ls/stat/rm) to the full product image so the service path is gated without a GUI; keep the GUI/VBE test separate.
 <!-- AGENT-APPEND -->
 
 ## P0. ISO C parity (language + library + ABI)

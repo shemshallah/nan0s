@@ -52,6 +52,17 @@ JMPR r1
 gui_kernel_boot:
   MOVI r13,1
   LA r14,#KBOOT_STACK
+  ; COM1 cold-boot banner: product boot smoke with no C harness.
+  LA r1,@gui_boot_banner
+  SHL r1,r1,2
+gui_boot_ser:
+  LDB r2,r1,0
+  CMP r2,r0
+  JMP[EQ] @gui_boot_ser_done
+  PUTC r2
+  ADD r1,r1,r13
+  JMP @gui_boot_ser
+gui_boot_ser_done:
 
   ; MEMQ first: the kernel publishes the actual word count through CPUID
   ; 0x4E4D00FF, subleaf 1.  Never compile a RAM size into the boot path.
@@ -201,12 +212,27 @@ gui_heap_done:
   JMP[EQ] @gui_boot_fail
   LA r2,@g_shell_pid
   ST r1,r2,0
+  ; Shell startup smoke: proves PID 2 was created before the first SVC 0.
+  LA r1,@gui_shell_banner
+  SHL r1,r1,2
+gui_shell_ser:
+  LDB r2,r1,0
+  CMP r2,r0
+  JMP[EQ] @gui_shell_ser_done
+  PUTC r2
+  ADD r1,r1,r13
+  JMP @gui_shell_ser
+gui_shell_ser_done:
 
   ; The kernel has no runnable context of its own: SVC 0 with no current
   ; process starts the highest-priority ready process.
   SVC 0
   JMP @gui_boot_fail
 
+gui_boot_banner:
+  .str "NaN/0S BOOT\n"
+gui_shell_banner:
+  .str "NANIX SHELL READY\n"
 gui_boot_fail:
   MOVI r1,33
   PUTC r1
