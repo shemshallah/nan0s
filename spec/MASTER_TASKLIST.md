@@ -55,8 +55,10 @@ each item needs a real gate, a short proof, and a frontier note.
       software fallback; `naccel_gate` PASS (emulated IOMMU domains, DMA
       ring/fence, software GEMV placeholder, 64-bit VRAM/BAR placement,
       exhaustion/unmapped fallback; no native GPU claim).
-- [ ] F11 Fabric/storage: NVMe/model streaming, RDMA/remote KV, checkpoint
-      transport; emulated gate.
+- [x] F11 Fabric/storage: NVMe/model streaming, RDMA/remote KV, checkpoint
+      transport; `nnvme_gate` + `nfabric_gate` PASS (64-bit LBA 2^32, queue
+      wrap/doorbells, trim/flush, two-node RDMA send/recv/write/read, stale
+      rkey, remote KV, NAGC checkpoint epochs).
 - [ ] F12 Observability/ops: per-core stats, OOM/eviction, quotas, scheduler
       traces; gate.
 - [~] F13 Frontier capabilities: speculative decoding, MoE routing,
@@ -135,6 +137,10 @@ Agent rule:
 - [ ] (npaged) Add shared immutable paged prefixes with refcounts and copy-on-write fork: page-table entries carry a shared owner/refcount, a child publishes its own KV generation on first append, and a gate proves parent/child prefix reads plus divergent suffix isolation.
 - [ ] (npaged) Add a page eviction/tiering policy: recency + attention-mass + node-distance scoring, demotion of cold pages to a slower nheap class or swap capability with a small hot table, and a pressure-driven eviction/remap gate that re-checks exact post-remap logits and stable logical indices.
 - [ ] (npaged) Lift the 4 GiB decode limit: carry base_hi through the paged K/V view path (chunked byte/word access or a 64-bit nattn view entry) and gate one block allocated above 4 GiB with prefill/decode parity and remap across the boundary.
+- [ ] (nfabric) Add a GPUDirect/RDMA seam: register an naccel VRAM range as an nfabric MR through niommu, translate peer IOVAs in WRITE/READ, and gate a model load streamed directly into VRAM without a host bounce buffer.
+- [ ] (nfabric) Add paged remote KV: per-2 MiB-block rkeys and generations, parallel queue-pair transfer, partial-failure rollback, and a COW prefix moved between nodes with stable logical tokens.
+- [ ] (nfabric) Layer nnvme queue pairs on nfabric as NVMe-oF capsules plus data buffers; add controller-id/namespace generation checks and gate remote READ/WRITE/FLUSH/TRIM with exact bytes and stale-controller rejection.
+- [ ] (nfabric) Extend NAGC checkpoint transport to a 4-node ring with per-link epoch fences and a quorum seal; gate torn-write, duplicate-epoch and rollback rejection, then restore an nagent record on another node without rewinding its capability generation.
 <!-- AGENT-APPEND -->
 
 ## P0. ISO C parity (language + library + ABI)
