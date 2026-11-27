@@ -90,8 +90,8 @@ Proof.
        try (apply Nat.ltb_ge in E4).
   all: try (exfalso; lia).
   all: apply nth_lset_word_eq.
-  all: rewrite ?H1, ?H2, ?H3, ?H4, ?H5.
-  all: lia.
+  all: try rewrite H1; try rewrite H2; try rewrite H3;
+       try rewrite H4; try rewrite H5; lia.
 Qed.
 
 Print Assumptions mem_get_mem_set_eq.
