@@ -479,6 +479,41 @@ Definition exec_instr_p (prog : list InstrP) (vm : VM) : VM :=
 (** On every program written in the original [Instr] subset the extended
     model is the existing Coq model, instruction for instruction. *)
 
+(** ** Relation without the [vm_reg 15] clause
+
+    [R] ties both [vm_link] and [vm_reg 15] to the literal [r15].
+    [R_no15] drops the [vm_reg 15] clause; it remains useful when a
+    proof only needs the link view of [r15]. *)
+
+Definition R_no15 (L : LState) (vm : VM) : Prop :=
+  vm_pc vm = l_pc L /\
+  (forall i, i < 15 -> vm_reg vm i = l_reg L i mod 2 ^ 32) /\
+  vm_link vm = l_reg L 15 /\
+  (forall a, vm_mem vm a = payload_word (l_mem L a)) /\
+  vm_zf vm = Nat.eqb ((l_k L / 2) mod 2) 1 /\
+  vm_lf vm = Nat.eqb (l_k L mod 2) 1 /\
+  l_k L < 4 /\
+  vm_halted vm = l_halted L /\
+  (forall i, i < 16 -> l_reg L i < 2 ^ 32).
+
+Lemma R_R_no15 : forall L vm, R L vm -> R_no15 L vm.
+Proof.
+  intros L vm HR.
+  destruct HR as
+    (Hpc & Hregs & Hreg15 & Hlink & Hmem & Hzf & Hlf & Hk & Hhalt & Hbound).
+  unfold R_no15.
+  split_conj.
+  - exact Hpc.
+  - exact Hregs.
+  - exact Hlink.
+  - exact Hmem.
+  - exact Hzf.
+  - exact Hlf.
+  - exact Hk.
+  - exact Hhalt.
+  - exact Hbound.
+Qed.
+
 Print Assumptions e_shl32_eq.
 Print Assumptions e_shr32_lt.
 Print Assumptions e_bool_res_lt_two32.
