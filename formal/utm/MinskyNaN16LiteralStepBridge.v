@@ -2103,3 +2103,24 @@ Example lp_run_check_ten :
 Proof. vm_compute. reflexivity. Qed.
 
 Print Assumptions lp_run_check_sound.
+
+Definition fixture_run_check : bool :=
+  lp_run_check 21025 lp_reset fixture_prog_full.
+
+Lemma fixture_run_check_true : fixture_run_check = true.
+Proof. vm_compute. reflexivity. Qed.
+
+Theorem fixture_lp_run_refines :
+  Rlp (lp_run 21025 lp_reset)
+      (vm_run_p 21025 fixture_prog_full (vm_of_lp lp_reset)) /\
+  List.length (lp_reg (lp_run 21025 lp_reset)) = 16 /\
+  MemP_wf (lp_mem (lp_run 21025 lp_reset)).
+Proof.
+  apply lp_run_refines.
+  - apply Rlp_lp_reset.
+  - reflexivity.
+  - apply MemP_wf_reset.
+  - apply lp_run_check_sound. exact fixture_run_check_true.
+Qed.
+
+Print Assumptions fixture_lp_run_refines.
