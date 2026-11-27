@@ -1302,6 +1302,9 @@ Proof.
   reflexivity.
 Qed.
 
+Lemma le_256_two32 : 256 <= 2 ^ 32.
+Proof. vm_compute. lia. Qed.
+
 Lemma N_land_255_to_nat_lt :
   forall x, N.to_nat (N.land x 255%N) < 256.
 Proof.
@@ -1336,7 +1339,7 @@ Proof.
   { rewrite <- N_land_255_to_nat.
     apply Nat.lt_le_trans with 256.
     - apply N_land_255_to_nat_lt.
-    - lia. }
+    - apply le_256_two32. }
   unfold lp_exec, exec_instr_p.
   rewrite Hnth. cbn -[e_bool_res bool_resN].
   rewrite Hval.
