@@ -203,6 +203,14 @@ Proof.
     destruct (x <? code_hi) eqn:X3;
     destruct (x <? tape_hi) eqn:X4;
     cbn.
+  all: try (apply Nat.ltb_lt in X1);
+       try (apply Nat.ltb_ge in X1);
+       try (apply Nat.ltb_lt in X2);
+       try (apply Nat.ltb_ge in X2);
+       try (apply Nat.ltb_lt in X3);
+       try (apply Nat.ltb_ge in X3);
+       try (apply Nat.ltb_lt in X4);
+       try (apply Nat.ltb_ge in X4).
   all: try reflexivity.
   all: apply nth_lset_word_neq; lia.
 Qed.
@@ -213,6 +221,7 @@ Lemma mem_get_mem_set_data_neq :
     mem_get (mem_set m a v) x = mem_get m x.
 Proof.
   intros m a v x (H1 & H2 & H3 & H4 & H5) Hlo Hhi Hx Hneq.
+  unfold code_hi, data_lo in Hlo.
   unfold mem_set, mem_get.
   assert (A1 : (a <? tape_lo) = true)
     by (apply Nat.ltb_lt; unfold data_hi, tape_lo in *; lia).
@@ -226,6 +235,14 @@ Proof.
     destruct (x <? code_hi) eqn:X3;
     destruct (x <? tape_hi) eqn:X4;
     cbn.
+  all: try (apply Nat.ltb_lt in X1);
+       try (apply Nat.ltb_ge in X1);
+       try (apply Nat.ltb_lt in X2);
+       try (apply Nat.ltb_ge in X2);
+       try (apply Nat.ltb_lt in X3);
+       try (apply Nat.ltb_ge in X3);
+       try (apply Nat.ltb_lt in X4);
+       try (apply Nat.ltb_ge in X4).
   all: try reflexivity.
   all: apply nth_lset_word_neq; lia.
 Qed.
@@ -236,6 +253,7 @@ Lemma mem_get_mem_set_pad_neq :
     mem_get (mem_set m a v) x = mem_get m x.
 Proof.
   intros m a v x (H1 & H2 & H3 & H4 & H5) Hlo Hhi Hx Hneq.
+  unfold data_hi, pad_lo in Hlo.
   unfold mem_set, mem_get.
   assert (A1 : (a <? tape_lo) = true)
     by (apply Nat.ltb_lt; exact Hhi).
@@ -247,6 +265,14 @@ Proof.
     destruct (x <? code_hi) eqn:X3;
     destruct (x <? tape_hi) eqn:X4;
     cbn.
+  all: try (apply Nat.ltb_lt in X1);
+       try (apply Nat.ltb_ge in X1);
+       try (apply Nat.ltb_lt in X2);
+       try (apply Nat.ltb_ge in X2);
+       try (apply Nat.ltb_lt in X3);
+       try (apply Nat.ltb_ge in X3);
+       try (apply Nat.ltb_lt in X4);
+       try (apply Nat.ltb_ge in X4).
   all: try reflexivity.
   all: apply nth_lset_word_neq; lia.
 Qed.
@@ -268,6 +294,14 @@ Proof.
     destruct (x <? code_hi) eqn:X3;
     destruct (x <? tape_hi) eqn:X4;
     cbn.
+  all: try (apply Nat.ltb_lt in X1);
+       try (apply Nat.ltb_ge in X1);
+       try (apply Nat.ltb_lt in X2);
+       try (apply Nat.ltb_ge in X2);
+       try (apply Nat.ltb_lt in X3);
+       try (apply Nat.ltb_ge in X3);
+       try (apply Nat.ltb_lt in X4);
+       try (apply Nat.ltb_ge in X4).
   all: try reflexivity.
   all: apply nth_lset_word_neq; lia.
 Qed.
@@ -278,6 +312,7 @@ Lemma mem_get_mem_set_str_neq :
     mem_get (mem_set m a v) x = mem_get m x.
 Proof.
   intros m a v x (H1 & H2 & H3 & H4 & H5) Hlo Hhi Hx Hneq.
+  unfold tape_hi, str_lo in Hlo.
   unfold mem_set, mem_get.
   assert (A1 : (a <? tape_lo) = false)
     by (apply Nat.ltb_ge; unfold tape_lo, tape_hi in *; lia).
@@ -289,6 +324,14 @@ Proof.
     destruct (x <? code_hi) eqn:X3;
     destruct (x <? tape_hi) eqn:X4;
     cbn.
+  all: try (apply Nat.ltb_lt in X1);
+       try (apply Nat.ltb_ge in X1);
+       try (apply Nat.ltb_lt in X2);
+       try (apply Nat.ltb_ge in X2);
+       try (apply Nat.ltb_lt in X3);
+       try (apply Nat.ltb_ge in X3);
+       try (apply Nat.ltb_lt in X4);
+       try (apply Nat.ltb_ge in X4).
   all: try reflexivity.
   all: apply nth_lset_word_neq; lia.
 Qed.
