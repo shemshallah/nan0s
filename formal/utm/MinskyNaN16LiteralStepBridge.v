@@ -399,7 +399,8 @@ Proof.
             N.to_nat
               (lget_regN (lset_word (lp_reg L) 15 (N.of_nat (S (lp_pc L)))) i)
               mod 2 ^ 32).
-    rewrite (set_reg_neq _ _ _ _ ltac:(lia)).
+    assert (Hi15 : i <> 15) by lia.
+    rewrite (set_reg_neq _ _ _ _ Hi15).
     rewrite (lget_regN_lset_word_neq (lp_reg L) 15
       (N.of_nat (S (lp_pc L))) i) by lia.
     exact (Hregs i Hi).
