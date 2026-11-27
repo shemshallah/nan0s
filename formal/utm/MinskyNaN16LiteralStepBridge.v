@@ -1721,7 +1721,7 @@ Fixpoint lp_run_safe
   | S f =>
       if lp_halted L then True
       else
-        match decode_word_p (lp_mem_at L (lp_pc L)) with
+        match decode_word_p (mem_get (lp_mem L) (lp_pc L)) with
         | Some ins =>
             nth_error prog (lp_pc L) = Some ins /\
             LPInstrSide L ins /\
@@ -1742,7 +1742,7 @@ Lemma lp_run_safe_step :
   forall fuel L prog,
     lp_halted L = false ->
     lp_run_safe (S fuel) L prog =
-      match decode_word_p (lp_mem_at L (lp_pc L)) with
+      match decode_word_p (mem_get (lp_mem L) (lp_pc L)) with
       | Some ins =>
           nth_error prog (lp_pc L) = Some ins /\
           LPInstrSide L ins /\
@@ -1791,7 +1791,7 @@ Proof.
               List.length (lp_reg (lp_run fuel (lp_step L))) = 16 /\
               MemP_wf (lp_mem (lp_run fuel (lp_step L)))).
       rewrite (lp_run_safe_step fuel L prog Hhalt) in Hsafe.
-      remember (decode_word_p (lp_mem_at L (lp_pc L))) as ins_opt eqn:Hdec.
+      remember (decode_word_p (mem_get (lp_mem L) (lp_pc L))) as ins_opt eqn:Hdec.
       destruct ins_opt as [ins|].
       2: { cbn in Hsafe. contradiction. }
       cbn in Hsafe.
@@ -1801,11 +1801,14 @@ Proof.
         destruct HRp as (Hpc & _ & _ & _ & _ & _ & _ & _ & _ & _).
         rewrite Hpc. exact Hnth. }
       assert (Hstep : lp_step L = lp_exec L ins).
-      { unfold lp_step. rewrite <- lp_mem_at_eq. rewrite (eq_sym Hdec). reflexivity. }
+      { unfold lp_step. rewrite (eq_sym Hdec). reflexivity. }
       rewrite Hstep.
+      assert (Hdec_at :
+        decode_word_p (lp_mem_at L (lp_pc L)) = Some ins).
+      { rewrite lp_mem_at_eq. exact (eq_sym Hdec). }
       apply IH.
       * exact (lp_exec_instr_refines L vm prog ins HR Hlen Hwf Hside
-                 (eq_sym Hdec) Hnth_vm).
+                 Hdec_at Hnth_vm).
       * rewrite lp_exec_reg_length. exact Hlen.
       * apply lp_exec_mem_wf. exact Hwf.
       * exact Hsafe'.
@@ -2054,7 +2057,7 @@ Fixpoint lp_run_check
   | S f =>
       if lp_halted L then true
       else
-        match decode_word_p (lp_mem_at L (lp_pc L)) with
+        match decode_word_p (mem_get (lp_mem L) (lp_pc L)) with
         | Some ins =>
             (match nth_error prog (lp_pc L) with
              | Some ins' => instr_eqb ins' ins
