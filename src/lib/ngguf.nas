@@ -43,6 +43,16 @@
 ; API:
 ;   ngguf_parse r1=storage cap r2=header r3=tensor table r4=max tensors
 ;               -> 0/-1
+;   ngguf_blocks_to_nq4 r1=tensor record r2=dst blocks r3=dst capacity blocks
+;               -> blocks converted, -1 bad record, -2 range not addressable
+;                  below 4 GiB (first touch would need a 64-bit load)
+;
+; Q4_0/Q8_0 conversion: GGUF stores an f16 scale and 16/32 packed bytes per
+; block.  ngguf_blocks_to_nq4 reads those bytes through the tensor's nkv view,
+; converts the f16 scale to f32 exactly (nq_f16_to_f32), and repacks the block
+; into nq4's word-aligned f32-scale layout.  The packed payload bytes are not
+; altered.  This is the documented one-time conversion pass: a view cannot be
+; consumed in place because the block stride changes 18->20 and 34->36 bytes.
 ;
 ; Limits: the GGUF header/metadata/tensor-info bytes must live below 4 GiB in
 ; the storage address window (guest LDB is 32-bit); tensor abs offsets/sizes
@@ -1083,6 +1093,193 @@ ng_vi_d:
 ng_fail:
   LA r1,0xFFFFFFFF
 ng_out:
+  SUB r14,r14,r13
+  LD r15,r14,0
+  RET
+
+; ---------------------------------------------------------------------------
+; ngguf_blocks_to_nq4: r1=record r2=dst r3=capacity(blocks)
+;   -> blocks converted, -1 bad record, -2 not addressable below 4 GiB
+.equ NGC 0x5840
+ngguf_blocks_to_nq4:
+  ST r15,r14,0
+  ADD r14,r14,r13
+  ST r1,r0,#NGC+0
+  ST r2,r0,#NGC+1
+  ST r3,r0,#NGC+2
+  LD r2,r1,0
+  LA r3,#NG_ENTRY_MAGIC
+  CMP r2,r3
+  JMP[NE] @ngc_bad
+  LD r2,r1,#NG_T_DTYPE
+  CMP r2,r0
+  JMP[EQ] @ngc_fail
+  MOVI r3,#NG_DT_Q4_0
+  CMP r2,r3
+  JMP[EQ] @ngc_q4
+  MOVI r3,#NG_DT_Q8_0
+  CMP r2,r3
+  JMP[NE] @ngc_fail
+  MOVI r3,#NG_Q8_BYTES
+  MOVI r4,1
+  JMP @ngc_type
+ngc_q4:
+  MOVI r3,#NG_Q4_BYTES
+  MOVI r4,0
+ngc_type:
+  ST r3,r0,#NGC+3          ; bytes/block
+  ST r4,r0,#NGC+4          ; q8 flag
+  LD r2,r1,#NG_T_BLOCKS
+  LD r3,r1,#NG_T_BLOCKS+1
+  CMP r3,r0
+  JMP[NE] @ngc_fail
+  CMP r2,r0
+  JMP[EQ] @ngc_fail
+  ST r2,r0,#NGC+5          ; blocks
+  LD r3,r0,#NGC+2
+  CMP r2,r3
+  JMP[GT] @ngc_fail
+
+  ; first address of the tensor through its nkv view
+  LD r2,r1,#NG_T_VIEW
+  LA r3,#NKV_VIEW_MAGIC
+  CMP r2,r3
+  JMP[NE] @ngc_fail
+  ADDI r1,r1,#NG_T_VIEW
+  MOVI r2,0
+  MOVI r3,0
+  CALL @nkv_view_addr
+  CMP r3,r0
+  JMP[NE] @ngc_fail
+  CMP r2,r0
+  JMP[NE] @ngc_high
+  ST r1,r0,#NGC+6          ; addr lo
+
+  ; view size must cover blocks*bytes
+  LD r1,r0,#NGC+5
+  LD r2,r0,#NGC+3
+  MOVI r3,0
+  CALL @n64_mul32
+  ST r1,r0,#NGC+7
+  ST r2,r0,#NGC+8
+  LD r4,r0,#NGC+0
+  ADD r4,r4,r0
+  LD r3,r4,#NG_T_VIEW+8   ; view size lo
+  LD r4,r4,#NG_T_VIEW+9   ; view size hi
+  LD r1,r0,#NGC+7
+  LD r2,r0,#NGC+8
+  CALL @n64_cmp
+  CMP r1,r0
+  JMP[EQ] @ngc_size_ok
+  LA r5,0xFFFFFFFF
+  CMP r1,r5
+  JMP[NE] @ngc_fail
+ngc_size_ok:
+  ; end = addr + total must stay below 4 GiB
+  LD r1,r0,#NGC+6
+  MOVI r2,0
+  LD r3,r0,#NGC+7
+  LD r4,r0,#NGC+8
+  CALL @n64_add
+  CMP r2,r0
+  JMP[NE] @ngc_high
+  ST r1,r0,#NGC+9          ; end lo
+
+  ST r0,r0,#NGC+10         ; b
+  LD r1,r0,#NGC+1
+  ST r1,r0,#NGC+11         ; dst cursor
+ngc_loop:
+  LD r1,r0,#NGC+10
+  LD r2,r0,#NGC+5
+  CMP r1,r2
+  JMP[GE] @ngc_ok
+  ; src = addr + b*bytes/block
+  LD r1,r0,#NGC+10
+  LD r2,r0,#NGC+3
+  MOVI r3,0
+  CALL @n64_mul32
+  ADD r3,r1,r0
+  ADD r4,r2,r0
+  LD r1,r0,#NGC+6
+  MOVI r2,0
+  CALL @n64_add
+  CMP r2,r0
+  JMP[NE] @ngc_high
+  ST r1,r0,#NGC+12         ; src byte address
+  ; f16 scale (little endian)
+  ADD r3,r1,r0
+  LDB r1,r3,0
+  LDB r2,r3,1
+  SHL r2,r2,8
+  BOOL.14 r1,r1,r2
+  CALL @n64_f16_to_f32
+  LD r2,r0,#NGC+11
+  ST r1,r2,0
+  ; payload words
+  ST r0,r0,#NGC+13
+  LD r1,r0,#NGC+4
+  CMP r1,r0
+  JMP[EQ] @ngc_q4w
+  MOVI r1,8
+  JMP @ngc_nw
+ngc_q4w:
+  MOVI r1,4
+ngc_nw:
+  ST r1,r0,#NGC+14
+ngc_word:
+  LD r1,r0,#NGC+13
+  LD r2,r0,#NGC+14
+  CMP r1,r2
+  JMP[GE] @ngc_blkdone
+  ; byte base = 2 + w*4
+  SHL r2,r1,2
+  ADDI r2,r2,2
+  LD r3,r0,#NGC+12
+  ADD r2,r3,r2
+  LDB r1,r2,0
+  LDB r3,r2,1
+  SHL r3,r3,8
+  BOOL.14 r1,r1,r3
+  LDB r3,r2,2
+  SHL r3,r3,16
+  BOOL.14 r1,r1,r3
+  LDB r3,r2,3
+  SHL r3,r3,24
+  BOOL.14 r1,r1,r3
+  LD r2,r0,#NGC+11
+  ADDI r2,r2,1
+  LD r3,r0,#NGC+13
+  ADD r2,r2,r3
+  ST r1,r2,0
+  LD r1,r0,#NGC+13
+  ADD r1,r1,r13
+  ST r1,r0,#NGC+13
+  JMP @ngc_word
+ngc_blkdone:
+  LD r1,r0,#NGC+11
+  LD r2,r0,#NGC+4
+  CMP r2,r0
+  JMP[EQ] @ngc_adv4
+  ADDI r1,r1,9
+  JMP @ngc_advd
+ngc_adv4:
+  ADDI r1,r1,5
+ngc_advd:
+  ST r1,r0,#NGC+11
+  LD r1,r0,#NGC+10
+  ADD r1,r1,r13
+  ST r1,r0,#NGC+10
+  JMP @ngc_loop
+ngc_ok:
+  LD r1,r0,#NGC+5
+  JMP @ngc_out
+ngc_high:
+  LA r1,0xFFFFFFFE
+  JMP @ngc_out
+ngc_fail:
+ngc_bad:
+  LA r1,0xFFFFFFFF
+ngc_out:
   SUB r14,r14,r13
   LD r15,r14,0
   RET

@@ -23,6 +23,7 @@
 ; Q8 blocks by 9.  Activations are an array of f32 bits, 1 word/element.
 ;
 ; API:
+;   nq_f16_to_f32 r1=u16 -> r1=f32 bits (exact; subnormal/inf/NaN included)
 ;   nq4_dequant r1=block r2=index -> r1=f32 bits (NaN if index >= 32)
 ;   nq8_dequant r1=block r2=index -> r1=f32 bits (NaN if index >= 32)
 ;   nq4_dot32   r1=block r2=acts -> r1=f32 dot bits
@@ -33,6 +34,8 @@
 ; All arithmetic is IEEE f32.  Scales and activations in the gate are exact
 ; binary fractions and weights are small integers, so every product and sum
 ; is exactly representable; the expected bit patterns are fixed.
+
+.include "n64.nas"
 
 .equ NQ_TMP 0x6000
 
@@ -64,6 +67,12 @@ nq_b2:
   MOVI r2,0xFF
   BOOL.8 r1,r1,r2
   RET
+
+
+; ---------------------------------------------------------------------------
+; nq_f16_to_f32: shared exact f16 -> f32 conversion (n64_f16_to_f32).
+nq_f16_to_f32:
+  JMP @n64_f16_to_f32
 
 ; r1=block r2=index -> r1=f32 dequant bits
 nq4_dequant:

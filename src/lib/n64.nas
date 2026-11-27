@@ -61,3 +61,66 @@ n64_mul32:
   MUL r3,r4,r6
   ADD r2,r2,r3
   RET
+
+; ---------------------------------------------------------------------------
+; n64_f16_to_f32: r1=16-bit IEEE half bits -> r1=32-bit IEEE float bits.
+; Every f16 value is exactly representable in f32, so this conversion rounds
+; nothing.  Subnormals are normalized; Inf/NaN keep their payload.
+n64_f16_to_f32:
+  MOVI r2,0x8000
+  BOOL.8 r3,r1,r2              ; sign
+  MOVI r2,0x7C00
+  BOOL.8 r4,r1,r2
+  SHR r4,r4,10                 ; exponent 0..31
+  MOVI r2,0x3FF
+  BOOL.8 r5,r1,r2              ; mantissa
+  CMP r4,r0
+  JMP[EQ] @nq_f16_sub
+  MOVI r2,31
+  CMP r4,r2
+  JMP[EQ] @nq_f16_special
+  ADDI r4,r4,112
+  SHL r4,r4,23
+  SHL r5,r5,13
+  JMP @nq_f16_build
+nq_f16_special:
+  MOVI r4,255
+  SHL r4,r4,23
+  SHL r5,r5,13
+  JMP @nq_f16_build
+nq_f16_sub:
+  CMP r5,r0
+  JMP[NE] @nq_f16_subnz
+  MOVI r4,0
+  JMP @nq_f16_build
+nq_f16_subnz:
+  ; k = floor(log2(mant)); f32 exp = 103+k; frac = (mant << (23-k)) & 0x7FFFFF
+  MOVI r6,0
+  ADD r7,r5,r0
+nq_f16_norm:
+  MOVI r2,1
+  CMP r7,r2
+  JMP[LE] @nq_f16_normd
+  SHR r7,r7,1
+  ADD r6,r6,r13
+  JMP @nq_f16_norm
+nq_f16_normd:
+  ADDI r4,r6,103
+  SHL r4,r4,23
+  MOVI r2,23
+  SUB r2,r2,r6
+  ADD r7,r5,r0
+nq_f16_shl:
+  CMP r2,r0
+  JMP[LE] @nq_f16_shld
+  SHL r7,r7,1
+  SUB r2,r2,r13
+  JMP @nq_f16_shl
+nq_f16_shld:
+  LA r2,0x7FFFFF
+  BOOL.8 r5,r7,r2
+nq_f16_build:
+  SHL r3,r3,16
+  BOOL.14 r1,r4,r5
+  BOOL.14 r1,r1,r3
+  RET

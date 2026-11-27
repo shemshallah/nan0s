@@ -34,20 +34,27 @@ each item needs a real gate, a short proof, and a frontier note.
 - [x] F6 Tensor/KV memory: zero-copy 64-bit views, per-agent KV slabs,
       packed Q4/Q8 layouts, huge pages; `nkv_gate` + `nq4_gate` PASS
       (2 TiB views across 4 GiB, isolated slabs, exact Q4/Q8 dots).
-- [~] F7 Model runtime: GGUF/safetensors import, tokenizer, Q4/Q8 GEMV/
+- [x] F7 Model runtime: GGUF/safetensors import, tokenizer, Q4/Q8 GEMV/
       attention/RMSNorm, deterministic sampling; tiny-model token gate.
       GGUF v3 import/views, byte BPE tokenizer, RMSNorm, Q4/Q8 GEMV,
       deterministic sampler and a tiny embedding->norm->projection token gate
-      are gated (`ngguf_gate`, `ntok_gate`, `nmodel_gate`).  Remaining:
-      attention, safetensors, direct GGUF f16-scale Q4/Q8 consumption.
+      are gated (`ngguf_gate`, `ntok_gate`, `nmodel_gate`).  F7b adds
+      one-head causal attention over nkv token views with exact RoPE/softmax,
+      fused Q4xQ8 QK^T bit-equal to the nq4_dot32 oracle, a 1-layer attention
+      token gate (`nattn_gate`), GGUF f16-scale Q4/Q8 repack plus GEMV
+      (`ngguf_scale_gate`) and a safetensors JSON header/importer
+      (`nsafetensors_gate`).  Multi-head, paged decode and speculative
+      decoding remain as (nattn) frontier directives.
 - [x] F8 Trace/replay: hash chain, deterministic RNG, budgets/deadlines,
       divergence detection; `nreplay_gate` PASS (checkpoint replay, exact
       divergence index, fail-closed budgets, byte-identical runs).
 - [x] F9 Isolation/security: per-agent address spaces, W^X/NX, capability
       revocation, sandbox/fuzz; `nsecure_gate` PASS (two agents, guard/range/
       cap errors, 1024 malformed denials, 160 admitted, byte-identical runs).
-- [ ] F10 Accelerator boundary: PCIe/IOMMU/DMA, VRAM/model placement,
-      software fallback; emulated gate.
+- [x] F10 Accelerator boundary: PCIe/IOMMU/DMA, VRAM/model placement,
+      software fallback; `naccel_gate` PASS (emulated IOMMU domains, DMA
+      ring/fence, software GEMV placeholder, 64-bit VRAM/BAR placement,
+      exhaustion/unmapped fallback; no native GPU claim).
 - [ ] F11 Fabric/storage: NVMe/model streaming, RDMA/remote KV, checkpoint
       transport; emulated gate.
 - [ ] F12 Observability/ops: per-core stats, OOM/eviction, quotas, scheduler
@@ -111,6 +118,14 @@ Agent rule:
 - [ ] (nsecure) Add capability-revocation shootdown: publish a per-CPU cap/range epoch, fence after revoke, and gate a two-CPU stale-range failure followed by success after nsec_rebind plus a generation fence.
 - [ ] (nsecure) Add an agent-scoped handle salt (or globally indexed cap id) so an identical index/generation/rights word from agent A is rejected on agent B; gate the cross-agent forgery case that the current index-local handle scheme cannot distinguish.
 - [ ] (nsecure) Extend the deterministic malformed corpus with a branch-coverage counter over nsec_check/nsec_sandbox_check and add guard, overlap, window and op-bit mutation classes; gate deny-by-default with no admitted request outside an allowed window.
+- [ ] (naccel) Wire niommu/naccel to nancore/nansched device discovery: parse PCIe ECAM/BARs, bind one device per agent domain, and gate a two-device/two-agent isolation handoff with hotplug revoke.
+- [ ] (naccel) Add scatter-gather DMA descriptors and contiguous multi-entry IOVA translation, then gate a model load split across 4 KiB/2 MiB pages and a >4 GiB IOVA range with exact completion ordering.
+- [ ] (naccel) Replace the VRAM bitmap with nheap-backed 4 KiB/2 MiB/1 GiB VRAM classes, add pin counts plus KV eviction to host, and gate pressure/eviction/remap accounting on a 2 TiB BAR.
+- [ ] (naccel) Add IOMMU shootdown: per-domain in-flight counters, epoch fencing and drain on unmap/rebind/revoke; gate a stale-completion race on two DMA queues and a two-device generation fence.
+- [ ] (nattn) Extend nattn from one head to two heads with per-head Q4/Q8 caches and gate that two independent one-head passes produce bit-identical per-head contexts.
+- [ ] (nattn) Add an incremental decode path: append K/V to an nkv slab, apply RoPE at the new position, and gate prefill+decode logits against a full recompute for the same tokens.
+- [ ] (nattn) Build an nmodel loader from ngguf_blocks_to_nq4 plus nsafetensors tensors (dtype/shape/offset checked) and gate one real token step over imported weights.
+- [ ] (nattn) Replace truncating Q4/Q8 quantization with round-to-nearest and per-block scales; gate max error against f32 and keep fused QK bit-identical to nq4_dot32 on exact values.
 <!-- AGENT-APPEND -->
 
 ## P0. ISO C parity (language + library + ABI)
