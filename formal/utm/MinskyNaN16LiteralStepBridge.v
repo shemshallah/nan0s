@@ -1809,3 +1809,137 @@ Proof.
 Qed.
 
 Print Assumptions lp_run_refines.
+
+(** ** Reflected safety checker
+
+    [lp_run_check] is the computable counterpart of [lp_run_safe].  It
+    only runs the LP machine; the program lookup uses the LP program
+    counter, and the opcode side conditions are tested with booleans. *)
+
+Lemma InstrP_eq_dec :
+  forall (a b : InstrP), {a = b} + {a <> b}.
+Proof. decide equality. Defined.
+
+Definition instr_eqb (a b : InstrP) : bool :=
+  if InstrP_eq_dec a b then true else false.
+
+Lemma instr_eqb_eq :
+  forall a b, instr_eqb a b = true <-> a = b.
+Proof.
+  intros a b. unfold instr_eqb.
+  destruct (InstrP_eq_dec a b) as [E | N].
+  - split; intros _; exact E.
+  - split; intros H; [discriminate H | exfalso; apply N; exact H].
+Qed.
+
+Definition lp_instr_side_bool (L : LPState) (ins : InstrP) : bool :=
+  match ins with
+  | pCMP a b => (a <? 16) && (b <? 16)
+  | pJMP p target => negb (lp_k L =? 3)
+  | pSHL d a imm =>
+      (d <? 16) && negb (d =? 15) && (a <? 16) && (imm <? 32) &&
+      Nat.ltb (N.to_nat (lget_regN (lp_reg L) a) * 2 ^ imm) (2 ^ 32)
+  | pSHR d a imm =>
+      (d <? 16) && negb (d =? 15) && (a <? 16) && (imm <? 32)
+  | pADD d a b =>
+      (d <? 16) && negb (d =? 15) && (a <? 16) && (b <? 16) &&
+      Nat.ltb (N.to_nat (lget_regN (lp_reg L) a) +
+               N.to_nat (lget_regN (lp_reg L) b)) (2 ^ 32)
+  | pSUB d a b =>
+      (d <? 16) && negb (d =? 15) && (a <? 16) && (b <? 16) &&
+      Nat.leb (N.to_nat (lget_regN (lp_reg L) b))
+              (N.to_nat (lget_regN (lp_reg L) a))
+  | pLD d a imm => (d <? 16) && (a <? 16)
+  | pST d a imm =>
+      (d <? 16) && (a <? 16) &&
+      Nat.ltb (lget_reg (lp_reg L) a + imm) 4366
+  | pMOVI d imm =>
+      (d <? 16) && negb (d =? 15) && (imm <? 2 ^ 32)
+  | pBOOL tbl d a b =>
+      (tbl =? 8) && (d <? 16) && negb (d =? 15) && (a <? 16) &&
+      (b <? 16) && N.eqb (lget_regN (lp_reg L) b) 255%N
+  | pPUTC d => true
+  | pCALL target => Nat.ltb (S (lp_pc L)) (2 ^ 32)
+  | pRET => true
+  | pRETP p => negb (lp_k L =? 3)
+  | pHALT => true
+  end.
+
+Lemma lp_instr_side_bool_sound :
+  forall L ins,
+    lp_instr_side_bool L ins = true ->
+    LPInstrSide L ins.
+Proof.
+  intros L ins. destruct ins; cbn; intros H;
+    repeat rewrite andb_true_iff in H;
+    repeat match goal with H0 : _ /\ _ |- _ => destruct H0 end;
+    repeat match goal with
+    | H0 : Nat.ltb ?a ?b = true |- _ => apply Nat.ltb_lt in H0
+    | H0 : Nat.leb ?a ?b = true |- _ => apply Nat.leb_le in H0
+    | H0 : Nat.eqb ?a ?b = true |- _ => apply Nat.eqb_eq in H0
+    | H0 : negb (Nat.eqb ?a ?b) = true |- _ =>
+        apply negb_true_iff in H0; apply Nat.eqb_neq in H0
+    | H0 : N.eqb ?a ?b = true |- _ => apply N.eqb_eq in H0
+    end;
+    try (repeat split; auto; lia).
+Qed.
+
+Lemma nth_instr_eqb_sound :
+  forall prog pc ins,
+    (match nth_error prog pc with
+     | Some ins' => instr_eqb ins' ins
+     | None => false
+     end) = true ->
+    nth_error prog pc = Some ins.
+Proof.
+  intros prog pc ins H.
+  destruct (nth_error prog pc) as [ins'|] eqn:E.
+  - apply instr_eqb_eq in H. subst ins'. reflexivity.
+  - discriminate H.
+Qed.
+
+Fixpoint lp_run_check
+    (fuel : nat) (L : LPState) (prog : list InstrP) : bool :=
+  match fuel with
+  | 0 => true
+  | S f =>
+      if lp_halted L then true
+      else
+        match decode_word_p (lp_mem_at L (lp_pc L)) with
+        | Some ins =>
+            (match nth_error prog (lp_pc L) with
+             | Some ins' => instr_eqb ins' ins
+             | None => false
+             end) &&
+            lp_instr_side_bool L ins &&
+            lp_run_check f (lp_exec L ins) prog
+        | None => false
+        end
+  end.
+
+Lemma lp_run_check_sound :
+  forall fuel L prog,
+    lp_run_check fuel L prog = true ->
+    lp_run_safe fuel L prog.
+Proof.
+  induction fuel as [|fuel IH]; intros L prog H.
+  - cbn. exact I.
+  - cbn [lp_run_check] in H.
+    destruct (lp_halted L) eqn:Hhalt.
+    + cbn [lp_run_safe]. rewrite Hhalt. exact I.
+    + destruct (decode_word_p (lp_mem_at L (lp_pc L))) as [ins|] eqn:Hdec.
+      2: discriminate H.
+      apply andb_true_iff in H. destruct H as [H Hrec].
+      apply andb_true_iff in H. destruct H as [Hnth Hside].
+      apply nth_instr_eqb_sound in Hnth.
+      apply lp_instr_side_bool_sound in Hside.
+      rewrite (lp_run_safe_step fuel L prog Hhalt).
+      rewrite Hdec. cbn.
+      split; [exact Hnth | split; [exact Hside | apply IH; exact Hrec]].
+Qed.
+
+Example lp_run_check_ten :
+  lp_run_check 10 lp_reset fixture_prog_full = true.
+Proof. vm_compute. reflexivity. Qed.
+
+Print Assumptions lp_run_check_sound.
