@@ -1816,6 +1816,9 @@ Qed.
 
 Print Assumptions lp_run_refines.
 
+Lemma le_2_16_2_32 : 2 ^ 16 <= 2 ^ 32.
+Proof. apply Nat.pow_le_mono_r; lia. Qed.
+
 (** ** Reflected safety checker
 
     [lp_run_check] is the computable counterpart of [lp_run_safe].  It
@@ -1856,13 +1859,13 @@ Definition lp_instr_side_bool (L : LPState) (ins : InstrP) : bool :=
   | pJMP p target => negb (lp_k L =? 3)
   | pSHL d a imm =>
       (d <? 16) && negb (d =? 15) && (a <? 16) && (imm <? 32) &&
-      Nat.ltb (N.to_nat (lget_regN (lp_reg L) a) * 2 ^ imm) (2 ^ 32)
+      Nat.ltb (N.to_nat (lget_regN (lp_reg L) a) * 2 ^ imm) (2 ^ 16)
   | pSHR d a imm =>
       (d <? 16) && negb (d =? 15) && (a <? 16) && (imm <? 32)
   | pADD d a b =>
       (d <? 16) && negb (d =? 15) && (a <? 16) && (b <? 16) &&
       Nat.ltb (N.to_nat (lget_regN (lp_reg L) a) +
-               N.to_nat (lget_regN (lp_reg L) b)) (2 ^ 32)
+               N.to_nat (lget_regN (lp_reg L) b)) (2 ^ 16)
   | pSUB d a b =>
       (d <? 16) && negb (d =? 15) && (a <? 16) && (b <? 16) &&
       Nat.leb (N.to_nat (lget_regN (lp_reg L) b))
@@ -1872,7 +1875,7 @@ Definition lp_instr_side_bool (L : LPState) (ins : InstrP) : bool :=
       (d <? 16) && (a <? 16) &&
       Nat.ltb (lget_reg (lp_reg L) a + imm) 4366
   | pMOVI d imm =>
-      (d <? 16) && negb (d =? 15) && (imm <? 2 ^ 32)
+      (d <? 16) && negb (d =? 15) && (imm <? 2 ^ 16)
   | pBOOL tbl d a b =>
       (tbl =? 8) && (d <? 16) && negb (d =? 15) && (a <? 16) &&
       (b <? 16) && N.eqb (lget_regN (lp_reg L) b) 255%N
@@ -1894,7 +1897,12 @@ Ltac solve_lp_side H :=
       apply negb_true_iff in H0; apply Nat.eqb_neq in H0
   | H0 : N.eqb ?a ?b = true |- _ => apply N.eqb_eq in H0
   end;
-  repeat split; try assumption; try exact I.
+  repeat split; try assumption; try exact I;
+  repeat match goal with
+  | H0 : ?a < 2 ^ 16 |- ?a < 2 ^ 32 =>
+      apply Nat.lt_le_trans with (2 ^ 16);
+      [exact H0 | apply le_2_16_2_32]
+  end.
 
 Lemma lp_side_cmp : forall L a b,
   lp_instr_side_bool L (pCMP a b) = true -> LPInstrSide L (pCMP a b).
