@@ -106,9 +106,16 @@ GitHub Actions run does not make them interchangeable.
    `mem_get`, realizes the Coq VM's 184x8 table for every K-window and
    source configuration (`literal_table_matches_nan16_addr_mem`), and
    that the tape-base and control cells agree. This is the
-   input-independent half of the literal-image -> Coq-VM bridge. The
-   general executor simulation, loader/assembler semantics, and the
-   finite-memory/unbounded-tape bridge remain open.
+   input-independent half of the literal-image -> Coq-VM bridge.
+   `MinskyNaN16LiteralStepBridge.v` now supplies the general executor
+   simulation: all fifteen opcode one-step refinements, the
+   `LPInstrSide` dispatcher, and the inductive `lp_run_refines` theorem
+   under the LP-only certificate `lp_run_safe`.  `lp_run_check` is a
+   computable, per-opcode reflected checker; it certifies the full
+   21,025-step fixture (`fixture_run_check_true`), yielding
+   `fixture_lp_run_refines`.  The native `r15` / `vm_link` calling
+   convention is reconciled on CALL and on `LD 15`.  Loader/assembler
+   semantics and the finite-memory/unbounded-tape bridge remain open.
 
 The Coq theorems are formal results about the Coq models. The general
 zipper-to-signed-address simulation bridges these two formal representations,
