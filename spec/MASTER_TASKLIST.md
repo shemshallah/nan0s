@@ -28,8 +28,9 @@ each item needs a real gate, a short proof, and a frontier note.
 - [x] F4 4096-core scale: dynamic CPU count, x2APIC, per-core stacks/online
       bitmap, no global lock on dispatch; `ncscale_gate` PASS (4096 cores,
       x2APIC 0x10000000+2i, 16 KiB stacks, online/ready bitmaps, 2/4-CPU regress).
-- [ ] F5 AI ABI: capability generations/revocation, checkpoint/restore/fork,
-      migration, shared weights, KV slabs, trace/replay; exact gates.
+- [x] F5 AI ABI: capability generations/revocation, checkpoint/restore/fork,
+      migration, shared weights, KV roots, trace continuity; `nagent_gate`
+      PASS (exact `O`, no C product code).
 - [ ] F6 Tensor/KV memory: zero-copy 64-bit views, per-agent KV slabs,
       packed Q4/Q8 layouts, huge pages; exact small gates.
 - [ ] F7 Model runtime: GGUF/safetensors import, tokenizer, Q4/Q8 GEMV/
@@ -80,6 +81,11 @@ Agent rule:
 - [ ] (ncscale) Fold nnuma SRAT/SLIT node and distance hints into ncs_init/ncs_index; gate sparse-node distance-aware dispatch preference with policy kept in NaN.
 - [ ] (ncscale) Add a per-core cache-color stack/record placement pass and gate a 4096-core color histogram that excludes guard and shared text colors.
 - [ ] (ncscale) Add ncs_next_online(start) word-skip scanning over the online bitmap so idle dispatch finds work without a 4096-entry linear scan; gate wrap and empty-bitmap cases.
+- [ ] (nagent) Wire nagent records into nancore/nansched_mp: bind scheduler slot, cpu/node, 24-word trap frame and trace head; gate a 2-CPU checkpoint/migrate handoff.
+- [ ] (nagent) Extend the checkpoint hash into an append-only chain with prev_hash; gate rollback detection across three checkpoint epochs.
+- [ ] (nagent) Add weight-root refcounts and a COW KV object in nanobj; gate zero-copy weight fork with independent child KV generations.
+- [ ] (nagent) Add live-generation publish/drain across CPUs and require checkpoint/restore to join the current agent/capability generation, never rewind it.
+- [ ] (nagent) Add a per-agent deterministic RNG and replay from a checkpoint; gate trace-head equality and divergence.
 <!-- AGENT-APPEND -->
 
 ## P0. ISO C parity (language + library + ABI)
