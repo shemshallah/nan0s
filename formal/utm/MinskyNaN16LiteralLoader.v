@@ -79,8 +79,10 @@ Proof.
   cbn [lp_mem mp_low mp_data mp_pad mp_tape mp_str].
   destruct MemP_wf_reset as (H1 & H2 & H3 & H4 & H5).
   repeat split; try assumption.
-  rewrite firstn_length, app_length.
-  cbn [length repeat]. lia.
+  rewrite firstn_length, length_app.
+  cbn [length repeat].
+  rewrite Nat.min_l by lia.
+  reflexivity.
 Qed.
 
 Lemma Rlp_core_lp_load_tape :
