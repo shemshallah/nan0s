@@ -49,6 +49,26 @@ cmp -s "$T/nhost.words" "$T/nmk.words" ||
 n=$(wc -l < "$T/nhost.words")
 echo "nhost_gate: PASS phase 1 ($n words; nhost .include expansion == nmk.awk)"
 
+# ---- phase 1b: nhost assembles itself to the same word stream ----------------
+awk -f tools/nhost_bundle.awk -v MAIN=src/prog/nhost.nas > "$T/self.bundle" ||
+  { echo "nhost_gate: FAIL (self bundler)"; exit 1; }
+sz=$(wc -c < "$T/self.bundle"); rem=$((sz % 512))
+[ "$rem" -eq 0 ] || dd if=/dev/zero bs=1 count=$((512 - rem)) >> "$T/self.bundle" 2>/dev/null
+cp "$T/self.bundle" "$T/self.img"
+timeout 300 "$CLI" --img "$T/nhost.nan" --disk "$T/self.img" --mem 64 \
+  --steps 8000000000 --serial > "$T/self.out" 2> "$T/self.run" || true
+grep -q '^;END .* err=00000000' "$T/self.out" ||
+  { echo "nhost_gate: FAIL (self-host errors)"; tail -3 "$T/self.out"; exit 1; }
+grep -E '^[0-9A-Fa-f]{4}_[0-9A-Fa-f]{8}_[0-9A-Fa-f]{4}' "$T/self.out" |
+  sed 's/[[:space:]].*//' > "$T/self.words"
+grep -E '^[0-9A-Fa-f]{4}_[0-9A-Fa-f]{8}_[0-9A-Fa-f]{4}' "$T/nhost.nan" |
+  sed 's/[[:space:]].*//' > "$T/self.nmk.words"
+cmp -s "$T/self.words" "$T/self.nmk.words" ||
+  { echo "nhost_gate: FAIL (self-host fixed point differs)";
+    diff -u "$T/self.nmk.words" "$T/self.words" | head -12; exit 1; }
+n=$(wc -l < "$T/self.words")
+echo "nhost_gate: PASS phase 1b ($n words; nhost assembles itself exactly)"
+
 # ---- phase 2: the full 51-file product guest (530,842 words) ----------------
 # nmk.awk is still the oracle here; nhost must reproduce its stream exactly,
 # including duplicate-name last-definition semantics, LDS/STS promotion and

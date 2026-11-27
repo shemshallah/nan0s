@@ -17,7 +17,13 @@ sh tools/rootfs_seed.sh
 # The product guest is the flat scheduler image: GUI desktop at 0x2000,
 # kernel/scheduler at 0x10000 and the NANIX shell at 0x80000.  It is packed
 # without a cart TOC so the desktop code at word 22000 is not overwritten.
-awk -f tools/nmk.awk -v CMD=emit src/gui/gui_sched_boot.nas > src/nan/nixsched.nan
+# NHOST_BUILD=1 selects the self-hosted nhost emitter (bootstrap/ORACLE
+# machine); the default hermetic path stays on nmk.awk for portability.
+if [ "${NHOST_BUILD:-0}" = 1 ]; then
+  sh tools/nhost_emit_guest.sh src/gui/gui_sched_boot.nas src/nan/nixsched.nan
+else
+  awk -f tools/nmk.awk -v CMD=emit src/gui/gui_sched_boot.nas > src/nan/nixsched.nan
+fi
 # Keep the Trusting Trust cart as a source artifact for the later conversion.
 awk -f tools/nmk.awk -v CMD=emit src/trust/trust_cart.nas > src/nan/trust_cart.nan
 sh tools/mkall.sh

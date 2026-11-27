@@ -30,6 +30,10 @@ trap 'rm -rf "$T"' EXIT INT TERM
 fail() { echo "noc_product_gate: FAIL: $*" >&2; exit 1; }
 sha()  { sha256sum "$1" | awk '{print $1}'; }
 same() { cmp -s "$1" "$2" || fail "$3"; }
+words() {
+  grep -E '^[0-9A-Fa-f]{4}_[0-9A-Fa-f]{8}_[0-9A-Fa-f]{4}' "$1" |
+    sed 's/[[:space:]].*//'
+}
 
 MARK_RE='20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]|[0-9][0-9]:[0-9][0-9]:[0-9][0-9]|/tmp/|TMPDIR|SOURCE_DATE_EPOCH|@[A-Z][A-Z0-9_]*@|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'
 scan_markers() {
@@ -114,8 +118,10 @@ build_one "$T/b1"
 build_one "$T/b2"
 same "$T/b1/nan0s.img" "$T/b2/nan0s.img" "two hermetic product builds differ"
 same "$T/b1/nixsched.nan" "$T/b2/nixsched.nan" "two hermetic guest emissions differ"
-same "$T/b1/nixsched.nan" src/nan/nixsched.nan \
-  "src/nan/nixsched.nan is stale; run: awk -f tools/nmk.awk -v CMD=emit src/gui/gui_sched_boot.nas > src/nan/nixsched.nan"
+words "$T/b1/nixsched.nan" > "$T/b1.words"
+words src/nan/nixsched.nan > "$T/src.words"
+same "$T/b1.words" "$T/src.words" \
+  "src/nan/nixsched.nan word stream is stale; run sh tools/build.sh"
 same "$T/b1/nan0s.img" build/nan0s.img \
   "build/nan0s.img is stale relative to sources; run sh tools/build.sh"
 I1=$(sha "$T/b1/nan0s.img")
@@ -139,13 +145,14 @@ cat "$T/sb.bin" "$T/sg.bin" > "$T/smoke.img"
 truncate -s 1474560 "$T/smoke.img"
 sh tools/manifest_build.sh "$T/smoke.img" >/dev/null
 # The first 504 bytes are the product boot code; 504..507 carries LMAX and
-# therefore differs when the guest size differs.  The kernel window must match.
+# therefore differs when the guest size differs.  The 60,928-byte kernel code
+# must match; the manifest above it carries the guest digest and differs.
 dd if="$T/smoke.img" of="$T/smoke.boot" bs=1 count=504 status=none
 dd if="$T/boot512.bin" of="$T/prod.boot" bs=1 count=504 status=none
 same "$T/smoke.boot" "$T/prod.boot" "smoke image boot code differs from product boot sector"
-dd if="$T/smoke.img" of="$T/smoke.kern" bs=1 skip=512 count=65024 status=none
-dd if=build/nan0s.img of="$T/prod.kern" bs=1 skip=512 count=65024 status=none
-same "$T/smoke.kern" "$T/prod.kern" "smoke image kernel differs from product kernel"
+dd if="$T/smoke.img" of="$T/smoke.kern" bs=1 skip=512 count=60928 status=none
+dd if=build/nan0s.img of="$T/prod.kern" bs=1 skip=512 count=60928 status=none
+same "$T/smoke.kern" "$T/prod.kern" "smoke image kernel code differs from product kernel"
 rm -f "$T/smoke.com"
 timeout 25 qemu-system-i386 -m 128 \
   -drive format=raw,if=floppy,file="$T/smoke.img" -boot a \

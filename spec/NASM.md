@@ -22,11 +22,14 @@ The x86 backend is namespaced `x1_*`/`Z1_*`; the NaN backend keeps `run` and
 
 - x86 boot sector: byte-identical to the pre-merge nasm1 output.
 - `tools/xgold.sh`: GOLD match, 18.3 s through the block cache.
-- `tools/blockcache_gate.sh`: PASS, 3,910-word cache, boot 512/512 and kernel
+- `tools/blockcache_gate.sh`: PASS, 3,913-word cache, boot 512/512 and kernel
   12,368/12,368.
 - `tools/source_gold_gate.sh`: PASS in 73.7 s including the raw n16i slice.
-- `tools/nhost_gate.sh`: PASS, two phases: the `nrun_test` tree (4,839 words)
-  and the full 51-file product guest (530,842 words, exact `nmk.awk` stream).
+- `tools/nhost_gate.sh`: PASS, three phases: the `nrun_test` tree (4,842
+  words), nhost assembling itself (4,518 words, exact fixed point), and the
+  full 51-file product guest (530,842 words, exact `nmk.awk` stream).
+- `tools/nhost_product_gate.sh`: ORACLE MATCH; the nhost-emitted guest packs
+  to the shipped `build/nan0s.img` byte-for-byte.
 - `tools/nixsh_asm_gate.sh`: PASS, in-shell `asm` assembles an
   operand/label source and n16i runs it.
 - `src/tests/nrun_test.nas`: `HI` / `RUN PASS` after the merge.
@@ -61,6 +64,15 @@ Two encoder differences were also brought into line with `nmk.awk`:
 
 The full guest now assembles under `nhost` with 0 errors and is byte-identical
 to `nmk.awk` (same 530,842 words, SHA-256 match, ~34 s).
-`tools/nhost_bundle.awk` builds the flat `;@MAIN`/`;@FILE` disk bundle for the
-gate.  The remaining bootstrap step is emitting `src/nan/nixsched.nan` from
-`nhost` instead of `nmk.awk`.
+`tools/nhost_bundle.awk` builds the flat `;@MAIN`/`;@FILE` disk bundle.
+
+`nhost` also assembles its own source to the same 4,518-word image: stage0 is
+built with `nmk.awk`, then stage1 is the fixed point.  `tools/nhost_emit_guest.sh`
+runs stage0 -> stage1 -> guest; the default `tools/build.sh` path remains
+hermetic, and `NHOST_BUILD=1` selects the nhost guest.  `nhost_product_gate.sh`
+packs that guest and compares the result to `build/nan0s.img`.
+
+`nan_cli` is still the bootstrap machine for this path, so it is not yet the
+default producer (BUILD_PERF rule 3).  The remaining step is running the same
+nhost image on the native core or a portable x86_64 machine with the bundle
+on a second IDE disk, then making that the default.
