@@ -14,7 +14,7 @@ command -v qemu-system-i386 >/dev/null 2>&1 || { echo "xgold64: qemu-system-i386
 asm_one() { # src out.bin
   src="$1"; out="$2"
   awk -v SRC="$src" 'BEGIN {
-    printf ".org 0\n.include \"nasm1.nas\"\n.org 0x20000\n.str \""
+    printf ".org 0\n.include \"nasm.nas\"\n.org 0x20000\n.str \""
     while ((getline line < SRC) > 0) {
       gsub(/\\/, "\\\\", line); gsub(/"/, "\\\"", line)
       printf "%s\\n", line

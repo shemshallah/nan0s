@@ -24,6 +24,14 @@
 LA r1,@gui_kernel_boot
 JMPR r1
 
+; nasm0 and n16i live in the free pad below the 64K GUI cart.  Both are
+; 16-bit-address code (nasm0 uses MOVI @label for its tables), so the shell at
+; 0x80000 reaches them with near CALLs while their internals stay below 0x10000.
+.org 0x300
+.include "../prog/nasm.nas"
+.org 0x1200
+.include "../tools/n16i.nas"
+
 .org 8192
 .include "gui_cart.nas"
 

@@ -114,6 +114,12 @@ each item needs a real gate, a short proof, and a frontier note.
       slice now passes the 8M-word host mask; the old 256 KiB mask wrapped
       nasm1's output at word 0x100000 and stack at 0x1F0000.  Full-kernel raw
       n16i remains the slow reference path.
+- [x] F18c Unified nasm: `src/prog/nasm.nas` is the single assembler with a
+      NaN-word mode (z0, `run`/`V_*`) and an x86-byte mode (x1, `_start`);
+      `nasm0.nas`/`nasm1.nas` are aliases.  x86 boot output is byte-identical
+      to nasm1, `xgold.sh` matches GOLD in 15.4 s, `blockcache_gate` PASS
+      (3,817-word cache), and `source_gold_gate` PASS in 73.7 s.  In-shell
+      `asm` operands still hit the shell-context hang.
 - [x] F18b Block-cache GOLD build: translate nasm1's 2,992 compiled words to
       native x86 slots plus a per-PC predicate-mask table, dispatch directly
       in a multiboot 64-bit stub, and consume it from `tools/xgold.sh`.

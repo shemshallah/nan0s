@@ -19,11 +19,11 @@ MASK_BASE=$(cat "$T/mask_base")
 W=$T/run.$$
 mkdir -p "$W"
 trap 'rm -rf "$W"' EXIT
-cp src/prog/nasm1.nas src/prog/nasm1_tables.nas "$W/"
+cp src/prog/nasm.nas src/prog/nasm0.nas src/prog/nasm0_tables.nas "$W/"
 
 # Stage the source exactly as tools/xgold.sh does.
 awk -v SRC="$SRC" 'BEGIN {
-  printf ".org 0\n.include \"nasm1.nas\"\n.org 0x20000\n.str \""
+  printf ".org 0\n.include \"nasm.nas\"\n.org 0x20000\n.str \""
   while ((getline line < SRC) > 0) {
     gsub(/\\/, "\\\\", line)
     gsub(/"/, "\\\"", line)

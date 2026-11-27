@@ -35,7 +35,7 @@ asm_one() { # src out.bin
     return 0
   fi
   awk -v SRC="$src" 'BEGIN {
-    printf ".org 0\n.include \"nasm1.nas\"\n.org 0x20000\n.str \""
+    printf ".org 0\n.include \"nasm.nas\"\n.org 0x20000\n.str \""
     while ((getline line < SRC) > 0) {
       gsub(/\\/, "\\\\", line)
       gsub(/"/, "\\\"", line)

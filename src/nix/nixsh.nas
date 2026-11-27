@@ -35,7 +35,7 @@
 .equ NX_STAT    0x210                ; 20-word stat block
 
 ; Byte-addressed scratch above the GUI compiler/terminal buffers.
-.equ NX_BUF     0x1000000            ; 0x8000 bytes
+.equ NX_BUF     0x1800000            ; 0x8000 bytes
 .equ NX_P1      0x1010000
 .equ NX_P2      0x1010100
 .equ NX_CWD     0x1010200
@@ -93,6 +93,12 @@
 .equ NX_G_PUTC_CH 0x281
 .equ NX_G_PUTS_STR 0x282
 .equ NX_G_EPUTC_CH 0x283
+; In-shell NaN assembler/runner state.
+.equ NX_A_STEPS  0x284
+.equ NX_A_SP     0x285
+.equ NX_A_R13    0x286
+.equ NX_A_R15    0x287
+.equ NX_A_CH     0x288
 ; Line-filter integration (nixcmds.nas).
 .equ NX_F_CMD   0x2C0
 .equ NX_F_PATH  0x2C1
@@ -117,7 +123,7 @@
 ; POSIX variable lane: 16 entries of 16-byte name + 64-byte value.  The
 ; table and its string scratches are byte addressed and live above the GUI
 ; compiler/terminal buffers, below the SVC 2 heap.
-.equ NX_VTAB     0x1200000            ; 16 * 80 bytes
+.equ NX_VTAB     0x1900000            ; 16 * 80 bytes
 .equ NX_VNAME    0x1201000            ; 16-byte name scratch
 .equ NX_VVAL     0x1201100            ; 64-byte value scratch / read line
 ; Cross-call state for the variable lane.  NX_VG is a word address (the block
@@ -582,6 +588,11 @@ nx_dispatch:
   CALL @nx_streq
   CMP r1,r0
   JMP[NE] @nx_exit
+  LA r1,#NX_CMD
+  LA r2,@nx_c_asm
+  CALL @nx_streq
+  CMP r1,r0
+  JMP[NE] @nx_asm
 
   ; Everything not ported yet keeps the existing GUI/NANIX command handler.
   ; Hand it the clean line so redirect operators are not part of its args.
@@ -2905,6 +2916,188 @@ nx_exit:
   JMP @nx_done
 
 ; ---------------------------------------------------------------------------
+; asm FILE - assemble a packed .nas file with the in-guest nasm0, then run
+; the emitted words under the in-guest n16i.  Guest PUTC goes to fd 1 and
+; COM1 through nx_asm_out.
+nx_asm:
+  ST r15,r14,0
+  ADDI r14,r14,9
+  LA r1,#NX_A1
+  CALL @nx_next_arg
+  LA r1,#NX_A1
+  LDB r2,r1,0
+  CMP r2,r0
+  JMP[EQ] @nx_asm_use
+
+  LA r1,#NX_A1
+  LA r2,#NX_P1
+  CALL @nx_abspath
+
+  ; Source bytes at 0x600000; nasm0 sees the packed words at 0x180000.
+  LA r1,#NX_P1
+  LA r2,0x600000
+  MOVI r3,0x7F00
+  CALL @bare_fs_load
+  LA r4,0xFFFFFFFF
+  CMP r1,r4
+  JMP[EQ] @nx_asm_nf
+  ST r1,r0,#NX_LEN
+  MOVI r0,0
+  MOVI r13,1
+  CMP r13,r0
+  LA r2,0x600000
+  ADD r2,r2,r1
+  STB r0,r2,0
+  MOVI r0,0
+  MOVI r13,1
+  CMP r13,r0
+  LA r1,0x180000
+  ST r1,r0,#V_SRCB
+  LA r1,0x190000
+  ST r1,r0,#V_OUTB
+  LA r1,0x1A0000
+  ST r1,r0,#V_LABB
+  LA r1,0x1B0000
+  ST r1,r0,#V_EXPB
+  LA r1,0x1C0000
+  ST r1,r0,#V_EXPCB
+  ST r0,r0,#V_ERR
+  ST r0,r0,#V_MIRR
+  ST r0,r0,#V_NLAB
+
+  MOVI r1,1
+  ST r1,r0,#V_PASS
+  MOVI r1,0
+  MOVI r2,0
+  MOVI r3,0
+  MOVI r4,0
+  MOVI r5,0
+  MOVI r6,0
+  MOVI r7,0
+  MOVI r8,0
+  MOVI r9,0
+  MOVI r10,0
+  MOVI r11,0
+  MOVI r12,0
+  MOVI r0,0
+  MOVI r13,1
+  CMP r13,r0
+  ST r14,r0,#NX_A_SP
+  LA r14,0x1D0000
+  ST r13,r0,#NX_A_R13
+  CALL @run
+  LD r14,r0,#NX_A_SP
+  LD r13,r0,#NX_A_R13
+  MOVI r1,2
+  ST r1,r0,#V_PASS
+  MOVI r1,0
+  MOVI r2,0
+  MOVI r3,0
+  MOVI r4,0
+  MOVI r5,0
+  MOVI r6,0
+  MOVI r7,0
+  MOVI r8,0
+  MOVI r9,0
+  MOVI r10,0
+  MOVI r11,0
+  MOVI r12,0
+  MOVI r0,0
+  MOVI r13,1
+  CMP r13,r0
+  ST r14,r0,#NX_A_SP
+  LA r14,0x1D0000
+  ST r13,r0,#NX_A_R13
+  CALL @run
+  LD r14,r0,#NX_A_SP
+  LD r13,r0,#NX_A_R13
+  LD r1,r0,#V_ERR
+  CMP r1,r0
+  JMP[NE] @nx_asm_err
+
+  LA r1,@nx_s_asm_ok
+  CALL @nx_puts
+  LD r1,r0,#V_IDX
+  CALL @nx_dec
+  LA r1,@nx_s_words
+  CALL @nx_puts
+  LA r1,@nx_s_asm_ok_ser
+  CALL @nx_asm_ser
+
+  MOVI r1,0
+  LA r2,0x190000
+  MOVI r3,0xFFFF
+  LA r4,@nx_asm_out
+  ST r4,r0,@ni_outcb
+  ST r14,r0,#NX_A_SP
+  LA r14,0x1D0000
+  ST r13,r0,#NX_A_R13
+  ST r15,r0,#NX_A_R15
+  CALL @n16i_run
+  ST r0,r0,@ni_outcb
+  LD r14,r0,#NX_A_SP
+  LD r13,r0,#NX_A_R13
+  LD r15,r0,#NX_A_R15
+  ST r1,r0,#NX_A_STEPS
+  LA r1,@nx_s_ran
+  CALL @nx_puts
+  LD r1,r0,#NX_A_STEPS
+  CALL @nx_dec
+  LA r1,@nx_s_steps
+  CALL @nx_puts
+  JMP @nx_asm_done
+
+nx_asm_err:
+  LA r1,@nx_s_asm_err
+  CALL @nx_puts
+  LD r1,r0,#V_ERR
+  CALL @nx_dec
+  CALL @nx_nl
+  LA r1,@nx_s_asm_err_ser
+  CALL @nx_asm_ser
+  JMP @nx_asm_done
+
+nx_asm_nf:
+  LA r1,@nx_s_asm_nf
+  CALL @nx_puts
+  LA r1,@nx_s_asm_nf_ser
+  CALL @nx_asm_ser
+  JMP @nx_asm_done
+
+nx_asm_use:
+  LA r1,@nx_s_asm_use
+  CALL @nx_puts
+nx_asm_done:
+  ADDI r14,r14,-9
+  LD r15,r14,0
+  JMP @nx_done
+
+; n16i PUTC hook: terminal fd 1 plus COM1, preserving r14/r15.
+nx_asm_out:
+  ST r15,r14,0
+  ADDI r14,r14,9
+  ST r1,r0,#NX_A_CH
+  CALL @nx_putc
+  LD r1,r0,#NX_A_CH
+  PUTC r1
+  ADDI r14,r14,-9
+  LD r15,r14,0
+  RET
+
+; word string -> COM1 bytes
+nx_asm_ser:
+  SHL r1,r1,2
+nx_asm_ser_l:
+  LDB r2,r1,0
+  CMP r2,r0
+  JMP[EQ] @nx_asm_ser_d
+  PUTC r2
+  ADD r1,r1,r13
+  JMP @nx_asm_ser_l
+nx_asm_ser_d:
+  RET
+
+; ---------------------------------------------------------------------------
 nx_root_path:
 .str "/"
 nx_c_cd:
@@ -2990,6 +3183,28 @@ nx_c_help:
 .str "help"
 nx_c_exit:
 .str "exit"
+nx_c_asm:
+.str "asm"
+nx_s_asm_ok:
+.str "asm: "
+nx_s_words:
+.str " words\n"
+nx_s_ran:
+.str "ran "
+nx_s_steps:
+.str " steps\n"
+nx_s_asm_err:
+.str "asm: error "
+nx_s_asm_nf:
+.str "asm: no file\n"
+nx_s_asm_use:
+.str "usage: asm FILE\n"
+nx_s_asm_ok_ser:
+.str "ASM OK\n"
+nx_s_asm_err_ser:
+.str "ASM ERR\n"
+nx_s_asm_nf_ser:
+.str "ASM NOFILE\n"
 
 nx_s_e:
 .str "-e"
@@ -3054,4 +3269,4 @@ nx_s_reply:
 nx_s_nixsh:
 .str "/nixsh"
 nx_s_help:
-.str "NANIX shell (phase 1.5)\ncd pwd echo printf test true false cp mv touch rm mkdir rmdir ls cat wc stat truncate sleep kill read env sync help exit\nio: > >> < 2> 2>&1 | (sequential)\nvars: NAME=value, $NAME, read [NAME]\nlegacy: write edit cc run debug mem alloc execbig\n"
+.str "NANIX shell (phase 1.5)\ncd pwd echo printf test true false cp mv touch rm mkdir rmdir ls cat wc stat truncate sleep kill read env sync help exit\nio: > >> < 2> 2>&1 | (sequential)\nvars: NAME=value, $NAME, read [NAME]\nlegacy: write edit cc run debug mem alloc execbig\nasm FILE (nasm0 + n16i in-guest)\n"

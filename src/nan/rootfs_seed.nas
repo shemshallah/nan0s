@@ -42,6 +42,10 @@ rootfs_seed_all:
   SHL r1,r1,2
   LA r2,@rootfs_d9
   CALL @fs_seed
+  LA r1,@rootfs_p10
+  SHL r1,r1,2
+  LA r2,@rootfs_d10
+  CALL @fs_seed
   ADDI r14,r14,-9
   LD r15,r14,0
   RET
@@ -70,18 +74,22 @@ rootfs_p5:
 rootfs_d5:
 .str "int main(void){ printf(\"hello from /hello.c\\n\"); return 0; }\n"
 rootfs_p6:
-.str "/inc.h"
+.str "/hello.nas"
 rootfs_d6:
-.str "int add(int a,int b){ return a+b; }\n"
+.str "; hello.nas - first NaN program assembled and run inside NANIX.\n; It is seeded into / so the shell can run: asm /hello.nas\n.org 0\nMOVI r1,72\nPUTC r1\nMOVI r1,73\nPUTC r1\nMOVI r1,10\nPUTC r1\nHALT\n"
 rootfs_p7:
-.str "/motd"
+.str "/inc.h"
 rootfs_d7:
-.str "Welcome to NANIX on NaN/0S.\nThe .c files in / are demo inputs for the raw-NaN16 ncc compiler.\nSystem code is .nas/NaN16; C here is data, not the OS.\n"
+.str "int add(int a,int b){ return a+b; }\n"
 rootfs_p8:
-.str "/spin.c"
+.str "/motd"
 rootfs_d8:
-.str "int k;\nint main(){\n  float A=0,B=0.3,i,j,z[1760];\n  char b[1760];\n  printf(\"\\x1b[2J\");\n  while(1){\n  memset(b,32,1760);\n  memset(z,0,7040);\n  for(j=0;6.28>j;j+=0.05)\n    for(i=0;6.28>i;i+=0.15){\n      float c=sin(i),d=cos(j),e=sin(A),f=sin(j),g=cos(A),h=d+2,D=1/(c*h*e+f*g+5),l=cos(i),m=cos(B),n=sin(B),t=c*h*g-f*e;\n      int x=40+30*D*(l*h*m-t*n),y=12+15*D*(l*h*n+t*m),o=x+80*y,N=8*((f*e-c*d*g)*m-c*d*e-f*g-l*d*n);\n      if(22>y&&y>0&&x>0&&80>x&&D>z[o]){z[o]=D;b[o]=\".,-~:;=!*#$@\"[N>0?N:0];}\n    }\n  printf(\"\\x1b[H\");\n  for(k=0;1761>k;k++) putchar(k%80?b[k]:10);\n  A+=0.04; B+=0.02;\n  }\n  return 0;\n}\n"
+.str "Welcome to NANIX on NaN/0S.\nThe .c files in / are demo inputs for the raw-NaN16 ncc compiler.\nSystem code is .nas/NaN16; C here is data, not the OS.\n"
 rootfs_p9:
-.str "/useinc.c"
+.str "/spin.c"
 rootfs_d9:
+.str "int k;\nint main(){\n  float A=0,B=0.3,i,j,z[1760];\n  char b[1760];\n  printf(\"\\x1b[2J\");\n  while(1){\n  memset(b,32,1760);\n  memset(z,0,7040);\n  for(j=0;6.28>j;j+=0.05)\n    for(i=0;6.28>i;i+=0.15){\n      float c=sin(i),d=cos(j),e=sin(A),f=sin(j),g=cos(A),h=d+2,D=1/(c*h*e+f*g+5),l=cos(i),m=cos(B),n=sin(B),t=c*h*g-f*e;\n      int x=40+30*D*(l*h*m-t*n),y=12+15*D*(l*h*n+t*m),o=x+80*y,N=8*((f*e-c*d*g)*m-c*d*e-f*g-l*d*n);\n      if(22>y&&y>0&&x>0&&80>x&&D>z[o]){z[o]=D;b[o]=\".,-~:;=!*#$@\"[N>0?N:0];}\n    }\n  printf(\"\\x1b[H\");\n  for(k=0;1761>k;k++) putchar(k%80?b[k]:10);\n  A+=0.04; B+=0.02;\n  }\n  return 0;\n}\n"
+rootfs_p10:
+.str "/useinc.c"
+rootfs_d10:
 .str "#include \"/inc.h\"\nint main(void){ printf(\"%d\\n\", add(20,22)); return 0; }\n"

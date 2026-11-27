@@ -304,6 +304,19 @@ ni_h_bswapm:
   JMP @ni_loop
 ni_h_putc:
   LD r4,r5,@ni_regs
+  LD r6,r0,@ni_outcb
+  CMP r6,r0
+  JMP[EQ] @ni_putc_raw
+  ST r10,r0,@ni_s10
+  ST r11,r0,@ni_s11
+  ST r12,r0,@ni_s12
+  ADD r1,r4,r0
+  CALLR r6
+  LD r10,r0,@ni_s10
+  LD r11,r0,@ni_s11
+  LD r12,r0,@ni_s12
+  JMP @ni_loop
+ni_putc_raw:
   PUTC r4
   JMP @ni_loop
 ni_h_stw:
@@ -786,6 +799,14 @@ ni_irq_nostk:
   RET
 ; ---- state and tables ------------------------------------------------------------
 ni_lnk:
+.word 0
+ni_outcb:
+.word 0
+ni_s10:
+.word 0
+ni_s11:
+.word 0
+ni_s12:
 .word 0
 ni_hlnk:
 .word 0

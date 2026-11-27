@@ -15,7 +15,7 @@ NAN_CLI=${NAN_CLI:-aarch64/android/nan_cli}
 FORCE=${1:-}
 mkdir -p "$T"
 
-KEY=$(cat src/prog/nasm1.nas src/prog/nasm1_cache.nas \
+KEY=$(cat src/prog/nasm.nas src/prog/nasm0.nas src/prog/nasm0_tables.nas src/prog/nasm1_cache.nas \
           src/translate/x64_block.nas src/translate/x86_64.nas \
           src/translate/abi64.nas src/native64/cache_body.S \
           src/native64/cache.ld tools/blockcache_build.sh |
@@ -33,7 +33,7 @@ command -v clang >/dev/null 2>&1 || { echo "blockcache: clang is required" >&2; 
 command -v ld.lld >/dev/null 2>&1 || { echo "blockcache: ld.lld is required" >&2; exit 1; }
 
 echo "blockcache: building $KEY"
-awk -f tools/nmk.awk -v CMD=emit src/prog/nasm1.nas > "$T/nasm1.nan"
+awk -f tools/nmk.awk -v CMD=emit src/prog/nasm.nas > "$T/nasm1.nan"
 grep -E '^[0-9A-Fa-f]{4}_[0-9A-Fa-f]{8}_[0-9A-Fa-f]{4}' "$T/nasm1.nan" |
   sed 's/[[:space:]].*//' | awk '{print ".raw "$0}' > "$T/nasm1_words.nas"
 N=$(grep -c '^\.raw ' "$T/nasm1_words.nas")

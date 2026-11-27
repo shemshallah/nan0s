@@ -13,7 +13,7 @@ cd "$(dirname "$0")/.."
 export LC_ALL=C
 [ "${XGOLD_FORCE:-0}" = 1 ] && exec sh tools/xgold.sh
 
-KEY=$(sha256sum src/native/kan16.xa src/prog/nasm1.nas tools/xgold.sh \
+KEY=$(sha256sum src/native/kan16.xa src/prog/nasm.nas src/prog/nasm0.nas src/prog/nasm0_tables.nas tools/xgold.sh \
       tools/manifest_build.sh tools/manifest_mk.awk 2>/dev/null |
       sha256sum | awk '{print $1}')
 CACHE="build/xgold_cache/$KEY"

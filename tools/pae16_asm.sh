@@ -52,7 +52,7 @@ asm_one() { # src out.bin
   expand_includes "$src" "$exp"
   # nasm1 runs as a guest; the source travels in a .str after nasm1.nas.
   awk -v SRC="$exp" 'BEGIN {
-    printf ".org 0\n.include \"nasm1.nas\"\n.org 0x20000\n.str \""
+    printf ".org 0\n.include \"nasm.nas\"\n.org 0x20000\n.str \""
     while ((getline line < SRC) > 0) {
       gsub(/\\/, "\\\\", line)
       gsub(/"/, "\\\"", line)

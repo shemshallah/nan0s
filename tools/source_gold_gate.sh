@@ -86,7 +86,7 @@ command -v qemu-system-i386 >/dev/null 2>&1 ||
 command -v xxd >/dev/null 2>&1 || fail "xxd is required"
 [ -f src/native/nan16_x86.nan ] || fail "missing src/native/nan16_x86.nan"
 [ -f src/native/kan16.xa ] || fail "missing src/native/kan16.xa"
-[ -f src/prog/nasm1.nas ] || fail "missing src/prog/nasm1.nas"
+[ -f src/prog/nasm.nas ] || fail "missing src/prog/nasm.nas"
 [ -f src/tools/n16i.nas ] || fail "missing src/tools/n16i.nas"
 GOLD=src/native/nan16_x86.nan
 
@@ -114,7 +114,7 @@ fi
 echo "xgold64 producer: native QEMU nasm1; nan_cli only writes the optional nc.ser comparator"
 
 # ---- 2. full GOLD: source-derived rebuild with the native core --------------
-echo "== 2. full GOLD regeneration (nasm1 on native kan16, QEMU) =="
+echo "== 2. full GOLD regeneration (nasm x86 mode on native kan16, QEMU) =="
 cp "$GOLD" "$T/gold.before"
 cp x86/native/nan16_x86.nan "$T/gold.x86.before"
 if [ "${SOURCE_GOLD_FAST:-0}" = 1 ]; then
@@ -152,10 +152,10 @@ dd if="$T/gold.bin" of="$T/boot.gold" bs=1 count=512 2>/dev/null
 echo "GOLD grid: 32 boot + $kernel_rows kernel rows ($kernel_bytes kernel bytes; old 532 expectation removed)"
 
 # ---- 4. raw n16i slice: nasm1 assembles the boot sector ---------------------
-echo "== 4. raw n16i slice: nasm1 assembles x86/boot/kboot0.xa under n16i =="
+echo "== 4. raw n16i slice: nasm assembles x86/boot/kboot0.xa under n16i =="
 # xgold.sh stages the source next to nasm1 so .include "nasm1.nas" resolves.
 awk -v SRC=x86/boot/kboot0.xa 'BEGIN {
-  printf ".org 0\n.include \"nasm1.nas\"\n.org 0x20000\n.str \""
+  printf ".org 0\n.include \"nasm.nas\"\n.org 0x20000\n.str \""
   while ((getline line < SRC) > 0) {
     gsub(/\\/, "\\\\", line); gsub(/"/, "\\\"", line)
     printf "%s\\n", line
@@ -168,7 +168,7 @@ if ! awk -f tools/nmk.awk -v CMD=emit "$STAGE_H" > "$T/h.nan" 2>"$T/h.err"; then
 fi
 h_words=$(sed -n 's/^words \([0-9][0-9]*\)$/\1/p' "$T/h.err")
 [ -n "$h_words" ] || fail "cannot read inner guest word count"
-echo "inner guest: nasm1 + kboot0.xa at 0x20000, $h_words words"
+echo "inner guest: nasm + kboot0.xa at 0x20000, $h_words words"
 
 INNER=135168
 make_n16i_outer "$T/h.nan" "$INNER" "$STAGE_O"
@@ -244,7 +244,7 @@ fi
 
 # ---- 6. optional x86-64 GOLD (native xgold64.sh, no C producer) ------------
 if [ "${SOURCE_GOLD_64:-0}" = 1 ]; then
-  echo "== 6. x86-64 GOLD regeneration (nasm1 on native kan16, QEMU) =="
+  echo "== 6. x86-64 GOLD regeneration (nasm x86 mode on native kan16, QEMU) =="
   cp src/native/nan16_x64.nan "$T/x64.before"
   if ! sh tools/xgold64.sh > "$T/x64.log" 2>&1; then
     cat "$T/x64.log" >&2
@@ -260,7 +260,7 @@ fi
 if [ "${SOURCE_GOLD_FULL_N16I:-0}" = 1 ]; then
   echo "== 7. full GOLD kernel under raw n16i (slow path) =="
   awk -v SRC=src/native/kan16.xa 'BEGIN {
-    printf ".org 0\n.include \"nasm1.nas\"\n.org 0x20000\n.str \""
+    printf ".org 0\n.include \"nasm.nas\"\n.org 0x20000\n.str \""
     while ((getline line < SRC) > 0) {
       gsub(/\\/, "\\\\", line); gsub(/"/, "\\\"", line)
       printf "%s\\n", line
