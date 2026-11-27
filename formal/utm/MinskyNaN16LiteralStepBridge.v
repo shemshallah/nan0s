@@ -1550,3 +1550,104 @@ Proof.
 Qed.
 
 Print Assumptions lp_exec_ST_refines.
+
+(** ** Supported-instruction dispatcher
+
+    [LPInstrSide] collects exactly the opcode-specific side conditions
+    of the one-step table.  [lp_exec_instr_refines] then dispatches on
+    the decoded constructor; block invariants and the register-file
+    length are kept separate because they are preserved by every
+    instruction and only need to be maintained once per run. *)
+
+Definition LPInstrSide (L : LPState) (vm : VM) (ins : InstrP) : Prop :=
+  match ins with
+  | pCMP a b => a < 16 /\ b < 16
+  | pJMP p target => lp_k L <> 3
+  | pSHL d a imm =>
+      d < 16 /\ d <> 15 /\ a < 16 /\ imm < 32 /\
+      N.to_nat (lget_regN (lp_reg L) a) * 2 ^ imm < 2 ^ 32
+  | pSHR d a imm => d < 16 /\ d <> 15 /\ a < 16 /\ imm < 32
+  | pADD d a b =>
+      d < 16 /\ d <> 15 /\ a < 16 /\ b < 16 /\
+      N.to_nat (lget_regN (lp_reg L) a) +
+        N.to_nat (lget_regN (lp_reg L) b) < 2 ^ 32
+  | pSUB d a b =>
+      d < 16 /\ d <> 15 /\ a < 16 /\ b < 16 /\
+      N.to_nat (lget_regN (lp_reg L) b) <=
+        N.to_nat (lget_regN (lp_reg L) a)
+  | pLD d a imm => d < 16 /\ d <> 15 /\ a < 16
+  | pST d a imm =>
+      d < 16 /\ a < 16 /\ lget_reg (lp_reg L) a + imm < 4366
+  | pMOVI d imm => d < 16 /\ d <> 15 /\ imm < 2 ^ 32
+  | pBOOL tbl d a b =>
+      tbl = 8 /\ d < 16 /\ d <> 15 /\ a < 16 /\ b < 16 /\
+      lget_regN (lp_reg L) b = 255%N /\ vm_reg vm b = 255
+  | pPUTC d => True
+  | pCALL target => S (lp_pc L) < 2 ^ 32 /\ vm_reg vm 15 = S (lp_pc L)
+  | pRET => True
+  | pRETP p => lp_k L <> 3
+  | pHALT => True
+  end.
+
+Theorem lp_exec_instr_refines :
+  forall L vm prog ins,
+    Rlp L vm ->
+    List.length (lp_reg L) = 16 ->
+    MemP_wf (lp_mem L) ->
+    LPInstrSide L vm ins ->
+    decode_word_p (lp_mem_at L (lp_pc L)) = Some ins ->
+    nth_error prog (vm_pc vm) = Some ins ->
+    Rlp (lp_exec L ins) (exec_instr_p prog vm).
+Proof.
+  intros L vm prog ins HR Hlen Hwf Hside Hdec Hnth.
+  destruct ins as
+    [a b | p target | d a imm | d a imm | d a b | d a b | d a imm
+    | d a imm | d imm | tbl d a b | d | target | | p |].
+  - simpl in Hside. destruct Hside as (Ha & Hb).
+    eapply lp_exec_CMP_refines; eauto.
+  - simpl in Hside. eapply lp_exec_JMP_refines; eauto.
+  - simpl in Hside. destruct Hside as (Hd & Hd15 & Ha & Himm & Hprod).
+    eapply lp_exec_SHL_refines; eauto.
+  - simpl in Hside. destruct Hside as (Hd & Hd15 & Ha & Himm).
+    eapply lp_exec_SHR_refines; eauto.
+  - simpl in Hside. destruct Hside as (Hd & Hd15 & Ha & Hb & Hsum).
+    eapply lp_exec_ADD_refines; eauto.
+  - simpl in Hside. destruct Hside as (Hd & Hd15 & Ha & Hb & Hle).
+    eapply lp_exec_SUB_refines; eauto.
+  - simpl in Hside. destruct Hside as (Hd & Hd15 & Ha).
+    eapply lp_exec_LD_refines; eauto.
+  - simpl in Hside. destruct Hside as (Hd & Ha & Haddr).
+    eapply lp_exec_ST_refines; eauto.
+  - simpl in Hside. destruct Hside as (Hd & Hd15 & Himm).
+    eapply lp_exec_MOVI_refines; eauto.
+  - simpl in Hside.
+    destruct Hside as (Htbl & Hd & Hd15 & Ha & Hb & Hbn & Hvb).
+    subst tbl. eapply lp_exec_BOOL8_255_refines; eauto.
+  - simpl in Hside. eapply lp_exec_PUTC_refines; eauto.
+  - simpl in Hside. destruct Hside as (Hnext & Hlink).
+    eapply lp_exec_CALL_refines; eauto.
+  - simpl in Hside. eapply lp_exec_RET_refines; eauto.
+  - simpl in Hside. eapply lp_exec_RETP_refines; eauto.
+  - simpl in Hside. eapply lp_exec_HALT_refines; eauto.
+Qed.
+
+Print Assumptions lp_exec_instr_refines.
+
+Lemma lp_exec_reg_length :
+  forall L ins,
+    List.length (lp_reg (lp_exec L ins)) = List.length (lp_reg L).
+Proof.
+  intros L ins. destruct ins; cbn; try reflexivity;
+    apply lset_word_length.
+Qed.
+
+Lemma lp_exec_mem_wf :
+  forall L ins,
+    MemP_wf (lp_mem L) ->
+    MemP_wf (lp_mem (lp_exec L ins)).
+Proof.
+  intros L ins Hwf. destruct ins; cbn; try exact Hwf;
+    apply MemP_wf_mem_set; exact Hwf.
+Qed.
+
+Print Assumptions lp_exec_mem_wf.
