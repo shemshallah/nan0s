@@ -114,16 +114,24 @@ each item needs a real gate, a short proof, and a frontier note.
       slice now passes the 8M-word host mask; the old 256 KiB mask wrapped
       nasm1's output at word 0x100000 and stack at 0x1F0000.  Full-kernel raw
       n16i remains the slow reference path.
-- [ ] (nasm) Make the NaN label table collision-proof (name compare or
-      64-bit hash).  The full guest has 10,251 labels; the current 32-bit
-      hash-only table collides at word 1152.  `nhost` already expands
-      includes and matches nmk on the 4,746-word `nrun_test` tree.
+- [x] (nasm) Collision-proof NaN label table: three-word entries (two
+      independent 32-bit hashes + value), newest-first `llook` for nmk's
+      last-definition-wins semantics, and the `LD/ST -> LDS/STS` plus
+      `JMP/CALL -> JMPF/CALLF` promotions.  `nhost` now reproduces the full
+      51-file guest exactly: 530,842/530,842 words, SHA-256 match, 0 errors;
+      `tools/nhost_gate.sh` covers it.  The duplicate `tn_d` name in libcx
+      was renamed `cx_tn_d`, fixing the in-shell `asm` operand hang;
+      `tools/nixsh_asm_gate.sh` PASSes.
+- [ ] (nasm) Emit `src/nan/nixsched.nan` with `nhost` and retire `nmk.awk`
+      from the guest build (`tools/build.sh`, `tools/mkn16iimg.sh`), leaving
+      nmk only as the gate oracle and bootstrap.
 - [x] F18c Unified nasm: `src/prog/nasm.nas` is the single assembler with a
       NaN-word mode (z0, `run`/`V_*`) and an x86-byte mode (x1, `_start`);
       `nasm0.nas`/`nasm1.nas` are aliases.  x86 boot output is byte-identical
-      to nasm1, `xgold.sh` matches GOLD in 15.4 s, `blockcache_gate` PASS
-      (3,817-word cache), and `source_gold_gate` PASS in 73.7 s.  In-shell
-      `asm` operands still hit the shell-context hang.
+      to nasm1, `xgold.sh` matches GOLD, `blockcache_gate` PASS (3,913-word
+      cache), and `source_gold_gate` PASS in 73.7 s.  In-shell `asm`
+      operands/labels now assemble and run (`nixsh_asm_gate` PASS) after the
+      duplicate `tn_d` label fix.
 - [x] F18b Block-cache GOLD build: translate nasm1's 2,992 compiled words to
       native x86 slots plus a per-PC predicate-mask table, dispatch directly
       in a multiboot 64-bit stub, and consume it from `tools/xgold.sh`.

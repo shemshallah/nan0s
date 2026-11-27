@@ -21,30 +21,46 @@ The x86 backend is namespaced `x1_*`/`Z1_*`; the NaN backend keeps `run` and
 ## Verification
 
 - x86 boot sector: byte-identical to the pre-merge nasm1 output.
-- `tools/xgold.sh`: GOLD match, 15.4 s through the block cache.
-- `tools/blockcache_gate.sh`: PASS, 3,817-word cache, boot 512/512 and kernel
+- `tools/xgold.sh`: GOLD match, 18.3 s through the block cache.
+- `tools/blockcache_gate.sh`: PASS, 3,910-word cache, boot 512/512 and kernel
   12,368/12,368.
 - `tools/source_gold_gate.sh`: PASS in 73.7 s including the raw n16i slice.
+- `tools/nhost_gate.sh`: PASS, two phases: the `nrun_test` tree (4,839 words)
+  and the full 51-file product guest (530,842 words, exact `nmk.awk` stream).
+- `tools/nixsh_asm_gate.sh`: PASS, in-shell `asm` assembles an
+  operand/label source and n16i runs it.
 - `src/tests/nrun_test.nas`: `HI` / `RUN PASS` after the merge.
 
-The in-shell `asm` command remains experimental: it assembles a `HALT`-only
-source, but operand-bearing sources still hang in the shell process context.
+## nhost and the full-guest label table (2026-11-27)
 
-## nhost and the full-guest label limit (2026-11-27)
-
-`src/prog/nhost.nas` now expands `.include` correctly.  The bug was the second
+`src/prog/nhost.nas` expands `.include` correctly.  The bug was the second
 word of the `.include` matcher: `0x65646C75` spells `ulde`, not `lude`.  With
-`0x6564756C`, `tools/nhost_gate.sh` PASSES: the `nrun_test` tree assembles to
-the exact 4,746-word stream `nmk.awk` produces.
+`0x6564756C`, `tools/nhost_gate.sh` phase 1 matches the `nrun_test` tree.
 
-The full `gui_sched_boot.nas` tree (51 files) assembles under `nhost` to
-530,842 words, 0 errors, in 34 s.  It diverges from `nmk.awk` at guest word
-1152.  The cause is the NaN label table: `nasm0` stores only a 32-bit djb2
-hash plus value, and the full guest has 10,251 labels.  The first hash
-collision resolves to the wrong label, so `JMP[NE]` targets 0x0485 instead of
-0x54DC.
+The full `gui_sched_boot.nas` tree (51 files) is 530,842 words.  The old label
+table stored one 32-bit djb2 hash plus a value, so two of the ~10k labels
+collided and resolved to the wrong target.  The table is now three words per
+entry: two independent 32-bit hashes (djb2 and `h2 = h2*129 + c`) and the
+value.  `V_H2`/`V_H2S` carry the second hash through `.equ` expressions; the
+static mnemonic/directive tables keep the cheap single-hash scan.
 
-The next assembler change is a collision-proof label table: either the label
-name (pointer/length and compare on hash hit) or a 64-bit hash stored beside
-the value.  The static mnemonic/directive tables can keep the 32-bit hash
-because their entries are unique; the source-label table cannot.
+`nmk.awk` keys labels by full name, so a name defined twice keeps its **last**
+definition.  `llook` now scans the label table newest-first to reproduce that
+semantics without a second name buffer.  This exposed a real guest bug:
+`tn_d` in `src/lib/libcx.nas` overwrote nasm's decimal-parser loop `tn_d`, so
+`JMP[NE] @tn_d` landed in libcx's `DIV` and hung in-shell assembly on any
+numeric operand.  The libcx loop is now `cx_tn_d`; the in-shell `asm` command
+assembles operands and labels and runs the result.
+
+Two encoder differences were also brought into line with `nmk.awk`:
+
+- `LD`/`ST` with a `0xF0000..0xF0FFF` immediate and base `r0` become
+  `LDS`/`STS` with the offset reduced by `0xF0000`.
+- `JMP`/`CALL` with a target above 16 bits become `JMPF`/`CALLF`, carrying a
+  24-bit `d:a:imm` target.
+
+The full guest now assembles under `nhost` with 0 errors and is byte-identical
+to `nmk.awk` (same 530,842 words, SHA-256 match, ~34 s).
+`tools/nhost_bundle.awk` builds the flat `;@MAIN`/`;@FILE` disk bundle for the
+gate.  The remaining bootstrap step is emitting `src/nan/nixsched.nan` from
+`nhost` instead of `nmk.awk`.

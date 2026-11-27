@@ -42,6 +42,8 @@ JMP @x1__start
 .equ V_LABB 6295
 .equ V_EXPB 6296
 .equ V_EXPCB 6297
+.equ V_H2 6298
+.equ V_H2S 6299
 ; ---- run: one full pass over the source (V_PASS = 1 or 2 set by caller)
 run:
 ST r15,r14,0
@@ -124,8 +126,12 @@ d_equ:
 CALL @nextc
 CALL @rdhash1
 ST r5,r0,#V_H
+LD r2,r0,#V_H2
+ST r2,r0,#V_H2S
 CALL @expr
 LD r5,r0,#V_H
+LD r2,r0,#V_H2S
+ST r2,r0,#V_H2
 LD r2,r0,#V_PASS
 CMP r2,r13
 JMP[NE] @pskip
@@ -307,6 +313,65 @@ ST r8,r0,#V_I
 JMP @dl
 de:
 LD r1,r0,#V_OP
+; JMP/CALL with a >16-bit target become JMPF/CALLF with a 24-bit d:a:imm (as nmk)
+MOVI r4,10
+CMP r1,r4
+JMP[EQ] @de_far
+MOVI r4,11
+CMP r1,r4
+JMP[NE] @de_ld
+de_far:
+LD r2,r0,#V_I
+MOVI r4,65535
+CMP r2,r4
+JMP[LE] @de_ld
+LA r4,0xFFFFFF
+BOOL.8 r2,r2,r4
+MOVI r4,10
+CMP r1,r4
+MOVI[EQ] r1,56
+MOVI r4,11
+CMP r1,r4
+MOVI[EQ] r1,57
+ST r1,r0,#V_OP
+SHR r3,r2,20
+ST r3,r0,#V_D
+SHR r3,r2,16
+MOVI r4,15
+BOOL.8 r3,r3,r4
+ST r3,r0,#V_A
+MOVI r4,65535
+BOOL.8 r3,r2,r4
+ST r3,r0,#V_I
+JMP @de_enc
+de_ld:
+; LD/ST with a 0xF0000..0xF0FFF address and base r0 become LDS/STS (as nmk)
+MOVI r4,8
+CMP r1,r4
+JMP[EQ] @de_hi
+MOVI r4,9
+CMP r1,r4
+JMP[NE] @de_enc
+de_hi:
+LD r2,r0,#V_A
+CMP r2,r0
+JMP[NE] @de_enc
+LD r2,r0,#V_I
+SHR r3,r2,12
+MOVI r4,240
+CMP r3,r4
+JMP[NE] @de_enc
+MOVI r4,8
+CMP r1,r4
+MOVI[EQ] r1,28
+MOVI r4,9
+CMP r1,r4
+MOVI[EQ] r1,29
+ST r1,r0,#V_OP
+LA r3,0xF0000
+SUB r2,r2,r3
+ST r2,r0,#V_I
+de_enc:
 SHL r2,r1,24
 LD r3,r0,#V_D
 SHL r3,r3,20
@@ -372,17 +437,22 @@ LD r4,r0,#V_MIRR
 ADD r4,r4,r13
 ST r4,r0,#V_MIRR
 RET
-; ---- define: r5=hash r8=value -> label/equ table (2 words/entry, hash 0 ends). pass 1 only
+; ---- define: r5=hash1, V_H2=hash2, r8=value -> label/equ table
+; (3 words/entry: hash1, hash2, value; a zero hash1 ends the table). pass 1 only
 define:
 LD r2,r0,#V_NLAB
-SHL r3,r2,1
+MOVI r3,3
+MUL r3,r2,r3
 LD r4,r0,#V_LABB
 ADD r3,r3,r4
 ST r5,r3,0
-ST r8,r3,1
+LD r2,r0,#V_H2
+ST r2,r3,1
+ST r8,r3,2
+LD r2,r0,#V_NLAB
 ADD r2,r2,r13
 ST r2,r0,#V_NLAB
-ST r0,r3,2
+ST r0,r3,3
 RET
 ; ---- look: r5=hash r6=table r7=stride -> r1=entry address or 0
 look:
@@ -397,6 +467,35 @@ lk0:
 MOVI r1,0
 RET
 lk2:
+BOOL.12 r1,r6,r6
+RET
+; ---- llook: newest-first scan of the label table (last definition wins, as nmk)
+; requires hash1 and V_H2 to both match; the table is V_LABB with V_NLAB entries of 3 words
+llook:
+LD r7,r0,#V_NLAB
+CMP r7,r0
+JMP[EQ] @llk0
+MOVI r4,3
+MUL r2,r7,r4
+ADD r6,r6,r2
+SUB r6,r6,r4
+llk_l:
+LD r2,r6,0
+CMP r2,r5
+JMP[NE] @llk_n
+LD r2,r6,1
+LD r3,r0,#V_H2
+CMP r2,r3
+JMP[EQ] @llk_hit
+llk_n:
+SUB r6,r6,r4
+SUB r7,r7,r13
+CMP r7,r0
+JMP[NE] @llk_l
+llk0:
+MOVI r1,0
+RET
+llk_hit:
 BOOL.12 r1,r6,r6
 RET
 ; ---- expr: reads from stream, r8 = value. term = @label | #EQU | number, joined by + -, unary - allowed
@@ -456,11 +555,11 @@ JMP @tm_x
 tm_l:
 CALL @rdhash
 LD r6,r0,#V_LABB
-MOVI r7,2
-CALL @look
+MOVI r7,3
+CALL @llook
 CMP r1,r0
 JMP[EQ] @tm_miss
-LD r8,r1,1
+LD r8,r1,2
 JMP @tm_x
 tm_miss:
 MOVI r8,0
@@ -544,11 +643,15 @@ rdhash1:
 ST r15,r14,0
 ADD r14,r14,r13
 MOVI r5,5381
+LA r2,0x9E3779B9
+ST r2,r0,#V_H2
 JMP @rh_a
 rdhash:
 ST r15,r14,0
 ADD r14,r14,r13
 MOVI r5,5381
+LA r2,0x9E3779B9
+ST r2,r0,#V_H2
 rh1:
 CALL @getc
 CALL @isid
@@ -558,6 +661,11 @@ rh_a:
 SHL r6,r5,5
 ADD r5,r6,r5
 ADD r5,r5,r1
+LD r2,r0,#V_H2
+SHL r3,r2,7
+ADD r2,r2,r3
+ADD r2,r2,r1
+ST r2,r0,#V_H2
 JMP @rh1
 rh2:
 CALL @ungetc
