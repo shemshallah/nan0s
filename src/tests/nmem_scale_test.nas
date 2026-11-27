@@ -1,0 +1,89 @@
+; nmem_scale_test.nas - 2 TB memory object + 1 TB 64-bit view.
+.org 0
+JMP @main
+.include "../lib/nmem.nas"
+main:
+MOVI r13,1
+MOVI r14,0x7000
+CALL @nobj_init
+; base = 4 GiB (lo=0, hi=1), size = 2 TiB (lo=0, hi=512)
+MOVI r1,0
+MOVI r2,1
+MOVI r3,0
+MOVI r4,512
+MOVI r5,3
+MOVI r6,3
+CALL @nmem_create
+CMP r1,r0
+JMP[EQ] @fail
+ST r1,r0,#NM_CAP
+; info
+LD r1,r0,#NM_CAP
+LA r2,#NM_INFO
+CALL @nmem_info
+LA r5,0xFFFFFFFF
+CMP r1,r5
+JMP[EQ] @fail
+LA r4,#NM_INFO
+LD r5,r4,0
+CMP r5,r0
+JMP[NE] @fail
+LD r5,r4,1
+MOVI r6,1
+CMP r5,r6
+JMP[NE] @fail
+LD r5,r4,2
+CMP r5,r0
+JMP[NE] @fail
+LD r5,r4,3
+MOVI r6,512
+CMP r5,r6
+JMP[NE] @fail
+LD r5,r4,4
+MOVI r6,3
+CMP r5,r6
+JMP[NE] @fail
+LD r5,r4,5
+MOVI r6,3
+CMP r5,r6
+JMP[NE] @fail
+; 1 TiB view at offset 1 TiB, length 1 TiB
+LD r1,r0,#NM_CAP
+MOVI r2,0
+MOVI r3,256
+MOVI r4,0
+MOVI r5,256
+CALL @nmem_view
+CMP r1,r0
+JMP[EQ] @fail
+ST r1,r0,#NM_CAP
+LA r2,#NM_INFO
+CALL @nmem_info
+LA r5,0xFFFFFFFF
+CMP r1,r5
+JMP[EQ] @fail
+LA r4,#NM_INFO
+LD r5,r4,1
+MOVI r6,257
+CMP r5,r6
+JMP[NE] @fail
+LD r5,r4,3
+MOVI r6,256
+CMP r5,r6
+JMP[NE] @fail
+; 2 TiB offset is past the end and must fail
+LD r1,r0,#NM_CAP
+MOVI r2,0
+MOVI r3,0x400
+MOVI r4,0
+MOVI r5,1
+CALL @nmem_view
+CMP r1,r0
+JMP[NE] @fail
+MOVI r1,79
+PUTC r1
+HALT
+fail:
+MOVI r1,70
+PUTC r1
+HALT

@@ -143,4 +143,4 @@ nc_online_test:
   LD r15,r14,0
   RET
 
-.equ NC_TMP 0x3DF
+.equ NC_TMP 0x3D3
