@@ -1759,3 +1759,29 @@ Proof.
 Qed.
 
 Print Assumptions lp_run_refines.
+(** ** Fixture link-register obstruction
+
+    The first CALL of the fixture is at pc 6, after the straight-line
+    prelude [MOVI 13 1; MOVI 1 5; ST 1 0 100; MOVI 1 166;
+    ST 1 0 101; ST 0 0 102], which never writes [r15].  The abstract
+    VM's [pCALL] leaves [vm_reg 15] unchanged and only writes
+    [vm_link], while the literal [pCALL] writes the return address into
+    [r15].  The CALL row of [LPInstrSide] therefore fails at this site;
+    these two computed facts record the obstruction. *)
+
+Lemma fixture_lp_pc_six : lp_pc (lp_run 6 lp_reset) = 6.
+Proof. vm_compute. reflexivity. Qed.
+
+Lemma fixture_vm_reg15_six :
+  vm_reg (vm_run_p 6 fixture_prog_full (vm_of_lp lp_reset)) 15 = 0.
+Proof. vm_compute. reflexivity. Qed.
+
+Lemma fixture_first_call_link_fails :
+  vm_reg (vm_run_p 6 fixture_prog_full (vm_of_lp lp_reset)) 15 <>
+  S (lp_pc (lp_run 6 lp_reset)).
+Proof.
+  rewrite fixture_vm_reg15_six, fixture_lp_pc_six.
+  discriminate.
+Qed.
+
+Print Assumptions fixture_first_call_link_fails.
