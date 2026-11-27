@@ -109,7 +109,11 @@ z_count:
   REPSTOSD
   ; r27: full guest image from the IDE primary master at kernel+16B0.
   ; Falls back to the floppy-staged 512 KiB copy when no disk answers.
+  ; F16: verify boot+kernel+manifest+tag before the first guest fetch; the
+  ; guest digest is checked after the fetch and before the guest is entered.
+  CALL @man_verify_pre
   CALL @ata_load_guest
+  CALL @man_verify_guest
   NOP
   NOP
   NOP
@@ -2948,3 +2952,528 @@ kabi_tick:
   CALL @kabi_irq
 kt_ret:
   RET
+
+; ---- F16 product manifest verification + SHA-256 ---------------------------
+; The manifest is the 512 bytes at LBA 128 (physical 0x1FE00), loaded by the
+; boot sector before the kernel starts.  Scratch lives below the kernel window
+; (0xC000..0xC240) so hashing the kernel image does not mutate hashed bytes.
+;
+; Scope: SHA-256 region digests plus HMAC-SHA-256 with an embedded build key.
+; This is symmetric tamper detection, not a public-key signature.  An attacker
+; who can rewrite the kernel can also rewrite the key and the tag; the gate
+; proves accidental/corruption fail-closed behavior, not authenticity against
+; an active attacker.
+.equ MFEST  0x1FE00
+.equ MGUEST 0x200000
+.equ SHAPTR 0xC000
+.equ SHALEN 0xC004
+.equ SHAG   0xC008
+.equ SHAT0  0xC00C
+.equ SHAH   0xC020
+.equ SHAS   0xC040
+.equ SHAW   0xC060
+.equ SHAB   0xC160
+.equ SHB    0xC1C0
+
+man_verify_pre:
+  PUSH %EAX
+  PUSH %EBX
+  PUSH %ECX
+  PUSH %EDX
+  PUSH %ESI
+  PUSH %EDI
+  PUSH %EBP
+  ; guest byte count from the boot record's LMAX field (image offset 504)
+  MOV [0x7DF8],%EAX
+  SHL $3,%EAX
+  MOV %EAX,[SHAG]
+  TEST %EAX,%EAX
+  JZ @man_bad
+  ; ---- structural checks: magic, version, flags, region table ----
+  MOV $MFEST,%EDI
+  MOV [EDI],%EAX
+  CMP $0x4E414D4E,%EAX
+  JNE @man_bad
+  MOV [EDI+4],%EAX
+  CMP $1,%EAX
+  JNE @man_bad
+  MOV [EDI+0x0C],%EAX
+  CMP $1,%EAX
+  JNE @man_bad
+  MOV [EDI+0x10],%EAX
+  CMP $3,%EAX
+  JNE @man_bad
+  MOV [EDI+0x14],%EAX
+  CMP $0x40,%EAX
+  JNE @man_bad
+  MOV [EDI+0x18],%EAX
+  CMP $0xE8,%EAX
+  JNE @man_bad
+  MOV [EDI+0x1C],%EAX
+  CMP $0x108,%EAX
+  JNE @man_bad
+  ; boot region: id 1, SHA-256, offset 0, size 512
+  MOV [EDI+0x40],%EAX
+  CMP $1,%EAX
+  JNE @man_bad
+  MOV [EDI+0x44],%EAX
+  CMP $1,%EAX
+  JNE @man_bad
+  MOV [EDI+0x48],%EAX
+  TEST %EAX,%EAX
+  JNZ @man_bad
+  MOV [EDI+0x4C],%EAX
+  TEST %EAX,%EAX
+  JNZ @man_bad
+  MOV [EDI+0x50],%EAX
+  CMP $512,%EAX
+  JNE @man_bad
+  ; kernel region: id 2, offset 512, size 65024
+  MOV [EDI+0x78],%EAX
+  CMP $2,%EAX
+  JNE @man_bad
+  MOV [EDI+0x7C],%EAX
+  CMP $1,%EAX
+  JNE @man_bad
+  MOV [EDI+0x80],%EAX
+  CMP $512,%EAX
+  JNE @man_bad
+  MOV [EDI+0x84],%EAX
+  TEST %EAX,%EAX
+  JNZ @man_bad
+  MOV [EDI+0x88],%EAX
+  CMP $65024,%EAX
+  JNE @man_bad
+  ; guest region: id 3, offset 66048, size 8*LMAX
+  MOV [EDI+0xB0],%EAX
+  CMP $3,%EAX
+  JNE @man_bad
+  MOV [EDI+0xB4],%EAX
+  CMP $1,%EAX
+  JNE @man_bad
+  MOV [EDI+0xB8],%EAX
+  CMP $66048,%EAX
+  JNE @man_bad
+  MOV [EDI+0xBC],%EAX
+  TEST %EAX,%EAX
+  JNZ @man_bad
+  MOV [EDI+0xC0],%EAX
+  CMP [SHAG],%EAX
+  JNE @man_bad
+  ; reserved header bytes 0x20..0x3F and tail bytes 0x128..0x1FF are outside
+  ; the root/tag coverage; require them to be zero so any mutation is caught.
+  MOV $MFEST+0x20,%ESI
+  MOV $8,%ECX
+man_rz1:
+  MOV [ESI],%EAX
+  TEST %EAX,%EAX
+  JNZ @man_bad
+  ADD $4,%ESI
+  DEC %ECX
+  JNZ @man_rz1
+  MOV $MFEST+0x128,%ESI
+  MOV $54,%ECX
+man_rz2:
+  MOV [ESI],%EAX
+  TEST %EAX,%EAX
+  JNZ @man_bad
+  ADD $4,%ESI
+  DEC %ECX
+  JNZ @man_rz2
+  ; ---- root = SHA-256(manifest[0..0xE7]) ----
+  MOV $MFEST,%ESI
+  MOV $0xE8,%EBP
+  CALL @sha_hash
+  MOV $SHAH,%ESI
+  MOV $MFEST+0xE8,%EDI
+  CALL @man_cmp32
+  JC @man_bad
+  ; ---- tag = HMAC-SHA-256(build key, root) ----
+  MOV $SHB,%EDI
+  MOV $man_kipad,%ESI
+  MOV $16,%ECX
+  REPMOVSD
+  MOV $MFEST+0xE8,%ESI
+  MOV $8,%ECX
+  REPMOVSD
+  MOV $SHB,%ESI
+  MOV $96,%EBP
+  CALL @sha_hash
+  MOV $SHB,%EDI
+  MOV $man_kopad,%ESI
+  MOV $16,%ECX
+  REPMOVSD
+  MOV $SHAH,%ESI
+  MOV $8,%ECX
+  REPMOVSD
+  MOV $SHB,%ESI
+  MOV $96,%EBP
+  CALL @sha_hash
+  MOV $SHAH,%ESI
+  MOV $MFEST+0x108,%EDI
+  CALL @man_cmp32
+  JC @man_sig
+  ; ---- boot sector digest (pristine 512-byte copy at 0x7E00) ----
+  MOV $0x7E00,%ESI
+  MOV $512,%EBP
+  CALL @sha_hash
+  MOV $SHAH,%ESI
+  MOV $MFEST+0x58,%EDI
+  CALL @man_cmp32
+  JC @man_bad
+  ; ---- kernel digest (65024 bytes at 0x10000) ----
+  MOV $0x10000,%ESI
+  MOV $65024,%EBP
+  CALL @sha_hash
+  MOV $SHAH,%ESI
+  MOV $MFEST+0x90,%EDI
+  CALL @man_cmp32
+  JC @man_bad
+  POP %EBP
+  POP %EDI
+  POP %ESI
+  POP %EDX
+  POP %ECX
+  POP %EBX
+  POP %EAX
+  RET
+
+man_verify_guest:
+  PUSH %EAX
+  PUSH %EBX
+  PUSH %ECX
+  PUSH %EDX
+  PUSH %ESI
+  PUSH %EDI
+  PUSH %EBP
+  MOV [SHAG],%EBP
+  TEST %EBP,%EBP
+  JZ @man_bad
+  MOV $MGUEST,%ESI
+  CALL @sha_hash
+  MOV $SHAH,%ESI
+  MOV $MFEST+0xC8,%EDI
+  CALL @man_cmp32
+  JC @man_bad
+  POP %EBP
+  POP %EDI
+  POP %ESI
+  POP %EDX
+  POP %ECX
+  POP %EBX
+  POP %EAX
+  RET
+
+; ESI=a, EDI=b; CF set when the 32 bytes differ.
+man_cmp32:
+  MOV $8,%ECX
+mc_l:
+  MOV [ESI],%EAX
+  CMP [EDI],%EAX
+  JNE @mc_bad
+  ADD $4,%ESI
+  ADD $4,%EDI
+  DEC %ECX
+  JNZ @mc_l
+  CLC
+  RET
+mc_bad:
+  STC
+  RET
+
+; ESI = NUL-terminated string.
+man_puts:
+  MOVZXB [ESI],%EAX
+  TEST %EAX,%EAX
+  JZ @mp_done
+  MOV %AL,[OB]
+  CALL @out1
+  INC %ESI
+  JMP @man_puts
+mp_done:
+  RET
+
+man_bad:
+  MOV $man_sman,%ESI
+  CALL @man_puts
+  JMP @man_halt
+man_sig:
+  MOV $man_ssig,%ESI
+  CALL @man_puts
+man_halt:
+  CLI
+mh_l:
+  HLT
+  JMP @mh_l
+
+man_sman:
+  .byte 0x21,0x4D,0x41,0x4E,10,0
+man_ssig:
+  .byte 0x21,0x53,0x49,0x47,10,0
+
+; ---- SHA-256 (FIPS 180-4) ------------------------------------------------
+; sha_hash: ESI = data, EBP = byte length.  Leaves the 32-byte digest at SHAH.
+; Preserves all general registers.
+sha_hash:
+  PUSH %EAX
+  PUSH %EBX
+  PUSH %ECX
+  PUSH %EDX
+  PUSH %ESI
+  PUSH %EDI
+  PUSH %EBP
+  MOV %EBP,[SHALEN]
+  CALL @sha_begin
+sh_full:
+  CMP $64,%EBP
+  JB @sh_tail
+  CALL @sha_compress
+  ADD $64,%ESI
+  SUB $64,%EBP
+  JMP @sh_full
+sh_tail:
+  PUSH %ESI
+  MOV $SHAB,%EDI
+  XOR %EAX,%EAX
+  MOV $16,%ECX
+  REPSTOSD
+  POP %ESI
+  MOV $SHAB,%EDI
+  MOV %EBP,%ECX
+  .byte 0xF3,0xA4              ; rep movsb
+  MOV $SHAB,%EDI
+  ADD %EBP,%EDI
+  MOVB $0x80,[EDI]
+  CMP $56,%EBP
+  JB @sh_one
+  INC %EDI
+  MOV $63,%ECX
+  SUB %EBP,%ECX
+sh_z1:
+  MOVB $0,[EDI]
+  INC %EDI
+  DEC %ECX
+  JNZ @sh_z1
+  MOV $SHAB,%ESI
+  CALL @sha_compress
+  MOV $SHAB,%EDI
+  XOR %EAX,%EAX
+  MOV $14,%ECX
+  REPSTOSD
+  JMP @sh_len
+sh_one:
+  INC %EDI
+  MOV $55,%ECX
+  SUB %EBP,%ECX
+sh_z2:
+  MOVB $0,[EDI]
+  INC %EDI
+  DEC %ECX
+  JNZ @sh_z2
+sh_len:
+  MOV [SHALEN],%EAX
+  SHL $3,%EAX
+  XOR %EDX,%EDX
+  BSWAP %EAX
+  MOV %EAX,[SHAB+60]
+  MOV %EDX,[SHAB+56]
+  MOV $SHAB,%ESI
+  CALL @sha_compress
+  ; SHA-256 digest words are host little-endian; the manifest stores the
+  ; canonical big-endian byte stream, so byte-swap each word in place.
+  MOV $SHAH,%EDI
+  MOV $8,%ECX
+sh_final:
+  MOV [EDI],%EAX
+  BSWAP %EAX
+  MOV %EAX,[EDI]
+  ADD $4,%EDI
+  DEC %ECX
+  JNZ @sh_final
+  POP %EBP
+  POP %EDI
+  POP %ESI
+  POP %EDX
+  POP %ECX
+  POP %EBX
+  POP %EAX
+  RET
+
+sha_begin:
+  MOVL $0x6A09E667,[SHAH]
+  MOVL $0xBB67AE85,[SHAH+4]
+  MOVL $0x3C6EF372,[SHAH+8]
+  MOVL $0xA54FF53A,[SHAH+12]
+  MOVL $0x510E527F,[SHAH+16]
+  MOVL $0x9B05688C,[SHAH+20]
+  MOVL $0x1F83D9AB,[SHAH+24]
+  MOVL $0x5BE0CD19,[SHAH+28]
+  RET
+
+sha_compress:
+  PUSH %EAX
+  PUSH %EBX
+  PUSH %ECX
+  PUSH %EDX
+  PUSH %ESI
+  PUSH %EDI
+  PUSH %EBP
+  MOV %ESI,[SHAPTR]
+  MOV $SHAH,%ESI
+  MOV $SHAS,%EDI
+  MOV $8,%ECX
+sc_save:
+  MOV [ESI],%EAX
+  MOV %EAX,[EDI]
+  ADD $4,%ESI
+  ADD $4,%EDI
+  DEC %ECX
+  JNZ @sc_save
+  MOV [SHAPTR],%ESI
+  MOV $SHAW,%EDI
+  MOV $16,%ECX
+sc_load:
+  MOV [ESI],%EAX
+  BSWAP %EAX
+  MOV %EAX,[EDI]
+  ADD $4,%ESI
+  ADD $4,%EDI
+  DEC %ECX
+  JNZ @sc_load
+  MOV $16,%ECX
+sc_ext:
+  MOV %ECX,%EDI
+  SHL $2,%EDI
+  ADD $SHAW,%EDI
+  MOV [EDI-60],%EAX
+  MOV %EAX,%EBX
+  ROR $7,%EAX
+  ROR $18,%EBX
+  XOR %EBX,%EAX
+  MOV [EDI-60],%EBX
+  SHR $3,%EBX
+  XOR %EBX,%EAX
+  ADD [EDI-64],%EAX
+  ADD [EDI-28],%EAX
+  MOV [EDI-8],%EBX
+  MOV %EBX,%EDX
+  ROR $17,%EBX
+  ROR $19,%EDX
+  XOR %EDX,%EBX
+  MOV [EDI-8],%EDX
+  SHR $10,%EDX
+  XOR %EDX,%EBX
+  ADD %EBX,%EAX
+  MOV %EAX,[EDI]
+  INC %ECX
+  CMP $64,%ECX
+  JB @sc_ext
+  XOR %ESI,%ESI
+sc_round:
+  ; T1 = h + S1(e) + Ch(e,f,g) + K[i] + W[i]
+  MOV [SHAH+16],%EAX
+  MOV %EAX,%EBX
+  ROR $6,%EAX
+  ROR $11,%EBX
+  XOR %EBX,%EAX
+  MOV [SHAH+16],%EBX
+  ROR $25,%EBX
+  XOR %EBX,%EAX
+  MOV [SHAH+16],%EBX
+  AND [SHAH+20],%EBX
+  MOV [SHAH+16],%ECX
+  NOT %ECX
+  AND [SHAH+24],%ECX
+  XOR %ECX,%EBX
+  ADD %EBX,%EAX
+  ADD [SHAH+28],%EAX
+  ADD [SHAW+ESI*4],%EAX
+  ADD [shak+ESI*4],%EAX
+  MOV %EAX,[SHAT0]
+  ; T2 = S0(a) + Maj(a,b,c)
+  MOV [SHAH],%EBX
+  MOV %EBX,%ECX
+  ROR $2,%EBX
+  ROR $13,%ECX
+  XOR %ECX,%EBX
+  MOV [SHAH],%ECX
+  ROR $22,%ECX
+  XOR %ECX,%EBX
+  MOV [SHAH],%ECX
+  AND [SHAH+4],%ECX
+  MOV [SHAH],%EDX
+  AND [SHAH+8],%EDX
+  XOR %EDX,%ECX
+  MOV [SHAH+4],%EDX
+  AND [SHAH+8],%EDX
+  XOR %EDX,%ECX
+  ADD %ECX,%EBX
+  ; rotate the working variables
+  MOV [SHAH+24],%ECX
+  MOV %ECX,[SHAH+28]
+  MOV [SHAH+20],%ECX
+  MOV %ECX,[SHAH+24]
+  MOV [SHAH+16],%ECX
+  MOV %ECX,[SHAH+20]
+  MOV [SHAT0],%ECX
+  ADD [SHAH+12],%ECX
+  MOV %ECX,[SHAH+16]
+  MOV [SHAH+8],%ECX
+  MOV %ECX,[SHAH+12]
+  MOV [SHAH+4],%ECX
+  MOV %ECX,[SHAH+8]
+  MOV [SHAH],%ECX
+  MOV %ECX,[SHAH+4]
+  ADD %EBX,%EAX
+  MOV %EAX,[SHAH]
+  INC %ESI
+  CMP $64,%ESI
+  JB @sc_round
+  MOV $SHAH,%EDI
+  MOV $SHAS,%ESI
+  MOV $8,%ECX
+sc_add:
+  MOV [ESI],%EAX
+  ADD %EAX,[EDI]
+  MOV [EDI],%EAX
+  ADD $4,%ESI
+  ADD $4,%EDI
+  DEC %ECX
+  JNZ @sc_add
+  POP %EBP
+  POP %EDI
+  POP %ESI
+  POP %EDX
+  POP %ECX
+  POP %EBX
+  POP %EAX
+  RET
+
+shak:
+  .long 0x428A2F98,0x71374491,0xB5C0FBCF,0xE9B5DBA5
+  .long 0x3956C25B,0x59F111F1,0x923F82A4,0xAB1C5ED5
+  .long 0xD807AA98,0x12835B01,0x243185BE,0x550C7DC3
+  .long 0x72BE5D74,0x80DEB1FE,0x9BDC06A7,0xC19BF174
+  .long 0xE49B69C1,0xEFBE4786,0x0FC19DC6,0x240CA1CC
+  .long 0x2DE92C6F,0x4A7484AA,0x5CB0A9DC,0x76F988DA
+  .long 0x983E5152,0xA831C66D,0xB00327C8,0xBF597FC7
+  .long 0xC6E00BF3,0xD5A79147,0x06CA6351,0x14292967
+  .long 0x27B70A85,0x2E1B2138,0x4D2C6DFC,0x53380D13
+  .long 0x650A7354,0x766A0ABB,0x81C2C92E,0x92722C85
+  .long 0xA2BFE8A1,0xA81A664B,0xC24B8B70,0xC76C51A3
+  .long 0xD192E819,0xD6990624,0xF40E3585,0x106AA070
+  .long 0x19A4C116,0x1E376C08,0x2748774C,0x34B0BCB5
+  .long 0x391C0CB3,0x4ED8AA4A,0x5B9CCA4F,0x682E6FF3
+  .long 0x748F82EE,0x78A5636F,0x84C87814,0x8CC70208
+  .long 0x90BEFFFA,0xA4506CEB,0xBEF9A3F7,0xC67178F2
+
+man_kipad:
+  .byte 0x78,0x57,0x78,0x06,0x65,0x1B,0x70,0x07,0x00,0x1B,0x58,0x5B,0x57,0x58,0x5F,0x50
+  .byte 0x53,0x45,0x42,0x1B,0x54,0x43,0x5F,0x5A,0x52,0x1B,0x5D,0x53,0x4F,0x1B,0x06,0x07
+  .byte 0x36,0x36,0x36,0x36,0x36,0x36,0x36,0x36,0x36,0x36,0x36,0x36,0x36,0x36,0x36,0x36
+  .byte 0x36,0x36,0x36,0x36,0x36,0x36,0x36,0x36,0x36,0x36,0x36,0x36,0x36,0x36,0x36,0x36
+man_kopad:
+  .byte 0x12,0x3D,0x12,0x6C,0x0F,0x71,0x1A,0x6D,0x6A,0x71,0x32,0x31,0x3D,0x32,0x35,0x3A
+  .byte 0x39,0x2F,0x28,0x71,0x3E,0x29,0x35,0x30,0x38,0x71,0x37,0x39,0x25,0x71,0x6C,0x6D
+  .byte 0x5C,0x5C,0x5C,0x5C,0x5C,0x5C,0x5C,0x5C,0x5C,0x5C,0x5C,0x5C,0x5C,0x5C,0x5C,0x5C
+  .byte 0x5C,0x5C,0x5C,0x5C,0x5C,0x5C,0x5C,0x5C,0x5C,0x5C,0x5C,0x5C,0x5C,0x5C,0x5C,0x5C

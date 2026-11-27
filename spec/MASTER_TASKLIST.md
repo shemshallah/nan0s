@@ -83,9 +83,11 @@ each item needs a real gate, a short proof, and a frontier note.
       orders, 3344-word deterministic snapshot) and a content-hash prefix
       DAG (`nkvdag_gate`: 4 agents, P/Q prefixes, identical P0 page deduped
       to one header with refs 4, late fourth join, COW suffixes, both close
-      orders, 5280-word snapshot) are gated.  F13 core complete; Merkle
-      multi-parent roots, sibling joins, generation deadlines and SMP
-      publish are queued follow-ups.
+      orders, 5280-word snapshot) and a Merkle multi-parent DAG
+      (`nkvmerkle_gate`: 4 agents, gen-tagged nodes, root-only page/token
+      proofs, 11 mutation/order rejects, post-free proof, 6816-word snapshot)
+      are gated.  F13 core complete; CAS hydration, sibling joins,
+      generation deadlines and SMP publish are queued follow-ups.
 - [x] F14 Verification: Coq/UTM trace, translation validation, reproducible
       build; `nverify_gate` PASS (reproducible nmk/translator output, byte
       goldens, native/n16i trace sha equality, non-ELF product images,
@@ -94,9 +96,11 @@ each item needs a real gate, a short proof, and a frontier note.
       boot/AP/page-table paths; `noc_product_gate` PASS (hermetic two-build
       image, full product boot to NANIX SHELL READY, raw64 2-AP block path,
       no C linked, C-free product source).
-- [ ] F16 Signed product image manifest: region hashes/signature over boot,
-      kernel and guest; verify before first guest fetch; fail closed on any
-      one-byte mutation.
+- [x] F16 Signed/authenticated product manifest: 512-byte LBA128 manifest
+      over boot/kernel/guest, native SHA-256/HMAC verifier before guest fetch,
+      exact `!MAN`/`!SIG` fail-closed for one-byte boot/kernel/guest/manifest/
+      root/tag mutations.  HMAC is tamper detection, not public-key; Ed25519
+      or a Winternitz/Lamport OTS is queued.
 - [x] F17 Raw 64-bit SMP substrate: per-AP GDT/TSS/IST, shared IDT, 4-core
       MADT/INIT-SIPI-SIPI, AP-local LAPIC timer, reschedule IPI, exact EOI,
       exception/IST1 self-test; `noc_raw64_smp_gate` PASS (4/2 CPUs, no C
@@ -233,6 +237,15 @@ Agent rule:
 - [ ] (ngold) Make the GOLD producer parallel-safe and deterministic: unique src/prog staging files instead of fixed _xgold_h.nas/_xgold64_h.nas, a QEMU serial lock, and a gate that two concurrent reconstructions are byte-identical.
 - [ ] (ngold) Cross-check the boot GOLD with an independent NaN encoder (nasm0 or a table-driven encoder) or a bit-vector equivalence checker so the bytes do not rely on nasm1 plus the optional C oracle.
 - [ ] (ngold) Wire source_gold_gate.sh and the native xgold64 rebuild into the product/no-C aggregate so a stale GOLD fails the build, not just a standalone gate.
+- [ ] (nmanifest) Replace the embedded-key HMAC tag with a real public-key verifier: implement Ed25519 verification in raw native assembly, root the public key outside the image (boot ROM/TPM/secure variable), and gate an attacker who knows the whole image but cannot re-sign it.
+- [ ] (nmanifest) Add a Winternitz/Lamport one-time signature over SHA-256 with a 2-4 KiB manifest region, generate the key pair deterministically offline, keep the secret out of the image, and gate one-byte boot/kernel/guest/manifest/signature mutations plus a forged re-tag.
+- [ ] (nmanifest) Add manifest key id, image generation and anti-rollback state: a small allowed-key set, signed key transitions, monotonic generation checks before guest fetch, and a gate that rejects replay of an older valid image and an unknown key id.
+- [ ] (nmanifest) Extend the manifest into measured boot: PCR-like extend chain over boot, kernel, guest and service carts, a bounded COM1 event log, and a gate that replays the log to the same root and detects a rollback or out-of-order event.
+- [ ] (nmanifest) Replace the flat guest digest with a per-2 MiB-page Merkle tree and verify root plus inclusion proofs lazily before entering each guest page; gate an exact failing-page report and a partial guest fetch that never enters an unverified page.
+- [ ] (nkvmerkle) Persist nkvmerkle nodes in a content-addressed store keyed by (hash_lo,hash_hi), hydrate a cold agent by root hash over NVMe/RDMA, and gate exact dedup hits and bytes avoided across a restart.
+- [ ] (nkvmerkle) Save root-only checkpoints {DAG root hash, ngen generation, nagent KV root, trace head}, verify page and token proofs without the node registry, replay a branch suffix through the view gate, and gate exact token equality plus old-view divergence at the exact event index.
+- [ ] (nkvmerkle) Add cross-node proof assembly: publish a multi-parent root whose parents live on different shards, fetch and verify each shard's chain against the root hash, and gate missing/mutated-shard fail-closed plus a distributed parent-ref count.
+- [ ] (nkvmerkle) Attach inclusion proofs to nkvmerkle page/token views and verify them at the view or transport boundary so an untrusted adapter/cache can serve KV; gate a forged page and a forged token rejected before the value is returned.
 <!-- AGENT-APPEND -->
 
 ## P0. ISO C parity (language + library + ABI)

@@ -43,13 +43,19 @@ asm_one() { # src out.bin
   }' "$T/h.nan" | xxd -r -p > "$T/guest.bin"
   [ -s "$T/guest.bin" ] || { echo "xgold: empty guest for $src" >&2; exit 1; }
 
-  # Boot floppy = current gold boot+kernel.  The ATA loader reads the full
-  # guest from IDE LBA 129, so the 512 KiB floppy limit does not apply.
+  # Boot floppy = current gold boot+kernel+manifest.  The ATA loader reads
+  # the full guest from IDE LBA 129, so the 512 KiB floppy limit does not
+  # apply.  F16: the kernel verifies the manifest before fetching the guest,
+  # so stage a full boot+kernel+guest image, write the manifest, then split.
   : > "$T/carts.txt"
-  awk -f tools/mkimg.awk -v GOLD=src/native/nan16_x86.nan \
+  awk -f tools/mkimg.awk -v NOTOC=1 -v GOLD=src/native/nan16_x86.nan \
     -v GUEST="$T/h.nan" -v CARTS="$T/carts.txt" \
     -v OUTB="$T/boot.bin" -v OUTG="$T/junk.bin" >/dev/null
-  cat "$T/boot.bin" > "$T/floppy.img"
+  cat "$T/boot.bin" "$T/junk.bin" > "$T/full.img"
+  fsz=$(wc -c < "$T/full.img"); frem=$((fsz % 512))
+  [ "$frem" -eq 0 ] || dd if=/dev/zero bs=1 count=$((512 - frem)) >> "$T/full.img"
+  sh tools/manifest_build.sh "$T/full.img" >/dev/null
+  cat "$T/full.img" > "$T/floppy.img"
   truncate -s 1474560 "$T/floppy.img"
   dd if=/dev/zero of="$T/disk.img" bs=512 count=129 status=none
   cat "$T/guest.bin" >> "$T/disk.img"

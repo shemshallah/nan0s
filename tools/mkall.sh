@@ -25,4 +25,6 @@ cat "$T/n0sb.bin" "$T/n0sg.bin" > "$IMG"
 sz=$(wc -c < "$IMG")
 rem=$((sz % 512))
 [ "$rem" -eq 0 ] || dd if=/dev/zero bs=1 count=$((512 - rem)) >> "$IMG"
+# F16: deterministic manifest at LBA 128 over boot/kernel/guest bytes.
+sh tools/manifest_build.sh "$IMG"
 ls build/*.img | wc -l | sed 's/^/images in build\/: /'

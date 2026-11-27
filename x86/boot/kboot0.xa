@@ -10,7 +10,7 @@ _start:
   MOV %AX,%SS
   MOV $0x7C00,%SP
   STI
-  MOV %DL,[drive]
+  MOV %DL,[0x5F8]
   MOV %AX,%ES
   XOR %EBX,%EBX
   MOV $0x600,%DI
@@ -65,7 +65,7 @@ e8c_w:
   MOV $1152,%SI
 L1:
   MOV $0x0201,%AX
-  MOV [drive],%DL
+  MOV [0x5F8],%DL
   INT $0x13
   JC @fail
   MOV %ES,%AX
@@ -85,6 +85,15 @@ L2:
   OR $2,%AL
   OUT %AL,$0x92
   CLI
+  ; F16: pristine copy of the boot sector for the manifest verifier.  This is
+  ; after every BIOS call and before protected mode sets GDT accessed bits.
+  XOR %AX,%AX
+  MOV %AX,%ES
+  MOV $0x7C00,%SI
+  MOV $0x7E00,%DI
+  MOV $256,%CX
+  CLD
+  .byte 0xF3,0xA5              ; rep movsw
   LGDT [gdtr]
   MOV %CR0,%EAX
   OR $1,%EAX
@@ -105,8 +114,6 @@ pm:
   MOV $0x10000,%EAX
   JMP %EAX
 .code16
-drive:
-  .byte 0
   .align 4
 gdt:
   .long 0,0

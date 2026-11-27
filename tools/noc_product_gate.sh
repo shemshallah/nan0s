@@ -63,7 +63,7 @@ printf '%s\n' "$raw_out"
 
 # The image build must be raw data plus POSIX shell/gawk/cat/dd.  Reject a
 # compiler/linker invocation on a non-comment line.
-for f in tools/mkall.sh tools/mkbase.sh tools/rootfs_seed.sh tools/build.sh; do
+for f in tools/mkall.sh tools/mkbase.sh tools/rootfs_seed.sh tools/build.sh tools/manifest_build.sh tools/manifest_mk.awk; do
   [ -f "$f" ] || fail "missing product build input $f"
   bad=$(grep -vE '^[[:space:]]*#' "$f" |
         grep -nE '(^|[;&|[:space:]])(clang|gcc|g\+\+|cc|ld\.lld|llvm-objcopy|python3?)([[:space:]]|$)' || true)
@@ -75,7 +75,7 @@ done
 [ -f tools/mkimg.awk ] || fail "missing tools/mkimg.awk"
 grep -q 'GOLD=src/native/nan16_x86.nan' tools/mkall.sh || fail "mkall GOLD changed"
 grep -q 'GUEST=' tools/mkall.sh || fail "mkall GUEST changed"
-echo "product build: sh/gawk/cat/dd only; GOLD is raw .nan; no C compiler step"
+echo "product build: sh/gawk/cat/dd/sha256sum only; GOLD is raw .nan; manifest is derived from emitted bytes; no C compiler step"
 check_not_elf build/nan0s.img
 echo "build/nan0s.img: $(wc -c < build/nan0s.img) bytes, magic $(od -An -tx1 -N4 build/nan0s.img | tr -d ' \n') (not ELF)"
 scan_markers build/nan0s.img
@@ -86,7 +86,7 @@ echo "== 2. hermetic two-build and staleness =="
 SH=$(command -v sh) || fail "no sh"
 BIN="$T/bin"
 mkdir -p "$BIN"
-for t in gawk awk cat dd wc sed ls rm mkdir dirname basename tr head cmp od grep; do
+for t in sh gawk awk cat dd wc sed ls rm mkdir dirname basename tr head cmp od grep sha256sum; do
   p=$(command -v "$t" 2>/dev/null || true)
   if [ -n "$p" ]; then ln -sf "$p" "$BIN/$t"; fi
 done
@@ -137,13 +137,14 @@ env -i PATH="$BIN" LC_ALL=C gawk -f tools/mkimg.awk -v NOTOC=1 \
   { cat "$T/mkimg.err" >&2; fail "smoke mkimg"; }
 cat "$T/sb.bin" "$T/sg.bin" > "$T/smoke.img"
 truncate -s 1474560 "$T/smoke.img"
+sh tools/manifest_build.sh "$T/smoke.img" >/dev/null
 # The first 504 bytes are the product boot code; 504..507 carries LMAX and
 # therefore differs when the guest size differs.  The kernel window must match.
 dd if="$T/smoke.img" of="$T/smoke.boot" bs=1 count=504 status=none
 dd if="$T/boot512.bin" of="$T/prod.boot" bs=1 count=504 status=none
 same "$T/smoke.boot" "$T/prod.boot" "smoke image boot code differs from product boot sector"
-dd if="$T/smoke.img" of="$T/smoke.kern" bs=1 skip=512 count=65536 status=none
-dd if=build/nan0s.img of="$T/prod.kern" bs=1 skip=512 count=65536 status=none
+dd if="$T/smoke.img" of="$T/smoke.kern" bs=1 skip=512 count=65024 status=none
+dd if=build/nan0s.img of="$T/prod.kern" bs=1 skip=512 count=65024 status=none
 same "$T/smoke.kern" "$T/prod.kern" "smoke image kernel differs from product kernel"
 rm -f "$T/smoke.com"
 timeout 25 qemu-system-i386 -m 128 \
