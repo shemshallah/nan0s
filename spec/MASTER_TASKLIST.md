@@ -114,6 +114,10 @@ each item needs a real gate, a short proof, and a frontier note.
       slice now passes the 8M-word host mask; the old 256 KiB mask wrapped
       nasm1's output at word 0x100000 and stack at 0x1F0000.  Full-kernel raw
       n16i remains the slow reference path.
+- [ ] (nasm) Make the NaN label table collision-proof (name compare or
+      64-bit hash).  The full guest has 10,251 labels; the current 32-bit
+      hash-only table collides at word 1152.  `nhost` already expands
+      includes and matches nmk on the 4,746-word `nrun_test` tree.
 - [x] F18c Unified nasm: `src/prog/nasm.nas` is the single assembler with a
       NaN-word mode (z0, `run`/`V_*`) and an x86-byte mode (x1, `_start`);
       `nasm0.nas`/`nasm1.nas` are aliases.  x86 boot output is byte-identical

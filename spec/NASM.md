@@ -29,3 +29,22 @@ The x86 backend is namespaced `x1_*`/`Z1_*`; the NaN backend keeps `run` and
 
 The in-shell `asm` command remains experimental: it assembles a `HALT`-only
 source, but operand-bearing sources still hang in the shell process context.
+
+## nhost and the full-guest label limit (2026-11-27)
+
+`src/prog/nhost.nas` now expands `.include` correctly.  The bug was the second
+word of the `.include` matcher: `0x65646C75` spells `ulde`, not `lude`.  With
+`0x6564756C`, `tools/nhost_gate.sh` PASSES: the `nrun_test` tree assembles to
+the exact 4,746-word stream `nmk.awk` produces.
+
+The full `gui_sched_boot.nas` tree (51 files) assembles under `nhost` to
+530,842 words, 0 errors, in 34 s.  It diverges from `nmk.awk` at guest word
+1152.  The cause is the NaN label table: `nasm0` stores only a 32-bit djb2
+hash plus value, and the full guest has 10,251 labels.  The first hash
+collision resolves to the wrong label, so `JMP[NE]` targets 0x0485 instead of
+0x54DC.
+
+The next assembler change is a collision-proof label table: either the label
+name (pointer/length and compare on hash hit) or a 64-bit hash stored beside
+the value.  The static mnemonic/directive tables can keep the 32-bit hash
+because their entries are unique; the source-label table cannot.
