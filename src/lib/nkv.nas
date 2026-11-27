@@ -396,9 +396,9 @@ nkv_vc_stride:
   ST r1,r5,#NKV_V_STRIDE+1
   CMP r2,r0
   JMP[EQ] @nkv_vc_count
-  ; accum *= shape[i+1]
+  ; accum *= shape[i] (row-major: stride[i] = elem * prod(shape[i+1..]))
   LD r3,r0,#NKW+7
-  ADD r5,r2,r13
+  ADD r5,r2,r0
   ADD r3,r3,r5
   LD r6,r3,0
   ADD r1,r6,r0

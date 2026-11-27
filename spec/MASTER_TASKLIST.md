@@ -34,8 +34,12 @@ each item needs a real gate, a short proof, and a frontier note.
 - [x] F6 Tensor/KV memory: zero-copy 64-bit views, per-agent KV slabs,
       packed Q4/Q8 layouts, huge pages; `nkv_gate` + `nq4_gate` PASS
       (2 TiB views across 4 GiB, isolated slabs, exact Q4/Q8 dots).
-- [ ] F7 Model runtime: GGUF/safetensors import, tokenizer, Q4/Q8 GEMV/
+- [~] F7 Model runtime: GGUF/safetensors import, tokenizer, Q4/Q8 GEMV/
       attention/RMSNorm, deterministic sampling; tiny-model token gate.
+      GGUF v3 import/views, byte BPE tokenizer, RMSNorm, Q4/Q8 GEMV,
+      deterministic sampler and a tiny embedding->norm->projection token gate
+      are gated (`ngguf_gate`, `ntok_gate`, `nmodel_gate`).  Remaining:
+      attention, safetensors, direct GGUF f16-scale Q4/Q8 consumption.
 - [x] F8 Trace/replay: hash chain, deterministic RNG, budgets/deadlines,
       divergence detection; `nreplay_gate` PASS (checkpoint replay, exact
       divergence index, fail-closed budgets, byte-identical runs).
@@ -96,6 +100,11 @@ Agent rule:
 - [ ] (nreplay) Add deterministic tool-call replay: log SVC 42 args/results as nreplay events, derive request ids from nrng_next, and gate a reordered/missing tool call diverging at its exact event index before the result is admitted.
 - [ ] (nreplay) Add checkpoint-ring divergence bisection (nr_replay_until plus periodic 13-word checkpoints) and gate first-divergence search in O(log n) replays with exact index equality.
 - [ ] (nreplay) Add compacted-trace replay over chunked nantrace storage/zero-copy KV views and gate that replay from checkpoint roots plus suffix produces the same head as the full trace.
+- [ ] (nmodel) Add a GGUF block import pass that converts Q4_0/Q8_0 f16 block scales to the nq4 f32-scale layout on first touch (or mmap a read-only file-backed storage cap), then gate direct nq4 GEMV over a GGUF view crossing 4 GiB.
+- [ ] (nmodel) Add one-head attention over nkv token views: Q4/Q8 QK^T with DP4B/VDP4B4, exact f32 softmax, RoPE, and a differential gate against an nq4_dot32 oracle; then extend the tiny model from bag-of-tokens to a real 1-layer token gate.
+- [ ] (nmodel) Wire nkv paged KV into nmodel decode: 2 MiB block append/eviction/remap, stable logical token indices, attention over paged views, and a checkpoint/fork safe KV generation.
+- [ ] (nmodel) Add a safetensors importer with the same zero-copy nkv view contract (64-bit offsets, dtype/shape checks, rejection cases) and a differential GGUF-vs-safetensors tensor metadata gate.
+- [ ] (nmodel) Implement deterministic speculative decoding: draft + verifier models, per-agent xorshift streams, accept/reject trace records and KV-generation rollback; gate identical output for a fixed seed/prompt and a forced-rejection path.
 <!-- AGENT-APPEND -->
 
 ## P0. ISO C parity (language + library + ABI)
