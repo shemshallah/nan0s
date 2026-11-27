@@ -1471,7 +1471,9 @@ Proof.
   unfold u, word_mask32.
   rewrite ones32.
   rewrite N.land_ones.
+  match goal with |- ?G => idtac "MKPAY:" G end.
   apply N.mod_mod.
+  match goal with |- ?G => idtac "MKPAYLEFT:" G end.
 Qed.
 
 Lemma payload_word_nan_mkwordN :
