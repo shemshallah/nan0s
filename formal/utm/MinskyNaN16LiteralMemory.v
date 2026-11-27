@@ -53,3 +53,36 @@ Qed.
 
 Print Assumptions MemP_wf_reset.
 Print Assumptions MemP_wf_mem_set.
+
+Lemma nth_lset_word_eq :
+  forall (l : list N) i v,
+    i < List.length l ->
+    nth i (lset_word l i v) 0%N = v.
+Proof.
+  intros l. induction l as [|x xs IH]; intros i v Hi.
+  - simpl in Hi. lia.
+  - destruct i as [|i].
+    + reflexivity.
+    + simpl. apply IH. simpl in Hi. lia.
+Qed.
+
+Lemma mem_get_mem_set_eq :
+  forall m a v,
+    MemP_wf m ->
+    a < 4366 ->
+    mem_get (mem_set m a v) a = v.
+Proof.
+  intros m a v Hwf Ha.
+  destruct Hwf as (H1 & H2 & H3 & H4 & H5).
+  unfold mem_set, mem_get.
+  destruct (a <? tape_lo) eqn:E1;
+    destruct (a <? data_hi) eqn:E2;
+    destruct (a <? code_hi) eqn:E3;
+    destruct (a <? tape_hi) eqn:E4;
+    cbn.
+  all: try (exfalso; lia).
+  all: try (apply nth_lset_word_eq;
+            rewrite ?H1, ?H2, ?H3, ?H4, ?H5; lia).
+Qed.
+
+Print Assumptions mem_get_mem_set_eq.
