@@ -75,13 +75,31 @@ halt and step in lockstep.  The safety certificate is LP-only: it never
 steps the VM, which keeps the concrete fixture check within the
 reducer's reach.
 
+## Concrete fixture certificate
+
+`lp_run_check` is a computable checker over the LP machine only.  It
+reads `mem_get (lp_mem L)` (not the opaque `lp_mem_at`), checks the
+decoded instruction against `fixture_prog_full`, and tests the opcode
+side conditions.  The 32-bit bounds are checked at the stricter 16-bit
+bound and lifted once via `le_2_16_2_32`; the fixture fits.
+
+    Lemma fixture_run_check_true :
+      lp_run_check 21025 lp_reset fixture_prog_full = true.
+
+    Theorem fixture_lp_run_refines :
+      Rlp (lp_run 21025 lp_reset)
+          (vm_run_p 21025 fixture_prog_full (vm_of_lp lp_reset)) /      length (lp_reg (lp_run 21025 lp_reset)) = 16 /      MemP_wf (lp_mem (lp_run 21025 lp_reset)).
+
+Both are checked by the Coq 8.20 cone; the 21,025-step checker runs in
+about a minute.
+
 ## Remaining work
 
-- Reflect `lp_run_safe` into a boolean checker and evaluate
-  `lp_run_check 21025 lp_reset fixture_prog_full`.  The certificate is
-  already LP-only, so this is a pure computation; the reflection proof
-  should be kept per-opcode to keep the kernel term small.
 - Lift the run theorem to the universality statement.
+- Optional: project the final VM PC, `r1` and control cells from
+  `fixture_lp_run_refines` together with
+  `MinskyNaN16LiteralRun.literal_full_run_pass`.  The `Rlp` theorem is
+  already the concrete bridge; this projection is a corollary.
 
 ## Fast debug
 
