@@ -1,8 +1,8 @@
 # Frontier agent state
 
 Dispatch cap: 2 agents at a time.
-Slot A: nmanifest (F16) session ses_de2bbb422ffeQehybv6szM9vSm
-Slot B: nkcas     (F13k) session ses_de25bc031ffekwNCBxH6VyJqSr
+Slot A: nots  (F16b) session ses_de24aaa07ffeyKmyWGgDnwKbQM
+Slot B: nkcas (F13k) session ses_de25bc031ffekwNCBxH6VyJqSr
 Completed: F1 smpblock 9985ea4; F2 nansched 49905d8; F3 nnuma 01f36fe;
            F4 ncscale ef07f18; F5 nagent 1f8db01; F6 nkv a5d7a30;
            F7 model 5e13def+c141041; F8 nreplay 7029529; F9 nsecure 33f2686;
@@ -11,7 +11,7 @@ Completed: F1 smpblock 9985ea4; F2 nansched 49905d8; F3 nnuma 01f36fe;
            F13d nmoe 7344af2; F13e ngen 30d928e; F13f nsym a1d347b;
            F13g nkvgen e59b36c; F13h nkvtree 8ef3592; F13i nkvdag f656850;
            F13j nkvmerkle 79c55c1; F14 nverify 23bb7dd; F15 product ec6db62;
-           F17 rawsmp 592df0e; F18 source-GOLD 4b376e8.
+           F16 manifest aa384c1; F17 rawsmp 592df0e; F18 source-GOLD 4b376e8.
 Started: 2026-11-27
 Loop: background-result returns or 30-minute automation tick. When both
 slots have passing reports: commit, mark F items, then dispatch the next two
