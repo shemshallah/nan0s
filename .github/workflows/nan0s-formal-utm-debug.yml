@@ -62,7 +62,7 @@ jobs:
           ulimit -s unlimited 2>/dev/null || ulimit -s 65536
           for f in MinskyNaN16LiteralBridge MinskyNaN16LiteralStepBridge; do
             echo "=== coqc $f"
-            coqc -Q formal/utm NaNLM \
+            stdbuf -oL -eL coqc -time -Q formal/utm NaNLM \
               -w -notation-overridden,-stdlib-vector \
               "formal/utm/$f.v"
           done
