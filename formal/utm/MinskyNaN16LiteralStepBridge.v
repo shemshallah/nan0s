@@ -1822,7 +1822,11 @@ Proof. decide equality. Defined.
 
 Lemma InstrP_eq_dec :
   forall (a b : InstrP), {a = b} + {a <> b}.
-Proof. decide equality; apply preg_eq_dec. Defined.
+Proof.
+  decide equality.
+  all: try apply Nat.eq_dec.
+  all: try apply preg_eq_dec.
+Defined.
 
 Definition instr_eqb (a b : InstrP) : bool :=
   if InstrP_eq_dec a b then true else false.
