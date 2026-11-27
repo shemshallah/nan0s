@@ -103,6 +103,11 @@ long_mode:
     movl $0x1FFFFF, 0x50404
     movl $0, 0x50C00
     movl $0, 0x50C04
+    /* ABI scratch: kernel mode + control words */
+    movl $0, 0x50E00
+    movl $0xFFFFFFFF, 0x50E04
+    movl $0xFFFFFFFF, 0x50E08
+    movl $0, 0x50E0C
 
     /* native mechanical dispatch: table entries are (pc, code) qwords.
        The NaN-emitted blocks update XPC; this loop only looks up and calls. */

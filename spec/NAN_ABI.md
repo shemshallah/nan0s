@@ -75,6 +75,8 @@ n16i runtime after it.  The system window is `0xEFFFFF` (15 Mi words), leaving
 ## Gates
 
 - `tools/n16i_kabi_gate.sh` — bare n16i SVC/SVCRET/control-word test (`GKOD`).
+- `tools/qgate64abi.sh` — NaN-coded x86-64 translator SVC/SVCRET frame,
+  control ports, kernel return and resume (`r1=0x9A`, XPC=0x0B).
 - `tools/ngate_n16i.sh` — native vs n16i differential for the ISA core.
 
 # AI-native ABI extensions

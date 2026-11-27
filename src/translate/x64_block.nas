@@ -4,6 +4,7 @@
 ; Supported: the block translator instruction set, including OUTL/INL
 ; through the native port helper at 0x18000.  The block ends with set-XPC + RET.
 .include "x86_64.nas"
+.include "abi64.nas"
 
 x64_block:
   ST r15,r0,@xb_retaddr
@@ -212,6 +213,12 @@ xb_loop:
   MOVI r11,0x28
   CMP r7,r11
   JMP[EQ] @xb_cmps
+  MOVI r11,0x4E
+  CMP r7,r11
+  JMP[EQ] @xb_svc
+  MOVI r11,0x4F
+  CMP r7,r11
+  JMP[EQ] @xb_svcret
   JMP @xb_fail
 xb_movi:
   LD r1,r0,@xb_out
@@ -514,7 +521,7 @@ xb_outl:
   CALL @x64_load_eax_r
   ADD r5,r9,r0
   CALL @x64_load_edx_r
-  CALL @x64_port_helper
+  CALL @x64_port_helper_out
   ST r1,r0,@xb_out
   JMP @xb_adv
 xb_inl:
@@ -776,6 +783,20 @@ xb_done:
   SUB r1,r1,r2
   LD r15,r0,@xb_retaddr
   RET
+xb_svc:
+  LD r1,r0,@xb_out
+  ADD r7,r10,r0
+  LD r8,r0,@xb_next
+  CALL @x64_svc
+  ST r1,r0,@xb_out
+  JMP @xb_ended
+
+xb_svcret:
+  LD r1,r0,@xb_out
+  CALL @x64_svcret
+  ST r1,r0,@xb_out
+  JMP @xb_ended
+
 xb_fail:
   LD r1,r0,@xb_out
   MOVI r9,0x4F

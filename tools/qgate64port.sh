@@ -26,12 +26,16 @@ block64:
 block64_end:
 .text
 .include "$ROOT/src/native64/core64_body.S"
+.text
 .code64
 .org 0x8000
 port_helper:
   movl %eax,0x50D00
   movl %edx,0x50D04
   mov \$0x1234,%eax
+  ret
+.org 0x8100
+port_out:
   ret
 EOS
 clang --target=x86_64-none-elf -c "$T/core64.S" -o "$T/core64.o"

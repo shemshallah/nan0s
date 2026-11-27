@@ -70,3 +70,10 @@
   high-half read, MAXPHYADDR/non-canonical rejection on a 128 MiB guest.
 - Next: E820/SRAT-driven ranges, per-NUMA page allocator, nmem map/unmap/
   protect calls, 16 KiB per-core stacks, sealed checkpoint roots, tiering.
+
+## ABI / translator
+- `qgate64abi` PASS: emitted SVC/SVCRET frame, control ports, kernel
+  return word, resume PC 11, r1=0x9A.  INL=0x18000, OUTL=0x18100,
+  ABI scratch 0x50E00, frame payload at word byte +2.
+- Next: 2-core NanCore block dispatch with per-core register files, then
+  NaN per-CPU queues/work stealing/affinity/migration.

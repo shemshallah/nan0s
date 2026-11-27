@@ -23,6 +23,9 @@ not know the guest ISA and never decodes a guest instruction.
 | emitted block pages | `0x51000`, `0x52000`, `0x53000` |
 | page tables | `0x30000-0x33fff` |
 | C stack (native call) | `0x1F0000` |
+| ABI scratch | `0x50E00` |
+| INL helper | `0x18000` |
+| OUTL helper | `0x18100` |
 
 The emitted x86-64 uses SIB absolute `disp32` addressing, e.g.
 `C7 04 25 04 00 05 00 2A 00 00 00` = `mov dword [0x50004], 42`.
@@ -122,3 +125,27 @@ builds the first executable core. Once the 64-bit NaN block core can translate
 its own source, the native substrate remains only the boot/memory/EXECN layer.
 The verified chain (NaN binary -> Binary TM -> Minsky UTM -> Coq) applies to
 the emitted block and to the core itself.
+
+## SVC / SVCRET
+
+`src/translate/abi64.nas` emits the 24-word trap frame directly:
+
+- `SVC imm` saves r0..r15 at frame[0..15], the next PC at frame[16], the
+  flag index at frame[17], cause 0 at frame[19], the SVC number at
+  frame[20], zero at frame[21], and the guest SP at frame[22].  It sets
+  `r14` from control port `0x4E03` (unless unset), sets XPC from `0x4E00`,
+  and sets `in_kernel` at `0x50E00`.
+- `SVCRET` restores the register file, XPC from frame[16], FLAGM from
+  frame[17]&3, and (for cause 0) r1 from frame[21], then clears
+  `in_kernel`.
+
+The control words are read/written through the native port helper:
+`0x18000` = INL (EDX=port -> EAX=value), `0x18100` = OUTL
+(EDX=port, EAX=value).  Frame payloads use the normal NaN word layout
+(payload at byte +2 of each 8-byte word), matching LD/ST.
+
+`tools/qgate64abi.sh` proves the path: three emitted blocks, control-port
+setup from NaN `OUTL`, `SVC 7`, a kernel block that reads frame[20] and
+returns 0x99 through frame[21], and resume at PC 11; expected
+`r1=0x9A`, `XPC=0x0B`.  Distinct trap codes 0x41-0x45 identify KIN,
+kentry, frame, SVCRET-KIN and SVCRET-frame failures.
