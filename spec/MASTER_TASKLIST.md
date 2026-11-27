@@ -36,8 +36,9 @@ each item needs a real gate, a short proof, and a frontier note.
       (2 TiB views across 4 GiB, isolated slabs, exact Q4/Q8 dots).
 - [ ] F7 Model runtime: GGUF/safetensors import, tokenizer, Q4/Q8 GEMV/
       attention/RMSNorm, deterministic sampling; tiny-model token gate.
-- [ ] F8 Trace/replay: hash chain, deterministic RNG, budgets/deadlines,
-      divergence detection; gate.
+- [x] F8 Trace/replay: hash chain, deterministic RNG, budgets/deadlines,
+      divergence detection; `nreplay_gate` PASS (checkpoint replay, exact
+      divergence index, fail-closed budgets, byte-identical runs).
 - [ ] F9 Isolation/security: per-agent address spaces, W^X/NX, capability
       revocation, sandbox/fuzz; gate.
 - [ ] F10 Accelerator boundary: PCIe/IOMMU/DMA, VRAM/model placement,
@@ -91,6 +92,10 @@ Agent rule:
 - [ ] (nkv) Add shared-prefix KV and fork copy-on-write: keep immutable prefix caps shared across agents, publish a new KV generation per branch, and gate parent/child prefix reads plus divergent suffix isolation.
 - [ ] (nkv) Fuse Q4_0 dequant into QK^T/dot using integer nibble lanes and DP4B, apply the block scale once, and compare the fused result bit-for-bit against nq4_dot32 over a two-block vector.
 - [ ] (nkv) Add zero-copy GGUF tensor import: read-only file-backed class-20 storage caps, nkv views from GGUF dtype/shape/strides, direct nq4 consumption, and a tensor range crossing 4 GiB.
+- [ ] (nreplay) Bind nreplay to nagent turn records: one checkpoint carries the 24-word frame, scheduler slot, budget/deadline and nreplay RNG/head/index; gate a two-CPU restore that replays the same turn suffix and reproduces the identical trace head.
+- [ ] (nreplay) Add deterministic tool-call replay: log SVC 42 args/results as nreplay events, derive request ids from nrng_next, and gate a reordered/missing tool call diverging at its exact event index before the result is admitted.
+- [ ] (nreplay) Add checkpoint-ring divergence bisection (nr_replay_until plus periodic 13-word checkpoints) and gate first-divergence search in O(log n) replays with exact index equality.
+- [ ] (nreplay) Add compacted-trace replay over chunked nantrace storage/zero-copy KV views and gate that replay from checkpoint roots plus suffix produces the same head as the full trace.
 <!-- AGENT-APPEND -->
 
 ## P0. ISO C parity (language + library + ABI)
