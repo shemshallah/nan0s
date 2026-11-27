@@ -1894,7 +1894,7 @@ Proof.
         apply negb_true_iff in H0; apply Nat.eqb_neq in H0
     | H0 : N.eqb ?a ?b = true |- _ => apply N.eqb_eq in H0
     end;
-    try (repeat split; auto).
+    try (repeat split; try assumption; try exact I).
 Qed.
 
 Lemma nth_instr_eqb_sound :
