@@ -251,6 +251,14 @@ Lemma lp_mem_at_lp_exec_BOOL :
     lp_mem_at (lp_exec L (pBOOL tbl d a b)) = lp_mem_at L.
 Proof. intros. unfold lp_mem_at, lp_exec. reflexivity. Qed.
 
+Lemma lp_mem_at_lp_exec_ST :
+  forall L d a imm,
+    lp_mem_at (lp_exec L (pST d a imm)) =
+      mem_get
+        (mem_set (lp_mem L) (lget_reg (lp_reg L) a + imm)
+           (nan_mkwordN (lget_regN (lp_reg L) d) 10)).
+Proof. intros. unfold lp_mem_at, lp_exec. reflexivity. Qed.
+
 Opaque lp_mem_at.
 
 Definition lp_to_LState (L : LPState) : LState :=
