@@ -1519,14 +1519,10 @@ Proof.
   - change (vm_link vm = N.to_nat (lget_regN (lp_reg L) 15)).
     exact Hlink.
   - intro x.
-    rewrite lp_mem_at_lp_exec_ST.
     change ((if Nat.eqb x (vm_reg vm a + imm) then vm_reg vm d
              else vm_mem vm x) =
-            payload_word
-              (mem_get
-                 (mem_set (lp_mem L)
-                    (lget_reg (lp_reg L) a + imm)
-                    (nan_mkwordN (lget_regN (lp_reg L) d) 10)) x)).
+            payload_word (lp_mem_at (lp_exec L (pST d a imm)) x)).
+    rewrite lp_mem_at_lp_exec_ST.
     rewrite Haddr.
     destruct (Nat.eqb x (lget_reg (lp_reg L) a + imm)) eqn:Ex.
     + apply Nat.eqb_eq in Ex. subst x. cbn.
