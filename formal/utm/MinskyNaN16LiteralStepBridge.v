@@ -1749,7 +1749,7 @@ Proof.
       cbn in Hsafe.
       destruct Hsafe as (Hnth & Hside & Hsafe').
       assert (Hstep : lp_step L = lp_exec L ins).
-      { unfold lp_step. rewrite <- lp_mem_at_eq. rewrite <- Hdec. reflexivity. }
+      { unfold lp_step. rewrite <- lp_mem_at_eq. rewrite (eq_sym Hdec). reflexivity. }
       rewrite Hstep.
       apply IH.
       * exact (lp_exec_instr_refines L vm prog ins HR Hlen Hwf Hside Hdec Hnth).
