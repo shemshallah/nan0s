@@ -62,7 +62,7 @@ each item needs a real gate, a short proof, and a frontier note.
 - [x] F12 Observability/ops: per-core stats, OOM/eviction, quotas, scheduler
       traces; `nobs_gate` PASS (4 CPUs, exact core/mem/quota/ring/health,
       pressure eviction + OOM, deterministic trace hashes).
-- [~] F13 Frontier capabilities: speculative decoding, MoE routing,
+- [x] F13 Frontier capabilities: speculative decoding, MoE routing,
       long-context KV paging, live generations, symbiotic multi-agent
       scheduling; design + prototype gate.  Paged KV + incremental decode
       gated (`npaged_gate`: 2 MiB blocks, stable logical map, prefill+decode
@@ -74,8 +74,11 @@ each item needs a real gate, a short proof, and a frontier note.
       (`nmoe_gate`: top-2 Q4 router, 4 expert FFNs, capacity drops, load and
       NUMA/VRAM placement accounting, exact combine) are also gated.  Live
       generations (`ngen_gate`: publish/drain/start, stale/dup rejection,
-      forced abort, two-agent isolation) are gated too.  Symbiotic
-      multi-agent scheduling remains.
+      forced abort, two-agent isolation) and symbiotic multi-agent
+      scheduling (`nsym_gate`: 3-agent WFQ on 2 CPUs, bounded ratio, no
+      starvation, reservations/budgets/deadlines, shared-root refcounts,
+      generation isolation) are gated.  F13 core complete; COW KV,
+      generation deadlines and SMP publish are queued follow-ups.
 - [x] F14 Verification: Coq/UTM trace, translation validation, reproducible
       build; `nverify_gate` PASS (reproducible nmk/translator output, byte
       goldens, native/n16i trace sha equality, non-ELF product images,
@@ -178,6 +181,11 @@ Agent rule:
 - [ ] (ngen) Add per-draining-generation deadlines to ngen: account ticks, force abort at expiry with an exact reason, and gate early completion, deadline abort and stale post-abort rejection.
 - [ ] (ngen) Add bounded generation rollback: keep the last four drained descriptors and permit rollback only when no newer checkpoint, capability epoch or KV generation exists; gate the accepted rollback and each rejection reason.
 - [ ] (ngen) Make publish atomic under real SMP by driving a per-agent CAS/fence through the nansmp ops seam, with a two-CPU publish race gate that proves one winner, one EDUP loser and no partial drain/start state.
+- [ ] (nsym) Bind nsym agent records to nansched_mp task slots through the nansmp CAS/fence ops seam; gate two CPUs dispatching concurrently with one winner per tick, exact per-CPU service, and root refcounts unchanged by scheduling.
+- [ ] (nsym) Add hierarchical shared-prefix weight roots: per-prefix refcounts, immutable prefix pages, and copy-on-write only on the diverging suffix; gate a parent/child adapter branch that publishes its own generation without copying shared prefix pages.
+- [ ] (nsym) Add team-level budgets and deadlines to nsym: a team share with producer/consumer handoff (drafter/verifier or tool agent), team admission, and a gate that team fairness holds while each member's reservation and root reference stay independent.
+- [ ] (nsym) Integrate deadline-aware KV reservation: couple nsym admission to nobs quota headroom and npaged residency, reject/defer jobs whose deadline is infeasible after eviction, and gate eviction-vs-deadline decisions with exact park and miss accounting.
+- [ ] (nsym) Add cooperative migration of an nsym agent (queue, vrt, reservation, budget, generation tag and root reference) between CPUs with a destination epoch fence and two-lock handoff; gate no double service and unchanged root refcount.
 <!-- AGENT-APPEND -->
 
 ## P0. ISO C parity (language + library + ABI)
