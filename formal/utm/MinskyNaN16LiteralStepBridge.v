@@ -1690,6 +1690,21 @@ Fixpoint vm_run_p
            else vm_run_p f prog (exec_instr_p prog vm)
   end.
 
+Lemma lp_run_safe_step :
+  forall fuel L vm prog,
+    lp_halted L = false ->
+    lp_run_safe (S fuel) L vm prog =
+      match decode_word_p (lp_mem_at L (lp_pc L)) with
+      | Some ins =>
+          nth_error prog (vm_pc vm) = Some ins /\
+          LPInstrSide L vm ins /\
+          lp_run_safe fuel (lp_exec L ins) (exec_instr_p prog vm) prog
+      | None => False
+      end.
+Proof.
+  intros. cbn [lp_run_safe]. rewrite H. reflexivity.
+Qed.
+
 Theorem lp_run_refines :
   forall fuel L vm prog,
     Rlp L vm ->
@@ -1727,11 +1742,11 @@ Proof.
                 (vm_run_p fuel prog (exec_instr_p prog vm)) /\
               List.length (lp_reg (lp_run fuel (lp_step L))) = 16 /\
               MemP_wf (lp_mem (lp_run fuel (lp_step L)))).
-      cbn [lp_run_safe] in Hsafe.
-      rewrite Hhalt in Hsafe.
-      destruct (decode_word_p (lp_mem_at L (lp_pc L))) as [ins|] eqn:Hdec.
-      2: { rewrite Hdec in Hsafe. cbn in Hsafe. contradiction. }
-      rewrite Hdec in Hsafe. cbn in Hsafe.
+      rewrite (lp_run_safe_step fuel L vm prog Hhalt) in Hsafe.
+      remember (decode_word_p (lp_mem_at L (lp_pc L))) as ins_opt eqn:Hdec.
+      destruct ins_opt as [ins|].
+      2: { cbn in Hsafe. contradiction. }
+      cbn in Hsafe.
       destruct Hsafe as (Hnth & Hside & Hsafe').
       assert (Hstep : lp_step L = lp_exec L ins).
       { unfold lp_step. rewrite <- lp_mem_at_eq. rewrite Hdec. reflexivity. }
