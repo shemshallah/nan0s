@@ -207,3 +207,35 @@ Proof.
 Qed.
 
 Print Assumptions mem_get_mem_set_low_neq.
+
+Lemma mem_get_mem_set_data_neq :
+  forall m a v x,
+    MemP_wf m -> code_hi <= a -> a < data_hi -> x < 4366 -> x <> a ->
+    mem_get (mem_set m a v) x = mem_get m x.
+Proof.
+  intros m a v x (H1 & H2 & H3 & H4 & H5) Hlo Hhi Hx Hneq.
+  unfold code_hi, data_lo in Hlo.
+  unfold mem_set, mem_get.
+  assert (A1 : (a <? tape_lo) = true)
+    by (apply Nat.ltb_lt; unfold data_hi, tape_lo in *; lia).
+  assert (A2 : (a <? data_hi) = true)
+    by (apply Nat.ltb_lt; exact Hhi).
+  assert (A3 : (a <? code_hi) = false)
+    by (apply Nat.ltb_ge; exact Hlo).
+  rewrite A1, A2, A3.
+  destruct (x <? tape_lo) eqn:X1;
+    destruct (x <? data_hi) eqn:X2;
+    destruct (x <? code_hi) eqn:X3;
+    destruct (x <? tape_hi) eqn:X4;
+    cbn.
+  all: try (apply Nat.ltb_lt in X1);
+       try (apply Nat.ltb_ge in X1);
+       try (apply Nat.ltb_lt in X2);
+       try (apply Nat.ltb_ge in X2);
+       try (apply Nat.ltb_lt in X3);
+       try (apply Nat.ltb_ge in X3);
+       try (apply Nat.ltb_lt in X4);
+       try (apply Nat.ltb_ge in X4).
+  all: try reflexivity.
+  all: match goal with |- ?G => idtac "DATANEQ:" G end.
+Qed.
