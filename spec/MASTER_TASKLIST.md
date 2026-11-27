@@ -31,8 +31,9 @@ each item needs a real gate, a short proof, and a frontier note.
 - [x] F5 AI ABI: capability generations/revocation, checkpoint/restore/fork,
       migration, shared weights, KV roots, trace continuity; `nagent_gate`
       PASS (exact `O`, no C product code).
-- [ ] F6 Tensor/KV memory: zero-copy 64-bit views, per-agent KV slabs,
-      packed Q4/Q8 layouts, huge pages; exact small gates.
+- [x] F6 Tensor/KV memory: zero-copy 64-bit views, per-agent KV slabs,
+      packed Q4/Q8 layouts, huge pages; `nkv_gate` + `nq4_gate` PASS
+      (2 TiB views across 4 GiB, isolated slabs, exact Q4/Q8 dots).
 - [ ] F7 Model runtime: GGUF/safetensors import, tokenizer, Q4/Q8 GEMV/
       attention/RMSNorm, deterministic sampling; tiny-model token gate.
 - [ ] F8 Trace/replay: hash chain, deterministic RNG, budgets/deadlines,
@@ -86,6 +87,10 @@ Agent rule:
 - [ ] (nagent) Add weight-root refcounts and a COW KV object in nanobj; gate zero-copy weight fork with independent child KV generations.
 - [ ] (nagent) Add live-generation publish/drain across CPUs and require checkpoint/restore to join the current agent/capability generation, never rewind it.
 - [ ] (nagent) Add a per-agent deterministic RNG and replay from a checkpoint; gate trace-head equality and divergence.
+- [ ] (nkv) Add per-block KV paging to nkv: allocate 2 MiB blocks on append, evict cold blocks to nheap, remap logical tokens to new 64-bit offsets, and gate allocation/eviction/remap with stable logical indices.
+- [ ] (nkv) Add shared-prefix KV and fork copy-on-write: keep immutable prefix caps shared across agents, publish a new KV generation per branch, and gate parent/child prefix reads plus divergent suffix isolation.
+- [ ] (nkv) Fuse Q4_0 dequant into QK^T/dot using integer nibble lanes and DP4B, apply the block scale once, and compare the fused result bit-for-bit against nq4_dot32 over a two-block vector.
+- [ ] (nkv) Add zero-copy GGUF tensor import: read-only file-backed class-20 storage caps, nkv views from GGUF dtype/shape/strides, direct nq4 consumption, and a tensor range crossing 4 GiB.
 <!-- AGENT-APPEND -->
 
 ## P0. ISO C parity (language + library + ABI)
