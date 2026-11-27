@@ -154,10 +154,10 @@ no_c_outside_tests: PASS (src outside src/tests is C-free)
 
 ## Honest gaps
 
-- **Speculative decoding was not implemented.**  F13a was delivered as the
-  paged/incremental parity gate.  There is no `src/lib/nspec.nas`, no draft
-  model, no accept/reject trace and no KV rollback prototype.  The next
-  directives below scope it.
+- **Speculative decoding was outside F13a.**  F13a was delivered as the
+  paged/incremental parity gate; F13b now adds `src/lib/nspec.nas` and the
+  `npaged_trim` rollback primitive described at the end of this file.  The
+  F13a paged/incremental parity claim is unchanged.
 - Decode requires the block base `hi` word to be zero (page below 4 GiB of
   byte address), because `nattn_view_ptr` rejects a high address word.  The
   table stores 64-bit bases and remap preserves them, but a >4 GiB page
@@ -201,3 +201,33 @@ no_c_outside_tests: PASS (src outside src/tests is C-free)
    file-backed swap capability, keep a small hot table, and gate a
    pressure-driven eviction/remap sequence with stable logical indices and
    exact post-remap parity.
+
+## F13b extension: `npaged_trim`
+
+`src/lib/npaged.nas` gained one API, used by `nspec` for speculative KV
+rollback:
+
+```
+npaged_trim  r1=ctx r2=count -> 0/-1
+```
+
+It truncates to `count <= used`.  Every live block strictly above the target
+block releases its storage capability and returns its 2 MiB page to `nheap`
+(`live--`, `evicts++`).  If `count` ends inside the target block, the context
+and block generations are bumped, the block entry is repointed, and the
+retained record headers in that block are rewritten; the payload (`x`, `v`,
+Q4, Q8) is untouched, so attention bits and logical indices below `count` are
+stable.  A boundary trim frees the higher blocks without bumping the full
+target block, and `count == 0` frees every live block.  `count > used` fails
+closed.  The free loop stops at block 0; an early version underflowed the
+block cursor and looped forever on trim-to-zero, which the nspec gate now
+covers.
+
+No other `npaged` code changed.  `tools/npaged_gate.sh` still prints:
+
+```
+O
+npaged: PASS (2 MiB blocks, stable logical map, prefill+decode == full recompute, remap/generation, pressure/capacity/eviction)
+```
+
+The speculative and trim-specific proofs are in `spec/agents/nspec.md`.

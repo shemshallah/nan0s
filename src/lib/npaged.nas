@@ -72,6 +72,11 @@
 ;                      generation, release the old page to nheap).
 ;   npaged_evict_last  r1=ctx -> 0/-1 (truncate the tail block and free its
 ;                      page to nheap; earlier logical tokens stay stable).
+;   npaged_trim        r1=ctx r2=count -> 0/-1 (truncate to count tokens;
+;                      blocks above the target block are released to nheap,
+;                      a partially trimmed target block bumps its generation
+;                      and rewrites retained record headers.  This is the
+;                      speculative-decoding rollback primitive.)
 ;   npaged_token_word  r1=ctx r2=token -> record word address / 0
 ;   npaged_token_gen   r1=ctx r2=token -> generation / 0
 ;   npaged_check       r1=ctx r2=token r3=generation -> 1 if live and equal
@@ -1466,6 +1471,186 @@ npaged_evict_last:
 npel_bad:
   LA r1,0xFFFFFFFF
 npel_out:
+  SUB r14,r14,r13
+  LD r15,r14,0
+  RET
+
+; ---------------------------------------------------------------------------
+; npaged_trim: r1=ctx r2=count -> 0/-1
+; Truncate the live token space to count <= used.  Every live block strictly
+; above the target block is released to nheap (cap released first, evicts
+; incremented).  If count is inside a block and that block loses records, the
+; context generation is bumped, the block entry generation is repointed and
+; the retained record headers are rewritten.  A previously resolved view or
+; token generation therefore fails closed, while logical indices below count
+; keep resolving and the copied record payload (x/v/q4/q8) is untouched.
+npaged_trim:
+  ST r15,r14,0
+  ADD r14,r14,r13
+  LA r3,#NP_TP+48
+  ST r1,r3,0
+  ST r2,r3,1
+  LD r4,r1,#NP_C_MAGIC
+  LA r5,#NP_MAGIC
+  CMP r4,r5
+  JMP[NE] @npt_bad
+  LD r4,r1,#NP_C_VERSION
+  MOVI r5,#NP_VERSION
+  CMP r4,r5
+  JMP[NE] @npt_bad
+  LD r4,r1,#NP_C_USED
+  CMP r2,r4
+  JMP[GT] @npt_bad
+  CMP r2,r0
+  JMP[LT] @npt_bad
+  CMP r2,r4
+  JMP[EQ] @npt_ok
+
+  ; target block and first block to free
+  MOVI r5,0
+  ST r5,r0,#NP_TP+48+3      ; target valid flag
+  ST r5,r0,#NP_TP+48+4      ; first free block
+  CMP r2,r0
+  JMP[EQ] @npt_tgt_done
+  ADDI r4,r2,-1
+  LD r5,r1,#NP_C_BLOCKTOK
+  DIVU r5,r4,r5
+  ST r5,r0,#NP_TP+48+2      ; target block
+  MOVI r6,1
+  ST r6,r0,#NP_TP+48+3
+  ADD r6,r5,r13
+  ST r6,r0,#NP_TP+48+4
+npt_tgt_done:
+
+  ; free live blocks from tabcap-1 down to first_free
+  LD r5,r1,#NP_C_TABCAP
+  ADDI r5,r5,-1
+  ST r5,r0,#NP_TP+48+5      ; block cursor
+npt_free_l:
+  LD r5,r0,#NP_TP+48+5
+  LD r6,r0,#NP_TP+48+4
+  CMP r5,r6
+  JMP[LT] @npt_free_d
+  LD r1,r0,#NP_TP+48+0
+  ADD r2,r5,r0
+  CALL @np_entry
+  CMP r1,r0
+  JMP[EQ] @npt_free_n
+  ST r1,r0,#NP_TP+48+6      ; entry
+  LD r2,r1,#NP_E_STATE
+  CMP r2,r0
+  JMP[EQ] @npt_free_n
+  LD r1,r1,#NP_E_CAP
+  CALL @nobj_release
+  LD r1,r0,#NP_TP+48+0
+  LD r1,r1,#NP_C_HEAP
+  LD r2,r0,#NP_TP+48+0
+  LD r2,r2,#NP_C_NODE
+  MOVI r3,1
+  LD r4,r0,#NP_TP+48+6
+  LD r4,r4,#NP_E_BASE
+  LD r5,r0,#NP_TP+48+6
+  LD r5,r5,#NP_E_BASE+1
+  MOVI r6,1
+  MOVI r7,0
+  CALL @nheap_free
+  LD r1,r0,#NP_TP+48+6
+  ST r0,r1,#NP_E_STATE
+  ST r0,r1,#NP_E_USED
+  ST r0,r1,#NP_E_CAP
+  ST r0,r1,#NP_E_GEN
+  LD r1,r0,#NP_TP+48+0
+  LD r2,r1,#NP_C_LIVE
+  SUB r2,r2,r13
+  ST r2,r1,#NP_C_LIVE
+  LD r2,r1,#NP_C_EVICTS
+  ADD r2,r2,r13
+  ST r2,r1,#NP_C_EVICTS
+npt_free_n:
+  LD r5,r0,#NP_TP+48+5
+  CMP r5,r0
+  JMP[EQ] @npt_free_d
+  ADDI r5,r5,-1
+  ST r5,r0,#NP_TP+48+5
+  JMP @npt_free_l
+npt_free_d:
+
+  ; trim the target block (if count > 0)
+  LD r5,r0,#NP_TP+48+3
+  CMP r5,r0
+  JMP[EQ] @npt_setused
+  LD r1,r0,#NP_TP+48+0
+  LD r2,r0,#NP_TP+48+2
+  CALL @np_entry
+  CMP r1,r0
+  JMP[EQ] @npt_bad
+  ST r1,r0,#NP_TP+48+6
+  ; keep = count - target*blocktok
+  LD r2,r0,#NP_TP+48+1
+  LD r3,r0,#NP_TP+48+0
+  LD r3,r3,#NP_C_BLOCKTOK
+  LD r4,r0,#NP_TP+48+2
+  MUL r4,r4,r3
+  SUB r2,r2,r4
+  ST r2,r0,#NP_TP+48+7      ; keep
+  LD r3,r1,#NP_E_USED
+  CMP r2,r3
+  JMP[GE] @npt_setblock
+  ; bump the context generation and the target block generation
+  LD r1,r0,#NP_TP+48+0
+  LD r2,r1,#NP_C_GEN
+  ADD r2,r2,r13
+  CMP r2,r0
+  JMP[NE] @npt_gen
+  MOVI r2,1
+npt_gen:
+  ST r2,r1,#NP_C_GEN
+  LD r1,r0,#NP_TP+48+6
+  ST r2,r1,#NP_E_GEN
+  ; rewrite generation word in each retained record
+  LD r2,r1,#NP_E_BASE
+  SHR r2,r2,2
+  LD r3,r1,#NP_E_BASE+1
+  SHL r3,r3,30
+  ADD r2,r2,r3
+  ST r2,r0,#NP_TP+48+8      ; record word base
+  ST r0,r0,#NP_TP+48+9      ; slot
+npt_hd:
+  LD r3,r0,#NP_TP+48+9
+  LD r4,r0,#NP_TP+48+7
+  CMP r3,r4
+  JMP[GE] @npt_hdd
+  LD r5,r0,#NP_TP+48+0
+  LD r5,r5,#NP_C_STRIDE
+  MUL r6,r3,r5
+  LD r7,r0,#NP_TP+48+8
+  ADD r7,r7,r6
+  ADD r7,r7,r13
+  LD r8,r0,#NP_TP+48+6
+  LD r8,r8,#NP_E_GEN
+  ST r8,r7,0
+  LD r3,r0,#NP_TP+48+9
+  ADD r3,r3,r13
+  ST r3,r0,#NP_TP+48+9
+  JMP @npt_hd
+npt_hdd:
+npt_setblock:
+  LD r1,r0,#NP_TP+48+6
+  LD r2,r0,#NP_TP+48+7
+  ST r2,r1,#NP_E_USED
+
+npt_setused:
+  LD r1,r0,#NP_TP+48+0
+  LD r2,r0,#NP_TP+48+1
+  ST r2,r1,#NP_C_USED
+  ADD r1,r1,r0
+  CALL @np_set_pressure
+npt_ok:
+  MOVI r1,0
+  JMP @npt_out
+npt_bad:
+  LA r1,0xFFFFFFFF
+npt_out:
   SUB r14,r14,r13
   LD r15,r14,0
   RET

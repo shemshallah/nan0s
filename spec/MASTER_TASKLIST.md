@@ -67,8 +67,9 @@ each item needs a real gate, a short proof, and a frontier note.
       scheduling; design + prototype gate.  Paged KV + incremental decode
       gated (`npaged_gate`: 2 MiB blocks, stable logical map, prefill+decode
       bit-equal to full recompute, remap/generation, pressure/eviction).
-      Speculative decode, MoE, live generations and symbiotic scheduling
-      remain.
+      Speculative decode (`nspec_gate`: draft/verifier, forced rejection,
+      exact ids/logits, paged-KV trim rollback, deterministic trace head) is
+      also gated.  MoE, live generations and symbiotic scheduling remain.
 - [ ] F14 Verification: Coq/UTM trace, translation validation, reproducible
       build; gate.
 - [ ] F15 Product raw substrate: replace C harnesses with raw assembly/NaN
