@@ -111,7 +111,7 @@ Proof.
     by (apply Nat.ltb_ge; exact Hlo).
   rewrite E1, E2. cbn.
   apply nth_lset_word_eq.
-  rewrite H3. unfold pad_lo, data_hi in *. lia.
+  rewrite H3. unfold pad_lo, data_hi, tape_lo in *. lia.
 Qed.
 
 Lemma mem_get_mem_set_tape :
