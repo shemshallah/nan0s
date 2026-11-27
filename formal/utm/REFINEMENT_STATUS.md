@@ -116,8 +116,13 @@ GitHub Actions run does not make them interchangeable.
    `fixture_lp_run_refines`.  `MinskyNaN16LiteralCapstone.v` packages
    that relation with the published final literal state in
    `fixture_bridge_and_final`.  The native `r15` / `vm_link` calling
-   convention is reconciled on CALL and on `LD 15`.  Loader/assembler
-   semantics and the finite-memory/unbounded-tape bridge remain open.
+   convention is reconciled on CALL and on `LD 15`.
+   `MinskyNaN16LiteralLoader.v` starts the universality lift: it loads
+   an arbitrary 256-cell source window, proves the loaded memory and
+   `Rlp` invariants, and derives `bounded_window_bridge` conditionally
+   on the loader's safety certificate.  The full loader/assembler
+   semantics and the finite-memory/unbounded-tape bridge (safety for
+   every window, and windows longer than 256 cells) remain open.
 
 The Coq theorems are formal results about the Coq models. The general
 zipper-to-signed-address simulation bridges these two formal representations,

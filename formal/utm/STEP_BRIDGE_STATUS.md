@@ -106,7 +106,29 @@ with the published final state:
 The literal half is stated on `literal_final` so the kernel never
 converts through the 21,025-step VM term.
 
+## Bounded-window universality start
+
+`MinskyNaN16LiteralLoader.v` loads an arbitrary 256-cell source window
+into the tape block of the literal memory:
+
+    lp_load_window c K
+
+It proves `MemP_wf`, `Rlp`, the tape-cell projection
+`payload_word (mem_get ...) = win_mem ...`, and
+
+    bounded_window_bridge :
+      lp_run_safe fuel (lp_load_window c K) fixture_prog_full ->
+      Rlp (lp_run fuel (lp_load_window c K))
+          (vm_run_p fuel fixture_prog_full (vm_of_lp (lp_load_window c K))) /\
+      length (lp_reg ...) = 16 /\
+      MemP_wf (lp_mem ...).
+
+The remaining finite-memory/unbounded-tape obligation is to prove
+`lp_run_safe` for the loaded windows and to handle source windows
+longer than the literal 256-cell tape.
+
 ## Remaining work
+
 
 - Lift the run theorem to the universality statement.
 - Optional: project the final VM PC, `r1` and control cells from
