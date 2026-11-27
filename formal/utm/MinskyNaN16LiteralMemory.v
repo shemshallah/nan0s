@@ -155,21 +155,17 @@ Proof.
   - apply Nat.ltb_ge in E3.
     destruct (a <? data_hi) eqn:E2.
     + apply mem_get_mem_set_data; auto.
-      * exact E3.
-      * apply Nat.ltb_lt in E2. exact E2.
+      apply Nat.ltb_lt in E2. exact E2.
     + apply Nat.ltb_ge in E2.
       destruct (a <? tape_lo) eqn:E1.
       * apply mem_get_mem_set_pad; auto.
-        { exact E2. }
-        { apply Nat.ltb_lt in E1. exact E1. }
+        apply Nat.ltb_lt in E1. exact E1.
       * apply Nat.ltb_ge in E1.
         destruct (a <? tape_hi) eqn:E4.
         -- apply mem_get_mem_set_tape; auto.
-           + exact E1.
-           + apply Nat.ltb_lt in E4. exact E4.
+           apply Nat.ltb_lt in E4. exact E4.
         -- apply mem_get_mem_set_str; auto.
-           + apply Nat.ltb_ge in E4. exact E4.
-           + exact Ha.
+           exact Ha.
 Qed.
 
 Print Assumptions mem_get_mem_set_eq.
