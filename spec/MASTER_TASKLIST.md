@@ -25,8 +25,9 @@ each item needs a real gate, a short proof, and a frontier note.
 - [x] F3 E820/SRAT/NUMA topology: usable RAM and holes, node ids, CPU/APIC
       mapping, `nheap` integration; `nnuma_gate` PASS (sparse nodes, 5 GiB
       bases, holes/reserved/ACPI/MMIO skipped, per-node 4K/2M/1G heaps).
-- [ ] F4 4096-core scale: dynamic CPU count, x2APIC, per-core stacks/online
-      bitmap, no global lock on dispatch; layout + 2/4-CPU gate.
+- [x] F4 4096-core scale: dynamic CPU count, x2APIC, per-core stacks/online
+      bitmap, no global lock on dispatch; `ncscale_gate` PASS (4096 cores,
+      x2APIC 0x10000000+2i, 16 KiB stacks, online/ready bitmaps, 2/4-CPU regress).
 - [ ] F5 AI ABI: capability generations/revocation, checkpoint/restore/fork,
       migration, shared weights, KV slabs, trace/replay; exact gates.
 - [ ] F6 Tensor/KV memory: zero-copy 64-bit views, per-agent KV slabs,
@@ -74,6 +75,11 @@ Agent rule:
 - [ ] (nansched) Widen task affinity to a 4096-bit bitmap, keep the 32-CPU fast path, and include nancore NC_NODE hints and steal/topology policy.
 - [ ] (nansched) Add speculative tool-call admission with reserved budget classes and deadline-miss parking; gate an admitted and a rejected speculative call.
 - [ ] (nansched) Add live-generation handoff: migrate with task epoch, KV epoch, trace head and a destination epoch fence; gate old-generation drain plus new-generation start.
+- [ ] (ncscale) Parse x2APIC cluster/package fields from ACPI MADT type 9, carry cluster hints in the NanCore record, and gate a 4096-core cluster histogram.
+- [ ] (ncscale) Add ncs_claim(index) as an atomic READY-claim and gate a 4096-core single-winner handoff race through the nansmp CAS seam.
+- [ ] (ncscale) Fold nnuma SRAT/SLIT node and distance hints into ncs_init/ncs_index; gate sparse-node distance-aware dispatch preference with policy kept in NaN.
+- [ ] (ncscale) Add a per-core cache-color stack/record placement pass and gate a 4096-core color histogram that excludes guard and shared text colors.
+- [ ] (ncscale) Add ncs_next_online(start) word-skip scanning over the online bitmap so idle dispatch finds work without a 4096-entry linear scan; gate wrap and empty-bitmap cases.
 <!-- AGENT-APPEND -->
 
 ## P0. ISO C parity (language + library + ABI)
