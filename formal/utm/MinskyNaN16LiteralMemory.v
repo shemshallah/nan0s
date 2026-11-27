@@ -359,3 +359,39 @@ Proof.
 Qed.
 
 Print Assumptions mem_get_mem_set_neq.
+
+(** ** Reads beyond the 4366-word image
+
+    The five blocks cover exactly [0,4366).  A larger address reads the
+    tail of [mp_str], where the block invariant gives the default.  This
+    is the outer branch needed to project the total ST update. *)
+
+Lemma mem_get_high :
+  forall m x, MemP_wf m -> 4366 <= x -> mem_get m x = 0%N.
+Proof.
+  intros m x (H1 & H2 & H3 & H4 & H5) Hx.
+  unfold mem_get, tape_lo, tape_hi, str_lo.
+  assert (E1 : (x <? 4096) = false) by (apply Nat.ltb_ge; lia).
+  assert (E4 : (x <? 4352) = false) by (apply Nat.ltb_ge; lia).
+  rewrite E1, E4.
+  rewrite nth_overflow by (rewrite H5; lia).
+  reflexivity.
+Qed.
+
+Lemma mem_get_mem_set_neq_all :
+  forall m a v x,
+    MemP_wf m -> a < 4366 -> x <> a ->
+    mem_get (mem_set m a v) x = mem_get m x.
+Proof.
+  intros m a v x Hwf Ha Hneq.
+  destruct (x <? 4366) eqn:Hx.
+  - apply Nat.ltb_lt in Hx.
+    apply mem_get_mem_set_neq; auto.
+  - apply Nat.ltb_ge in Hx.
+    rewrite (mem_get_high (mem_set m a v) x)
+      by (apply MemP_wf_mem_set; auto; lia).
+    rewrite (mem_get_high m x) by auto.
+    reflexivity.
+Qed.
+
+Print Assumptions mem_get_mem_set_neq_all.
