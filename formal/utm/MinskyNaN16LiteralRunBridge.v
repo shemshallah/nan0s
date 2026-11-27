@@ -32,26 +32,28 @@ Proof.
   unfold Rlp in HR.
   destruct HR as
     (HpcR & Hregs & _ & _ & Hmem & _ & _ & _ & HhaltR & _).
-  split.
-  - rewrite HpcR. exact Hpc.
-  - split.
-    + rewrite HhaltR. exact Hhalt.
-    + split.
-      * assert (H1 : 1 < 15) by lia.
-        rewrite (Hregs 1 H1).
-        change (lget_reg (lp_reg (lp_run 21025 lp_reset)) 1 mod 2 ^ 32 =
-                4357).
-        rewrite Hr1.
-        apply Nat.mod_small.
-        pose proof le_256_two32. lia.
-      * split.
-        -- rewrite (Hmem action_state_addr).
-           rewrite lp_mem_at_eq. exact Hstate.
-        -- split.
-           ++ rewrite (Hmem action_head_addr).
-              rewrite lp_mem_at_eq. exact Hhead.
-           ++ rewrite (Hmem action_halt_addr).
-              rewrite lp_mem_at_eq. exact Hhhalt.
+  repeat split.
+  - exact (eq_trans HpcR Hpc).
+  - exact (eq_trans HhaltR Hhalt).
+  - assert (H1 : 1 < 15) by lia.
+    transitivity (lget_reg (lp_reg (lp_run 21025 lp_reset)) 1 mod 2 ^ 32).
+    + exact (Hregs 1 H1).
+    + change (lget_reg (lp_reg literal_final) 1 mod 2 ^ 32 = 4357).
+      rewrite Hr1.
+      apply Nat.mod_small.
+      pose proof le_256_two32. lia.
+  - transitivity
+      (payload_word (lp_mem_at (lp_run 21025 lp_reset) action_state_addr)).
+    + exact (Hmem action_state_addr).
+    + rewrite lp_mem_at_eq. exact Hstate.
+  - transitivity
+      (payload_word (lp_mem_at (lp_run 21025 lp_reset) action_head_addr)).
+    + exact (Hmem action_head_addr).
+    + rewrite lp_mem_at_eq. exact Hhead.
+  - transitivity
+      (payload_word (lp_mem_at (lp_run 21025 lp_reset) action_halt_addr)).
+    + exact (Hmem action_halt_addr).
+    + rewrite lp_mem_at_eq. exact Hhhalt.
 Qed.
 
 Print Assumptions fixture_vm_final.
