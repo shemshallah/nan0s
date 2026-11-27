@@ -1715,7 +1715,7 @@ Proof.
       rewrite Hvm.
       change (Rlp L vm /\ List.length (lp_reg L) = 16 /\
               MemP_wf (lp_mem L)).
-      repeat split; assumption.
+      split; [exact HR | split; [exact Hlen | exact Hwf]].
     + assert (Hvm : vm_halted vm = false).
       { pose proof HR as HR'.
         unfold Rlp in HR'.
