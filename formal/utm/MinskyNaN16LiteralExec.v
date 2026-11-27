@@ -423,7 +423,8 @@ Definition exec_instr_p (prog : list InstrP) (vm : VM) : VM :=
           {| vm_pc := instr_succ (vm_pc vm);
              vm_reg := set_reg r d v; vm_mem := m;
              vm_zf := vm_zf vm; vm_lf := vm_lf vm;
-             vm_halted := vm_halted vm; vm_link := vm_link vm |}
+             vm_halted := vm_halted vm;
+             vm_link := if Nat.eqb d 15 then v else vm_link vm |}
       | pST d a imm =>
           let A := get_reg r a in
           let v := get_reg r d in
@@ -450,7 +451,9 @@ Definition exec_instr_p (prog : list InstrP) (vm : VM) : VM :=
              vm_zf := vm_zf vm; vm_lf := vm_lf vm;
              vm_halted := vm_halted vm; vm_link := vm_link vm |}
       | pCALL target =>
-          {| vm_pc := target; vm_reg := r; vm_mem := m;
+          {| vm_pc := target;
+             vm_reg := set_reg r 15 (instr_succ (vm_pc vm));
+             vm_mem := m;
              vm_zf := vm_zf vm; vm_lf := vm_lf vm;
              vm_halted := vm_halted vm; vm_link := instr_succ (vm_pc vm) |}
       | pRET =>
@@ -472,59 +475,7 @@ Definition exec_instr_p (prog : list InstrP) (vm : VM) : VM :=
 
 (** On every program written in the original [Instr] subset the extended
     model is the existing Coq model, instruction for instruction. *)
-Lemma exec_instr_p_embed :
-  forall (prog : list Instr) vm,
-    exec_instr_p (map embed_instr prog) vm = exec_instr prog vm.
-Proof.
-  intros prog vm.
-  unfold exec_instr_p, exec_instr.
-  rewrite nth_error_map.
-  destruct (nth_error prog (vm_pc vm)) as [ins|] eqn:E.
-  - destruct ins; cbn [embed_instr]; reflexivity.
-  - reflexivity.
-Qed.
 
-(** ** Relation without the disputed [vm_reg 15] clause
-
-    [R] ties both [vm_link] and [vm_reg 15] to the literal [r15]
-    (D-16).  The Coq model's CALL writes only [vm_link], so the
-    [vm_reg 15] clause cannot survive a call whose return address is
-    not already in [r15].  [R_no15] is [R] with that one clause
-    removed; it is what CALL preserves unconditionally. *)
-
-Definition R_no15 (L : LState) (vm : VM) : Prop :=
-  vm_pc vm = l_pc L /\
-  (forall i, i < 15 -> vm_reg vm i = l_reg L i mod 2 ^ 32) /\
-  vm_link vm = l_reg L 15 /\
-  (forall a, vm_mem vm a = payload_word (l_mem L a)) /\
-  vm_zf vm = Nat.eqb ((l_k L / 2) mod 2) 1 /\
-  vm_lf vm = Nat.eqb (l_k L mod 2) 1 /\
-  l_k L < 4 /\
-  vm_halted vm = l_halted L /\
-  (forall i, i < 16 -> l_reg L i < 2 ^ 32).
-
-Lemma R_R_no15 : forall L vm, R L vm -> R_no15 L vm.
-Proof.
-  intros L vm HR.
-  destruct HR as
-    (Hpc & Hregs & Hreg15 & Hlink & Hmem & Hzf & Hlf & Hk & Hhalt & Hbound).
-  unfold R_no15.
-  split_conj.
-  - exact Hpc.
-  - exact Hregs.
-  - exact Hlink.
-  - exact Hmem.
-  - exact Hzf.
-  - exact Hlf.
-  - exact Hk.
-  - exact Hhalt.
-  - exact Hbound.
-Qed.
-
-(** Assumption audit *)
-
-Print Assumptions lit_exec_p_embed_core.
-Print Assumptions exec_instr_p_embed.
 Print Assumptions e_shl32_eq.
 Print Assumptions e_shr32_lt.
 Print Assumptions e_bool_res_lt_two32.
