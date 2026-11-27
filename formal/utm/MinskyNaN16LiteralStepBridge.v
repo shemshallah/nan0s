@@ -1303,7 +1303,10 @@ Proof.
 Qed.
 
 Lemma le_256_two32 : 256 <= 2 ^ 32.
-Proof. vm_compute. lia. Qed.
+Proof.
+  change (2 ^ 8 <= 2 ^ 32).
+  apply Nat.pow_le_mono_r; lia.
+Qed.
 
 Lemma N_land_255_to_nat_lt :
   forall x, N.to_nat (N.land x 255%N) < 256.
