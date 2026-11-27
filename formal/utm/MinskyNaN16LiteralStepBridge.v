@@ -1703,7 +1703,7 @@ Proof.
   intros fuel. induction fuel as [|fuel IH]; intros L vm prog HR Hlen Hwf Hsafe.
   - change (Rlp L vm /\ List.length (lp_reg L) = 16 /\
             MemP_wf (lp_mem L)).
-    repeat split; assumption.
+    split; [exact HR | split; [exact Hlen | exact Hwf]].
   - cbn [lp_run vm_run_p].
     destruct (lp_halted L) eqn:Hhalt.
     + assert (Hvm : vm_halted vm = true).
