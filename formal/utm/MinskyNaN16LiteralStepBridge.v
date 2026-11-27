@@ -1816,9 +1816,13 @@ Print Assumptions lp_run_refines.
     only runs the LP machine; the program lookup uses the LP program
     counter, and the opcode side conditions are tested with booleans. *)
 
+Lemma preg_eq_dec :
+  forall (a b : preg), {a = b} + {a <> b}.
+Proof. decide equality. Defined.
+
 Lemma InstrP_eq_dec :
   forall (a b : InstrP), {a = b} + {a <> b}.
-Proof. decide equality. Defined.
+Proof. decide equality; apply preg_eq_dec. Defined.
 
 Definition instr_eqb (a b : InstrP) : bool :=
   if InstrP_eq_dec a b then true else false.
