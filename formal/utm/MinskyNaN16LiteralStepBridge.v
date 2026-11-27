@@ -2087,7 +2087,7 @@ Proof.
   - cbn [lp_run_check] in H.
     destruct (lp_halted L) eqn:Hhalt.
     + cbn [lp_run_safe]. rewrite Hhalt. exact I.
-    + destruct (decode_word_p (lp_mem_at L (lp_pc L))) as [ins|] eqn:Hdec.
+    + destruct (decode_word_p (mem_get (lp_mem L) (lp_pc L))) as [ins|] eqn:Hdec.
       2: discriminate H.
       apply andb_true_iff in H. destruct H as [H Hrec].
       apply andb_true_iff in H. destruct H as [Hnth Hside].
