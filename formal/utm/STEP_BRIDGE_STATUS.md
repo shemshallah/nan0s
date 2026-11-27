@@ -6,6 +6,7 @@ Verified one-step refinements in `MinskyNaN16LiteralStepBridge.v`:
 | --- | --- | --- |
 | MOVI | `lp_exec_MOVI_refines` | PASS |
 | LD | `lp_exec_LD_refines` | PASS |
+| ST | `lp_exec_ST_refines` (requires `MemP_wf` and address `< 4366`) | PASS |
 | HALT | `lp_exec_HALT_refines` | PASS |
 | PUTC | `lp_exec_PUTC_refines` | PASS |
 | RET | `lp_exec_RET_refines` | PASS |
@@ -19,21 +20,22 @@ Verified one-step refinements in `MinskyNaN16LiteralStepBridge.v`:
 | SHL | `lp_exec_SHL_refines` (no-overflow) | PASS |
 | BOOL.8/255 | `lp_exec_BOOL8_255_refines` | PASS |
 
-All six preserve the full `Rlp` relation, including the opaque memory
-view, register bounds, flags, halt state and the link register.
+All one-step theorems preserve the full `Rlp` relation, including the
+opaque memory view, register bounds, flags, halt state and the link
+register.  The ST case additionally uses the block invariant
+`MemP_wf` and the fixture address bound to project the total memory
+update through `mem_get_mem_set_eq` / `mem_get_mem_set_neq_all`.
 
-## Remaining opcodes
+## Remaining work
 
-- ST: needs the `nan_mkwordN` / `nan_mkword` payload bridge and memory
-  update agreement.
-- SHL / ADD / SUB: need explicit 32-bit no-overflow/no-borrow
-  invariants.
-- BOOL: truth-table agreement.
-- Then: a supported-instruction dispatcher and an inductive run
-  theorem from `lp_run` to the VM.
+- A supported-instruction dispatcher (`decode_word_p` chooses the
+  opcode-specific theorem, with its side conditions).
+- An inductive run theorem from `lp_run` / `literal_step_p` to the
+  Coq VM, including `MemP_wf` maintenance across the whole run.
+- Lift that run theorem to the universality statement.
 
 ## Fast debug
 
 `.github/workflows/nan0s-formal-utm-debug.yml` downloads the complete
-`.vo` object graph from a successful main run and compiles only the two
-bridge modules.
+`.vo` object graph from a successful main run and compiles only the
+`Memory`, `Bridge` and `StepBridge` modules.
