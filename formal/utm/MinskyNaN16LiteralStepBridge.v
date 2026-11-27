@@ -1349,7 +1349,7 @@ Proof.
       rewrite HA'.
       rewrite Nat.mod_small.
       2:{ apply Nat.lt_le_trans with 256.
-          - apply Nat.lt_of_succ_le. apply Nat.mod_upper_bound. lia.
+          - apply (Nat.mod_upper_bound (N.to_nat (lget_regN (lp_reg L) a)) 256). lia.
           - lia. }
       reflexivity.
     + rewrite (set_reg_neq _ _ _ _ Hne).
@@ -1413,7 +1413,7 @@ Proof.
         by (rewrite Hlen; lia).
       rewrite N_land_255_to_nat.
       apply Nat.lt_le_trans with 256.
-      * apply Nat.lt_of_succ_le. apply Nat.mod_upper_bound. lia.
+      * apply (Nat.mod_upper_bound (N.to_nat (lget_regN (lp_reg L) a)) 256). lia.
       * lia.
     + rewrite (lget_regN_lset_word_neq (lp_reg L) d
         (N.land (lget_regN (lp_reg L) a) 255%N) i Hne).
