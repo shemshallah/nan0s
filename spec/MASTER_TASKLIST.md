@@ -101,6 +101,11 @@ each item needs a real gate, a short proof, and a frontier note.
       MADT/INIT-SIPI-SIPI, AP-local LAPIC timer, reschedule IPI, exact EOI,
       exception/IST1 self-test; `noc_raw64_smp_gate` PASS (4/2 CPUs, no C
       linked).
+- [x] F18 Source-derived GOLD: raw n16i nasm1 boot slice (512/512 bytes),
+      native xgold.sh full GOLD (512+9913 bytes, 32+620 rows), nan_cli only
+      an optional comparator; `source_gold_gate` PASS.  Full-kernel n16i path
+      measured 621 s and matched 9913/9913 bytes; default gate uses the 36 s
+      boot slice plus the native-core full rebuild.
 
 Agent rule:
 
@@ -223,6 +228,11 @@ Agent rule:
 - [ ] (nkvdag) Persist DAG nodes in a content-addressed store and gate late hydration of a new agent by root hash over NVMe/RDMA, asserting exact dedup hits and bytes avoided across a cold restart.
 - [ ] (nkvdag) Add CAS/fence per-node refcounts plus epoch GC/orphan reclamation; gate two-CPU concurrent sibling join/close with one winner per refcount op, exact per-CPU counters and no free of a node visible to a live view.
 - [ ] (nkvdag) Save checkpoint roots {DAG root, ngen generation, nagent KV root, trace head}, replay a branch suffix through the view gate, and assert exact token/value equality plus old-view divergence at the exact event index.
+- [ ] (ngold) Add a proof-carrying GOLD certificate over boot/kernel/guest: hash-chain each region, verify it in the native boot path before the first guest fetch, and gate a one-byte mutation in each region so the image fails closed.
+- [ ] (ngold) Run nasm1 over the full src/native/kan16.xa under raw n16i on the native core (oracle count 1,125,205,921 outer steps; measured 621 s end-to-end, 9913/9913 kernel bytes matched) and decide whether the ~10 min full path or the 36 s boot slice is the default n16i proof.
+- [ ] (ngold) Make the GOLD producer parallel-safe and deterministic: unique src/prog staging files instead of fixed _xgold_h.nas/_xgold64_h.nas, a QEMU serial lock, and a gate that two concurrent reconstructions are byte-identical.
+- [ ] (ngold) Cross-check the boot GOLD with an independent NaN encoder (nasm0 or a table-driven encoder) or a bit-vector equivalence checker so the bytes do not rely on nasm1 plus the optional C oracle.
+- [ ] (ngold) Wire source_gold_gate.sh and the native xgold64 rebuild into the product/no-C aggregate so a stale GOLD fails the build, not just a standalone gate.
 <!-- AGENT-APPEND -->
 
 ## P0. ISO C parity (language + library + ABI)

@@ -1,7 +1,8 @@
 #!/bin/sh
 # tools/xgold64.sh - assemble the x86-64 long-mode core with nasm1.
-# No C and no Python: gawk stages the source, the prebuilt 32-bit native core
-# runs nasm1, QEMU captures the emitted bytes, and awk writes the gold stream.
+# No C and no Python in the producer: gawk stages the source, the source-derived
+# 32-bit GOLD boot sector + native kan16 core run nasm1 under QEMU, and awk
+# writes the gold stream.  nan_cli is an optional byte comparator only.
 set -e
 cd "$(dirname "$0")/.."
 export LC_ALL=C
@@ -33,17 +34,39 @@ asm_one() { # src out.bin
   }' "$T/h.nan" | xxd -r -p > "$T/guest.bin"
   [ -s "$T/guest.bin" ] || { echo "xgold64: empty guest for $src" >&2; exit 1; }
 
-  # Build/oracle path: the C runner executes nasm1; the emitted bytes are
-  # still nasm1 output.  No QEMU and no native-core hang in the build loop.
+  # Native producer: the 32-bit GOLD boot sector + kan16 core execute nasm1 on
+  # bare QEMU; the guest image is read from IDE LBA 129.  No C, no Python.
+  : > "$T/carts.txt"
+  awk -f tools/mkimg.awk -v GOLD=src/native/nan16_x86.nan \
+    -v GUEST="$T/h.nan" -v CARTS="$T/carts.txt" \
+    -v OUTB="$T/boot.bin" -v OUTG="$T/guest.bin" >/dev/null
+  cat "$T/boot.bin" > "$T/floppy.img"
+  truncate -s 1474560 "$T/floppy.img"
+  dd if=/dev/zero of="$T/disk.img" bs=512 count=129 status=none
+  cat "$T/guest.bin" >> "$T/disk.img"
+  truncate -s 1474560 "$T/disk.img"
   rm -f "$T/ser"
-  timeout 180 ./aarch64/android/nan_cli --img "$T/h.nan" --mem 16 \
-    --steps 500000000 --serial > "$T/ser" 2>"$T/nc.err" || true
+  timeout 180 qemu-system-i386 -m 64 \
+    -drive format=raw,if=floppy,file="$T/floppy.img" \
+    -drive format=raw,if=ide,index=0,file="$T/disk.img" \
+    -boot a -display none -serial "file:$T/ser" -no-reboot >/dev/null 2>&1 || true
   [ "$(head -c 1 "$T/ser" 2>/dev/null)" = "Y" ] || {
-    echo "xgold64: nasm1 rejected $src" >&2
+    echo "xgold64: native nasm1 rejected $src" >&2
     head -c 200 "$T/ser" | cat -v >&2 || true
-    tail -3 "$T/nc.err" >&2 || true
     exit 1
   }
+
+  # Optional comparator: the C nan_cli oracle must emit the same bytes.  It is
+  # never the producer; a missing binary just skips this check.
+  if [ -x aarch64/android/nan_cli ] && [ "${SOURCE_GOLD_NO_ORACLE:-0}" != 1 ]; then
+    rm -f "$T/nc.ser"
+    timeout 180 ./aarch64/android/nan_cli --img "$T/h.nan" --mem 16 \
+      --steps 500000000 --serial > "$T/nc.ser" 2>"$T/nc.err" || true
+    cmp -s "$T/ser" "$T/nc.ser" || {
+      echo "xgold64: native nasm1 output differs from the nan_cli oracle for $src" >&2
+      exit 1
+    }
+  fi
   tail -c +3 "$T/ser" > "$out"
 }
 
