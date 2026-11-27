@@ -122,9 +122,15 @@ each item needs a real gate, a short proof, and a frontier note.
       `tools/nhost_gate.sh` covers it.  The duplicate `tn_d` name in libcx
       was renamed `cx_tn_d`, fixing the in-shell `asm` operand hang;
       `tools/nixsh_asm_gate.sh` PASSes.
-- [ ] (nasm) Emit `src/nan/nixsched.nan` with `nhost` and retire `nmk.awk`
-      from the guest build (`tools/build.sh`, `tools/mkn16iimg.sh`), leaving
-      nmk only as the gate oracle and bootstrap.
+- [x] (nasm) Self-hosted guest emission: `nhost` assembles itself to a
+      4,518-word fixed point; `tools/nhost_emit_guest.sh` emits the 530,842-word
+      guest, and `tools/nhost_product_gate.sh` proves it packs to the shipped
+      `build/nan0s.img` byte-for-byte.  `NHOST_BUILD=1` selects it in
+      `tools/build.sh` and `tools/mkn16iimg.sh`.
+- [ ] (nasm) Make the nhost emitter the default producer: run nhost on the
+      native core (or a portable x86_64 machine) with the source bundle on a
+      second IDE disk, so the hermetic build no longer depends on the aarch64
+      `nan_cli`; then remove `nmk.awk` from `build.sh`.
 - [x] F18c Unified nasm: `src/prog/nasm.nas` is the single assembler with a
       NaN-word mode (z0, `run`/`V_*`) and an x86-byte mode (x1, `_start`);
       `nasm0.nas`/`nasm1.nas` are aliases.  x86 boot output is byte-identical

@@ -7,7 +7,13 @@ T="${TMPDIR:-$PWD/tmp}/mkn16i.$$"; mkdir -p "$T"
 trap 'rm -rf "$T"' EXIT
 [ -f src/native/nan16_x64.nan ] || { echo "mkn16i: missing nan16_x64.nan (run tools/xgold64.sh)" >&2; exit 1; }
 GUEST="${GUEST:-src/nan/nixsched.nan}"
-[ "$GUEST" = "src/nan/nixsched.nan" ] && awk -f tools/nmk.awk -v CMD=emit src/gui/gui_sched_boot.nas > src/nan/nixsched.nan
+if [ "$GUEST" = "src/nan/nixsched.nan" ]; then
+  if [ "${NHOST_BUILD:-0}" = 1 ]; then
+    sh tools/nhost_emit_guest.sh src/gui/gui_sched_boot.nas "$GUEST"
+  else
+    awk -f tools/nmk.awk -v CMD=emit src/gui/gui_sched_boot.nas > src/nan/nixsched.nan
+  fi
+fi
 awk -f tools/nmk.awk -v CMD=emit src/nan/n16i_runtime.nas > src/nan/n16i_runtime.nan
 gawk -f tools/mkimg.awk -v NOTOC=1 -v GOLD=src/native/nan16_x64.nan \
   -v GUEST="$GUEST" -v CARTS=/dev/null \
