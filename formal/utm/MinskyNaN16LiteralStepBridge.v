@@ -1288,3 +1288,136 @@ Proof.
 Qed.
 
 Print Assumptions lp_exec_SHL_refines.
+
+(** ** BOOL.8 with the fixture mask 255 *)
+
+Lemma N_land_255_to_nat :
+  forall x, N.to_nat (N.land x 255%N) = N.to_nat x mod 256.
+Proof.
+  intros x.
+  change (N.to_nat (N.land x (N.ones 8)) = N.to_nat x mod 2 ^ 8).
+  rewrite N.land_ones.
+  rewrite N2Nat.inj_mod.
+  rewrite N2Nat.inj_pow.
+  reflexivity.
+Qed.
+
+Theorem lp_exec_BOOL8_255_refines :
+  forall L vm prog d a b,
+    Rlp L vm ->
+    List.length (lp_reg L) = 16 ->
+    d < 16 ->
+    d <> 15 ->
+    a < 16 ->
+    b < 16 ->
+    lget_regN (lp_reg L) b = 255%N ->
+    vm_reg vm b = 255 ->
+    decode_word_p (lp_mem_at L (lp_pc L)) = Some (pBOOL 8 d a b) ->
+    nth_error prog (vm_pc vm) = Some (pBOOL 8 d a b) ->
+    Rlp (lp_exec L (pBOOL 8 d a b)) (exec_instr_p prog vm).
+Proof.
+  intros L vm prog d a b HR Hlen Hd Hd15 Ha Hb Hval Hvalvm Hdec Hnth.
+  pose proof HR as HR_R.
+  unfold Rlp in *.
+  destruct HR as
+    (Hpc & Hregs & Hreg15 & Hlink & Hmem & Hzf & Hlf & Hk & Hhalt & Hbound).
+  pose proof (R_reg_eq (lp_to_LState L) vm a HR_R Ha) as HA.
+  assert (HA' : vm_reg vm a = N.to_nat (lget_regN (lp_reg L) a)).
+  { unfold l_reg, lp_to_LState in HA. exact HA. }
+  unfold lp_exec, exec_instr_p.
+  rewrite Hnth. cbn.
+  rewrite Hval.
+  unfold R, lp_to_LState.
+  split_conj_step.
+  - change (S (vm_pc vm) = S (lp_pc L)). rewrite Hpc. reflexivity.
+  - intros i Hi.
+    change (set_reg (vm_reg vm) d
+              (e_bool_res 8 (vm_reg vm a) (vm_reg vm b)) i =
+            N.to_nat
+              (lget_regN
+                (lset_word (lp_reg L) d
+                  (N.land (lget_regN (lp_reg L) a) 255%N)) i)
+              mod 2 ^ 32).
+    destruct (Nat.eq_dec i d) as [-> | Hne].
+    + rewrite set_reg_eq.
+      rewrite Hvalvm.
+      rewrite (e_bool_res_8_255 (vm_reg vm a)) by (rewrite HA'; exact (Hbound a Ha)).
+      rewrite (lget_regN_lset_word_eq (lp_reg L) d
+        (N.land (lget_regN (lp_reg L) a) 255%N))
+        by (rewrite Hlen; lia).
+      rewrite N_land_255_to_nat.
+      rewrite HA'.
+      rewrite Nat.mod_small.
+      2:{ apply Nat.lt_le_trans with 256.
+          - apply Nat.mod_upper_bound. lia.
+          - lia. }
+      reflexivity.
+    + rewrite (set_reg_neq _ _ _ _ Hne).
+      rewrite (lget_regN_lset_word_neq (lp_reg L) d
+        (N.land (lget_regN (lp_reg L) a) 255%N) i Hne).
+      exact (Hregs i Hi).
+  - change (set_reg (vm_reg vm) d
+              (e_bool_res 8 (vm_reg vm a) (vm_reg vm b)) 15 =
+            N.to_nat
+              (lget_regN
+                (lset_word (lp_reg L) d
+                  (N.land (lget_regN (lp_reg L) a) 255%N)) 15)
+              mod 2 ^ 32).
+    rewrite (set_reg_neq _ _ _ _ (not_eq_sym Hd15)).
+    rewrite (lget_regN_lset_word_neq (lp_reg L) d
+      (N.land (lget_regN (lp_reg L) a) 255%N) 15
+      (not_eq_sym Hd15)).
+    exact Hreg15.
+  - change (vm_link vm =
+            N.to_nat
+              (lget_regN
+                (lset_word (lp_reg L) d
+                  (N.land (lget_regN (lp_reg L) a) 255%N)) 15)).
+    rewrite (lget_regN_lset_word_neq (lp_reg L) d
+      (N.land (lget_regN (lp_reg L) a) 255%N) 15
+      (not_eq_sym Hd15)).
+    exact Hlink.
+  - intro x.
+    change (vm_mem vm x =
+            payload_word (lp_mem_at (lp_exec L (pBOOL 8 d a b)) x)).
+    rewrite lp_mem_at_lp_exec_BOOL. exact (Hmem x).
+  - change (Nat.eqb (e_bool_res 8 (vm_reg vm a) (vm_reg vm b)) 0 =
+            Nat.eqb
+              (((pack_k
+                  (N.eqb (N.land (lget_regN (lp_reg L) a) 255%N) 0)
+                  false) / 2) mod 2) 1).
+    rewrite Hvalvm.
+    rewrite (e_bool_res_8_255 (vm_reg vm a)) by (rewrite HA'; exact (Hbound a Ha)).
+    rewrite pack_k_zf.
+    rewrite N_eqb_to_nat.
+    rewrite N_land_255_to_nat.
+    rewrite HA'.
+    reflexivity.
+  - change (false =
+            Nat.eqb
+              ((pack_k
+                  (N.eqb (N.land (lget_regN (lp_reg L) a) 255%N) 0)
+                  false) mod 2) 1).
+    rewrite pack_k_lf. reflexivity.
+  - apply pack_k_lt_4.
+  - change (vm_halted vm = lp_halted L). exact Hhalt.
+  - intros i Hi.
+    change (N.to_nat
+              (lget_regN
+                (lset_word (lp_reg L) d
+                  (N.land (lget_regN (lp_reg L) a) 255%N)) i)
+            < 2 ^ 32).
+    destruct (Nat.eq_dec i d) as [-> | Hne].
+    + rewrite (lget_regN_lset_word_eq (lp_reg L) d
+        (N.land (lget_regN (lp_reg L) a) 255%N))
+        by (rewrite Hlen; lia).
+      rewrite N_land_255_to_nat.
+      apply Nat.lt_le_trans with 256.
+      * apply Nat.mod_upper_bound. lia.
+      * lia.
+    + rewrite (lget_regN_lset_word_neq (lp_reg L) d
+        (N.land (lget_regN (lp_reg L) a) 255%N) i Hne).
+      exact (Hbound i Hi).
+Qed.
+
+Print Assumptions lp_exec_BOOL8_255_refines.
