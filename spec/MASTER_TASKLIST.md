@@ -74,10 +74,11 @@ each item needs a real gate, a short proof, and a frontier note.
       (`nmoe_gate`: top-2 Q4 router, 4 expert FFNs, capacity drops, load and
       NUMA/VRAM placement accounting, exact combine) are also gated.  Live
       generations (`ngen_gate`: publish/drain/start, stale/dup rejection,
-      forced abort, two-agent isolation) and symbiotic multi-agent
-      scheduling (`nsym_gate`: 3-agent WFQ on 2 CPUs, bounded ratio, no
-      starvation, reservations/budgets/deadlines, shared-root refcounts,
-      generation isolation) are gated.  F13 core complete; COW KV,
+      forced abort, two-agent isolation), symbiotic multi-agent scheduling
+      (`nsym_gate`: 3-agent WFQ, bounded ratio, no starvation, shared-root
+      refcounts), and COW prefix fork (`nkvgen_gate`: gen5 prefix, gen6 fork
+      shares pages, cross-gen/old-gen rejection, boundary COW, exact
+      refcounts) are gated.  F13 core complete; multi-agent prefix DAG,
       generation deadlines and SMP publish are queued follow-ups.
 - [x] F14 Verification: Coq/UTM trace, translation validation, reproducible
       build; `nverify_gate` PASS (reproducible nmk/translator output, byte
@@ -192,6 +193,10 @@ Agent rule:
 - [ ] (noc) Add a signed product-image manifest over boot+kernel+guest and verify it in the native boot path before the first guest fetch; gate a one-byte mutation in each region and fail closed.
 - [ ] (noc) Run the NaN translator under raw n16i in the gate, compare emitted bytes against the nan_cli oracle, then regenerate src/native/nan16_x86.nan with xgold.sh and fix the stale xgold kernel-row count so the checked-in GOLD is source-derived.
 - [ ] (noc) Add a headless COM1 NANIX shell transcript (mkdir/write/cat/ls/stat/rm) to the full product image so the service path is gated without a GUI; keep the GUI/VBE test separate.
+- [ ] (nkvgen) Replace the flat per-branch page table with a refcounted prefix-page DAG keyed by content hash so three or more agents/adapters share one immutable prefix without duplicating page headers; gate a three-branch tree with exact per-page refcounts and per-branch ngen tags.
+- [ ] (nkvgen) Add COW eviction/tiering: demote cold shared prefix pages to an nheap slow class while preserving refcounts, rehydrate on read, and gate a pressure-driven evict/remap that re-checks exact post-remap prefix values and alloc/join/leave/free counters.
+- [ ] (nkvgen) Add generation-tagged KV checkpoint/replay: save a branch page table plus ngen generation, replay a suffix from the checkpoint through the view gate, and gate exact logits/token equality plus an old-view divergence at the exact event index.
+- [ ] (nkvgen) Extend nkvgen fork from one child to a multi-level fork tree with sibling joins, identical-COW-page merging and orphan reclamation; gate a deterministic tree-generation trace and exact page refcounts across a fork/close tree.
 <!-- AGENT-APPEND -->
 
 ## P0. ISO C parity (language + library + ABI)
