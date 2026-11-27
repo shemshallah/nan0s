@@ -252,13 +252,12 @@ Theorem lp_exec_LD_refines :
     Rlp L vm ->
     List.length (lp_reg L) = 16 ->
     d < 16 ->
-    d <> 15 ->
     a < 16 ->
     decode_word_p (lp_mem_at L (lp_pc L)) = Some (pLD d a imm) ->
     nth_error prog (vm_pc vm) = Some (pLD d a imm) ->
     Rlp (lp_exec L (pLD d a imm)) (exec_instr_p prog vm).
 Proof.
-  intros L vm prog d a imm HR Hlen Hd Hd15 Ha Hdec Hnth.
+  intros L vm prog d a imm HR Hlen Hd Ha Hdec Hnth.
   pose proof HR as HR_R.
   unfold Rlp in *.
   destruct HR as
@@ -304,23 +303,48 @@ Proof.
                   (word_payload
                     (mem_get (lp_mem L) (lget_reg (lp_reg L) a + imm)))) 15)
               mod 2 ^ 32).
-    rewrite (set_reg_neq _ _ _ _ (not_eq_sym Hd15)).
-    rewrite (lget_regN_lset_word_neq (lp_reg L) d
-      (word_payload
-        (mem_get (lp_mem L) (lget_reg (lp_reg L) a + imm))) 15
-      (not_eq_sym Hd15)).
-    exact Hreg15.
-  - change (vm_link vm =
+    unfold set_reg.
+    destruct (Nat.eqb 15 d) eqn:E15.
+    + apply Nat.eqb_eq in E15. symmetry in E15. subst d.
+      rewrite (lget_regN_lset_word_eq (lp_reg L) 15
+        (word_payload
+          (mem_get (lp_mem L) (lget_reg (lp_reg L) a + imm))))
+        by (rewrite Hlen; lia).
+      rewrite Haddr.
+      rewrite (Hmem (lget_reg (lp_reg L) a + imm)).
+      rewrite <- (lp_mem_at_eq L (lget_reg (lp_reg L) a + imm)).
+      rewrite Nat.mod_small by apply payload_word_lt_two32.
+      reflexivity.
+    + apply Nat.eqb_neq in E15.
+      rewrite (lget_regN_lset_word_neq (lp_reg L) d
+        (word_payload
+          (mem_get (lp_mem L) (lget_reg (lp_reg L) a + imm))) 15
+        E15).
+      exact Hreg15.
+  - change ((if Nat.eqb d 15
+             then vm_mem vm (vm_reg vm a + imm)
+             else vm_link vm) =
             N.to_nat
               (lget_regN
                 (lset_word (lp_reg L) d
                   (word_payload
                     (mem_get (lp_mem L) (lget_reg (lp_reg L) a + imm)))) 15)).
-    rewrite (lget_regN_lset_word_neq (lp_reg L) d
-      (word_payload
-        (mem_get (lp_mem L) (lget_reg (lp_reg L) a + imm))) 15
-      (not_eq_sym Hd15)).
-    exact Hlink.
+    destruct (Nat.eqb d 15) eqn:E15.
+    + apply Nat.eqb_eq in E15. subst d.
+      rewrite (lget_regN_lset_word_eq (lp_reg L) 15
+        (word_payload
+          (mem_get (lp_mem L) (lget_reg (lp_reg L) a + imm))))
+        by (rewrite Hlen; lia).
+      rewrite Haddr.
+      rewrite (Hmem (lget_reg (lp_reg L) a + imm)).
+      rewrite <- (lp_mem_at_eq L (lget_reg (lp_reg L) a + imm)).
+      reflexivity.
+    + apply Nat.eqb_neq in E15.
+      rewrite (lget_regN_lset_word_neq (lp_reg L) d
+        (word_payload
+          (mem_get (lp_mem L) (lget_reg (lp_reg L) a + imm))) 15
+        (not_eq_sym E15)).
+      exact Hlink.
   - intro x.
     change (vm_mem vm x =
             payload_word (lp_mem_at (lp_exec L (pLD d a imm)) x)).
@@ -357,12 +381,11 @@ Theorem lp_exec_CALL_refines :
     Rlp L vm ->
     List.length (lp_reg L) = 16 ->
     S (lp_pc L) < 2 ^ 32 ->
-    vm_reg vm 15 = S (lp_pc L) ->
     decode_word_p (lp_mem_at L (lp_pc L)) = Some (pCALL target) ->
     nth_error prog (vm_pc vm) = Some (pCALL target) ->
     Rlp (lp_exec L (pCALL target)) (exec_instr_p prog vm).
 Proof.
-  intros L vm prog target HR Hlen Hpc32 Hreg15pre Hdec Hnth.
+  intros L vm prog target HR Hlen Hpc32 Hdec Hnth.
   unfold Rlp in *.
   destruct HR as
     (Hpc & Hregs & Hreg15 & Hlink & Hmem & Hzf & Hlf & Hk & Hhalt & Hbound).
@@ -379,14 +402,15 @@ Proof.
     rewrite (lget_regN_lset_word_neq (lp_reg L) 15
       (N.of_nat (S (lp_pc L))) i) by lia.
     exact (Hregs i Hi).
-  - change (vm_reg vm 15 =
+  - change (set_reg (vm_reg vm) 15 (instr_succ (vm_pc vm)) 15 =
             N.to_nat
               (lget_regN (lset_word (lp_reg L) 15 (N.of_nat (S (lp_pc L)))) 15)
               mod 2 ^ 32).
+    rewrite set_reg_eq.
+    unfold instr_succ. rewrite Hpc.
     rewrite (lget_regN_lset_word_eq (lp_reg L) 15
       (N.of_nat (S (lp_pc L)))) by (rewrite Hlen; lia).
     rewrite Nat2N.id.
-    rewrite Hreg15pre.
     rewrite Nat.mod_small by exact Hpc32.
     reflexivity.
   - change (instr_succ (vm_pc vm) =
@@ -1575,7 +1599,7 @@ Definition LPInstrSide (L : LPState) (vm : VM) (ins : InstrP) : Prop :=
       d < 16 /\ d <> 15 /\ a < 16 /\ b < 16 /\
       N.to_nat (lget_regN (lp_reg L) b) <=
         N.to_nat (lget_regN (lp_reg L) a)
-  | pLD d a imm => d < 16 /\ d <> 15 /\ a < 16
+  | pLD d a imm => d < 16 /\ a < 16
   | pST d a imm =>
       d < 16 /\ a < 16 /\ lget_reg (lp_reg L) a + imm < 4366
   | pMOVI d imm => d < 16 /\ d <> 15 /\ imm < 2 ^ 32
@@ -1583,7 +1607,7 @@ Definition LPInstrSide (L : LPState) (vm : VM) (ins : InstrP) : Prop :=
       tbl = 8 /\ d < 16 /\ d <> 15 /\ a < 16 /\ b < 16 /\
       lget_regN (lp_reg L) b = 255%N /\ vm_reg vm b = 255
   | pPUTC d => True
-  | pCALL target => S (lp_pc L) < 2 ^ 32 /\ vm_reg vm 15 = S (lp_pc L)
+  | pCALL target => S (lp_pc L) < 2 ^ 32
   | pRET => True
   | pRETP p => lp_k L <> 3
   | pHALT => True
@@ -1615,7 +1639,7 @@ Proof.
     apply lp_exec_ADD_refines; assumption.
   - red in Hside. destruct Hside as (Hd & Hd15 & Ha & Hb & Hle).
     apply lp_exec_SUB_refines; assumption.
-  - red in Hside. destruct Hside as (Hd & Hd15 & Ha).
+  - red in Hside. destruct Hside as (Hd & Ha).
     apply lp_exec_LD_refines; assumption.
   - red in Hside. destruct Hside as (Hd & Ha & Haddr).
     apply lp_exec_ST_refines; assumption.
@@ -1626,8 +1650,7 @@ Proof.
     subst tbl. apply lp_exec_BOOL8_255_refines; assumption.
   - red in Hside.
     apply lp_exec_PUTC_refines; assumption.
-  - red in Hside. destruct Hside as (Hnext & Hlink).
-    apply lp_exec_CALL_refines; assumption.
+  - red in Hside. apply lp_exec_CALL_refines; assumption.
   - red in Hside.
     apply lp_exec_RET_refines; assumption.
   - red in Hside.

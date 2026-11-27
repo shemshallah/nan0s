@@ -27,12 +27,15 @@
        action.  [literal_step_p] is the corresponding full decoder/step.
 
     2. [exec_instr_p] is the Coq-side model for the full [InstrP] stream.
-       On the eleven constructors of [Instr] it is *definitionally* the
-       existing [exec_instr] of [MinskyNaN16VM.v] (lemma
-       [exec_instr_p_embed]), so it does not revise any previously
-       checked VM behaviour.  The four constructors absent from [Instr]
-       (SHR, BOOL, PUTC, predicated RET) are specified here from the
-       NAN0S ISA text: logical right shift, the four-bit BOOL truth
+       Its eleven [Instr] cases follow [exec_instr] of
+       [MinskyNaN16VM.v], with one deliberate ISA refinement: the native
+       calling convention keeps the return address in [r15].  [pCALL]
+       therefore writes [r15] as well as [vm_link], and [pLD] to [r15]
+       restores both.  This is the D-16 link reconciliation needed by the
+       fixture's save/restore sequences; the universality development
+       continues to use [exec_instr].  The four constructors absent from
+       [Instr] (SHR, BOOL, PUTC, predicated RET) are specified here from
+       the NAN0S ISA text: logical right shift, the four-bit BOOL truth
        table, low-byte output, and predicated return through the link.
 
        The Coq VM has no output channel, so model-side PUTC advances the
