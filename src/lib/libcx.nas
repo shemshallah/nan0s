@@ -402,7 +402,7 @@ STB r3,r1,0
 ADDI r1,r1,1
 MOVI r5,1000
 MOVI r6,4
-tn_d:
+cx_tn_d:
 DIV r7,r2,r5
 ADDI r7,r7,48
 STB r7,r1,0
@@ -412,7 +412,7 @@ MOVI r7,10
 DIV r5,r5,r7
 SUB r6,r6,r13
 CMP r6,r0
-JMP[NE] @tn_d
+JMP[NE] @cx_tn_d
 MOVI r3,46
 STB r3,r1,0
 ADDI r1,r1,1

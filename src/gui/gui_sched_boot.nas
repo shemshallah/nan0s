@@ -29,7 +29,7 @@ JMPR r1
 ; 0x80000 reaches them with near CALLs while their internals stay below 0x10000.
 .org 0x300
 .include "../prog/nasm.nas"
-.org 0x1200
+.org 0x18A0
 .include "../tools/n16i.nas"
 
 .org 8192
