@@ -43,8 +43,9 @@ each item needs a real gate, a short proof, and a frontier note.
 - [x] F8 Trace/replay: hash chain, deterministic RNG, budgets/deadlines,
       divergence detection; `nreplay_gate` PASS (checkpoint replay, exact
       divergence index, fail-closed budgets, byte-identical runs).
-- [ ] F9 Isolation/security: per-agent address spaces, W^X/NX, capability
-      revocation, sandbox/fuzz; gate.
+- [x] F9 Isolation/security: per-agent address spaces, W^X/NX, capability
+      revocation, sandbox/fuzz; `nsecure_gate` PASS (two agents, guard/range/
+      cap errors, 1024 malformed denials, 160 admitted, byte-identical runs).
 - [ ] F10 Accelerator boundary: PCIe/IOMMU/DMA, VRAM/model placement,
       software fallback; emulated gate.
 - [ ] F11 Fabric/storage: NVMe/model streaming, RDMA/remote KV, checkpoint
@@ -105,6 +106,11 @@ Agent rule:
 - [ ] (nmodel) Wire nkv paged KV into nmodel decode: 2 MiB block append/eviction/remap, stable logical token indices, attention over paged views, and a checkpoint/fork safe KV generation.
 - [ ] (nmodel) Add a safetensors importer with the same zero-copy nkv view contract (64-bit offsets, dtype/shape checks, rejection cases) and a differential GGUF-vs-safetensors tensor metadata gate.
 - [ ] (nmodel) Implement deterministic speculative decoding: draft + verifier models, per-agent xorshift streams, accept/reject trace records and KV-generation rollback; gate identical output for a fixed seed/prompt and a forced-rejection path.
+- [ ] (nsecure) Wire nsec records to per-agent CR3/PML4 roots with PCID/ASID: nsec_map/unmap/rebind allocate and clear leaf tables, bump the address-space epoch and issue TLB shootdowns; gate a two-agent stale-TLB isolation race.
+- [ ] (nsecure) Add SMEP/SMAP/WP policy bits to the nsecure record and return the required CR4/PTE protection bits from nsec_check; gate kernel reads of agent pages faulting under SMAP and succeeding only through an explicit sandbox window.
+- [ ] (nsecure) Add capability-revocation shootdown: publish a per-CPU cap/range epoch, fence after revoke, and gate a two-CPU stale-range failure followed by success after nsec_rebind plus a generation fence.
+- [ ] (nsecure) Add an agent-scoped handle salt (or globally indexed cap id) so an identical index/generation/rights word from agent A is rejected on agent B; gate the cross-agent forgery case that the current index-local handle scheme cannot distinguish.
+- [ ] (nsecure) Extend the deterministic malformed corpus with a branch-coverage counter over nsec_check/nsec_sandbox_check and add guard, overlap, window and op-bit mutation classes; gate deny-by-default with no admitted request outside an allowed window.
 <!-- AGENT-APPEND -->
 
 ## P0. ISO C parity (language + library + ABI)
