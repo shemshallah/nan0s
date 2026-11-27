@@ -1343,6 +1343,10 @@ Proof.
     apply Nat.lt_le_trans with 256.
     - apply N_land_255_to_nat_lt.
     - apply le_256_two32. }
+  assert (Houter :
+    (N.to_nat (lget_regN (lp_reg L) a) mod 256) mod 2 ^ 32 =
+    N.to_nat (lget_regN (lp_reg L) a) mod 256)
+    by (apply Nat.mod_small; exact Hmod_lt).
   unfold lp_exec, exec_instr_p.
   rewrite Hnth. cbn -[e_bool_res bool_resN].
   rewrite Hval.
@@ -1366,7 +1370,7 @@ Proof.
         by (rewrite Hlen; lia).
       rewrite N_land_255_to_nat.
       rewrite HA'.
-      rewrite Nat.mod_small by exact Hmod_lt.
+      rewrite Houter.
       reflexivity.
     + rewrite (set_reg_neq _ _ _ _ Hne).
       rewrite (lget_regN_lset_word_neq (lp_reg L) d
@@ -1428,7 +1432,8 @@ Proof.
         (N.land (lget_regN (lp_reg L) a) 255%N))
         by (rewrite Hlen; lia).
       rewrite N_land_255_to_nat.
-      rewrite Nat.mod_small by exact Hmod_lt.
+      rewrite Houter.
+      exact Hmod_lt.
     + rewrite (lget_regN_lset_word_neq (lp_reg L) d
         (N.land (lget_regN (lp_reg L) a) 255%N) i Hne).
       exact (Hbound i Hi).
