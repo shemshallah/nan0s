@@ -1752,7 +1752,7 @@ Proof.
       { unfold lp_step. rewrite <- lp_mem_at_eq. rewrite (eq_sym Hdec). reflexivity. }
       rewrite Hstep.
       apply IH.
-      * exact (lp_exec_instr_refines L vm prog ins HR Hlen Hwf Hside Hdec Hnth).
+      * exact (lp_exec_instr_refines L vm prog ins HR Hlen Hwf Hside (eq_sym Hdec) Hnth).
       * rewrite lp_exec_reg_length. exact Hlen.
       * apply lp_exec_mem_wf. exact Hwf.
       * exact Hsafe'.
