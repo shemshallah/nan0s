@@ -1701,7 +1701,9 @@ Theorem lp_run_refines :
     MemP_wf (lp_mem (lp_run fuel L)).
 Proof.
   intros fuel. induction fuel as [|fuel IH]; intros L vm prog HR Hlen Hwf Hsafe.
-  - cbn. repeat split; assumption.
+  - change (Rlp L vm /\ List.length (lp_reg L) = 16 /\
+            MemP_wf (lp_mem L)).
+    repeat split; assumption.
   - cbn [lp_run vm_run_p].
     destruct (lp_halted L) eqn:Hhalt.
     + assert (Hvm : vm_halted vm = true).
@@ -1710,14 +1712,21 @@ Proof.
         destruct HR' as
           (_ & _ & _ & _ & _ & _ & _ & _ & Hvm & _).
         rewrite Hvm. exact Hhalt. }
-      rewrite Hvm. cbn. repeat split; assumption.
+      rewrite Hvm.
+      change (Rlp L vm /\ List.length (lp_reg L) = 16 /\
+              MemP_wf (lp_mem L)).
+      repeat split; assumption.
     + assert (Hvm : vm_halted vm = false).
       { pose proof HR as HR'.
         unfold Rlp in HR'.
         destruct HR' as
           (_ & _ & _ & _ & _ & _ & _ & _ & Hvm & _).
         rewrite Hvm. exact Hhalt. }
-      rewrite Hvm. cbn.
+      rewrite Hvm.
+      change (Rlp (lp_run fuel (lp_step L))
+                (vm_run_p fuel prog (exec_instr_p prog vm)) /\
+              List.length (lp_reg (lp_run fuel (lp_step L))) = 16 /\
+              MemP_wf (lp_mem (lp_run fuel (lp_step L)))).
       rewrite Hhalt in Hsafe.
       cbn [lp_run_safe] in Hsafe.
       destruct (decode_word_p (lp_mem_at L (lp_pc L))) as [ins|] eqn:Hdec.
