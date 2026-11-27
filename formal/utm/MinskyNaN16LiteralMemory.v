@@ -80,10 +80,17 @@ Proof.
     destruct (a <? code_hi) eqn:E3;
     destruct (a <? tape_hi) eqn:E4;
     cbn.
+  all: try (apply Nat.ltb_lt in E1);
+       try (apply Nat.ltb_ge in E1);
+       try (apply Nat.ltb_lt in E2);
+       try (apply Nat.ltb_ge in E2);
+       try (apply Nat.ltb_lt in E3);
+       try (apply Nat.ltb_ge in E3);
+       try (apply Nat.ltb_lt in E4);
+       try (apply Nat.ltb_ge in E4).
   all: try (exfalso; lia).
   all: try (apply nth_lset_word_eq;
             rewrite ?H1, ?H2, ?H3, ?H4, ?H5; lia).
-  all: match goal with |- ?G => idtac "REMAIN:" G end.
 Qed.
 
 Print Assumptions mem_get_mem_set_eq.
