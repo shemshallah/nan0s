@@ -117,6 +117,7 @@ MinskyWideConcreteDispatch.v
 MinskyWideSource.v
 MinskyWritebackMacro.v
 MinskyNaN16LiteralStepBridge.v
+MinskyNaN16LiteralLoader.v
 MinskyNaN16LiteralCapstone.v
 MinskyNaN16LiteralExec.v
 MinskyNaN16LiteralMemory.v
