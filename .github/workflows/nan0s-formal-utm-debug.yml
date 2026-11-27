@@ -60,7 +60,7 @@ jobs:
         run: |
           set -euo pipefail
           ulimit -s unlimited 2>/dev/null || ulimit -s 65536
-          for f in MinskyNaN16LiteralExec MinskyNaN16LiteralMemory MinskyNaN16LiteralBridge MinskyNaN16LiteralStepBridge; do
+          for f in MinskyNaN16LiteralExec MinskyNaN16LiteralMemory MinskyNaN16LiteralBridge MinskyNaN16LiteralStepBridge MinskyNaN16LiteralRunBridge; do
             if [ -f "formal/utm/$f.v" ]; then
               echo "=== coqc $f"
               stdbuf -oL -eL coqc -time -Q formal/utm NaNLM \
