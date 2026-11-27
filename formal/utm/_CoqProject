@@ -118,3 +118,4 @@ MinskyWideSource.v
 MinskyWritebackMacro.v
 MinskyNaN16LiteralStepBridge.v
 MinskyNaN16LiteralExec.v
+MinskyNaN16LiteralMemory.v
