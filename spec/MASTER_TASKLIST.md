@@ -5,6 +5,62 @@ is "out of scope"; items are ordered, not dropped.
 
 Status: `[ ]` open, `[~]` in progress, `[x]` done and gated.
 
+## F. Frontier AI-native product queue (dispatch source)
+
+Raw-NaN product only. C is allowed only under `src/tests` as an oracle. At most
+two agents run at once. Pick the first open item whose dependencies are gated;
+each item needs a real gate, a short proof, and a frontier note.
+
+- [x] F0 Zero C in product source outside `src/tests`; `no_c_outside_tests` PASS.
+- [x] F0.1 Native maximum map (4 PiB physical / 128 PiB virtual); `mem64_gate` PASS.
+- [x] F0.2 Per-NUMA 4K/2M/1G page allocator; `nheap_gate` PASS.
+- [x] F0.3 Translator SVC/SVCRET frame + control ports; `qgate64abi` PASS.
+- [x] F0.4 Shared immutable block + per-core CR3 state; `qgate64core2` PASS.
+- [ ] F1 Real AP block runtime: 2 CPUs execute one immutable block with
+      per-core CR3 and shared guest memory; gate `qgate64smpblock` in raw
+      assembly/NaN only.
+- [ ] F2 NaN per-CPU scheduler: queues, work stealing, affinity, migration,
+      budgets/deadlines, preemption hooks; exact gate.
+- [ ] F3 E820/SRAT/NUMA topology: usable RAM and holes, node ids, CPU/APIC
+      mapping, `nheap` integration; synthetic-map gate.
+- [ ] F4 4096-core scale: dynamic CPU count, x2APIC, per-core stacks/online
+      bitmap, no global lock on dispatch; layout + 2/4-CPU gate.
+- [ ] F5 AI ABI: capability generations/revocation, checkpoint/restore/fork,
+      migration, shared weights, KV slabs, trace/replay; exact gates.
+- [ ] F6 Tensor/KV memory: zero-copy 64-bit views, per-agent KV slabs,
+      packed Q4/Q8 layouts, huge pages; exact small gates.
+- [ ] F7 Model runtime: GGUF/safetensors import, tokenizer, Q4/Q8 GEMV/
+      attention/RMSNorm, deterministic sampling; tiny-model token gate.
+- [ ] F8 Trace/replay: hash chain, deterministic RNG, budgets/deadlines,
+      divergence detection; gate.
+- [ ] F9 Isolation/security: per-agent address spaces, W^X/NX, capability
+      revocation, sandbox/fuzz; gate.
+- [ ] F10 Accelerator boundary: PCIe/IOMMU/DMA, VRAM/model placement,
+      software fallback; emulated gate.
+- [ ] F11 Fabric/storage: NVMe/model streaming, RDMA/remote KV, checkpoint
+      transport; emulated gate.
+- [ ] F12 Observability/ops: per-core stats, OOM/eviction, quotas, scheduler
+      traces; gate.
+- [ ] F13 Frontier capabilities: speculative decoding, MoE routing,
+      long-context KV paging, live generations, symbiotic multi-agent
+      scheduling; design + prototype gate.
+- [ ] F14 Verification: Coq/UTM trace, translation validation, reproducible
+      build; gate.
+- [ ] F15 Product raw substrate: replace C harnesses with raw assembly/NaN
+      boot/AP/page-table paths; product image boots with no C.
+
+Agent rule:
+
+1. Pick one F item; work only in `.nas`/`.nan`/`.md`/`.sh`.
+2. Add `src/lib/<name>.nas`, `src/tests/<name>_test.nas`,
+   `tools/<name>_gate.sh`; run the gate.
+3. Append `spec/agents/<name>.md` with the proof, exact output, and 2-4
+   frontier ideas.
+4. Add 3-5 directives with `sh tools/tasklist_append.sh <agent> "<text>"`.
+5. End with `NEXT: F# ...` so the main loop can dispatch the next pair.
+
+<!-- AGENT-APPEND -->
+
 ## P0. ISO C parity (language + library + ABI)
 
 ### P0.1 Vendored c-testsuite
