@@ -10,8 +10,9 @@
 #   3. Boot the shipped 32-bit boot sector + native NaN16 core with a raw-NaN
 #      smoke guest; require its COM1 banner.  No C harness and no IDE.
 #   4. Build and boot the raw 64-bit product path: s1_boot.S + an assembly
-#      runtime (page roots, LAPIC/MADT AP startup, immutable NaN-emitted block)
-#      with no C linked.  Require the exact 2-CPU transcript.
+#      runtime (page roots, LAPIC/MADT AP startup, per-AP TSS/IST, immutable
+#      NaN-emitted block, AP-local timer and reschedule IPI) with no C linked.
+#      Require the exact 2-CPU transcript.
 #   5. Scan the image for ELF magic and timestamp/entropy markers; run
 #      no_c_outside_tests.
 #
@@ -233,14 +234,14 @@ timeout 60 qemu-system-x86_64 -m 256 -smp 2 \
   -display none -serial "file:$R/com" -no-reboot >/dev/null 2>&1 || true
 expected='NAN64 RAW SMP x86_64
 RAW64 cpus=2
-RAW64 core0 r1=00000011 slot=00000011 done=00000011
-RAW64 core1 r1=00000021 slot=00000021 done=00000021
+RAW64 core0 r1=00000011 slot=00000011 done=00000011 timer=1 ipi=1 resched=1 eoi=2 tss=1 ist=1
+RAW64 core1 r1=00000021 slot=00000021 done=00000021 timer=1 ipi=1 resched=1 eoi=2 tss=1 ist=1
 RAW64 PASS'
 got=$(cat "$R/com" 2>/dev/null || true)
 printf '%s\n' "$got"
 [ "$got" = "$expected" ] || fail "raw64 COM1 transcript"
 echo "raw64 block sha256 $(sha "$R/block.bin"); kernel sha256 $(sha "$R/raw.bin")"
-echo "raw64 PASS: boot + page roots + MADT/INIT-SIPI-SIPI AP + one immutable block, no C"
+echo "raw64 PASS: boot + page roots + MADT/INIT-SIPI-SIPI AP + per-AP TSS/IST + timer/IPI + one immutable block, no C"
 
 # --------------------------------------- 5. shipped full product image boot
 echo "== 5. shipped full product image boot (full guest + IDE, no C harness) =="

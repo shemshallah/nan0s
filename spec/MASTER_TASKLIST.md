@@ -88,6 +88,13 @@ each item needs a real gate, a short proof, and a frontier note.
       boot/AP/page-table paths; `noc_product_gate` PASS (hermetic two-build
       image, full product boot to NANIX SHELL READY, raw64 2-AP block path,
       no C linked, C-free product source).
+- [ ] F16 Signed product image manifest: region hashes/signature over boot,
+      kernel and guest; verify before first guest fetch; fail closed on any
+      one-byte mutation.
+- [x] F17 Raw 64-bit SMP substrate: per-AP GDT/TSS/IST, shared IDT, 4-core
+      MADT/INIT-SIPI-SIPI, AP-local LAPIC timer, reschedule IPI, exact EOI,
+      exception/IST1 self-test; `noc_raw64_smp_gate` PASS (4/2 CPUs, no C
+      linked).
 
 Agent rule:
 
@@ -197,6 +204,11 @@ Agent rule:
 - [ ] (nkvgen) Add COW eviction/tiering: demote cold shared prefix pages to an nheap slow class while preserving refcounts, rehydrate on read, and gate a pressure-driven evict/remap that re-checks exact post-remap prefix values and alloc/join/leave/free counters.
 - [ ] (nkvgen) Add generation-tagged KV checkpoint/replay: save a branch page table plus ngen generation, replay a suffix from the checkpoint through the view gate, and gate exact logits/token equality plus an old-view divergence at the exact event index.
 - [ ] (nkvgen) Extend nkvgen fork from one child to a multi-level fork tree with sibling joins, identical-COW-page merging and orphan reclamation; gate a deterministic tree-generation trace and exact page refcounts across a fork/close tree.
+- [ ] (rawsmp) Add an AP-local immutable block cache and a shared (guest pc -> code) table; gate CPU1 dispatching a second block without copying code and with shared text mapped read-only.
+- [ ] (rawsmp) Add x2APIC 4096-core MADT type-9 discovery, full 32-bit APIC ids, 4096 per-core state pages and batched AP startup; gate a 4096-core histogram plus the current 4-core raw transcript.
+- [ ] (rawsmp) Add a BSP/AP exception trap matrix (#PF/#GP/#DF) over the per-AP TSS/IST and a per-core SVC state frame; gate exact vector/RIP/CR2 and non-colliding IST1/IST2 stacks.
+- [ ] (rawsmp) Add a CR3/TLB generation shootdown IPI (vector 0x42) with per-core ack counters; gate block reload or address-space migration so no core executes under a stale root.
+- [ ] (rawsmp) Add a bounded periodic LAPIC tick with per-core quantum/tick accounting and a cross-core reschedule seam into nansched_mp/nansmp; gate preemption after N ticks on 4 cores.
 <!-- AGENT-APPEND -->
 
 ## P0. ISO C parity (language + library + ABI)

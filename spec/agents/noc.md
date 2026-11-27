@@ -57,6 +57,13 @@ GUI guest.
 
 ### 4. Raw 64-bit boot/page-table/AP/block runtime (no C linked)
 
+> **F17 update (rawsmp).** This path now boots 2/4 cores with per-AP
+> GDT/TSS/IST, AP-local one-shot LAPIC timers, reschedule IPIs and exact EOI.
+> The 2-core transcript below is the historical F15 form; the current exact
+> output and proof are in `spec/agents/rawsmp.md` and
+> `tools/noc_raw64_smp_gate.sh`. The C `s1_smp.c` comparator is no longer the
+> F1/F4 proof path; it remains only as a test-only regression oracle.
+
 `src/native64/raw64_smp_body.S` is the F15 64-bit product substrate. It is
 linked with the existing raw `s1_boot.S` long-mode entry and `smp_tramp.S`
 AP trampoline, plus one immutable 159-byte block emitted by the NaN translator
@@ -75,16 +82,16 @@ Exact QEMU `-smp 2` output:
 ```
 NAN64 RAW SMP x86_64
 RAW64 cpus=2
-RAW64 core0 r1=00000011 slot=00000011 done=00000011
-RAW64 core1 r1=00000021 slot=00000021 done=00000021
+RAW64 core0 r1=00000011 slot=00000011 done=00000011 timer=1 ipi=1 resched=1 eoi=2 tss=1 ist=1
+RAW64 core1 r1=00000021 slot=00000021 done=00000021 timer=1 ipi=1 resched=1 eoi=2 tss=1 ist=1
 RAW64 PASS
 ```
 
 Link audit: `s1_boot.o + raw64_smp_body.o + blob.o`; `llvm-nm -u` is empty;
-BSS ends at `0x109cc` (below the page tables at `0x30000`). The block sha256
+BSS ends at `0x1129a` (below the page tables at `0x30000`). The block sha256
 is `d3a0d31e5a655439154792c21d29b65d100150fccc66c2987047204438908875`,
 kernel sha256
-`ddeb8fc3a216f5121d5547675bb98738b551a89e78c9f85293c1b952872a97a4`.
+`269f2c98f128df4732cc573a9378cf6fcc108c991be7a25e252793522a78844f`.
 
 The NaN translator is executed by the C `nan_cli` **oracle** at build time;
 its bytes are linked, the C executable is not. This boundary is explicit.
@@ -133,9 +140,10 @@ frontier item.
   the GUI framebuffer. A manual `screendump` on this host stayed at 720x400
   after boot, so the desktop/VBE path still needs its own gate. The old
   `qgate_gui.sh` also depends on `ffprobe`, which is absent here.
-- The raw 64-bit path is one immutable block on two CPUs. It does not yet
-  have per-AP TSS/IST, AP-local timers/IPIs, per-core block caches, or a
-  4096-core scale path; `s1_smp.c` remains the richer C comparator.
+- The raw 64-bit path now boots 2/4 CPUs with per-AP TSS/IST, AP-local
+  timers/IPIs and exact EOI. It is still one immutable block; per-core block
+  caches and the 4096-core x2APIC scale path remain open. `s1_smp.c` remains
+  a test-only comparator, not the F1/F4 proof path.
 - The 32-bit guest still carries the C-compatibility libc/VFS helpers in the
   guest source tree; they are compiled to NaN for guests, not linked into the
   product image.
@@ -166,11 +174,11 @@ raw64 block 159 bytes
 raw64 link: s1_boot.S + raw64_smp_body.S + smp_tramp.S + NaN block; no C object, no undefined symbols
 NAN64 RAW SMP x86_64
 RAW64 cpus=2
-RAW64 core0 r1=00000011 slot=00000011 done=00000011
-RAW64 core1 r1=00000021 slot=00000021 done=00000021
+RAW64 core0 r1=00000011 slot=00000011 done=00000011 timer=1 ipi=1 resched=1 eoi=2 tss=1 ist=1
+RAW64 core1 r1=00000021 slot=00000021 done=00000021 timer=1 ipi=1 resched=1 eoi=2 tss=1 ist=1
 RAW64 PASS
-raw64 block sha256 d3a0d31e5a655439154792c21d29b65d100150fccc66c2987047204438908875; kernel sha256 ddeb8fc3a216f5121d5547675bb98738b551a89e78c9f85293c1b952872a97a4
-raw64 PASS: boot + page roots + MADT/INIT-SIPI-SIPI AP + one immutable block, no C
+raw64 block sha256 d3a0d31e5a655439154792c21d29b65d100150fccc66c2987047204438908875; kernel sha256 269f2c98f128df4732cc573a9378cf6fcc108c991be7a25e252793522a78844f
+raw64 PASS: boot + page roots + MADT/INIT-SIPI-SIPI AP + per-AP TSS/IST + timer/IPI + one immutable block, no C
 == 5. shipped full product image boot (full guest + IDE, no C harness) ==
 shipped full image: NaN/0S BOOT + NANIX SHELL READY on COM1 (raw NaN guest, no C)
 noc_product_gate: PASS (no-C product build audit, hermetic image, full product boot, raw 64-bit AP/block runtime)
