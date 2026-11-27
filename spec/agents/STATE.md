@@ -1,20 +1,12 @@
 # Frontier agent state
 
-Dispatch cap: 2 agents at a time.
-Slot A: nots  (F16b) session ses_de24aaa07ffeyKmyWGgDnwKbQM
-Slot B: nkcas (F13k) session ses_de25bc031ffekwNCBxH6VyJqSr
-Completed: F1 smpblock 9985ea4; F2 nansched 49905d8; F3 nnuma 01f36fe;
-           F4 ncscale ef07f18; F5 nagent 1f8db01; F6 nkv a5d7a30;
-           F7 model 5e13def+c141041; F8 nreplay 7029529; F9 nsecure 33f2686;
-           F10 naccel c141041; F11 fabric c7daec9; F12 nobs b3bdf75;
-           F13a npaged 8d78660; F13b nspec 3f24333; F13c nspectree 7afcea8;
-           F13d nmoe 7344af2; F13e ngen 30d928e; F13f nsym a1d347b;
-           F13g nkvgen e59b36c; F13h nkvtree 8ef3592; F13i nkvdag f656850;
-           F13j nkvmerkle 79c55c1; F14 nverify 23bb7dd; F15 product ec6db62;
-           F16 manifest aa384c1; F17 rawsmp 592df0e; F18 source-GOLD 4b376e8.
-Started: 2026-11-27
-Loop: background-result returns or 30-minute automation tick. When both
-slots have passing reports: commit, mark F items, then dispatch the next two
-open items from spec/MASTER_TASKLIST.md.
-Rules: raw .nas/.nan product only; zero C outside src/tests; two agents max.
-Automation: aut_21b3164ea001zKdsRpkr9gJMq2 (30 min, expires 2026-11-27T04:09-08:00)
+Mode: manual. All subagents stopped on request; the 8-hour automation was deleted.
+No new agents are being dispatched.
+
+Active task (main agent):
+- F16b OTS product manifest: nasm1 scratch window widened; native GOLD
+  rebuild running; OTS gate written (`tools/ots_gate.sh`).
+- F13k nkcas finished and committed (703992d).
+
+Completed F1-F18 except F16b; see spec/MASTER_TASKLIST.md.
+Rules: raw .nas/.nan product only; zero C outside src/tests.
