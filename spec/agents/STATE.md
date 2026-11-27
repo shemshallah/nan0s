@@ -1,11 +1,12 @@
 # Frontier agent state
 
 Dispatch cap: 2 agents at a time.
-Slot A: naccel (F10) session ses_de446d23effe6sGCtAPFgopNUq
-Slot B: nattn  (F7b) session ses_de454c0caffeY04PX4KKTFyjkr
+Slot A: nfabric (F11)  session ses_de417a8f0ffePw2Djzgr47mWzY
+Slot B: npaged  (F13a) session ses_de417a8eaffeBOOvfr8N1NvSTC
 Completed: F3 nnuma 01f36fe; F1 smpblock 9985ea4; F2 nansched 49905d8;
            F4 ncscale ef07f18; F5 nagent 1f8db01; F6 nkv a5d7a30;
-           F8 nreplay 7029529; F9 nsecure 33f2686; F7 partial 5e13def.
+           F7 model 5e13def+c141041; F8 nreplay 7029529; F9 nsecure 33f2686;
+           F10 naccel c141041.
 Started: 2026-11-26
 Loop: background-result returns or 30-minute automation tick. When both
 slots have passing reports: commit, mark F items, then dispatch the next two
