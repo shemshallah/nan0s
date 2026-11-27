@@ -10,7 +10,8 @@ Import ListNotations.
 Open Scope nat_scope.
 
 From NaNLM Require Import MinskyNaN16VM MinskyNaN16LiteralMachine
-  MinskyNaN16LiteralBridge MinskyNaN16LiteralStepBridge
+  MinskyNaN16LiteralDecode MinskyNaN16LiteralBridge
+  MinskyNaN16LiteralStepBridge
   MinskyNaN16LiteralRun MinskyNaN16LiteralPuts MinskyNaN16Action.
 
 Theorem fixture_bridge_and_final :
