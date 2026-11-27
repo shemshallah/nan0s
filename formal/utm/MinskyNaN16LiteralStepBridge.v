@@ -1606,8 +1606,6 @@ Proof.
   - simpl in Hside. destruct Hside as (Ha & Hb).
     apply lp_exec_CMP_refines; assumption.
   - simpl in Hside.
-    match goal with |- ?G => idtac "JMPGOAL:" G end.
-    match type of Hside => ?T => idtac "JMPHYP:" T end.
     exact (lp_exec_JMP_refines L vm prog p target HR Hside Hdec Hnth).
   - simpl in Hside. destruct Hside as (Hd & Hd15 & Ha & Himm & Hprod).
     apply lp_exec_SHL_refines; assumption.
