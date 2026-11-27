@@ -44,7 +44,7 @@ Proof.
   rewrite nan_mkwordN_payload.
   rewrite N2Nat.inj_mod.
   rewrite N2Nat.inj_pow.
-  rewrite N2Nat.id.
+  rewrite Nat2N.id.
   reflexivity.
 Qed.
 
