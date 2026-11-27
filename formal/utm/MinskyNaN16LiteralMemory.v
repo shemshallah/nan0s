@@ -73,13 +73,13 @@ Proof.
   intros m a v (H1 & H2 & H3 & H4 & H5) Ha.
   unfold mem_set, mem_get.
   assert (E1 : (a <? tape_lo) = true)
-    by (apply Nat.ltb_lt; unfold tape_lo; lia).
+    by (apply Nat.ltb_lt; unfold code_hi, tape_lo in *; lia).
   assert (E2 : (a <? data_hi) = true)
-    by (apply Nat.ltb_lt; unfold data_hi; lia).
+    by (apply Nat.ltb_lt; unfold code_hi, data_hi in *; lia).
   assert (E3 : (a <? code_hi) = true)
     by (apply Nat.ltb_lt; exact Ha).
   rewrite E1, E2, E3. cbn.
-  apply nth_lset_word_eq. rewrite H1. exact Ha.
+  apply nth_lset_word_eq. rewrite H1. unfold code_hi in Ha. exact Ha.
 Qed.
 
 Lemma mem_get_mem_set_data :
@@ -89,7 +89,7 @@ Proof.
   intros m a v (H1 & H2 & H3 & H4 & H5) Hlo Hhi.
   unfold mem_set, mem_get.
   assert (E1 : (a <? tape_lo) = true)
-    by (apply Nat.ltb_lt; unfold tape_lo, data_hi in *; lia).
+    by (apply Nat.ltb_lt; unfold tape_lo, data_hi, code_hi in *; lia).
   assert (E2 : (a <? data_hi) = true)
     by (apply Nat.ltb_lt; exact Hhi).
   assert (E3 : (a <? code_hi) = false)
