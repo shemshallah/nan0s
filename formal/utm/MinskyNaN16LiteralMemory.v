@@ -237,5 +237,6 @@ Proof.
        try (apply Nat.ltb_lt in X4);
        try (apply Nat.ltb_ge in X4).
   all: try reflexivity.
-  all: match goal with |- ?G => idtac "DATANEQ:" G end.
+  all: apply nth_lset_word_neq.
+  all: intro Hidx; apply Hneq; unfold data_lo, code_hi in *; lia.
 Qed.
