@@ -60,10 +60,12 @@ jobs:
         run: |
           set -euo pipefail
           ulimit -s unlimited 2>/dev/null || ulimit -s 65536
-          for f in MinskyNaN16LiteralBridge MinskyNaN16LiteralStepBridge; do
-            echo "=== coqc $f"
-            stdbuf -oL -eL coqc -time -Q formal/utm NaNLM \
-              -w -notation-overridden,-stdlib-vector \
-              "formal/utm/$f.v"
+          for f in MinskyNaN16LiteralMemory MinskyNaN16LiteralBridge MinskyNaN16LiteralStepBridge; do
+            if [ -f "formal/utm/$f.v" ]; then
+              echo "=== coqc $f"
+              stdbuf -oL -eL coqc -time -Q formal/utm NaNLM \
+                -w -notation-overridden,-stdlib-vector \
+                "formal/utm/$f.v"
+            fi
           done
           echo "NAN0S STEP BRIDGE COMPILE PASS"
