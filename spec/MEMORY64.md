@@ -107,3 +107,16 @@ dereferenced.
 - 16 KiB per-core stacks with guard pages at 4096-core scale.
 - Memory-object generations, sealed checkpoint roots, eviction/tiering,
   ECC/RAS, and hotplug.
+
+## NaN page allocator
+
+`src/lib/nheap.nas` is the product-side allocator: per-(NUMA node, page
+class) free-extent lists with `(lo,hi)` bases and counts.  It supports
+4 KiB, 2 MiB and 1 GiB classes, searches for a fitting extent, splits on
+partial allocation, and pushes freed extents back.  Context, descriptor
+pool and list heads are caller-supplied, so there is no hidden fixed heap.
+
+`tools/nheap_gate.sh` proves 1 TiB on node 0 plus 512 GiB on node 1,
+1 GiB split/alloc/free/reuse, 4 KiB and 2 MiB classes, 64-bit bases,
+alignment and per-class stats.  Still to add: coalescing, per-node locks,
+zeroing/scrubbing, and the native `mem64` map/unmap calls.

@@ -83,3 +83,10 @@
   per-core state window at 0x50000, shared guest memory; r1=0x11/0x21.
 - Next: install those roots on real APs (MADT/INIT-SIPI-SIPI), per-CPU block
   cache, then NaN per-CPU queues/work stealing/affinity/migration.
+
+## NaN allocator
+- `src/lib/nheap.nas` + `tools/nheap_gate.sh` PASS: per-NUMA 4K/2M/1G free
+  lists, 1 TiB/512 GiB nodes, split/free/reuse, 64-bit bases, stats.
+- Next: coalescing and per-node locks; wire `nheap` to the native `mem64`
+  map/unmap boundary; keep C only in `src/native64` gate harnesses, never in
+  `build/nan0s.img`.
