@@ -20,7 +20,7 @@ There is no host process, host libc, POSIX syscall, awk interpreter or C
 runtime between the native core and the guest.  The native core is the only
 host-side machine layer; the guest is the system.
 
-`src/native64/s1_kabi.c` and `tools/s1_runner.sh` are the x86_64 S1 **test
+`src/tests/native64/s1_kabi.c` and `tools/s1_runner.sh` are the x86_64 S1 **test
 harness**.  They are never packed into `build/nan0s.img` and are not part of
 the runtime boundary.
 

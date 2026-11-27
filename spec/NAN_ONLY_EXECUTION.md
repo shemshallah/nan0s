@@ -43,7 +43,7 @@ or the unified image, never from `nan_cli` alone.
 | layer | allowed implementation | current state |
 |---|---|---|
 | product boot + native core | assembly (`kboot0.xa`, `kan16.xa`) | OK; no C in the product image |
-| S6 suite harness | C (`src/native64/s1_kabi.c`, `s1_runner.sh`, `nan_cli`) | test bench only; may not be reported as the system |
+| S6 suite harness | C (`src/tests/native64/s1_kabi.c`, `s1_runner.sh`, `nan_cli`) | test bench only; may not be reported as the system |
 | NaN kernel/services | raw NaN16 (`.nas`): SVC, FS, console, processes, timers | FS + metadata + SVC file calls proven; KABI machine features still being ported into `kan16.xa` |
 | guest runtime (libc) | C compiled to NaN; service calls must go through NaN (`bare.nas`/SVC) | DB persistence and metadata are proven through NaN; console/time and the rest of the C libc VFS are still self-contained C |
 | guest applications (Tcl/SQLite/testfixture) | C compiled to NaN | OK |
@@ -57,8 +57,8 @@ Deletion ledger (delete the C body when its NaN replacement is wired):
 | `third_party/nan16-libc/src/libc.c` file I/O, console, time, sleep | C POSIX implementation | call the NaN service table/SVC; delete the C bodies |
 | `third_party/sqlite/nan16_vfs_libc.c` | SQLite OS layer over C libc | call the NaN POSIX table; delete the file |
 | `third_party/sqlite/nan16_vfs_nan.c` | probe VFS over NaN services | keep as the reference VFS; extend it to the full POSIX surface |
-| `src/native64/s1_kabi.c` | S6 machine + test hooks | keep only as ISA/trap/port/timer/region test bench; no kernel services |
-| `src/native64/mem64.c`, `core2.c` | max-map and per-core CR3 gate harnesses | gate only; not linked into `build/nan0s.img`; replace with the raw native core as it lands |
+| `src/tests/native64/s1_kabi.c` | S6 machine + test hooks | keep only as ISA/trap/port/timer/region test bench; no kernel services |
+| `src/tests/native64/mem64.c`, `core2.c` | max-map and per-core CR3 gate harnesses | gate only; not linked into `build/nan0s.img`; replace with the raw native core as it lands |
 | `aarch64/android/core/nan16.c`, `nan_cli` | portable conformance oracle | keep, labelled oracle only |
 | host build tools / packers / CI | build-time components | keep |
 

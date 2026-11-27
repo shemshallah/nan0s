@@ -1,7 +1,7 @@
 #!/bin/sh
 # tools/nansmp_gate.sh - x86_64 S1 multicore prototype gate.
 #
-# Builds src/native64/s1_smp.c + smp_tramp.S + s1_smp_isr.S, assembles the
+# Builds src/tests/native64/s1_smp.c + smp_tramp.S + s1_smp_isr.S, assembles the
 # NaN workload src/tests/nansmp_test.nas (which includes src/lib/nansmp.nas),
 # boots QEMU with -smp 2 and -smp 4, and requires an exact COM1 transcript.
 #
@@ -96,7 +96,7 @@ clang --target=x86_64-none-elf -c src/native64/s1_smp_isr.S -o "$T/isr.o"
 clang --target=x86_64-none-elf -std=gnu99 -O2 -Wall -Wextra \
   -ffreestanding -fno-builtin -fno-stack-protector -mno-red-zone \
   -mno-sse -mno-mmx -mno-avx \
-  -c src/native64/s1_smp.c -o "$T/smp.o"
+  -c src/tests/native64/s1_smp.c -o "$T/smp.o"
 clang --target=x86_64-none-elf -c "$T/blob.S" -o "$T/blob.o"
 ld.lld -m elf_x86_64 -T src/native64/s1_kabi.ld -e _start \
   -o "$T/s1.elf" "$T/boot.o" "$T/smp.o" "$T/isr.o" "$T/blob.o"

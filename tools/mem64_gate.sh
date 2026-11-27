@@ -28,7 +28,7 @@ OBJCOPY=${OBJCOPY:-llvm-objcopy}
 "$CC" --target=x86_64-none-elf -std=gnu99 -O2 -Wall -Wextra \
   -ffreestanding -fno-builtin -fno-stack-protector -mno-red-zone \
   -mno-sse -mno-mmx -mno-avx \
-  -c src/native64/mem64.c -o "$T/mem.o"
+  -c src/tests/native64/mem64.c -o "$T/mem.o"
 "$LD" -m elf_x86_64 -T src/native64/s1_kabi.ld -e _start \
   -o "$T/mem.elf" "$T/boot.o" "$T/mem.o"
 "$OBJCOPY" -O binary "$T/mem.elf" "$T/mem.bin"

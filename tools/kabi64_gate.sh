@@ -3,7 +3,7 @@
 #
 # Boots src/native64/s1_bootsec.S (self-contained 512-byte fixture) into flat
 # protected mode, then src/native64/s1_boot.S into long mode and runs the
-# 64-bit C S1 slice in src/native64/s1_kabi.c.  This is an ABI-mechanics
+# 64-bit C S1 slice in src/tests/native64/s1_kabi.c.  This is an ABI-mechanics
 # slice (integer/memory/port, SVC/SVCRET, timer, region checks), NOT the
 # no tools/mkall.sh, no host path constants.  COM1 transcript is exact.
 set -e; cd "$(dirname "$0")/.."; export LC_ALL=C
@@ -23,7 +23,7 @@ llvm-objcopy -O binary "$T/bootsec.elf" "$T/bootsec.bin"
 clang --target=x86_64-none-elf -c src/native64/s1_boot.S -o "$T/boot.o"
 clang --target=x86_64-none-elf -std=gnu99 -O2 -Wall -Wextra \
   -ffreestanding -fno-builtin -fno-stack-protector -mno-red-zone \
-  -c src/native64/s1_kabi.c -o "$T/s1.o"
+  -c src/tests/native64/s1_kabi.c -o "$T/s1.o"
 ld.lld -m elf_x86_64 -T src/native64/s1_kabi.ld -e _start \
   -o "$T/s1.elf" "$T/boot.o" "$T/s1.o"
 llvm-objcopy -O binary "$T/s1.elf" "$T/s1.bin"

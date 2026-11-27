@@ -45,7 +45,7 @@ clang --target=x86_64-none-elf -c src/native64/s1_boot.S -o "$T/boot.o"
 clang --target=x86_64-none-elf -std=gnu99 -O2 -Wall -Wextra \
   -ffreestanding -fno-builtin -fno-stack-protector -mno-red-zone \
   -mno-sse -mno-mmx -mno-avx \
-  -c src/native64/core2.c -o "$T/core2.o"
+  -c src/tests/native64/core2.c -o "$T/core2.o"
 clang --target=x86_64-none-elf -c "$T/blob.S" -o "$T/blob.o"
 ld.lld -m elf_x86_64 -T src/native64/s1_kabi.ld -e _start \
   -o "$T/core2.elf" "$T/boot.o" "$T/core2.o" "$T/blob.o"

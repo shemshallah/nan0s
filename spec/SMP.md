@@ -4,8 +4,8 @@ Status: **prototype, gated.**  A 2-CPU and 4-CPU QEMU boot brings every AP
 online through a real APIC INIT-SIPI-SIPI path, gives each CPU its own LAPIC
 timer and reschedule IPI, and runs the same NaN16 workload on every core
 through `src/lib/nansmp.nas`.  The full S1 interpreter in
-`src/native64/s1_kabi.c` is still single-core; the prototype's per-CPU
-execution slice is the scalar subset in `src/native64/s1_smp.c`.  This
+`src/tests/native64/s1_kabi.c` is still single-core; the prototype's per-CPU
+execution slice is the scalar subset in `src/tests/native64/s1_smp.c`.  This
 document is normative for the prototype and the migration target.
 
 Related: `spec/KERNEL_ABI.md` (trap frame, ports, regions),
@@ -440,7 +440,7 @@ single-core scheduler with a multi-core execution substrate.
 
 | file | role |
 |---|---|
-| `src/native64/s1_smp.c` | SMP prototype kernel, AP bring-up, per-CPU scheduler, scalar NaN slice |
+| `src/tests/native64/s1_smp.c` | SMP prototype kernel, AP bring-up, per-CPU scheduler, scalar NaN slice |
 | `src/native64/smp_tramp.S` | real-mode -> long-mode AP trampoline at `0x8000` |
 | `src/native64/s1_smp_isr.S` | timer/IPI/spurious/exception IDT stubs |
 | `src/lib/nansmp.nas` | NaN per-CPU queue, spinlock, atomics, fence, IPI |

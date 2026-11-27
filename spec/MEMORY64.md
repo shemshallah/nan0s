@@ -76,7 +76,7 @@ NaN layer owns placement, eviction, generations and checkpoint policy.
 ## Implemented native builder
 
 `src/native64/mem64_boot.S` enters long mode with a PML5 when CPUID exposes
-LA57, or a PML4 otherwise.  `src/native64/mem64.c` owns the table pool
+LA57, or a PML4 otherwise.  `src/tests/native64/mem64.c` owns the table pool
 (1 MiB..65 MiB), allocates 4 KiB tables, and maps 1 GiB / 2 MiB / 4 KiB
 leaves.  The active root is the boot root at `0x30000`; the C layer extends
 it and reloads CR3 after mapping.

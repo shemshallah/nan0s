@@ -7,7 +7,7 @@
 #   [--peek 'ADDR[:LEN],...']
 #
 # FILE may be nmk .nan text or a flat NaN16 word cartridge (8-byte words).
-# The guest runs on src/native64/s1_kabi.c -DS1_GUEST under QEMU x86_64 with
+# The guest runs on src/tests/native64/s1_kabi.c -DS1_GUEST under QEMU x86_64 with
 # the 512-byte boot fixture.  Guest PUTC bytes stay raw on COM1 before the
 # framed control-block/peek protocol; this wrapper parses the frame, writes
 # stdout/stderr files and prints peek words as %08X, like nan_cli.
@@ -189,7 +189,7 @@ clang --target=x86_64-none-elf -std=gnu99 -O3 -Wall -Wextra -ffp-contract=off -f
   -ffreestanding -fno-builtin -fno-stack-protector -mno-red-zone \
   -DS1_GUEST -DS1_GUEST_MEM="$WORDS" -DS1_GUEST_STEPS="$STEPS" \
   -DS1_GUEST_ZERO_WORDS="$SAFE" -DS1_GUEST_KEY_DELAY="$KEYDELAY" $STACK_DEF \
-  -c src/native64/s1_kabi.c -o "$T/s1.o"
+  -c src/tests/native64/s1_kabi.c -o "$T/s1.o"
 python3 - "$GSCRIPT" "$T/script.S" <<'PY'
 import sys
 path = sys.argv[1].encode("utf-8")

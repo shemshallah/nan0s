@@ -17,7 +17,7 @@ Host-side C and Python are not guest system code:
 
 - `aarch64/android/core/` is the portable conformance oracle.
 - `aarch64/android/tests/` is the oracle test suite.
-- `src/native64/s1_kabi.c` is a host-target ABI-mechanics slice.
+- `src/tests/native64/s1_kabi.c` is a host-target ABI-mechanics slice.
 - `tools/*.py` and the shell gates generate fixtures and verify transcripts.
 
 These may be used to verify behavior, but they must not become the only

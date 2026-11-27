@@ -121,7 +121,7 @@ Status legend: **done**, **partial**, **planned**.
 - [~] Bring the x86_64 S1 to the same op/feature baseline as the C oracle
       (ports, timer, trap frames, region checks, device windows) and make
       `qgate_x86_64` the acceptance path; the C core only cross-checks.
-      Landed: `src/native64/s1_kabi.c` ABI-mechanics slice + floppy and IDE
+      Landed: `src/tests/native64/s1_kabi.c` ABI-mechanics slice + floppy and IDE
       large-cartridge loaders (21.3 MB Tcl tclsh PASS) + scalar FP ops +
       `tools/kabi64_gate.sh` / `tools/s1_guest_gate.sh` /
       `tools/s1_runner.sh` gate CLI.

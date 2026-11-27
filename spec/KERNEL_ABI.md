@@ -221,7 +221,7 @@ primary target:
   0x40000 (up to 768 KiB), A20, flat protected mode, jump to the S1 image.
 - `src/native64/s1_boot.S` - 32-bit boot to long mode, identity-map page
   tables, 64-bit GDT/stack, `.bss` zeroing, COM1 comes from C.
-- `src/native64/s1_kabi.c` - freestanding x86_64 S1: guest word memory at
+- `src/tests/native64/s1_kabi.c` - freestanding x86_64 S1: guest word memory at
   0x200000 sized by `--mem` (default 64K words in the KABI build), fetch/
   gate/predication, the integer/memory/port subset, SVC/SVCRET trap frames,
   timer vector, region checks, `!K/!G/!O`.
