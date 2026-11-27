@@ -32,6 +32,21 @@
 #define TRAMP_DATA    0x9000UL
 #define LAPIC_FALLBACK 0xFEE00000UL
 
+#ifdef BLOCK_SMP
+/* F1 real-AP block runtime.  One immutable NaN-emitted block lives at
+ * 0x51000.  The per-core 4 KiB state window 0x50000..0x50FFF maps to a
+ * private physical page per CPU (0x70000 + cpu*0x1000); the block page and
+ * shared guest word memory at 0x200000 stay identity mapped. */
+#define BLOCK_ADDR       0x51000UL
+#define BLOCK_ROOT_BASE  0x38000UL
+#define BLOCK_ROOT_SIZE  0x4000UL
+#define BLOCK_STATE_BASE 0x70000UL
+#define BLOCK_STATE_SIZE 0x1000UL
+#define BLOCK_CPUS       2
+extern const unsigned char block0[];
+extern const unsigned char block0_end[];
+#endif
+
 /* Guest data layout, mirrored by src/tests/nansmp_test.nas. */
 #define G_RESULT  0x8000u
 #define G_SHARED  0x9000u
@@ -75,6 +90,7 @@ void *memcpy(void *d, const void *s, size_t n) {
 static uint64_t *const gmem = (uint64_t *)(uintptr_t)GMEM_BASE;
 
 static const uint16_t HEADS[4] = {0x7FF1, 0xFFF1, 0x7FF8, 0xFFF8};
+#ifndef BLOCK_SMP
 static uint32_t hcls(uint32_t h) { return ((h >> 2) & 2u) | (h >> 15); }
 static int hvalid(uint32_t h) {
   return (h & 0x7FF0u) == 0x7FF0u && ((h & 15u) == 1u || (h & 15u) == 8u);
@@ -83,6 +99,7 @@ static uint32_t w_near(uint64_t w) { return (uint32_t)(w >> 48); }
 static uint32_t w_far(uint64_t w) {
   return (uint32_t)(((w & 0xFFu) << 8) | ((w >> 8) & 0xFFu));
 }
+#endif
 static uint64_t mkword(uint32_t payload, int n) {
   uint32_t far = HEADS[n & 3], near = HEADS[(n >> 2) & 3];
   return (uint64_t)(far >> 8) | ((uint64_t)(far & 0xFF) << 8) |
@@ -216,6 +233,7 @@ static void lapic_init(void) {
   lapic_write(0xB0, 0);                   /* EOI */
 }
 static void lapic_eoi(void) { lapic_write(0xB0, 0); }
+#ifndef BLOCK_SMP
 static int lapic_send_ipi(uint32_t apic_id, uint32_t vec) {
   lapic_write(0x310, apic_id << 24);
   lapic_write(0x300, 0x00004000u | (vec & 0xFFu));
@@ -224,6 +242,7 @@ static int lapic_send_ipi(uint32_t apic_id, uint32_t vec) {
   }
   return -1;
 }
+#endif
 static void lapic_send_init(uint32_t apic_id) {
   lapic_write(0x310, apic_id << 24);
   lapic_write(0x300, 0x00004500u);        /* INIT, level assert */
@@ -349,6 +368,7 @@ void smp_exception_isr(uint64_t err, uint64_t rip, uint64_t cr2, uint64_t vec) {
 }
 
 /* --------------------------------------------------------------- NaN slice */
+#ifndef BLOCK_SMP
 static void setk(NanState *s, int z, int l) {
   s->k = 2u * (uint32_t)(z != 0) + (uint32_t)(l != 0);
 }
@@ -472,8 +492,10 @@ static void nan_step(int ci, Task *t) {
   default: t->state = 3; break;
   }
 }
+#endif
 
 /* --------------------------------------------------------------- scheduler */
+#ifndef BLOCK_SMP
 static void schedule(Cpu *c) {
   int cur = (c->cur == 0xFFFFFFFFu) ? -1 : (int)c->cur;
   if (cur >= 0 && c->task[cur].state == 2) c->task[cur].state = 1;
@@ -528,6 +550,7 @@ static void run_cpu(int ci) {
     if (c->task[0].state == 1 || c->task[1].state == 1) schedule(c);
   }
 }
+#endif
 
 /* ------------------------------------------------------------- AP startup */
 static void ap_main_entry(uint32_t ci);
@@ -537,7 +560,12 @@ static int start_ap(int ci) {
   volatile uint64_t *blk = (volatile uint64_t *)(uintptr_t)TRAMP_DATA;
   {
     uint64_t cr3;
+#ifdef BLOCK_SMP
+    if (ci >= BLOCK_CPUS) panic("AP root index");
+    cr3 = BLOCK_ROOT_BASE + (uint64_t)ci * BLOCK_ROOT_SIZE;
+#else
     __asm__ volatile("mov %%cr3,%0" : "=r"(cr3));
+#endif
     blk[0] = cr3;
   }
   blk[1] = AP_STACK_BASE + (uint64_t)ci * AP_STACK_SIZE + 0xF000ull;
@@ -558,6 +586,7 @@ static int start_ap(int ci) {
   return -1;
 }
 
+#ifndef BLOCK_SMP
 static void timer_probe(int ci) {
   Cpu *c = &g_cpu[ci];
   c->timer_ticks = 0;
@@ -571,6 +600,7 @@ static void timer_probe(int ci) {
   lapic_write(0x320, 0x00010000u);         /* mask */
   c->timer_ok = c->timer_ticks ? 1u : 0u;
 }
+#endif
 
 /* ------------------------------------------------------------ ACPI MADT */
 static int sig4(const void *p, const char *s) {
@@ -652,9 +682,17 @@ extern const unsigned char smp_tramp_blob_end[];
 
 static void init_guest(void) {
   for (uint32_t i = 0; i < GMEM_WORDS; i++) gmem[i] = 0;
+#ifdef BLOCK_SMP
+  {
+    size_t bsz = (size_t)(block0_end - block0);
+    if (bsz == 0 || bsz > BLOCK_STATE_SIZE) panic("bad block");
+    memcpy((void *)(uintptr_t)BLOCK_ADDR, block0, bsz);
+  }
+#else
   size_t bytes = (size_t)(smp_nan_image_end - smp_nan_image);
   if (bytes % 8u || bytes / 8u > GMEM_WORDS) panic("bad NaN image");
   memcpy((void *)(uintptr_t)GMEM_BASE, smp_nan_image, bytes);
+#endif
 
   gmem[G_SHARED] = mkword(0, 10);
   gmem[G_LOCK] = mkword(0, 10);
@@ -703,15 +741,156 @@ static void init_cpus(void) {
 static void ap_main_entry(uint32_t ci) {
   if (ci >= NCPU_MAX) panic("AP index");
   idt_load();
+#ifdef BLOCK_SMP
+  /* The AP already runs on its own CR3 root, built by the BSP before the
+   * SIPI.  Run the one shared immutable block and publish completion; IF
+   * stays clear, so no AP-local timer/IPI is needed for this proof. */
+  __atomic_store_n(&g_cpu[ci].online, 1u, __ATOMIC_RELEASE);
+  ((void (*)(void))(uintptr_t)BLOCK_ADDR)();
+  __atomic_store_n(&g_cpu[ci].finished, 1u, __ATOMIC_RELEASE);
+  for (;;) __asm__ volatile("cli; hlt");
+#else
   lapic_init();
   __asm__ volatile("sti" ::: "memory");
   timer_probe((int)ci);
   g_cpu[ci].online = 1;
   run_cpu((int)ci);
   for (;;) __asm__ volatile("cli; hlt");
+#endif
 }
 
+#ifdef BLOCK_SMP
+static void block_zero(uint64_t a, uint64_t n) {
+  volatile uint8_t *p = (volatile uint8_t *)(uintptr_t)a;
+  while (n--) *p++ = 0;
+}
+static uint64_t *block_tab(uint64_t a) { return (uint64_t *)(uintptr_t)a; }
+
+/* Four-level root for the low 1 GiB.  The first 2 MiB goes through a PT so
+ * virtual 0x50000 can point at this CPU's 4 KiB state page while 0x51000
+ * (the immutable block) stays a shared identity mapping. */
+static void block_build_root(uint64_t root, uint64_t state_phys) {
+  uint64_t pml4 = root, pdpt = root + 0x1000, pd = root + 0x2000,
+           pt = root + 0x3000;
+  block_zero(root, BLOCK_ROOT_SIZE);
+  block_tab(pml4)[0] = pdpt | 3u;
+  block_tab(pdpt)[0] = pd | 3u;
+  block_tab(pd)[0] = pt | 3u;
+  for (uint64_t i = 1; i < 512; i++)
+    block_tab(pd)[i] = (i << 21) | 0x83u;
+  for (uint64_t i = 0; i < 512; i++)
+    block_tab(pt)[i] = (i << 12) | 3u;
+  block_tab(pt)[0x50] = state_phys | 3u;   /* 0x50000 window */
+}
+
+static void block_init_state(uint64_t s, uint32_t ci) {
+  block_zero(s, BLOCK_STATE_SIZE);
+  *(volatile uint32_t *)(uintptr_t)(s + 0x004) = 0x10u + (ci << 4); /* r1 */
+  *(volatile uint32_t *)(uintptr_t)(s + 0x008) = 0x100u + ci;      /* r2 */
+  *(volatile uint32_t *)(uintptr_t)(s + 0x00C) = 0x200u + ci;      /* r3 */
+  *(volatile uint32_t *)(uintptr_t)(s + 0x400) = 0;            /* FLAGM */
+  *(volatile uint32_t *)(uintptr_t)(s + 0x404) = 0x1FFFFFu;    /* mask */
+}
+
+static inline void block_set_cr3(uint64_t root) {
+  __asm__ volatile("mov %0,%%cr3" : : "r"(root) : "memory");
+}
+static uint32_t block_rd32(uint32_t va) {
+  return *(volatile uint32_t *)(uintptr_t)va;
+}
+
+static void block_smp_main(void) {
+  serial_init();
+  serial_puts("NAN0S BLOCK SMP x86_64\n");
+  pic_mask_all();
+
+  lapic_map();
+  lapic_init();
+  idt_init();
+  idt_load();
+
+  uint8_t ids[NCPU_MAX];
+  int n = detect_cpus(ids, NCPU_MAX);
+  if (n > NCPU_MAX) n = NCPU_MAX;
+  g_ncpu = (uint32_t)n;
+
+  line_begin();
+  line_s("BLOCK SMP cpus="); line_d((uint32_t)n);
+  line_end();
+  if (n != BLOCK_CPUS) panic("BLOCK SMP needs exactly 2 CPUs");
+
+  init_guest();
+  init_cpus();
+
+  for (int i = 0; i < 256; i++) g_apic_cpu[i] = 0xFFu;
+  for (int i = 0; i < n; i++) {
+    g_cpu[i].apic_id = ids[i];
+    g_apic_cpu[ids[i]] = (uint8_t)i;
+  }
+
+  for (uint32_t i = 0; i < BLOCK_CPUS; i++) {
+    uint64_t state = BLOCK_STATE_BASE + (uint64_t)i * BLOCK_STATE_SIZE;
+    uint64_t root = BLOCK_ROOT_BASE + (uint64_t)i * BLOCK_ROOT_SIZE;
+    block_init_state(state, i);
+    block_build_root(root, state);
+  }
+
+  for (int i = 1; i < n; i++)
+    if (start_ap(i) != 0) panic("AP did not come online");
+
+  /* CPU0 runs the same block under its own root.  The APs are already
+   * running (or finished) the block under their roots. */
+  block_set_cr3(BLOCK_ROOT_BASE);
+  ((void (*)(void))(uintptr_t)BLOCK_ADDR)();
+  __atomic_store_n(&g_cpu[0].finished, 1u, __ATOMIC_RELEASE);
+
+  for (int i = 1; i < n; i++) {
+    int done = 0;
+    for (uint64_t spin = 0; spin < 2000000000ull; spin++) {
+      if (__atomic_load_n(&g_cpu[i].finished, __ATOMIC_ACQUIRE)) {
+        done = 1;
+        break;
+      }
+      __asm__ volatile("pause");
+    }
+    if (!done) panic("AP block did not finish");
+  }
+
+  uint32_t r1[BLOCK_CPUS], slot[BLOCK_CPUS], done[BLOCK_CPUS];
+  for (uint32_t i = 0; i < BLOCK_CPUS; i++) {
+    block_set_cr3(BLOCK_ROOT_BASE + (uint64_t)i * BLOCK_ROOT_SIZE);
+    r1[i] = block_rd32(0x50004u);          /* this root's private r1 */
+    slot[i] = gp(0x100u + i);               /* shared guest word */
+    done[i] = gp(0x200u + i);               /* shared guest word */
+  }
+  block_set_cr3(BLOCK_ROOT_BASE);
+
+  int ok = (r1[0] == 0x11u && slot[0] == 0x11u && done[0] == 0x11u &&
+            r1[1] == 0x21u && slot[1] == 0x21u && done[1] == 0x21u);
+  for (uint32_t i = 0; i < BLOCK_CPUS; i++) {
+    line_begin();
+    line_s("BLOCK SMP core"); line_d(i);
+    line_s(" r1="); line_h(r1[i]);
+    line_s(" slot="); line_h(slot[i]);
+    line_s(" done="); line_h(done[i]);
+    line_end();
+  }
+  if (ok) {
+    line_begin(); line_s("BLOCK SMP PASS"); line_end();
+    outl(0xF4, 0x10);
+  } else {
+    line_begin(); line_s("BLOCK SMP FAIL"); line_end();
+    outl(0xF4, 0x11);
+  }
+  for (;;) __asm__ volatile("cli; hlt");
+}
+#endif
+
 void s1_main(void) {
+#ifdef BLOCK_SMP
+  block_smp_main();
+  for (;;) __asm__ volatile("cli; hlt");
+#else
   serial_init();
   serial_puts("NAN0S SMP x86_64\n");
   pic_mask_all();
@@ -845,4 +1024,5 @@ void s1_main(void) {
 
   outl(0xF4, 0x10);             /* isa-debug-exit */
   for (;;) __asm__ volatile("cli; hlt");
+#endif
 }

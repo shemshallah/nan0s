@@ -16,8 +16,8 @@ each item needs a real gate, a short proof, and a frontier note.
 - [x] F0.2 Per-NUMA 4K/2M/1G page allocator; `nheap_gate` PASS.
 - [x] F0.3 Translator SVC/SVCRET frame + control ports; `qgate64abi` PASS.
 - [x] F0.4 Shared immutable block + per-core CR3 state; `qgate64core2` PASS.
-- [ ] F1 Real AP block runtime: 2 CPUs execute one immutable block with
-      per-core CR3 and shared guest memory; gate `qgate64smpblock` in raw
+- [x] F1 Real AP block runtime: 2 CPUs execute one immutable block with
+      per-core CR3 and shared guest memory; `qgate64smpblock` PASS in raw
       assembly/NaN only.
 - [ ] F2 NaN per-CPU scheduler: queues, work stealing, affinity, migration,
       budgets/deadlines, preemption hooks; exact gate.
@@ -64,6 +64,10 @@ Agent rule:
 - [ ] (nnuma) Add SRAT distance and HMAT latency/bandwidth entries plus a node-distance API; feed nansched affinity hints and nheap remote fallback.
 - [ ] (nnuma) Add per-node 64-bit free/high-water counters and 4K->2M->1G compaction/coalescing over nheap, gated by fragmentation and no-cross-node allocation checks.
 - [ ] (nnuma) Add CXL/PMEM and ACPI-reclaim tiers with explicit migration/eviction policy and a tiering gate; keep ACPI reclaim opt-in.
+- [ ] (smpblock) Extend the real-AP block runtime to a per-core immutable block cache and shared (guest pc -> code) table; gate CPU1 dispatching a second block without copying code.
+- [ ] (smpblock) Enable AP-local LAPIC timer and reschedule IPI after the F1 block, require timer/IPI counters on both CPUs, and fold the block path into the nansmp scheduler.
+- [ ] (smpblock) Add a cross-core block handoff: CPU0 publishes a work item and wakes CPU1 with nsp_ipi; CPU1 runs the handed block under its own CR3 root.
+- [ ] (smpblock) Add per-AP TSS/IST trap entry, a per-core SVC state frame, and CR3/TLB generation + shootdown for block reload and migration gates.
 <!-- AGENT-APPEND -->
 
 ## P0. ISO C parity (language + library + ABI)
