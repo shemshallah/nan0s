@@ -1654,10 +1654,14 @@ Proof.
       destruct HRv as
         (_ & Hregs & Hreg15 & _ & _ & _ & _ & _ & _ & _).
       destruct (Nat.eq_dec b 15) as [-> | Hb15].
-      - rewrite Hreg15, Hbn, N2Nat.id.
+      - rewrite Hreg15.
+        change (N.to_nat (lget_regN (lp_reg L) 15) mod 2 ^ 32 = 255).
+        rewrite Hbn, N2Nat.id.
         rewrite Nat.mod_small by lia. reflexivity.
       - assert (Hb15' : b < 15) by lia.
-        rewrite (Hregs b Hb15'), Hbn, N2Nat.id.
+        rewrite (Hregs b Hb15').
+        change (N.to_nat (lget_regN (lp_reg L) b) mod 2 ^ 32 = 255).
+        rewrite Hbn, N2Nat.id.
         rewrite Nat.mod_small by lia. reflexivity. }
     apply lp_exec_BOOL8_255_refines; assumption.
   - red in Hside.
