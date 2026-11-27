@@ -33,22 +33,15 @@ asm_one() { # src out.bin
   }' "$T/h.nan" | xxd -r -p > "$T/guest.bin"
   [ -s "$T/guest.bin" ] || { echo "xgold64: empty guest for $src" >&2; exit 1; }
 
-  : > "$T/carts.txt"
-  awk -f tools/mkimg.awk -v NOTOC=1 -v GOLD=src/native/nan16_x86.nan \
-    -v GUEST="$T/h.nan" -v CARTS="$T/carts.txt" \
-    -v OUTB="$T/boot.bin" -v OUTG="$T/junk.bin" >/dev/null
-  cat "$T/boot.bin" > "$T/floppy.img"; truncate -s 1474560 "$T/floppy.img"
-  dd if=/dev/zero of="$T/disk.img" bs=512 count=129 status=none
-  cat "$T/guest.bin" >> "$T/disk.img"; truncate -s 1474560 "$T/disk.img"
-
+  # Build/oracle path: the C runner executes nasm1; the emitted bytes are
+  # still nasm1 output.  No QEMU and no native-core hang in the build loop.
   rm -f "$T/ser"
-  timeout 240 qemu-system-i386 -m 64 \
-    -drive format=raw,if=floppy,file="$T/floppy.img" \
-    -drive format=raw,if=ide,index=0,file="$T/disk.img" \
-    -boot a -display none -serial "file:$T/ser" -no-reboot >/dev/null 2>&1 || true
+  timeout 180 ./aarch64/android/nan_cli --img "$T/h.nan" --mem 16 \
+    --steps 500000000 --serial > "$T/ser" 2>"$T/nc.err" || true
   [ "$(head -c 1 "$T/ser" 2>/dev/null)" = "Y" ] || {
     echo "xgold64: nasm1 rejected $src" >&2
     head -c 200 "$T/ser" | cat -v >&2 || true
+    tail -3 "$T/nc.err" >&2 || true
     exit 1
   }
   tail -c +3 "$T/ser" > "$out"

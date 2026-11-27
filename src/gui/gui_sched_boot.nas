@@ -44,7 +44,7 @@ JMPR r1
 ; The GUI's fixed compiler/terminal buffers end below this word; the SVC 2
 ; heap starts here and is clipped to every usable PMEM range above it.
 .equ HEAP_BASE    0xB00000
-.equ MIN_MEM      0x1000000
+.equ MIN_MEM      0xF00000
 
 ; ---------------------------------------------------------------------------
 ; gui_kernel_boot - initialise the kernel, create PID 1 (desktop) and PID 2

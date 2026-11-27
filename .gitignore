@@ -55,3 +55,6 @@ src/nan/nixsched.nan
 src/native/kan16_x64_full.xa
 # legacy host build scratch
 x86/build/
+# generated n16i runtime segment / candidate image
+src/nan/n16i_runtime.nan
+build/nan0s_n16i.img

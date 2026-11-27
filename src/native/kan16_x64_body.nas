@@ -55,6 +55,8 @@
 .equ XLEN 0x80D0
 .equ XPC 0x80D4
 .equ AVX2F 0x80E4
+.equ N16I_BASE 0xF00000
+.equ ATAFLAG 0x80E0
 ; KABI v0.1 control-port state (spec/KERNEL_ABI.md).  Addresses are guest
 ; word indices; 0xFFFFFFFF means unset.  KIN is 1 while kernel code runs.
 .equ KENTRY  0x80E8
@@ -68,27 +70,9 @@
 .equ KDATA   0x8108
 .equ KSTATUS 0x810C
 core64_entry:
-  MOV $0x4C,%EAX
-  MOV %AL,[OB]
-  CALL @out1
-  MOV $0x36,%EAX
-  MOV %AL,[OB]
-  CALL @out1
-  MOV $0x34,%EAX
-  MOV %AL,[OB]
-  CALL @out1
-  MOV $0x0A,%EAX
-  MOV %AL,[OB]
-  CALL @out1
   CLD
   CALL @sse_init
-  MOV $0x31,%EAX
-  MOV %AL,[OB]
-  CALL @out1
   CALL @mem_size
-  MOV $0x32,%EAX
-  MOV %AL,[OB]
-  CALL @out1
   MOVL $0x7FFFFFFF,[MAXS]
   MOVL $1,[FLAGM]
   MOVL $0,[STEPS]
@@ -127,10 +111,8 @@ z_count:
   REPSTOSD
   ; r27: full guest image from the IDE primary master at kernel+16B0.
   ; Falls back to the floppy-staged 512 KiB copy when no disk answers.
+  MOVL $0,[ATAFLAG]
   CALL @ata_load_guest
-  MOV $0x33,%EAX
-  MOV %AL,[OB]
-  CALL @out1
   NOP
   NOP
   NOP
@@ -144,18 +126,9 @@ z_count:
   NOP
   NOP
   CALL @hw_init
-  MOV $0x34,%EAX
-  MOV %AL,[OB]
-  CALL @out1
   CALL @memmap_build
-  MOV $0x35,%EAX
-  MOV %AL,[OB]
-  CALL @out1
   XOR %ESI,%ESI
 loop:
-  MOV $0x36,%EAX
-  MOV %AL,[OB]
-  CALL @out1
   MOV [STEPS],%EAX
   CMP [MAXS],%EAX
   JAE @done
@@ -191,7 +164,10 @@ loop:
   TEST %EDI,[FLAGM]
   JZ @loop
 L5:
-  JMP [tbl+EBX*4]
+  ; 64-bit mode: load the 32-bit table entry, then jump through the
+  ; zero-extended register.  A qword table load would combine two entries.
+  MOV [tbl+EBX*4],%EDI
+  JMP %EDI
 head:
   MOV %EBX,%ECX
   AND $0x7FF0,%ECX
@@ -1781,9 +1757,6 @@ tbl:
 ; highest usable RAM region below 4 GiB.  Falls back to the BIOS KB count,
 ; then to the historical 4M words.  CPUID 0x4E4D00FF exposes the result.
 mem_size:
-  MOV $0x61,%EAX
-  MOV %AL,[OB]
-  CALL @out1
   PUSH %EBX
   PUSH %ECX
   PUSH %EDX
@@ -1793,18 +1766,6 @@ mem_size:
   TEST %ECX,%ECX
   JZ @ms_bios
   MOV $0x600,%ESI
-  MOV $0x62,%EAX
-  MOV %AL,[OB]
-  CALL @out1
-  PUSH %ECX
-  MOV %CL,%AL
-  MOV %AL,[OB]
-  CALL @out1
-  SHR $8,%ECX
-  MOV %CL,%AL
-  MOV %AL,[OB]
-  CALL @out1
-  POP %ECX
   XOR %EBX,%EBX
 ms_loop:
   MOV [ESI+16],%EAX
@@ -1834,9 +1795,6 @@ ms_bios:
   MOVZWL [0x413],%EBX
   SHL $10,%EBX
 ms_have:
-  MOV $0x64,%EAX
-  MOV %AL,[OB]
-  CALL @out1
   CMP $0x400000,%EBX
   JBE @ms_min
   SUB $G,%EBX
@@ -1856,9 +1814,6 @@ ms_store:
   MOV %EAX,[NWORDS]
   SUB $1,%EAX
   MOV %EAX,[MASKM]
-  MOV $0x65,%EAX
-  MOV %AL,[OB]
-  CALL @out1
   POP %EDI
   POP %ESI
   POP %EDX
@@ -1897,7 +1852,7 @@ ata_load_guest:
   SHR $6,%EAX
   MOV %EAX,%EBP
   MOV $0x81,%EBX
-  MOV $0x200000,%EDI
+  MOV $0x4200000,%EDI
 ata_sector:
   MOV %EBX,%EAX
   SHR $24,%EAX
@@ -1936,11 +1891,19 @@ ata_drq:
   TEST $0x08,%AL
   JZ @ata_drq
   MOV $0x1F0,%DX
-  MOV $0x80,%ECX
+  MOV $0x100,%ECX
   .byte 0xF3,0x6D
   ADD $1,%EBX
   SUB $1,%EBP
   JNZ @ata_sector
+  MOV [ATAFLAG],%EAX
+  TEST %EAX,%EAX
+  JNZ @ata_done
+  MOVL $1,[ATAFLAG]
+  MOV $0x200000,%EDI
+  MOV $64,%EBP
+  JMP @ata_sector
+ata_done:
   RET
 ata_fallback:
   MOV $0x20000,%ESI

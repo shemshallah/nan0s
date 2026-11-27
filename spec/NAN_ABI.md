@@ -76,3 +76,137 @@ n16i runtime after it.  The system window is `0xEFFFFF` (15 Mi words), leaving
 
 - `tools/n16i_kabi_gate.sh` — bare n16i SVC/SVCRET/control-word test (`GKOD`).
 - `tools/ngate_n16i.sh` — native vs n16i differential for the ISA core.
+
+# AI-native ABI extensions
+
+Status: v0.2 design, aligned with `nanobj`, `nantensor` and `nantrace`.
+
+The system is meant for checkpointable agents, capability-secured tools,
+typed tensors/models/KV, deterministic traces and live generations.  The NaN
+ABI therefore has to make those first-class, not bolt them onto POSIX.
+
+## Versioned ABI block
+
+The kernel publishes a read-only ABI block at guest word `0x3F200`
+(`NABI_BASE`):
+
+| word | field |
+|---|---|
+| 0 | magic `NABI` (`0x4E414249`) |
+| 1 | version (`0x0002`) |
+| 2 | feature bits |
+| 3 | guest word mask |
+| 4 | monotonic tick |
+| 5 | trace head hash |
+| 6 | checkpoint generation |
+| 7 | capability root |
+| 8 | scheduler table word |
+| 9 | object table word |
+| 10 | tensor namespace word |
+| 11 | trace storage head |
+| 12..15 | reserved |
+
+Feature bits: `1` capabilities, `2` checkpoint/restore, `4` tensors/KV,
+`8` traces, `16` live generations, `32` deadlines/budgets, `64` replay.
+
+## Handles and capabilities
+
+A handle is the existing 32-bit capability word:
+
+```
+0xCA | object id (8) | generation (8) | rights (8)
+```
+
+Rights: `1` read, `2` write, `4` execute, `8` grant, `16` replace.  A handle
+is never a raw pointer.  `revoke` bumps the generation and invalidates every
+older handle.  Checkpoint/restore preserves the generation counter; a restored
+agent cannot use a handle from a newer generation.
+
+## SVC ranges
+
+The scheduler keeps SVC `0..28` (yield, exit, region, file, spawn, wait,
+kill, sleep, priority, count/limit).  The AI ABI reserves:
+
+| SVC | operation |
+|---|---|
+| 29 | `abi_version` -> version/feature bits |
+| 30 | `cap_check(cap, rights)` -> object/0 |
+| 31 | `cap_grant(cap, rights)` -> new cap/0 |
+| 32 | `cap_revoke(cap)` -> new generation |
+| 33 | `object_create(class, words)` -> cap |
+| 34 | `tensor_view(cap, offset, shape, rank)` -> view cap |
+| 35 | `kv_attach(kv cap, key, generation)` -> view cap |
+| 36 | `trace_append(kind, a, b)` -> index |
+| 37 | `checkpoint(agent, flags)` -> checkpoint cap |
+| 38 | `restore(checkpoint cap)` -> agent |
+| 39 | `generation_publish(agent, generation)` -> 0 |
+| 40 | `agent_spawn(image cap, caps cap set, priority, budget)` -> pid |
+| 41 | `agent_yield(deadline)` |
+| 42 | `tool_call(tool cap, arg cap)` -> result cap |
+| 43 | `random_seed(seed)` / deterministic RNG |
+| 44 | `stream_read(stream cap, buffer, len)` |
+| 45 | `stream_write(stream cap, buffer, len)` |
+| 46..63 | reserved |
+
+All arguments and returns use the 24-word trap frame; a handle travels in
+`frame[1]` and a pointer/word count in `frame[2..4]`.
+
+## Checkpoint / restore
+
+A checkpoint is a capability over an object whose payload is a sealed,
+hash-chained record of:
+
+- the 24-word trap frame and kernel mode;
+- scheduler slot, process/thread state, priority, deadline, budget;
+- region table and open fd/capability table with generations;
+- object table generations and object payload roots;
+- tensor metadata, storage capabilities and KV block roots;
+- trace head, RNG seed, tick and pending timers;
+- image identity/seal.
+
+`restore` validates every generation and hash before resuming.  A checkpoint
+may be forked: the restored agent gets a new scheduler slot but the same
+immutable storage roots, so model weights are shared zero-copy while KV/trace
+state is copy-on-write or explicitly shared.
+
+## Traces and replay
+
+Every SVC, tool call and agent switch can append
+`{kind, a, b, hash}` where `hash = mix(previous, kind, a, b)`.  The ABI block
+publishes the head.  Replay re-runs with the same seed, tick and input caps and
+must reproduce the same head; divergence is a first-class failure.  Traces are
+sealed before a checkpoint is published.
+
+## Tensors, models and KV
+
+Tensor descriptors follow `nantensor`:
+
+```
+dtype, rank, flags, storage cap, element offset,
+shape[8], strides[8], element count, reserved
+```
+
+Views copy metadata only and share the storage cap.  Weights should be
+read-only `1` caps; KV blocks are `2|8` caps with a generation and a key hash.
+A model is a namespace cap mapping name hashes to tensor caps.  Loading a model
+and attaching a KV block are capability operations; no ambient file path or
+host pointer is required.
+
+## Scheduling for agents
+
+The scheduler already has priorities, timer preemption, sleep/wait/kill and
+spawn.  The AI ABI adds:
+
+- `budget` (instructions/tokens) and `deadline` (tick) per agent;
+- cooperative `agent_yield(deadline)` and cancellation;
+- checkpointable blocked states (sleep, wait, tool call, stream);
+- a per-agent trace head and RNG seed, so a restored agent is deterministic;
+- generation-tagged capabilities for live upgrade/revoke.
+
+## Versioning and enforcement
+
+The ABI block is versioned; an agent must refuse a feature it does not know.
+`n16i` emulates the ABI in NaN16; the native substrate never interprets these
+fields.  The gate `tools/n16i_kabi_gate.sh` covers the trap/control core; the
+AI object gates (`nanobj`, `nantensor`, `nantrace`, `nantrace`) cover the
+object semantics.
