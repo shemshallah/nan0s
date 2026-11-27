@@ -2953,17 +2953,22 @@ kabi_tick:
 kt_ret:
   RET
 
-; ---- F16 product manifest verification + SHA-256 ---------------------------
-; The manifest is the 512 bytes at LBA 128 (physical 0x1FE00), loaded by the
-; boot sector before the kernel starts.  Scratch lives below the kernel window
-; (0xC000..0xC240) so hashing the kernel image does not mutate hashed bytes.
+; ---- F16b product manifest verification + SHA-256 + Winternitz OTS --------
+; The 4 KiB manifest is at LBA 120..127 (physical 0x1EE00); the 512-byte OTS
+; anchor block is at LBA 128 (physical 0x1FE00).  Both are inside the 128-sector
+; kernel window loaded by the boot sector before the kernel starts.  Kernel
+; code must fit below 60,928 bytes (0x10000..0x1EE00); the guest still starts
+; at LBA 129 / physical 0x20000.
 ;
-; Scope: SHA-256 region digests plus HMAC-SHA-256 with an embedded build key.
-; This is symmetric tamper detection, not a public-key signature.  An attacker
-; who can rewrite the kernel can also rewrite the key and the tag; the gate
-; proves accidental/corruption fail-closed behavior, not authenticity against
-; an active attacker.
-.equ MFEST  0x1FE00
+; Scope: SHA-256 region digests, a Winternitz-4 one-time signature over the
+; manifest root, and HMAC-SHA-256 as defense in depth.  The OTS master seed is
+; offline (build/ots, git-ignored); only the per-root public key, key id and
+; signature are in the image.  The expected key id/public key are copied into
+; the anchor block, which is the trust boundary together with this verifier:
+; an attacker who can rewrite the anchor and verifier code can bypass any
+; in-image check.  The gate proves the HMAC-only attacker fails at !OTS.
+.equ MFEST  0x1EE00
+.equ MANCHOR 0x1FE00
 .equ MGUEST 0x200000
 .equ SHAPTR 0xC000
 .equ SHALEN 0xC004
@@ -2974,6 +2979,11 @@ kt_ret:
 .equ SHAW   0xC060
 .equ SHAB   0xC160
 .equ SHB    0xC1C0
+; OTS scratch: 67 * 32 = 2144 bytes of public-key chunks, below the kernel.
+.equ OTSPKB 0xD000
+.equ OTSI   0xD900
+.equ OTSN   0xD904
+.equ OTSSUM 0xD908
 
 man_verify_pre:
   PUSH %EAX
@@ -2995,10 +3005,10 @@ man_verify_pre:
   CMP $0x4E414D4E,%EAX
   JNE @man_bad
   MOV [EDI+4],%EAX
-  CMP $1,%EAX
+  CMP $2,%EAX
   JNE @man_bad
   MOV [EDI+0x0C],%EAX
-  CMP $1,%EAX
+  CMP $3,%EAX
   JNE @man_bad
   MOV [EDI+0x10],%EAX
   CMP $3,%EAX
@@ -3007,10 +3017,26 @@ man_verify_pre:
   CMP $0x40,%EAX
   JNE @man_bad
   MOV [EDI+0x18],%EAX
-  CMP $0xE8,%EAX
+  CMP $0x128,%EAX
   JNE @man_bad
   MOV [EDI+0x1C],%EAX
-  CMP $0x108,%EAX
+  CMP $0x148,%EAX
+  JNE @man_bad
+  ; OTS parameters: Winternitz-4/SHA-256, 67 units, 2144-byte signature.
+  MOV [EDI+0x20],%EAX
+  CMP $1,%EAX
+  JNE @man_bad
+  MOV [EDI+0x24],%EAX
+  CMP $4,%EAX
+  JNE @man_bad
+  MOV [EDI+0x28],%EAX
+  CMP $67,%EAX
+  JNE @man_bad
+  MOV [EDI+0x2C],%EAX
+  CMP $0x200,%EAX
+  JNE @man_bad
+  MOV [EDI+0x30],%EAX
+  CMP $0x860,%EAX
   JNE @man_bad
   ; boot region: id 1, SHA-256, offset 0, size 512
   MOV [EDI+0x40],%EAX
@@ -3028,7 +3054,7 @@ man_verify_pre:
   MOV [EDI+0x50],%EAX
   CMP $512,%EAX
   JNE @man_bad
-  ; kernel region: id 2, offset 512, size 65024
+  ; kernel region: id 2, offset 512, size 60928 (ends before the manifest)
   MOV [EDI+0x78],%EAX
   CMP $2,%EAX
   JNE @man_bad
@@ -3042,7 +3068,7 @@ man_verify_pre:
   TEST %EAX,%EAX
   JNZ @man_bad
   MOV [EDI+0x88],%EAX
-  CMP $65024,%EAX
+  CMP $60928,%EAX
   JNE @man_bad
   ; guest region: id 3, offset 66048, size 8*LMAX
   MOV [EDI+0xB0],%EAX
@@ -3060,40 +3086,36 @@ man_verify_pre:
   MOV [EDI+0xC0],%EAX
   CMP [SHAG],%EAX
   JNE @man_bad
-  ; reserved header bytes 0x20..0x3F and tail bytes 0x128..0x1FF are outside
-  ; the root/tag coverage; require them to be zero so any mutation is caught.
-  MOV $MFEST+0x20,%ESI
-  MOV $8,%ECX
-man_rz1:
-  MOV [ESI],%EAX
-  TEST %EAX,%EAX
-  JNZ @man_bad
-  ADD $4,%ESI
-  DEC %ECX
-  JNZ @man_rz1
-  MOV $MFEST+0x128,%ESI
-  MOV $54,%ECX
-man_rz2:
-  MOV [ESI],%EAX
-  TEST %EAX,%EAX
-  JNZ @man_bad
-  ADD $4,%ESI
-  DEC %ECX
-  JNZ @man_rz2
+  ; reserved areas must be zero: header 0x34..0x3F, OTS gap 0x118..0x127,
+  ; tail 0x168..0x1FF and signature padding 0xA60..0xFFF.
+  MOV $MFEST+0x34,%ESI
+  MOV $3,%ECX
+  CALL @man_zero
+  MOV $MFEST+0x118,%ESI
+  MOV $4,%ECX
+  CALL @man_zero
+  MOV $MFEST+0x168,%ESI
+  MOV $38,%ECX
+  CALL @man_zero
+  MOV $MFEST+0xA60,%ESI
+  MOV $360,%ECX
+  CALL @man_zero
   ; ---- root = SHA-256(manifest[0..0xE7]) ----
   MOV $MFEST,%ESI
   MOV $0xE8,%EBP
   CALL @sha_hash
   MOV $SHAH,%ESI
-  MOV $MFEST+0xE8,%EDI
+  MOV $MFEST+0x128,%EDI
   CALL @man_cmp32
   JC @man_bad
-  ; ---- tag = HMAC-SHA-256(build key, root) ----
+  ; ---- Winternitz-4 OTS over the stored root (primary authentication) ----
+  CALL @man_verify_ots
+  ; ---- tag = HMAC-SHA-256(build key, root), defense in depth ----
   MOV $SHB,%EDI
   MOV $man_kipad,%ESI
   MOV $16,%ECX
   REPMOVSD
-  MOV $MFEST+0xE8,%ESI
+  MOV $MFEST+0x128,%ESI
   MOV $8,%ECX
   REPMOVSD
   MOV $SHB,%ESI
@@ -3110,7 +3132,7 @@ man_rz2:
   MOV $96,%EBP
   CALL @sha_hash
   MOV $SHAH,%ESI
-  MOV $MFEST+0x108,%EDI
+  MOV $MFEST+0x148,%EDI
   CALL @man_cmp32
   JC @man_sig
   ; ---- boot sector digest (pristine 512-byte copy at 0x7E00) ----
@@ -3121,9 +3143,9 @@ man_rz2:
   MOV $MFEST+0x58,%EDI
   CALL @man_cmp32
   JC @man_bad
-  ; ---- kernel digest (65024 bytes at 0x10000) ----
+  ; ---- kernel digest (60928 bytes at 0x10000, stops before the manifest) ----
   MOV $0x10000,%ESI
-  MOV $65024,%EBP
+  MOV $60928,%EBP
   CALL @sha_hash
   MOV $SHAH,%ESI
   MOV $MFEST+0x90,%EDI
@@ -3181,6 +3203,179 @@ mc_bad:
   STC
   RET
 
+; ESI = pointer, ECX = dword count; halts with !MAN on any nonzero word.
+man_zero:
+  MOV [ESI],%EAX
+  TEST %EAX,%EAX
+  JNZ @man_bad
+  ADD $4,%ESI
+  DEC %ECX
+  JNZ @man_zero
+  RET
+
+; ESI = a, EDI = b, ECX = dword count; CF set when they differ.
+man_cmpw:
+  MOV [ESI],%EAX
+  CMP [EDI],%EAX
+  JNE @mcw_bad
+  ADD $4,%ESI
+  ADD $4,%EDI
+  DEC %ECX
+  JNZ @man_cmpw
+  CLC
+  RET
+mcw_bad:
+  STC
+  RET
+
+; ---- Winternitz-4 OTS verification ---------------------------------------
+; Verifies 67 chain values over the stored root against the public key in the
+; manifest, after checking key id and public key against the 0x1FE00 anchor.
+; Any failure prints exactly !OTS and halts before the guest fetch.
+man_verify_ots:
+  PUSH %EAX
+  PUSH %EBX
+  PUSH %ECX
+  PUSH %EDX
+  PUSH %ESI
+  PUSH %EDI
+  PUSH %EBP
+  ; anchor magic "OTSA0001"
+  MOV $MANCHOR,%ESI
+  MOV [ESI],%EAX
+  CMP $0x4153544F,%EAX
+  JNE @ots_bad
+  MOV [ESI+4],%EAX
+  CMP $0x31303030,%EAX
+  JNE @ots_bad
+  ; manifest key id == first 16 bytes of manifest public key
+  MOV $MFEST+0xE8,%ESI
+  MOV $MFEST+0xF8,%EDI
+  MOV $4,%ECX
+  CALL @man_cmpw
+  JC @ots_bad
+  ; anchor key id == manifest key id
+  MOV $MANCHOR+8,%ESI
+  MOV $MFEST+0xE8,%EDI
+  MOV $4,%ECX
+  CALL @man_cmpw
+  JC @ots_bad
+  ; anchor public key == manifest public key
+  MOV $MANCHOR+0x18,%ESI
+  MOV $MFEST+0xF8,%EDI
+  CALL @man_cmp32
+  JC @ots_bad
+  ; checksum digit = sum(15 - nibble) over the 64 root nibbles
+  XOR %EBX,%EBX
+  MOV $MFEST+0x128,%ESI
+  MOV $32,%ECX
+ots_sum_l:
+  MOVZXB [ESI],%EAX
+  MOV %EAX,%EDX
+  SHR $4,%EAX
+  AND $15,%EDX
+  MOV $15,%EDI
+  SUB %EAX,%EDI
+  ADD %EDI,%EBX
+  MOV $15,%EDI
+  SUB %EDX,%EDI
+  ADD %EDI,%EBX
+  INC %ESI
+  DEC %ECX
+  JNZ @ots_sum_l
+  MOV %EBX,[OTSSUM]
+  XOR %EBP,%EBP
+ots_loop:
+  ; EDX = digit_i
+  CMP $64,%EBP
+  JAE @ots_ck
+  MOV %EBP,%EAX
+  SHR $1,%EAX
+  MOV $MFEST+0x128,%ESI
+  ADD %EAX,%ESI
+  MOVZXB [ESI],%EDX
+  TEST $1,%EBP
+  JNZ @ots_low
+  SHR $4,%EDX
+  JMP @ots_have
+ots_low:
+  AND $15,%EDX
+  JMP @ots_have
+ots_ck:
+  MOV $66,%ECX
+  SUB %EBP,%ECX
+  SHL $2,%ECX
+  MOV [OTSSUM],%EDX
+  SHR %CL,%EDX
+  AND $15,%EDX
+ots_have:
+  ; [OTSN] = 15 - digit
+  MOV $15,%EAX
+  SUB %EDX,%EAX
+  MOV %EAX,[OTSN]
+  MOV %EBP,[OTSI]
+  ; copy signature chunk i to SHB
+  MOV %EBP,%ECX
+  SHL $5,%ECX
+  MOV $MFEST+0x200,%ESI
+  ADD %ECX,%ESI
+  MOV $SHB,%EDI
+  MOV $8,%ECX
+  REPMOVSD
+  MOV [OTSN],%EAX
+  TEST %EAX,%EAX
+  JZ @ots_shb
+ots_hash:
+  MOV $SHB,%ESI
+  MOV $32,%EBP
+  CALL @sha_hash
+  MOV $SHAH,%ESI
+  MOV $SHB,%EDI
+  MOV $8,%ECX
+  REPMOVSD
+  MOV [OTSN],%EAX
+  DEC %EAX
+  MOV %EAX,[OTSN]
+  TEST %EAX,%EAX
+  JNZ @ots_hash
+  MOV $SHAH,%ESI
+  JMP @ots_store
+ots_shb:
+  MOV $SHB,%ESI
+ots_store:
+  ; PKBUF[i] = H^(15-digit)(sig_i)
+  MOV [OTSI],%EBP
+  MOV %EBP,%ECX
+  SHL $5,%ECX
+  MOV $OTSPKB,%EDI
+  ADD %ECX,%EDI
+  MOV $8,%ECX
+  REPMOVSD
+  MOV [OTSI],%EBP
+  INC %EBP
+  CMP $67,%EBP
+  JB @ots_loop
+  ; pubkey = SHA-256(PKBUF[0..2143]) must equal the manifest public key
+  MOV $OTSPKB,%ESI
+  MOV $2144,%EBP
+  CALL @sha_hash
+  MOV $SHAH,%ESI
+  MOV $MFEST+0xF8,%EDI
+  CALL @man_cmp32
+  JC @ots_bad
+  POP %EBP
+  POP %EDI
+  POP %ESI
+  POP %EDX
+  POP %ECX
+  POP %EBX
+  POP %EAX
+  RET
+ots_bad:
+  MOV $man_sots,%ESI
+  CALL @man_puts
+  JMP @man_halt
+
 ; ESI = NUL-terminated string.
 man_puts:
   MOVZXB [ESI],%EAX
@@ -3210,6 +3405,8 @@ man_sman:
   .byte 0x21,0x4D,0x41,0x4E,10,0
 man_ssig:
   .byte 0x21,0x53,0x49,0x47,10,0
+man_sots:
+  .byte 0x21,0x4F,0x54,0x53,10,0
 
 ; ---- SHA-256 (FIPS 180-4) ------------------------------------------------
 ; sha_hash: ESI = data, EBP = byte length.  Leaves the 32-byte digest at SHAH.

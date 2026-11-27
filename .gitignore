@@ -19,6 +19,9 @@ host.jar
 # generated gate scratch
 src/tests/.ncc_libm_exact_test.nas
 
+# F16b offline OTS master secret (never commit, never embed)
+build/ots/
+
 # local work areas
 staging/
 INCORPORATEANDDELETE/

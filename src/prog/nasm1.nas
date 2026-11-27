@@ -5,10 +5,10 @@
 ; Operands: $expr | [disp+REG*scale] | @label | REG.  Directives: .byte .word .long .str .equ
 ; .org .align .base .code16 .code32
 .equ SRC 0x20000
-.equ OUT 0x24000
-.equ LAB 0x30000
-.equ LONGB 0x31000
-.equ STACK 0x3F000
+.equ OUT 0x100000
+.equ LAB 0x140000
+.equ LONGB 0x141000
+.equ STACK 0x1F0000
 .equ V_PASS 0x4000
 .equ V_PC 0x4001
 .equ V_BASE 0x4002
@@ -50,8 +50,8 @@
 _start:
   MOVI r0,0
   MOVI r13,1
-  MOVI r14,0xF000
-  MOVHI r14,0x0003
+  MOVI r14,0x0000
+  MOVHI r14,0x001F
   ST r0,r0,#V_BASE
   ST r0,r0,#V_ERR
   ST r0,r0,#V_ESITE
@@ -61,14 +61,14 @@ _start:
   MOVI r4,0x0000
   MOVHI r4,0x0002
   ST r4,r0,#V_SRCB
-  MOVI r4,0x4000
-  MOVHI r4,0x0002
+  MOVI r4,0x0000
+  MOVHI r4,0x0010
   ST r4,r0,#V_OUTB
   MOVI r4,0x0000
-  MOVHI r4,0x0003
+  MOVHI r4,0x0014
   ST r4,r0,#V_LABB
   MOVI r4,0x1000
-  MOVHI r4,0x0003
+  MOVHI r4,0x0014
   ST r4,r0,#V_LONGB
   CALL @pass1
   CALL @pass1

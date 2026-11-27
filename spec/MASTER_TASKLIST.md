@@ -96,11 +96,14 @@ each item needs a real gate, a short proof, and a frontier note.
       boot/AP/page-table paths; `noc_product_gate` PASS (hermetic two-build
       image, full product boot to NANIX SHELL READY, raw64 2-AP block path,
       no C linked, C-free product source).
-- [x] F16 Signed/authenticated product manifest: 512-byte LBA128 manifest
-      over boot/kernel/guest, native SHA-256/HMAC verifier before guest fetch,
-      exact `!MAN`/`!SIG` fail-closed for one-byte boot/kernel/guest/manifest/
-      root/tag mutations.  HMAC is tamper detection, not public-key; Ed25519
-      or a Winternitz/Lamport OTS is queued.
+- [x] F16 Signed/authenticated product manifest: 4 KiB manifest at LBA 120
+      and 512-byte anchor at LBA 128 over boot/kernel/guest; native SHA-256
+      region/root plus Winternitz-4 OTS primary and HMAC defense-in-depth
+      before guest fetch.  `ots_gate` PASS: two deterministic builds, exact
+      boot/kernel/guest/manifest/root -> `!MAN`, key/pub/sig/anchor -> `!OTS`,
+      HMAC -> `!SIG`, clean boot to NANIX SHELL READY, guest never entered on
+      failure.  Development seed is public; production key custody and
+      Ed25519/anti-rollback/measured boot remain queued.
 - [x] F17 Raw 64-bit SMP substrate: per-AP GDT/TSS/IST, shared IDT, 4-core
       MADT/INIT-SIPI-SIPI, AP-local LAPIC timer, reschedule IPI, exact EOI,
       exception/IST1 self-test; `noc_raw64_smp_gate` PASS (4/2 CPUs, no C
@@ -250,6 +253,10 @@ Agent rule:
 - [ ] (nkcas) Add CAS epoch GC and orphan reclamation with a live-view fence; gate no free of a record visible to a proof or agent view.
 - [ ] (nkcas) Add a 4 KiB page-store variant and a 64-bit record index so a TB-scale CAS does not depend on the 48-word fixed record count.
 - [ ] (nkcas) Bind nkcas roots to nagent checkpoints and nreplay trace heads; gate restore+hydrate+replay with an exact divergence index.
+- [ ] (nots) Replace the development OTS seed with an offline production master and add key-id allow-lists plus signed key rotation; gate unknown-key and rollback rejection.
+- [ ] (nots) Add image generation and anti-rollback state before guest fetch; gate replay of an older valid OTS image and an unknown key id.
+- [ ] (nots) Extend the manifest guest digest to a per-2 MiB Merkle tree with lazy page verification; gate a failing-page report and no entry into an unverified page.
+- [ ] (nots) Add measured-boot PCR/event-log extension over boot, kernel, guest and service carts; gate replay to the same root plus out-of-order/rollback detection.
 <!-- AGENT-APPEND -->
 
 ## P0. ISO C parity (language + library + ABI)
