@@ -1882,7 +1882,8 @@ Lemma lp_instr_side_bool_sound :
     lp_instr_side_bool L ins = true ->
     LPInstrSide L ins.
 Proof.
-  intros L ins. destruct ins; cbn; intros H;
+  intros L ins H.
+  destruct ins; unfold lp_instr_side_bool in H; unfold LPInstrSide;
     repeat rewrite andb_true_iff in H;
     repeat match goal with H0 : _ /\ _ |- _ => destruct H0 end;
     repeat match goal with
@@ -1893,7 +1894,7 @@ Proof.
         apply negb_true_iff in H0; apply Nat.eqb_neq in H0
     | H0 : N.eqb ?a ?b = true |- _ => apply N.eqb_eq in H0
     end;
-    try (repeat split; auto; lia).
+    try (repeat split; auto).
 Qed.
 
 Lemma nth_instr_eqb_sound :
