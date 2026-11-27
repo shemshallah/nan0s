@@ -1656,7 +1656,8 @@ Proof.
       destruct (Nat.eq_dec b 15) as [-> | Hb15].
       - rewrite Hreg15.
         change (N.to_nat (lget_regN (lp_reg L) 15) mod 2 ^ 32 = 255).
-        rewrite Hbn, N2Nat.id.
+        rewrite Hbn.
+        change (255 mod 2 ^ 32 = 255).
         rewrite Nat.mod_small by lia. reflexivity.
       - assert (Hb15' : b < 15) by lia.
         rewrite (Hregs b Hb15').
