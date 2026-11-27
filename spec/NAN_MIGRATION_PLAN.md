@@ -17,7 +17,6 @@ S0  boot sector             native, 512 B
 S1  native core             x86 or AArch64, minimum
 S2  nasm0 seed              NaN16 words, assembler
 S3  system source           NaN16 text, packed
-S4  shell, museum, tools    NaN16
 S5  host test harness       scaffold only, outside the machine
 ```
 
@@ -41,7 +40,6 @@ Keep this list as short as possible:
 
 Everything else is NaN: mode-set sequences, font, paging policy, allocator,
 shell, loader, seals, assembler, disassembler, compiler, decompiler, image
-builder, museum, and tests.
 
 ## Migration order
 
@@ -99,7 +97,6 @@ All three share the opcode tables and the nested-word metadata.
   backend. Test with an encoding suite (83-style, plus A64-specific vectors).
 - AArch64 native core: the same S1 contract, written in AArch64 assembly,
   for bare-metal Pi/UEFI and for an AArch64 emulator.
-- AArch64 emulator: a NaN16 interpreter of A64 instructions, so the museum can
   run AArch64 programs inside the NaN machine.
 
 ### Stage 8 - Native minimization
@@ -124,7 +121,6 @@ orders so the outer pair also votes. This gives:
 
 - self-describing metadata (a word that contains a word),
 - nested seals (outer seal over inner words),
-- a natural place for the Orrery and exhibit transcript records,
 - a double-endian redundancy at two levels.
 
 Test: pack a legal inner word, corrupt one outer byte, confirm the vote fails
@@ -146,7 +142,6 @@ Only the host test bench:
 
 - `tools/textshot.py`, `tools/fbshot.py`: screenshot rendering.
 - `tools/harness/*.mjs`: v86 test driver.
-- `tools/gen_*.py`: source generators for long museum text and fonts.
 
 These are not part of the machine. They can be deleted without changing the
 image. The migration target is that no runtime path depends on them. The

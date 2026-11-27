@@ -1,10 +1,7 @@
 ; NaN/0S lib behind the fixed jump-vector table (round 17 ABI).
 ; Vector table at guest words 1-31 (word 0 = shell entry JMP).
-; Exhibits call lib via CALL @vector_N. Vector N contains JMP @lib_routine_N.
-; Lib RETs back to the exhibit. Exhibits assemble independently with .org at SLOT.
 ; r0=0, r13=1, r14=SP, r15=link. Lib clobbers r3..r9 and r15 only.
 
-.equ SLOT 4096          ; exhibit load/run address (fixed for all exhibits)
 
 ; ---- lib routines ----
 
@@ -225,7 +222,6 @@ RET
 ; vscroll: general shell scroll. In: r1 = signed lines (+ up, - down),
 ; r2 = fill cell (attr<<8 | char; 0 means 0x0720, white space on black).
 ; Scrolls the 80x25 VGA text plane one cell at a time using only VPEEK/VPOKE.
-; Preserves r1, r2 and the exhibit's r10..r14. Clobbers r3..r9, r15.
 lib_vscroll:
 MOVI r3,0
 CMP r2,r0

@@ -1,6 +1,5 @@
 ; n16de.nas - NaN16 double-ended qNaN carrier, pair-voting codec.
 ; This is a data carrier, not a cryptographic primitive. It is safe to include
-; in the museum.
 ;
 ; Word layout used here (NaN16, not IEEE bytes):
 ;   class nibble 10 (both faces +q) for DATA / DELIM / RESYNC

@@ -10,7 +10,7 @@ mkdir -p "$T"
 trap 'rm -rf "$T"' EXIT
 
 : > "$T/bad"
-for d in src/prog src/lib src/museum src/exhibits src/dbg src/tools; do
+for d in src/prog src/lib src/gui src/trust src/dbg src/tools src/nan src/nix; do
   find "$d" -type f \
     \( -name '*.c' -o -name '*.h' -o -name '*.cc' -o -name '*.cpp' \
        -o -name '*.py' -o -name '*.rs' -o -name '*.go' -o -name '*.js' \
@@ -24,8 +24,9 @@ fi
 
 # Every .nas source must live in one of the guest system directories; the
 # generated .nan files are raw word text, not source.
-find src/prog src/lib src/museum src/exhibits src/dbg src/tools -type f -name '*.nas' \
-  > "$T/nas"
+for d in src/prog src/lib src/gui src/trust src/dbg src/tools src/nan src/nix; do
+  find "$d" -type f -name '*.nas' >> "$T/nas"
+done
 [ -s "$T/nas" ] || { echo "raw_only: FAIL (no raw NaN source found)"; exit 1; }
 
 echo "raw_only: PASS (guest system source is raw NaN16 .nas; no C/C++/Python/Rust)"

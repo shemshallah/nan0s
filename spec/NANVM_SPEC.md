@@ -223,7 +223,6 @@ read and ignored on write. STW/BSWAPM/LDN on DEV: trap (!D) because there is
 no second face to check. BCOPY RAM->DEV converts 8-byte words to 4-byte
 cells (payload only) = the blit path; DEV->RAM the reverse.
 First target: VBE/linear framebuffer (QEMU/Bochs std-vga, v86 VGA) mapped as
-a DEV region; the existing Sierpinski/plasma exhibits then draw at 32 bpp
 with plain ST/BCOPY.
 GPU: a command ring is a DEV (or RAM+DMA) region, doorbell = ST to a DEV
 word. Honest order: linear FB -> virtio-gpu (small, well-specified, works in
@@ -235,7 +234,6 @@ a) Step 1 (checkable here): flat 32-bit asm interpreter, SSE single for
    FADD..CVTFI, 32-bit pc, built with `as --32` / `ld -m elf_i386` and run
    as a host process (32-bit exe runs on the dev box; `gcc -m32` libc is
    absent so the driver is pure asm + syscalls). Differential test against
-   the frozen model: selftest, lib, museum, nasm0 --big, gen2 must give
    word-identical output.
 b) Step 2: boot real -> protected mode, A20, E820, region table, disk load
    into high memory (unreal mode or temp low buffer + copy).
@@ -311,7 +309,6 @@ DEV windows (64-bit cell addresses). The reference C core today has
 2^16..2^28 words), the default is 2^25 words (32M words, 256 MiB raw /
 128 MiB guest C payload), and host memory is demand-mapped. 32-bit word
 indices remain for this revision; the 64-bit index/ADDRH revision is still
-a plan. NaNVM0 stays an 8,192-word museum machine for a single
 job; it is not the platform.
 
 Quake trace (requirements -> words):
@@ -455,7 +452,6 @@ host callbacks).
 
 There is one machine, not a family:
 
-- **NaNVM0** is revision 0 (NaN16 v0.1 ops, 8,192-word museum profile).
 - **NaNVM1** is revision 1 of the same machine (ops 0x20-0x37 plus the
   scale/SMP/AI families in §9.3); nothing forks a new machine.
 - **NaNNet VM** is not a second machine and not a separate image: its
@@ -504,7 +500,6 @@ the in-NaN translator are the route, not a license to skip correctness.
 
 ## 11. AI profile — why the scale, SMP and atomics matter
 
-The same VM hosts the museum language model, Quake and NaNNet; there is no
 AI-specific second machine.
 
 - **Memory.** Weights in f32/f16/bf16 live in 16 GB RAM = 2^31 words; the KV
@@ -534,7 +529,6 @@ AI-specific second machine.
   model fit and the threads real; it does not claim wire-speed inference.
 
 Rule, restated: one machine, one memory, one thread model, one device
-interface. Quake, the LM, the museum and NaNNet are processes on it.
 
 ## 12. Implementation authority, the main process, and the terminal
 
@@ -553,7 +547,6 @@ C is fixed. Older notes that called `nan16.c` the line of truth are retired
 S0 (512 B boot sector) and S1 (native core: fetch/decode/gate/trap, memory,
 clock, keyboard ring, text plane, port I/O, halt) are the only native code
 in the product. S2-S5 (assembler, builder, disk driver, filesystem, shell,
-museum, tools, terminal) are NaN. Hosts: x86 first, AArch64 next (the
 Android product boundary), then riscv64/wasm32. S1 is per-host and small; it
 contains no ATA logic, no filesystem, no allocator, no shell, no builder, no
 font, no VGA mode table.

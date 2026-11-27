@@ -1,7 +1,7 @@
 #!/bin/sh
 # nan0s_gui64_sched_gate.sh - NaN/0S kernel-boot acceptance.
 #
-# Boots src/exhibits/gui_sched_boot.nas on x86_64 S1.  The image is raw NaN16:
+# Boots src/gui/gui_sched_boot.nas on x86_64 S1.  The image is raw NaN16:
 # a boot trampoline, the GUI desktop at 8192, and nankernel + nansched at
 # 65536.  nsch_init creates PID 1 (desktop/window manager) and PID 2 (NANIX
 # shell) with the same flat image and independent trap frames/stacks.
@@ -19,7 +19,7 @@ mkdir -p "$T"
 trap 'rm -rf "$T"' EXIT INT TERM
 
 # A completed line is written to FNB by the Terminal and consumed by PID 2.
-awk -f tools/nmk.awk -v CMD=emit src/exhibits/gui_sched_boot.nas \
+awk -f tools/nmk.awk -v CMD=emit src/gui/gui_sched_boot.nas \
   > "$T/gui_sched.nan" 2> "$T/emit.err"
 WORDS=$(sed -n 's/^words //p' "$T/emit.err")
 [ -n "$WORDS" ] || { echo "gui64_sched: FAIL (no word count)"; exit 1; }

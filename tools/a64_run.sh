@@ -1,6 +1,5 @@
 #!/bin/sh
 # tools/a64_run.sh GUEST.nan [SECS] - assemble the A64 core, pack core + guest words, run on qemu-system-aarch64 -M virt, print the UART.
-# CARTS=tools/carts.txt embeds the exhibit cartridges. KEYS="s\r" feeds those bytes to the guest UART (KEY/KEYQ) after 1 s. Outer stack only: sh + gawk + xxd + qemu. Example: sh tools/a64_run.sh /tmp/a64_test.nan   (emit with: gawk -f tools/nmk.awk -v CMD=emit src/tests/a64_test.nas)
 set -e
 cd "$(dirname "$0")/.."
 export LC_ALL=C

@@ -57,9 +57,7 @@ for f in $FILES; do
     spec/*|third_party/*|*.md|build/*|aarch64/android/app/src/main/assets/*)
       ;;
     src/dbg/*|src/tests/ndbg_*|tools/ndbg*.sh)
-      add "ndbg ndbg_diff ndbg_mon ndbg_img ndbg_gui" ;;
-    src/exhibits/gui_cart.nas|src/museum/museum.nas|src/museum/shell.nas)
-      add "ndbg_gui qgate_gui" ;;
+      add "ndbg ndbg_diff ndbg_mon ndbg_img" ;;
     src/lib/ncc.nas|src/lib/ppexpr.nas|src/lib/mpp.nas|src/lib/wide*.nas|src/lib/vscanf.nas|src/lib/iso*.nas|src/lib/mathx.nas|src/prog/nasm0_tables.nas|src/tools/disasm.nas|src/tests/ctests/*|src/tests/ncc_*)
       add "$COMPILER" ;;
     aarch64/android/core/*|aarch64/android/tests/*|aarch64/android/tools/nan_cli.c|aarch64/android/Makefile)
@@ -158,7 +156,6 @@ gate_files() {
       echo "third_party/tinycc/nan16-* third_party/tinycc/tcc.h third_party/tinycc/libtcc.c third_party/tinycc/libtcc.h third_party/tinycc/tccelf.c third_party/nan16-libc/src/* third_party/nan16-libc/include/* aarch64/android/tools/nan_cli.c aarch64/android/core/* tools/tcc_nan16_*.sh tools/nan16_embed_tree.py"
       ;;
     ndbg_gui)
-      echo "src/museum/* src/exhibits/gui_cart.nas src/dbg/* tools/ndbg_gui.sh tools/mkimg.awk tools/nmk.awk x86/native/nan16_x86.nan"
       ;;
     tcc_sqlite)
       echo "third_party/sqlite/* third_party/tinycc/nan16-* third_party/tinycc/tcc.h third_party/tinycc/libtcc.c third_party/tinycc/libtcc.h third_party/tinycc/tccelf.c third_party/nan16-libc/src/* third_party/nan16-libc/include/* src/tests/sqlite/* aarch64/android/tools/nan_cli.c aarch64/android/core/* tools/tcc_sqlite.sh"

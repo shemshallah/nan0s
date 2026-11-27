@@ -34,7 +34,6 @@ asm src/tests/ndbg_ndr_test.nas "$T/ndr.nan"
 "$CLI" --img "$T/ndr.nan" --steps 2000000 --serial > "$T/ndr.out" 2>"$T/ndr.err" || true
 grep -qx 'NDR PASS' "$T/ndr.out" || { echo "ndbg_diff: NDR FAIL"; cat "$T/ndr.out" "$T/ndr.err"; exit 1; }
 
-# --- 1b. a real museum cartridge under the core ------------------------------
 asm src/tests/ndbg_cart_test.nas "$T/cart.nan"
 "$CLI" --img "$T/cart.nan" --steps 50000000 --serial > "$T/cart.out" 2>"$T/cart.err" || true
 grep -qx 'CART PASS' "$T/cart.out" || { echo "ndbg_diff: CART FAIL"; cat "$T/cart.out" "$T/cart.err"; exit 1; }

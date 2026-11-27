@@ -28,13 +28,11 @@ The product is the unified nan0s image, not the suite harness:
 tools/mkall.sh  ->  build/nan0s.img
   kboot0.xa       512-byte assembly boot sector
   kan16.xa        native NaN16 core, x86 assembly (~8.5k words)
-  guest           NaN16: kernel, nanfs, shell, museum, cartridges
 ```
 
 `sh tools/qgate.sh` boots that image on bare x86 (QEMU) and requires the
 `NaN/0S` banner on COM1.  The default boot is the GUI desktop; `qgate_gui`
 checks the 1024x768 framebuffer.  A pending ESC at cold boot enters the text
-shell (no museum menu); the GUI/museum code is legacy, not the boot path.  The upgraded machine target is **x86_64 S1**
 (`tools/s1_runner.sh`); `tools/nan0s_guest_gate.sh` runs a NaN guest on it by
 default and keeps `NAN0S_GUEST_ARCH=32` as legacy parity for the
 `kboot0+kan16` image.  Acceptance claims must come from the x86_64 S1 machine
@@ -101,7 +99,7 @@ Raw-NaN gates, not oracle claims:
   Terminal keyboard path is driven with delayed PS/2 make codes so the
   command line runs after `kbd_init`.
 - `tools/nan0s_gui64_sched_gate.sh` — the raw-NaN16 kernel-boot image
-  (`src/exhibits/gui_sched_boot.nas`): the GUI is PID 1 (desktop/window
+  (`src/gui/gui_sched_boot.nas`): the GUI is PID 1 (desktop/window
   manager) and PID 2 is the NANIX command process, both created by
   `nsch_init`/`nsch_spawn_desc` and scheduled by `nansched`.  The Terminal
   writes a completed line to `FNB` and yields; PID 2 runs `fs_dispatch` /
@@ -184,7 +182,6 @@ service table.
 
 1. Promote the proven kernel-boot image (`gui_sched_boot.nas`, desktop PID 1
    + NANIX shell PID 2) to the default published `build/nan0s.img`; the S1
-   gate already boots it, but the GUI/museum image remains the published
    single-cart boot.
 2. Extend `nanthr` from one cooperative thread-owner process to per-process
    thread state and per-thread preemption for AI workloads.
@@ -245,7 +242,7 @@ service table.
 ## Enforcement
 
 `tools/build.sh` refuses `.c`, `.s`, `.S` or `.o` files anywhere in the
-product guest trees (`src/nan`, `src/nix`, `src/lib`, `src/exhibits`,
+product guest trees (`src/nan`, `src/nix`, `src/lib`, `src/gui src/trust`,
 `src/boot`).  `tools/guest_raw_only_gate.sh` additionally checks that every
 OS cart is `.nan` and that `build/nan0s.img`/`build/disk.nanfs` contain no ELF
 magic.  C files in `nanfs/` are inert NPAF demo inputs for the raw-NaN16

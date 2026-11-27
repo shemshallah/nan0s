@@ -1,6 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 960 400" width="960" height="400" role="img" aria-label="NaN/0S">
 <title>NaN/0S</title>
-<desc>NaN/0S - a bare-metal museum of computing. Pixel-art wordmark with a slashed zero and an S.</desc>
 <defs>
 <radialGradient id="bg" cx="50%" cy="40%" r="80%"><stop offset="0" stop-color="#1a1236"/><stop offset=".6" stop-color="#0b0a1f"/><stop offset="1" stop-color="#04040c"/></radialGradient>
 <linearGradient id="cN" gradientUnits="userSpaceOnUse" x1="0" y1="100" x2="0" y2="223"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#8f9bff"/></linearGradient>
@@ -54,7 +53,6 @@ text{font-family:'JetBrains Mono','Fira Code',ui-monospace,SFMono-Regular,Menlo,
 <g class="ghost" opacity="0" fill="#00f0ff" style="mix-blend-mode:screen"><use xlink:href="#gSlash"/></g>
 <g mask="url(#reflMask)" opacity=".28"><g transform="translate(0,466) scale(1,-1)"><use xlink:href="#word"/></g></g>
 <rect x="46" y="64" width="868" height="1.5" fill="url(#hair)"/>
-<text x="48" y="44" font-size="13" fill="#8f9bff" opacity=".85" letter-spacing="3">NaN/0S  ·  BARE-METAL MUSEUM OF COMPUTING</text>
 <text x="912" y="44" font-size="13" fill="#ff2bd6" text-anchor="end" letter-spacing="3">7ff8 ····</text>
 <g class="bytes" font-size="17" letter-spacing="2">
 <text x="48" y="342" fill="#6a6f9c" xml:space="preserve">ff 00 00 00 00 08 <tspan fill="#ff2bd6">f8</tspan> <tspan fill="#39ff14">7f</tspan></text>

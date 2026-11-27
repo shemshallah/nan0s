@@ -45,6 +45,7 @@
 .equ V_TMPX 0x4021
 .equ V_AUX1 0x4022
 .equ V_AUX2 0x4023
+.equ V_ESITE 0x4024
 .equ OPBASE 0x4030
 _start:
   MOVI r0,0
@@ -53,6 +54,7 @@ _start:
   MOVHI r14,0x0003
   ST r0,r0,#V_BASE
   ST r0,r0,#V_ERR
+  ST r0,r0,#V_ESITE
   ST r0,r0,#V_NLAB
   MOVI r4,1
   ST r4,r0,#V_MODE
@@ -83,6 +85,20 @@ iter:
   PUTC r2
   MOVI r1,10
   PUTC r1
+  LD r1,r0,#V_ERR
+  CMP r1,r0
+  JMP[EQ] @noerr
+  MOVI r1,0x45
+  PUTC r1
+  LD r1,r0,#V_ESITE
+  PUTC r1
+  SHR r1,r1,8
+  PUTC r1
+  SHR r1,r1,8
+  PUTC r1
+  SHR r1,r1,8
+  PUTC r1
+noerr:
   LD r3,r0,#V_OUTB
   SHL r3,r3,2
   LD r4,r0,#V_PC
@@ -438,6 +454,12 @@ mdone:
   LD r15,r14,0
   RET
 bump_err:
+  LD r1,r0,#V_ESITE
+  CMP r1,r0
+  JMP[NE] @be_have
+  LD r1,r0,#V_SRCP
+  ST r1,r0,#V_ESITE
+be_have:
   LD r1,r0,#V_ERR
   ADD r1,r1,r13
   ST r1,r0,#V_ERR
@@ -1076,6 +1098,13 @@ mv_rm:
   JMP[NE] @mv_rm_n
   ADD r1,r11,r0
   CALL @prefix
+  LD r8,r0,#V_MODE
+  MOVI r9,2
+  CMP r8,r9
+  JMP[NE] @mv_ms_noaddr
+  MOVI r1,0x67
+  CALL @emitb
+mv_ms_noaddr:
   MOVI r1,0xA2
   MOVI r8,1
   CMP r11,r8
@@ -1116,6 +1145,13 @@ mv_sreg_st:
   CALL @enc_rm
   JMP @endins
 mv_cr_st:
+  LD r8,r0,#V_MODE
+  MOVI r9,2
+  CMP r8,r9
+  JMP[NE] @mv_cr_st_nw
+  MOVI r1,0x48
+  CALL @emitb
+mv_cr_st_nw:
   MOVI r1,0x0F
   CALL @emitb
   MOVI r1,0x20
@@ -1134,6 +1170,13 @@ mv_sreg_ld:
   CALL @enc_rm
   JMP @endins
 mv_cr_ld:
+  LD r8,r0,#V_MODE
+  MOVI r9,2
+  CMP r8,r9
+  JMP[NE] @mv_cr_ld_nw
+  MOVI r1,0x48
+  CALL @emitb
+mv_cr_ld_nw:
   MOVI r1,0x0F
   CALL @emitb
   MOVI r1,0x22
@@ -1171,6 +1214,13 @@ mv_mr:
   JMP[NE] @mv_mr_n
   ADD r1,r11,r0
   CALL @prefix
+  LD r8,r0,#V_MODE
+  MOVI r9,2
+  CMP r8,r9
+  JMP[NE] @mv_ml_noaddr
+  MOVI r1,0x67
+  CALL @emitb
+mv_ml_noaddr:
   MOVI r1,0xA0
   MOVI r8,1
   CMP r11,r8
@@ -1308,6 +1358,35 @@ enc_rm:
   SHL r3,r2,3
   ADDI r3,r3,#OPBASE
   LD r4,r3,0
+  ; code64 absolute memory: mod=00 r/m=100 SIB(0x25) disp32.
+  LD r8,r0,#V_MODE
+  MOVI r9,2
+  CMP r8,r9
+  JMP[NE] @er_not64abs
+  MOVI r5,3
+  CMP r4,r5
+  JMP[NE] @er_not64abs
+  LD r5,r3,2
+  LD r6,r3,3
+  MOVI r7,0xFF
+  CMP r6,r7
+  JMP[NE] @er_not64abs
+  CMP r5,r7
+  JMP[EQ] @er_abs64
+  CMP r5,r0
+  JMP[NE] @er_not64abs
+er_abs64:
+  LD r9,r3,5
+  SHL r1,r1,3
+  MOVI r5,0x04
+  BOOL.14 r1,r1,r5
+  CALL @emitb
+  MOVI r1,0x25
+  CALL @emitb
+  ADD r2,r9,r0
+  CALL @emitd
+  JMP @er_x
+er_not64abs:
   MOVI r5,1
   CMP r4,r5
   JMP[NE] @er_mem
@@ -2174,8 +2253,16 @@ h_gdt:
 m_ljmp:
   MOVI r1,0xEA
   CALL @emitb
+  LD r8,r0,#V_MODE
+  CMP r8,r0
+  JMP[EQ] @ljmp16
+  LD r2,r0,#OPBASE+9
+  CALL @emitd
+  JMP @ljmp_sel
+ljmp16:
   LD r2,r0,#OPBASE+9
   CALL @emitw
+ljmp_sel:
   LD r2,r0,#OPBASE+1
   CALL @emitw
   JMP @endins
@@ -2527,6 +2614,10 @@ d_code16:
   JMP @endins
 d_code32:
   MOVI r4,1
+  ST r4,r0,#V_MODE
+  JMP @endins
+d_code64:
+  MOVI r4,2
   ST r4,r0,#V_MODE
   JMP @endins
 m_inc_b:

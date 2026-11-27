@@ -85,4 +85,4 @@ PUTC r1
 MOVI r1,10
 PUTC r1
 HALT
-.include "../exhibits/gui_cart.nas"
+.include "../gui/gui_cart.nas"

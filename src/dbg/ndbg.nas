@@ -22,7 +22,6 @@
 ; history ring and UI are designed in spec/NANDBG.md and are the next stages.
 ;
 ; ABI: r0=0, r13=1. No stack; every CALL saves r15 in a private cell.
-; Entry: word 0. Target: word 8192 (the museum slot). Raw fault words: 9000.
 ;
 ; Serial output is deliberately tiny and parseable:
 ;   !D<type><code>@<site> W=<hi><lo>
@@ -1198,7 +1197,6 @@ nd_tq:
 .word 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 
 ; =============================================================================
-; target program: a real guest at the museum slot
 ; =============================================================================
 .org 8192
 tgt_entry:

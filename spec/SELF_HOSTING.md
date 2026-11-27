@@ -4,7 +4,6 @@
 
 Move the system to NaN as completely as possible. The native core is the
 absolute minimum needed to execute a NaN word and touch raw hardware. The disk
-driver, filesystem, builder, loader, shell, museum, and tools are NaN16.
 
 One VM: the unified VM is the main process — NaNVM0's revision upgraded with
 the NaNVM1 ops and hybridized with the NaNNet bytecode mode — and the terminal
@@ -20,7 +19,6 @@ S1  native core             x86 or AArch64, minimum
 S2  nasm0                   NaN16 assembler, self-hosting
 S3  nbuild                  NaN16 builder: manifest -> cartridges -> image
 S4  nanfs                   NaN16 disk driver + filesystem + allocator
-S5  work image              shell + museum + all cartridges
 S6  host test bench         scaffold only, outside the machine
 ```
 
@@ -103,14 +101,12 @@ the store to ATA. The third milestone builds the whole image.
 4. If NaNFS is absent, the shell can format the allocation device and write
    the work image. The allocation image is sparse and local; it is never
    shipped.
-5. The work image contains the shell, museum, cartridges, sources, and tools.
 
 ## AArch64
 
 The same S1 contract, written in AArch64 assembly. The boot path is UEFI or a
 bare-metal Pi stub; the NaN image is identical. `nasm2` is the AArch64 emitter
 written in NaN16, with the same source language as nasm1. The AArch64 emulator
-is a NaN16 interpreter, so the museum can run A64 programs inside the NaN
 machine.
 
 ## Nested NaNs

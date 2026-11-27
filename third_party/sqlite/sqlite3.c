@@ -1980,7 +1980,6 @@ struct sqlite3_vfs {
 ** prior to using any other SQLite interface.  For maximum portability,
 ** it is recommended that applications always invoke sqlite3_initialize()
 ** directly prior to using any other SQLite interface.  Future releases
-** of SQLite may require this.  In other words, the behavior exhibited
 ** when SQLite is compiled with [SQLITE_OMIT_AUTOINIT] might become the
 ** default behavior in some future release of SQLite.
 **
@@ -16810,7 +16809,6 @@ typedef int VList;
 
 /*
 ** The following values may be passed as the second argument to
-** sqlite3OsLock(). The various locks exhibit the following semantics:
 **
 ** SHARED:    Any number of processes may hold a SHARED lock simultaneously.
 ** RESERVED:  A single process may hold a RESERVED lock on a file at
@@ -50783,7 +50781,6 @@ static int winIoerrRetryDelay = SQLITE_WIN32_IOERR_RETRY_DELAY;
 ** returns zero.  The "winIoerrCanRetry2" macro is completely optional and
 ** may be used to include additional error codes in the set that should
 ** result in the failing I/O operation being retried by the caller.  If
-** defined, the "winIoerrCanRetry2" macro must exhibit external semantics
 ** identical to those of the "winIoerrCanRetry1" macro.
 */
 #if !defined(winIoerrCanRetry1)
@@ -60836,7 +60833,6 @@ static int addToSavepointBitvecs(Pager *pPager, Pgno pgno){
 **
 ** If the pager is not in exclusive-access mode, the database file is
 ** completely unlocked. If the file is unlocked and the file-system does
-** not exhibit the UNDELETABLE_WHEN_OPEN property, the journal file is
 ** closed (if it is open).
 **
 ** If the pager is in ERROR state when this function is called, the

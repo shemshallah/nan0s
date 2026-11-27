@@ -9,14 +9,15 @@ export LC_ALL=C
 export TMPDIR="${TMPDIR:-/tmp}"
 T="$TMPDIR/nan0s_build"
 rm -rf "$T"; mkdir -p "$T"
-gawk -f tools/mkimg.awk \
+gawk -f tools/mkimg.awk -v NOTOC=1 \
      -v GOLD=src/native/nan16_x86.nan \
-     -v GUEST=src/nan/museum.nan \
-     -v CARTS=tools/os_carts.txt \
+     -v GUEST=src/nan/nixsched.nan \
+     -v CARTS=/dev/null \
      -v OUTB="$T/n0sb.bin" -v OUTG="$T/n0sg.bin"
 cat "$T/n0sb.bin" "$T/n0sg.bin" > build/nan0s.img
+# Full raw IDE image: boot 512 + kernel 64 KiB + guest words.  Pad to a
+# 512-byte sector boundary; do not truncate to a 1.44 MiB floppy.
 sz=$(wc -c < build/nan0s.img)
-if [ "$sz" -lt 1474560 ]; then
-  truncate -s 1474560 build/nan0s.img 2>/dev/null || dd if=/dev/zero bs=1 count=$((1474560 - sz)) >> build/nan0s.img
-fi
+rem=$((sz % 512))
+[ "$rem" -eq 0 ] || dd if=/dev/zero bs=1 count=$((512 - rem)) >> build/nan0s.img
 ls build/*.img | wc -l | sed 's/^/images in build\/: /'

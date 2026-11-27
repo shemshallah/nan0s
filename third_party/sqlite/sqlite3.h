@@ -1659,7 +1659,6 @@ struct sqlite3_vfs {
 ** prior to using any other SQLite interface.  For maximum portability,
 ** it is recommended that applications always invoke sqlite3_initialize()
 ** directly prior to using any other SQLite interface.  Future releases
-** of SQLite may require this.  In other words, the behavior exhibited
 ** when SQLite is compiled with [SQLITE_OMIT_AUTOINIT] might become the
 ** default behavior in some future release of SQLite.
 **

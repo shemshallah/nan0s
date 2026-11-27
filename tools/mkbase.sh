@@ -10,6 +10,7 @@
 set -e
 cd "$(dirname "$0")/.."
 export LC_ALL=C
+mkdir -p x86/build
 BHEX=$(xxd -p x86/scaffold/boot0.bin | tr -d '\n')
 VHEX=$(xxd -p x86/scaffold/nanvm0.bin | tr -d '\n')
 gawk -v BHEX="$BHEX" -v VHEX="$VHEX" \

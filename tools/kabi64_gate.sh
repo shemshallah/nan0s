@@ -5,7 +5,6 @@
 # protected mode, then src/native64/s1_boot.S into long mode and runs the
 # 64-bit C S1 slice in src/native64/s1_kabi.c.  This is an ABI-mechanics
 # slice (integer/memory/port, SVC/SVCRET, timer, region checks), NOT the
-# full NaN16 op set and NOT a guest cartridge loader yet.  No museum image,
 # no tools/mkall.sh, no host path constants.  COM1 transcript is exact.
 set -e; cd "$(dirname "$0")/.."; export LC_ALL=C
 command -v qemu-system-x86_64 >/dev/null 2>&1 || { echo "kabi64: SKIP (no qemu-system-x86_64)"; exit 0; }

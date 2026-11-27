@@ -1,5 +1,4 @@
 ; undo_stub.nas - no-op undo recording hooks for standalone core builds.
-; The museum shell provides the real recording helpers; tests that link core.nas
 ; alone use these stubs so scalar execution still assembles and runs unchanged.
 nd_usave:
   RET

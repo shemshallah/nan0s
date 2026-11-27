@@ -63,9 +63,9 @@ image back into `nanfs/` for a commit.  Runtime writes remain volatile until
 - shell-I/O agent: `src/lib/nixfd.nas`, `src/nix/nixsh.nas`,
   `src/lib/nanpipe.nas`, `tools/nixsh_gate.sh`,
   `tools/nixsh_io_gate.sh`, `tools/nixsh_stdin_gate.sh`.
-  Terminal tty glue and line locking live in `src/exhibits/gui_cart.nas`.
+  Terminal tty glue and line locking live in `src/gui/gui_cart.nas`.
 - persistence agent: `src/lib/nfs2.nas`, `src/lib/bare.nas`,
-  `src/exhibits/gui_cart.nas` NFS boot block, `tools/rootfs_sync.sh`,
+  `src/gui/gui_cart.nas` NFS boot block, `tools/rootfs_sync.sh`,
   `tools/nfs_persist_gate.sh`, `nanfs/`.
 - stdio agent: `src/lib/stdio.nas`, `src/lib/ncc.nas` output hooks,
   `tools/stdio_gate.sh`; consume `nixfd.nas`, do not edit shell files.

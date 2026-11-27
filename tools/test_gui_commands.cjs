@@ -4,7 +4,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const source = fs.readFileSync(path.join(__dirname, '../src/exhibits/gui_cart.nas'), 'utf8');
+const source = fs.readFileSync(path.join(__dirname, '../src/gui/gui_cart.nas'), 'utf8');
 
 function block(start, end) {
   const a = source.indexOf('\n' + start + '\n');

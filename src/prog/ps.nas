@@ -1,6 +1,5 @@
 ; ps.nas - NaN/0S guest process viewer (raw NaN16, ISA-neutral).
 ;
-; Runs as a small NaN image or can be linked into the museum/shell image. It
 ; reads the live process table through the nanproc stat ABI and renders:
 ;   pid, ppid, state, threads, memory, CPU steps, priority.
 ; The kill/priority/spawn entries are the manager hooks for the future
@@ -8,7 +7,6 @@
 ; gate can verify the table changes. All logic is guest NaN code; no host C.
 ;
 ; Config: NP_BASE/NP_VARS must be set for nanproc (defined below). These are
-; standalone-image test conveniences; a museum/shell link must choose them
 ; from free memory (MEMQ) so they do not overlap code, cartridges, stacks or
 ; heaps. The viewer itself is relocatable: only the table/vars addresses and
 ; stack are fixed by the caller.

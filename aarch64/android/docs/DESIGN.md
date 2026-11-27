@@ -6,7 +6,6 @@ core/OPS.md was corrected against it; the toolchain was probed; the x86 gold ima
 - This tree (core/, tools/, app/) holds the Android port only. The image is an INPUT: `nan0s.img` produced by the main tree's `sh x86/tools/mkall.sh` (x86/build/nan0s.img).
 - MERGED: this tree now lives at `<repo>/aarch64/android/`; Gradle's `syncImage` copies `<repo>/x86/build/nan0s.img`. Nothing in core/ may include
   anything from the main tree; the only shared contract is the image format (docs: OPS.md) and the op semantics.
-- The core never hard-codes the museum: any image/words/.nan program that follows OPS.md runs.
 
 ## Files (planned)
 core/nan16.h        public API (existing, extended below)           core/nan16_int.h  struct nan_vm + inline word helpers
@@ -29,7 +28,6 @@ jni/nan_jni.c       JNI bridge                                        app/      
 - Disk: `nan_attach_disk_mem(vm, uint8_t*, size_t)`, `nan_attach_disk_fd(vm, int fd)` (pread/pwrite, for a 1 GB+ allocation image on Android), `nan_detach_disk`.
   Primary master ATA PIO LBA28 (IDENTIFY, READ, WRITE, FLUSH). No disk => floating bus (0xFF).
 - Keyboard: `nan_key_char()` pushes cooked values directly, but in RAW mode (kbd.nas) it synthesises set-1 make/break (with 0x2A shift and E0 prefixes)
-  using a reverse lookup of ktab.inc, so the on-screen keys and the soft keyboard work for raw-mode exhibits too. `nan_key_event(vm, sc, down)` for hardware keys.
 - Palette/text: `uint32_t nan_text_color_vm(vm, idx)` (through the DAC + attribute map) and `nan_dac_rgb(vm, idx)`; `nan_dirty(vm)` generation counter that bumps on ANY display write
   (cell, pixel, FBFILL/FBCOPY, DAC, mode) so the UI redraws only when needed.
 - Debug: `nan_set_trace(vm, cb, ctx)` (pc, payload, n, k before each op), `nan_set_port_log(vm, cb, ctx)` (every OUT/IN incl. unknown ports), `nan_strerror`.

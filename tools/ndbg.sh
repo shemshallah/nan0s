@@ -4,7 +4,6 @@
 # src/dbg/ndbg.nas is written entirely in NaN16. It proves:
 #   - all 16 diagnostic types survive STW/LDN and the BSWAPM mirror law
 #   - quiet/raise act on the two head bits
-#   - a target at the museum slot runs under the step core
 #   - a breakpoint stops before fetch without modifying the target
 #   - a gate trap and a bad-op trap become typed records, not a dead machine
 #

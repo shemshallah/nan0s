@@ -8,7 +8,7 @@ on:
       - "src/lib/wm.nas"
       - "src/lib/shell.nas"
       - "src/lib/bootbuild.nas"
-      - "src/exhibits/gui_cart.nas"
+      - "src/gui/gui_cart.nas"
       - "tools/qgate_nanbuild.sh"
       - ".github/workflows/nanbuild-proof.yml"
   workflow_dispatch:

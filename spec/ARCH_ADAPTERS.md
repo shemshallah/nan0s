@@ -13,8 +13,6 @@ file is a symbolic source of record; its gold bytestream lands in
 
 ## The core invariance promise
 
-The guest word state is ISA-NEUTRAL. The museum's 24,904 guest words
-(museum.nan + all carts) are 8-byte double-ended NaN words carrying class and
 payload only. The application runs UNMODIFIED on every target; only
   (a) the boot shim,
   (b) the native core bytes,

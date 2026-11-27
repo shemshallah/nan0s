@@ -10,7 +10,7 @@ cd "$(dirname "$0")/.."
 export LC_ALL=C
 
 fail=0
-for d in src/nan src/nix src/lib src/exhibits src/boot; do
+for d in src/nan src/nix src/lib src/gui src/trust src/boot; do
   bad=$(find "$d" -type f \( -name '*.c' -o -name '*.s' -o -name '*.S' -o -name '*.o' \) -print -quit)
   if [ -n "$bad" ]; then
     echo "guest_raw_only: FAIL (non-NaN source in $d: $bad)"

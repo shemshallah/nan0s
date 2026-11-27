@@ -262,9 +262,7 @@ test images use a convenience map that the gate checks statically:
 | 0x400000+ | descriptor-capacity probe (metadata only) |
 
 None of these ranges overlap: code < vars, vars/scratch < stack, stack <
-table, table end < heaps. For the museum/shell link the process table must be
 placed after the built image and its cartridge store, not at 0x10000: the
-current museum image's store reaches roughly 84k words. The integration must
 read the image word count and choose `NP_BASE` from free memory (MEMQ), e.g.
 above `image_words` with a gap, then choose heaps/stack above the table and
 verify the same non-overlap. The gate enforces the standalone map; the shell

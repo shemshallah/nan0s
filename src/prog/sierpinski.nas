@@ -1,4 +1,3 @@
-; NaN/0S exhibit: Sierpinski lattice (v3 of the NaN Lattice page). Every cell is a real NaN word:
 ; class nibble n=6 (XOR) is its function, payload bit0 = state, bit1 = guard. Cell reads neighbours L,R, applies f_n(L,R).
 ; Adapts to the display: asks DISPQ for cols/rows, so 80x25, 40x25 etc all work. Row 0 = title, rows 1.. = spacetime.
 main:

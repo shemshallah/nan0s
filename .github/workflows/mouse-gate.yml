@@ -6,7 +6,7 @@ on:
       - "src/lib/mouse.nas"
       - "src/lib/shell.nas"
       - "src/lib/wm.nas"
-      - "src/exhibits/gui_cart.nas"
+      - "src/gui/gui_cart.nas"
       - "tools/qgate_mouse.sh"
       - "tools/qgate_close_x.sh"
       - "tools/qgate_monitor.sh"

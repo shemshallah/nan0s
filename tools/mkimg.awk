@@ -1,6 +1,5 @@
 # tools/mkimg.awk - builds the bootable image (gawk implementation).
 # Outer dev-loop only. Run under LC_ALL=C:
-#   gawk -f tools/mkimg.awk -v GOLD=x86/native/nan16_x86.nan -v GUEST=src/nan/museum.nan \
 #        -v CARTS=tools/carts.txt -v OUTB=$T/n0sb.bin -v OUTG=$T/n0sg.bin
 # mkall.sh then: cat OUTB OUTG > img; truncate -s 1474560 img.
 # Layout: bytes 0-511 boot, 512-66047 kernel (gold, zero-padded to 128 sectors), then guest words
@@ -26,9 +25,9 @@ BEGIN {
   LMAX = loadguest(GUEST)
   if (LMAX == 0) die("no guest words in " GUEST)
   # ---- cartridges + builder-written TOC + boot record ----
+  if (!NOTOC) {
   # carts.txt format (one line per cart, order = menu order):
   #   SLOT:FILE:YEAR:HALL:BADGE:TITLE   SLOT = unique catalog id; id 10 hidden
-  #   boot:FILE                         the system cart (GUI); not an exhibit slot
   #   service:FILE                      slot-less service cart at word 4816
   # Catalog: 16-word TOC entries at 22000, 16-word titles at 23600, store 25000.
   # Titles are 4 chars/word LE, NUL padded. This admits 87 cartridges before the
@@ -103,6 +102,7 @@ BEGIN {
     setw(4816+8, 0, svc_h); setw(4816+10, 0, svc_h2); setw(4816+11, 0, svc_cc)
   }
   if (LMAX < TITLEB + 16*k + 16) LMAX = TITLEB + 16*k + 16
+  }
   if (LMAX < 4096) LMAX = 4096
   # arbitrary guest sizes, bounded only by the VM's word space
   if (LMAX > 4000000) die("guest image " LMAX " words exceeds the VM memory")

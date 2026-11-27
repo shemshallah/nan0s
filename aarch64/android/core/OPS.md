@@ -11,7 +11,6 @@ this round. Items marked [FIX] correct the first draft of this file.
 - putw(index,payload,n): FAR = heads[n&3], NEAR = heads[n>>2]. ST/STB/BFILL use n=10 (both 0x7FF8). STW uses r[b]&15.
 - [FIX] `.nan` text line `AAAA_PPPPPPPP_BBBB`: field1 = NEAR head VALUE (e.g. FFF1 -> b6=F1,b7=FF), field2 = payload as the
   big-endian hex of the LE u32 (0C000000 -> b2..b5 = 00 00 00 0C), field3 = FAR head written byte-swapped
-  (F17F -> head 0x7FF1 -> b0=7F,b1=F1). Verified against image words 0,35,37,40 of museum.nan.
   e.g. `FFF1_0C000000_F17F` (RET[EQ]) = bytes `7FF1 0000000C F1FF`; `FFF8_0A000200_F8FF` (JMP 512) = `FFF8 0002000A F8FF`.
   (mkimg.awk's names NEAR/FAR for the text fields are the same convention: n = idx(field1)*4 + idx(field3).)
 
@@ -87,8 +86,6 @@ The C core clamps to a 16 MB VRAM instead of crashing.
 VGA register writes (0x3C0-0x3D5, fb.nas mode13/mode3 tables) are ignored; fb.nas always follows them with DISPSET.
 DAC: 0x3C8 write index, 0x3C9 3x 6-bit RGB (auto-increment), 0x3C7 read index + 0x3C9 reads. Text colour c (0..15) -> DAC index
 c<8 ? (c==6 ? 0x14 : c) : 0x38+(c-8); the BIOS text palette = 64-entry EGA table (index bits r g b R G B: 0x14=AA5500, 0x38..3F bright), so a palette
-left by a graphics exhibit shows up in text mode exactly as on hardware.
-[FIX r4, probed on qemu/SeaBIOS with a boot sector that reads 0x3C9] There is NO default VGA palette: after BIOS mode 3 the DAC is entries 0..63 = EGA table (above) and 64..255 = black. An exhibit that does not load a palette sees exactly that in mode 13h/VBE.
 DAC 6->8 bit (qemu c6_to_8, used by screendump and the C core): v8 = (v6<<2) | ((v6&1)<<1) | (v6&1), e.g. 42->168, 21->87, 63->255.
 Initial text cells 0x0720 CONFIRMED (menu screen byte-identical to qemu). Text attr: fg = attr&15, bg = (attr>>4)&7 (blink on, BIOS default; guests so far only use attrs 0,8,11,14,15,31).
 FP both-operands-NaN: the core returns A (real SSE: first source). qemu 8.2 TCG returns the operand with the larger significand (x87 rule), so fuzz seeds with two NaN inputs can differ from qemu without being a core bug (seed 10 of the first batch).

@@ -81,7 +81,6 @@ move bounded bytes.
 
 Source: `src/nannet/nannet.nas` (direct-call library). Console:
 `src/nan/nannet_cart.nas`. Settings integration:
-`src/exhibits/settings_cart.nas`.
 
 ### 3.1 ABI and status codes
 

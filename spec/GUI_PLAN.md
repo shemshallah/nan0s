@@ -70,7 +70,6 @@ Phase 2: pixel cartridges (Sierpinski, Paradox, future Doom/Quake) get a
 pixel window. The shell gives them a framebuffer rectangle and an origin; the
 framebuffer driver clips to the rectangle.
 
-Phase 3: multiple windows. A launcher window, a museum window, a Trust window,
 a Boole window. Tiling and overlapping. Keyboard focus with Tab / arrows.
 
 Phase 4: mouse. PS/2 mouse IRQ, cursor, click-to-focus, drag, resize.
@@ -88,7 +87,6 @@ Phase 4: mouse. PS/2 mouse IRQ, cursor, click-to-focus, drag, resize.
 
 1. Window manager structs and drawing primitives in NaN16 (`src/lib/wm.nas`).
 2. Virtual console buffer and renderer (`src/lib/vcon.nas`).
-3. GUI shell launcher and desktop (`src/exhibits/gui_shell.nas`).
 4. Redirect V_PUTS/V_CLS/V_SCROLL to the focused vcon.
 5. Run Boole/About/Trust/Patriot in windows.
 6. Pixel window for Sierpinski/Paradox.

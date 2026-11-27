@@ -235,4 +235,5 @@ dirs:
 .word 2088919040,@d_base,0   ; .base
 .word 2850335879,@d_code16,0   ; .code16
 .word 2850335941,@d_code32,0   ; .code32
+.word 2850336042,@d_code64,0   ; .code64
 .word 0,0,0

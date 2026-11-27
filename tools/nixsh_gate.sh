@@ -12,7 +12,7 @@ T="$TMPDIR/nixsh_gate.$$"
 mkdir -p "$T"
 trap 'rm -rf "$T"' EXIT INT TERM
 
-awk -f tools/nmk.awk -v CMD=emit src/exhibits/gui_sched_boot.nas \
+awk -f tools/nmk.awk -v CMD=emit src/gui/gui_sched_boot.nas \
   > "$T/gui.nan" 2> "$T/emit.err"
 awk -f tools/nmk.awk -v CMD=check "$T/gui.nan" 2> "$T/check.err"
 grep -q 'check: 0 mismatches' "$T/check.err" || {

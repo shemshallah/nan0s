@@ -69,7 +69,6 @@ check_asm "$T/ps.nan"
 
 # Test-image memory map guard (test convenience, not a kernel ABI):
 # code below vars 0x1F00; table 0x10000..0x11800 (64*96) below heaps at
-# 0x30000; vars/scratch below the stack at 0x7000. The museum/shell link
 # must choose NP_BASE from its own free-memory map, not these constants.
 for spec in "$T/nanproc_test.nan" "$T/ps.nan"; do
   w=$(awk '/^words / { print $2 }' "$spec.emit")

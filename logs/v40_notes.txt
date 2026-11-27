@@ -14,7 +14,6 @@
 - Boole cartridge: 98-line scrollable plaque, live 16 functions, mirror law,
   word lab. V_SCROLL is a general shell vector.
 - About NaN/0S and About Shemshallah cartridges, scrollable.
-- Trust exhibit: preface + full paper (376 lines), scrollable. Paper:
   spec/TRUST_PAPER.md.
 - Curator Console: `~` opens a read-only raw guest word view.
 - Seven TOC entries. Image is 13,767 guest words. Patriot Missile Failure

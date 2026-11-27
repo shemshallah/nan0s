@@ -228,7 +228,6 @@ primary target:
 - `src/native64/s1_kabi.ld` - image at 0x10000 with an ASSERT that the
   image/BSS end below the live page tables at 0x30000.
 - `tools/kabi64_gate.sh` - QEMU x86_64 boot with an exact COM1 transcript,
-  a minimal boot fixture (no museum image / `mkall.sh` dependency), 128 MiB
   default (`KABI64_MEM` override), and explicit page-table/stack overlap
   checks on `__bss_end`.
 

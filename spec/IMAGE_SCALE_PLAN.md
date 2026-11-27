@@ -4,7 +4,6 @@
 
 The release must not be a multi-gigabyte download. The running system must
 still be able to own gigabytes of storage, large files, and large numbers of
-files. A single floppy-sized image cannot hold the museum forever.
 
 ## The rule
 
@@ -12,7 +11,6 @@ Ship two small things:
 
 1. `nan0s.img` is the loader image: boot sector, native kernel, Stage-1
    formatter/loader, and the seal verifier. It is small enough to inspect.
-2. `work.img` is the current work image: the museum shell and every cartridge.
    It is the image that contains all of the work. It is also small.
 
 On first boot, Stage 1 creates the allocation image `store.nan`. The allocation
@@ -49,7 +47,6 @@ offset ...     data extents
 
 The work image is stored as an inode with extents. The first extent begins at a
 fixed block so Stage 1 can find it without a full filesystem mount. The seal is
-the same dual-face FNV-1a/32 triplet used by the museum cartridges, plus a
 future keyed MAC.
 
 ## Stage 1 boot flow
@@ -69,12 +66,10 @@ future keyed MAC.
 
 - 64-bit block numbers. 4 KiB blocks. A 64 GiB device is 16,777,216 blocks.
 - Extents, not block lists, for large files.
-- A content-addressed store for museum assets: key = BLAKE3-like hash (future),
   value = extent list. Duplicate ROMs and text are stored once.
 - Streaming reads and writes: a file is a sequence of extents; the block cache
   is a fixed window. A 10 GiB file never has to fit in RAM.
 - Large numbers of files: inode table and directory entries are extents too.
-  The directory is a B-tree keyed by name hash. The museum can hold millions of
   small files without a linear scan.
 - Journal: write-ahead log of metadata blocks, checksummed. A crash leaves a
   replayable tail, not a corrupted tree.
@@ -86,7 +81,6 @@ The same allocation model applies to device memory. A `GPU` region is an
 extent list over a PCIe BAR. The kernel exposes BAR mapping and DMA windows;
 the NaN16 driver owns the command queue and the VRAM allocator. A future
 `GPUALLOC`, `GPUCOPY`, `GPUSUBMIT` op is the only native boundary. Doom and
-Quake use the same framebuffer API as the museum.
 
 ## v86 prototype
 

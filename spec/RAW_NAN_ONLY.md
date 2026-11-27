@@ -4,7 +4,6 @@ The shipped guest system is raw NaN16:
 
 - `src/prog/` - programs, kernels, loaders, allocators
 - `src/lib/` - runtime, filesystem, ATA, math, compiler support
-- `src/museum/`, `src/exhibits/` - exhibits
 - `src/dbg/` - debug core
 - `src/tools/` - guest tools such as the disassembler
 

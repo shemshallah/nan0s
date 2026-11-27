@@ -301,7 +301,6 @@ The separate clean full rebuild is still tracked as an independent gate.
 - `q12_right_marked_program_target_mismatch` shows that when the first
   restored *program* payload bit differs from the intended right-hand
   *data* neighbour, the returned q5 2/3 marker differs from that
-  neighbour's marker. `nine_bit_right_program_neighbor_mismatch` exhibits
   this distinction at width nine (program first bit 0, neighbour bit 1).
   The target comparison is with the neighbour, **not** with the
   source instruction's `wr_write` field, which has a different role.

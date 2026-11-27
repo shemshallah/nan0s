@@ -4,7 +4,6 @@
 Status: design + working proof + full step core. `src/dbg/ndbg.nas` proves the
 typed diagnostic word; `src/dbg/core.nas` is the reusable full engine;
 `src/tests/ndbg_diff_debug.nas` runs the same target natively and stepped and
-must produce a byte-identical transcript; a real museum cartridge (Baby) runs
 to `KEY` under it. `src/dbg/n16dbg.nas` is the first serial monitor: step, run, breakpoint,
 goto, watchpoint, registers, disassembly and memory dump. In the desktop, typing `debug` opens a second terminal-shaped CLI backed by the
 resident core (`gui_cart.nas` kind 8 + the ABI in `shell.nas`). It can list the
@@ -98,7 +97,6 @@ self-hosting are the next stages in §13.
 
 Every decision in NANDBG is made by NaN16 instructions. The debugger is a
 guest, assembled by `tools/nmk.awk` (host dev loop) or by `nasm0` (in-guest),
-running on the same `kan16`/portable core as any exhibit. Its files end in
 `.nas` or `.nan`. There is no host-side debugger, no C shim, no Python, no
 gdb stub.
 
@@ -181,11 +179,9 @@ signal.
 | `src/lib/nan16dump.nas` | one-word inspector: address, predicate, op/d/a/imm, payload, type | one word at a time, no history |
 | `src/lib/n16de.nas` | pair-voting qNaN carrier: tag, byte-swapped twin, resync/delim | data transport, not fault records |
 | `src/lib/libvec.nas:136–220` | seal v2: dual-face FNV A/B plus class channel; checks the mirror law | per-cartridge seal, not a debug log |
-| `src/museum/shell.nas` | TOC loader, seal verifier, cart slot 8192, `CALL 8192`, V_* table, curator console | read-only console; no step/break/regs; no fault capture |
 | `aarch64/android/tools/nan_cli.c` | headless run, serial, keys, peek, state, disk | host harness, not guest debug |
 | `AArch64 core API` | trace callback, register/PC/word access, snapshots | host API, not a NaN-native monitor |
 
-### 2.3 The loader and the museum map
 
 - Cart slot: word `8192`; shell copies the cart there and `CALL 8192`.
 - Catalog: word `22000`, 16-word entries; titles at `23600`; store at `25000`.
@@ -552,8 +548,7 @@ ladder.
 | `src/dbg/ui.nas` | 80×25 console, panes, keys | next |
 | `src/dbg/ndp.nas` | NaN Debug Protocol frames | later |
 | `src/dbg/sym.nas` | optional symbol/line lookup | later |
-| `src/museum/shell.nas` | resident ABI at 5800 + core at 5900 + demo target 7600 | working, gated by `ndbg_gui` |
-| `src/exhibits/gui_cart.nas` | terminal `debug` command and kind-8 second CLI | working, gated |
+| `src/gui/gui_cart.nas` | terminal `debug` command and kind-8 second CLI | working, gated |
 | `src/dbg/n16res.nas` | future full TOC/cart resident monitor | integration |
 | `src/dbg/n16mon.nas` | standalone boot monitor at word 0 | integration |
 | `tools/ndbg.sh` | exact proof gate | working |
@@ -748,7 +743,6 @@ status is `FAULT`; the record holds the detail.
 
 The target is untrusted by definition: it is broken, hostile, or both. If the
 step core lets it write anywhere, it can overwrite the monitor's code, its
-record ring, or the museum shell. The interpreter already computes every
 effective address, so the fix is cheap and pure NaN.
 
 ### 8.2 Region table
@@ -774,7 +768,6 @@ Every guest address is translated and checked:
 The monitor's own region is never granted. A target that tries to write it
 gets a typed record, not a corrupted debugger.
 
-For museum carts, the default map is:
 
 ```
 [0,32)          X       jump vectors only
@@ -793,7 +786,6 @@ operation those are real shell routines below the slot. In debug mode:
 
 - **Option A (faithful):** execute the real shell routine in the `X` region,
   with its real memory. It writes the screen/serial. Simple, but the target's
-  calls cross into museum code and the monitor must not let them write monitor
   memory.
 - **Option B (virtual):** intercept calls into `[1,32)` and implement the
   vector service inside the monitor: `V_PUTS` goes to the debug pane, `V_KEY`
@@ -840,7 +832,6 @@ This is how a debugger survives a target that calls `KEY` at boot.
 
 ### 9.1 The 80×25 console
 
-The console is a normal museum screen, drawn with `VPOKE`/`V_PUTS`, not a host
 window. Proposed panes:
 
 ```
@@ -862,7 +853,6 @@ window. Proposed panes:
 The type matrix at the bottom is a 4×4 grid of the sixteen diagnostic types;
 each cell shows a count or a live indicator. Errors light their cell. This is
 the machine's own taxonomy made visible, and it is the natural debug analogue
-of the museum's existing plaques.
 
 ### 9.2 Keys and commands
 
@@ -934,7 +924,6 @@ receiver and mailbox are still to come.
 
 ## 10. Residency and boot modes
 
-### 10.1 Museum-resident monitor (`n16res`)
 
 Place the engine above the cart store so no cart can overwrite it:
 
@@ -1046,7 +1035,6 @@ addresses outside the cart image.
 ### 10.2 Standalone boot monitor (`n16mon`)
 
 For the “bare metal” mode, build a guest image whose word 0 is the monitor,
-with no museum and no shell. The boot sector and kernel are unchanged. The
 monitor:
 
 - prints its banner on COM1;
@@ -1054,7 +1042,6 @@ monitor:
 - can inspect the kernel's handoff words and the boot record;
 - can read a cartridge directly from the store;
 - can be the first program after the kernel, so it sees the machine before any
-  exhibit.
 
 This is the closest thing to a ROM monitor while still being pure NaN. It can
 be built to `$TMPDIR`, not `build/`, to respect the two-image rule.
@@ -1110,13 +1097,11 @@ the cartridge seal.
 ### 11.5 The 16-cell type matrix as UI (keep)
 
 A 4×4 grid with live counts is both a debugger dashboard and a teaching
-exhibit. It makes the abstraction visible. It can double as a museum plaque:
 “these are the sixteen ways this machine can be wrong”.
 
 ### 11.6 Fault chime (optional, low priority)
 
 `BEEP` a short pattern by severity. Early machines used sound as a debug
-channel. It fits the museum, but it is not load-bearing.
 
 ### 11.7 Reverse execution (keep, P2)
 
@@ -1153,7 +1138,6 @@ the monitor starts. It reuses the disassembler and seal code.
 ### 11.12 Call-stack sampling profiler (defer)
 
 The shadow stack plus `TICK` gives a sampling profiler almost for free. Not a
-debugger requirement, but a natural next exhibit.
 
 ### 11.13 Symbol and line maps (keep, P2)
 
@@ -1323,12 +1307,10 @@ gate failure. That is deliberate: the proof is a specification.
 
 ## 15. Open questions for the author
 
-1. **Name.** NANDBG / `n16dbg` is the working name. The museum voice might
    prefer “The Quiet Room”, “The Anatomy Theatre”, or “The Coroner's Office”.
    The code prefix `nd_` is neutral.
 2. **Residency.** Resident core in the shell gap at 5800 (current), system
    menu entry, standalone boot monitor, or all three?
-   The design recommends both; only the resident one needs the museum image.
 3. **Type axes.** Severity×domain (this design) or a pure IEEE reading
    (live/latched × guest/machine)? The matrix is more useful for humans; the
    IEEE reading is more faithful to the word. The author's call.
@@ -1337,7 +1319,6 @@ gate failure. That is deliberate: the proof is a specification.
    in-place is closer to the production machine.
 5. **UI or protocol first?** The proof uses serial. A 80×25 UI is a large
    amount of NaN code; NDP plus a host capture might be enough for the first
-   usable version. The design recommends UI first because the museum is a
    visual place.
 6. **Native accelerator.** Is a trap trampoline acceptable as a later
    substrate primitive, or must the monitor always be interpreter-only? The
@@ -1367,7 +1348,6 @@ gate failure. That is deliberate: the proof is a specification.
 | word inspector | `src/lib/nan16dump.nas` |
 | pair-voting codec | `src/lib/n16de.nas` |
 | seal v2 | `src/lib/libvec.nas:136–220` |
-| loader slot and TOC | `src/museum/shell.nas:337–380, 650–725` |
 | image builder / store | `tools/mkimg.awk:1–120` |
 | assembler directives | `tools/nmk.awk:160–225` |
 | gate style | `tools/ngate_n16i.sh`, `tools/ncc_lex.sh` |
@@ -1546,7 +1526,6 @@ Cart picking adds two more lessons:
   span is at least `0x8000` so small carts can use data such as Baby's `SB`
   without leaving the sandbox. The store copy remains sealed and read-only.
 
-`tools/ndbg_gui.sh` rebuilds a minimal image containing the museum + GUI cart
 and the Baby cart, boots the guest under the portable core, types `debug`, and
 drives the second CLI. Its transcript is exact:
 

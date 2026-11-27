@@ -1,0 +1,86 @@
+; kan16_x64.xa - x86-64 long-mode NaN16 native core.
+; 32-bit boot shim at 0x10000 builds identity page tables for 0..1 GiB,
+; enters long mode, then runs the NaN16 interpreter body at 0x11000.
+; The guest ISA is unchanged (32-bit payload words); the host core is x86-64.
+.base 0x10000
+.code32
+_start:
+  CLI
+  CLD
+  MOV $0x53,%AL
+  CALL @sputc
+  MOV $0x30000,%EDI
+  XOR %EAX,%EAX
+  MOV $4096,%ECX
+  REPSTOSD
+  MOVL $0x31003,[0x30000]
+  MOVL $0x32003,[0x31000]
+  MOV $0x32000,%EDI
+  XOR %ECX,%ECX
+lm_pd:
+  MOV %ECX,%EAX
+  SHL $21,%EAX
+  OR $0x83,%EAX
+  MOV %EAX,[EDI+ECX*8]
+  MOVL $0,[EDI+ECX*8+4]
+  INC %ECX
+  CMP $512,%ECX
+  JB @lm_pd
+  MOV $0x50,%AL
+  CALL @sputc
+  LGDT [gdtr]
+  .byte 0x0F,0x20,0xE0
+  OR $0x620,%EAX
+  .byte 0x0F,0x22,0xE0
+  MOV $0x30000,%EAX
+  MOV %EAX,%CR3
+  MOV $0xC0000080,%ECX
+  .byte 0x0F,0x32
+  OR $0x100,%EAX
+  .byte 0x0F,0x30
+  .byte 0x0F,0x20,0xC0
+  AND $0xFFFFFFFB,%EAX
+  OR $0x80000002,%EAX
+  .byte 0x0F,0x22,0xC0
+  MOV $0x45,%AL
+  CALL @sputc
+  LJMP $0x08,@long_mode
+.code64
+long_mode:
+  MOV $0x4C,%AL
+  CALL @sputc
+  MOV $0x10,%AX
+  MOV %AX,%DS
+  MOV %AX,%ES
+  MOV %AX,%SS
+  MOV %AX,%FS
+  MOV %AX,%GS
+  MOV $0x1F0000,%ESP
+  CLD
+  JMP @core64_entry
+sputc:
+  MOV %AL,%BL
+spl:
+  MOV $0x3FD,%DX
+  IN %DX,%AL
+  TEST $0x20,%AL
+  JZ @spl
+  MOV $0x3F8,%DX
+  MOV %BL,%AL
+  OUT %AL,%DX
+  RET
+.align 8
+gdt:
+  .long 0
+  .long 0
+  .long 0x0000FFFF
+  .long 0x00AF9A00
+  .long 0x0000FFFF
+  .long 0x00AF9200
+gdt_end:
+gdtr:
+  .word gdt_end-gdt-1
+  .long gdt
+  .long 0
+.org 0x1000
+.include "kan16_x64_body.nas"

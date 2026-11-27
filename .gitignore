@@ -50,3 +50,8 @@ build/gate-*.log
 build/last-gate-log
 build/tcc2-gate-*.log
 build/tcc2-*.log
+# generated flat scheduler word dump and flattened long-mode source
+src/nan/nixsched.nan
+src/native/kan16_x64_full.xa
+# legacy host build scratch
+x86/build/

@@ -42,7 +42,6 @@ These have no hardware excuse to be x86:
 - NIC logic and the whole NaNNet stack.
 - Graphics: framebuffer drawing, NaNGlyph, windows, scaling.
 - Apps: Terminal, Monitor, Hex, Settings, NaNNet, utilities.
-- All cartridges/exhibits and the micro-transformer.
 - Tooling: `nasm0` and the NaN-native translator back ends.
 
 The native core exposes only primitives. A NaN driver reaches hardware with

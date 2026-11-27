@@ -51,7 +51,6 @@ its timeout is reported as `FAIL`, not left hanging.
 | translator sources | `xlate_x86` |
 | arena/tensor/matmul libs | `narena`, `narena64`, `nten`, `nmatmul`, `nmat64`, `nmat64x64` |
 | vector/Q4/bench sources | `nan_simd`, `nan_vec*`, `nan_q4*`, `nan_bench`, `xlate_x86` |
-| `src/dbg/*`, `src/tests/ndbg_*`, `tools/ndbg*`, `src/exhibits/gui_cart.nas`, `src/museum/*` | `ndbg` (typed words, step core), `ndbg_diff` (real cart, guard/watch, native-vs-stepped transcript), `ndbg_mon` (serial monitor session), `ndbg_img` (bare-metal qemu boot), `ndbg_gui` (desktop `debug` -> cart picker -> break/log/mem -> next/finish -> captured `screen`/`serial` -> typed edits, `bp`/`wp` tables, scalar undo with memory restore (`undo [n]`), redo with write replay (`redo [n]`), cart checkpoint/restore, typed `setw`/`setc` class edits, desktop `dis`, and the utilities `[3] DEBUG` entry) |
 | build tools (`nmk.awk`, `mkimg.awk`, `xgold.sh`, `mkall.sh`) | full battery |
 | `spec/`, docs | no gates |
 | unknown source path | full battery (safe default) |
