@@ -5,12 +5,12 @@ Verified one-step refinements in `MinskyNaN16LiteralStepBridge.v`:
 | Opcode | Theorem | Main CI |
 | --- | --- | --- |
 | MOVI | `lp_exec_MOVI_refines` | PASS |
-| LD | `lp_exec_LD_refines` | PASS |
+| LD | `lp_exec_LD_refines` (including `d = 15`) | PASS |
 | ST | `lp_exec_ST_refines` (requires `MemP_wf` and address `< 4366`) | PASS |
 | HALT | `lp_exec_HALT_refines` | PASS |
 | PUTC | `lp_exec_PUTC_refines` | PASS |
 | RET | `lp_exec_RET_refines` | PASS |
-| CALL | `lp_exec_CALL_refines` (explicit link invariant) | PASS |
+| CALL | `lp_exec_CALL_refines` | PASS |
 | CMP | `lp_exec_CMP_refines` | PASS |
 | JMP | `lp_exec_JMP_refines` (requires `k <> 3`) | PASS |
 | RETP | `lp_exec_RETP_refines` (requires `k <> 3`) | PASS |
@@ -25,6 +25,19 @@ opaque memory view, register bounds, flags, halt state and the link
 register.  The ST case additionally uses the block invariant
 `MemP_wf` and the fixture address bound to project the total memory
 update through `mem_get_mem_set_eq` / `mem_get_mem_set_neq_all`.
+
+## Link reconciliation
+
+The native calling convention keeps the return address in `r15`.  The
+extended Coq model in `MinskyNaN16LiteralExec.v` now mirrors that:
+
+- `pCALL` writes both `vm_link` and `vm_reg 15`;
+- `pLD` with `d = 15` restores both.
+
+This is the D-16 reconciliation needed by the fixture's
+save/restore sequences.  The universality development continues to use
+`exec_instr` and is unchanged.  The earlier `d <> 15` restriction on
+LD and the explicit CALL link precondition are gone.
 
 ## Dispatcher
 
@@ -52,44 +65,27 @@ matching Coq-VM runner.  The run theorem
       Rlp L vm ->
       length (lp_reg L) = 16 ->
       MemP_wf (lp_mem L) ->
-      lp_run_safe fuel L vm prog ->
+      lp_run_safe fuel L prog ->
       Rlp (lp_run fuel L) (vm_run_p fuel prog vm) /\
       length (lp_reg (lp_run fuel L)) = 16 /\
       MemP_wf (lp_mem (lp_run fuel L))
 
 is proved by induction on the fuel, so the literal executor and the VM
-halt and step in lockstep.
-
-## Link-register caveat
-
-The CALL row of `LPInstrSide` includes the precondition of
-`lp_exec_CALL_refines`:
-
-    vm_reg vm 15 = S (lp_pc L).
-
-The abstract VM's `pCALL` writes `vm_link` but leaves `vm_reg 15`
-unchanged, while the literal `pCALL` writes the return address into
-`r15`.  The run certificate therefore needs every CALL site to
-establish this equation before the call.  The fixture's first CALL is
-at pc 6, after a prelude that leaves `r15 = 0`, so the equation fails
-there.  Consequently the 21,025-step concrete certificate is
-not derivable from the current `R` without reconciling `r15` with
-`vm_link` (or changing the VM CALL/RET equations).  The one-step and
-run theorems above remain valid under the stated invariant; this is a
-model-reconciliation task for the next layer, not a gap in the checked
-proofs.
+halt and step in lockstep.  The safety certificate is LP-only: it never
+steps the VM, which keeps the concrete fixture check within the
+reducer's reach.
 
 ## Remaining work
 
-- Reconcile the `r15` / `vm_link` calling convention.
-- Then discharge `lp_run_safe 21025 lp_reset (vm_of_lp lp_reset)
-  fixture_prog_full` by a reflected (boolean) certificate.  The current
-  certificate is a `Prop`; the concrete fixture run needs a computable
-  checker plus its soundness lemma.
+- Reflect `lp_run_safe` into a boolean checker and evaluate
+  `lp_run_check 21025 lp_reset fixture_prog_full`.  The certificate is
+  already LP-only, so this is a pure computation; the reflection proof
+  should be kept per-opcode to keep the kernel term small.
 - Lift the run theorem to the universality statement.
 
 ## Fast debug
 
 `.github/workflows/nan0s-formal-utm-debug.yml` downloads the complete
-`.vo` object graph from a successful main run and compiles only the
-`Memory`, `Bridge` and `StepBridge` modules.
+`.vo` object graph from a successful main run and compiles
+`MinskyNaN16LiteralExec`, `MinskyNaN16LiteralMemory`,
+`MinskyNaN16LiteralBridge` and `MinskyNaN16LiteralStepBridge`.
