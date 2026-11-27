@@ -39,3 +39,12 @@
   to a floppy.
 - Native KABI v0.1 added to the 32-bit core (ports, SVC/SVCRET, trap frame,
   timer).
+
+## Product direction (locked)
+
+- Product runtime: native multicore substrate -> NaN-coded block translator
+  -> NaN scheduler/ABI.  n16i is the reference oracle, not the runtime.
+- Next: `spec/MULTICORE_NAN.md` M1 (translator `OUTL/INL/SVC/SVCRET` and
+  `qgate64abi`), then M2 per-core NanCore dispatch on 2 CPUs.
+- No x86-64 -> NaN lifter in the product path; source recompilation / ncc is
+  the compatibility route.
