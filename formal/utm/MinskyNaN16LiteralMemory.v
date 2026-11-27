@@ -204,7 +204,7 @@ Proof.
     destruct (x <? tape_hi) eqn:X4;
     cbn.
   all: try reflexivity.
-  all: apply nth_lset_word_neq; lia.
+  all: match goal with |- ?G => idtac "NEQ:" G end.
 Qed.
 
 Print Assumptions mem_get_mem_set_low_neq.
