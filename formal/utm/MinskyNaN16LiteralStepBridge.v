@@ -1877,24 +1877,157 @@ Definition lp_instr_side_bool (L : LPState) (ins : InstrP) : bool :=
   | pHALT => true
   end.
 
+Ltac solve_lp_side H :=
+  repeat rewrite andb_true_iff in H;
+  repeat match goal with H0 : _ /\ _ |- _ => destruct H0 end;
+  repeat match goal with
+  | H0 : Nat.ltb ?a ?b = true |- _ => apply Nat.ltb_lt in H0
+  | H0 : Nat.leb ?a ?b = true |- _ => apply Nat.leb_le in H0
+  | H0 : Nat.eqb ?a ?b = true |- _ => apply Nat.eqb_eq in H0
+  | H0 : negb (Nat.eqb ?a ?b) = true |- _ =>
+      apply negb_true_iff in H0; apply Nat.eqb_neq in H0
+  | H0 : N.eqb ?a ?b = true |- _ => apply N.eqb_eq in H0
+  end;
+  repeat split; try assumption; try exact I.
+
+Lemma lp_side_cmp : forall L a b,
+  lp_instr_side_bool L (pCMP a b) = true -> LPInstrSide L (pCMP a b).
+Proof.
+  intros L a b H. unfold lp_instr_side_bool in H.
+  unfold LPInstrSide. solve_lp_side H.
+Qed.
+
+Lemma lp_side_jmp : forall L p target,
+  lp_instr_side_bool L (pJMP p target) = true ->
+  LPInstrSide L (pJMP p target).
+Proof.
+  intros L p target H. unfold lp_instr_side_bool in H.
+  unfold LPInstrSide. solve_lp_side H.
+Qed.
+
+Lemma lp_side_shl : forall L d a imm,
+  lp_instr_side_bool L (pSHL d a imm) = true ->
+  LPInstrSide L (pSHL d a imm).
+Proof.
+  intros L d a imm H. unfold lp_instr_side_bool in H.
+  unfold LPInstrSide. solve_lp_side H.
+Qed.
+
+Lemma lp_side_shr : forall L d a imm,
+  lp_instr_side_bool L (pSHR d a imm) = true ->
+  LPInstrSide L (pSHR d a imm).
+Proof.
+  intros L d a imm H. unfold lp_instr_side_bool in H.
+  unfold LPInstrSide. solve_lp_side H.
+Qed.
+
+Lemma lp_side_add : forall L d a b,
+  lp_instr_side_bool L (pADD d a b) = true ->
+  LPInstrSide L (pADD d a b).
+Proof.
+  intros L d a b H. unfold lp_instr_side_bool in H.
+  unfold LPInstrSide. solve_lp_side H.
+Qed.
+
+Lemma lp_side_sub : forall L d a b,
+  lp_instr_side_bool L (pSUB d a b) = true ->
+  LPInstrSide L (pSUB d a b).
+Proof.
+  intros L d a b H. unfold lp_instr_side_bool in H.
+  unfold LPInstrSide. solve_lp_side H.
+Qed.
+
+Lemma lp_side_ld : forall L d a imm,
+  lp_instr_side_bool L (pLD d a imm) = true ->
+  LPInstrSide L (pLD d a imm).
+Proof.
+  intros L d a imm H. unfold lp_instr_side_bool in H.
+  unfold LPInstrSide. solve_lp_side H.
+Qed.
+
+Lemma lp_side_st : forall L d a imm,
+  lp_instr_side_bool L (pST d a imm) = true ->
+  LPInstrSide L (pST d a imm).
+Proof.
+  intros L d a imm H. unfold lp_instr_side_bool in H.
+  unfold LPInstrSide. solve_lp_side H.
+Qed.
+
+Lemma lp_side_movi : forall L d imm,
+  lp_instr_side_bool L (pMOVI d imm) = true ->
+  LPInstrSide L (pMOVI d imm).
+Proof.
+  intros L d imm H. unfold lp_instr_side_bool in H.
+  unfold LPInstrSide. solve_lp_side H.
+Qed.
+
+Lemma lp_side_bool : forall L tbl d a b,
+  lp_instr_side_bool L (pBOOL tbl d a b) = true ->
+  LPInstrSide L (pBOOL tbl d a b).
+Proof.
+  intros L tbl d a b H. unfold lp_instr_side_bool in H.
+  unfold LPInstrSide. solve_lp_side H.
+Qed.
+
+Lemma lp_side_putc : forall L d,
+  lp_instr_side_bool L (pPUTC d) = true ->
+  LPInstrSide L (pPUTC d).
+Proof.
+  intros L d H. unfold lp_instr_side_bool in H.
+  unfold LPInstrSide. solve_lp_side H.
+Qed.
+
+Lemma lp_side_call : forall L target,
+  lp_instr_side_bool L (pCALL target) = true ->
+  LPInstrSide L (pCALL target).
+Proof.
+  intros L target H. unfold lp_instr_side_bool in H.
+  unfold LPInstrSide. solve_lp_side H.
+Qed.
+
+Lemma lp_side_ret : forall L,
+  lp_instr_side_bool L pRET = true -> LPInstrSide L pRET.
+Proof.
+  intros L H. unfold lp_instr_side_bool in H.
+  unfold LPInstrSide. solve_lp_side H.
+Qed.
+
+Lemma lp_side_retp : forall L p,
+  lp_instr_side_bool L (pRETP p) = true ->
+  LPInstrSide L (pRETP p).
+Proof.
+  intros L p H. unfold lp_instr_side_bool in H.
+  unfold LPInstrSide. solve_lp_side H.
+Qed.
+
+Lemma lp_side_halt : forall L,
+  lp_instr_side_bool L pHALT = true -> LPInstrSide L pHALT.
+Proof.
+  intros L H. unfold lp_instr_side_bool in H.
+  unfold LPInstrSide. solve_lp_side H.
+Qed.
+
 Lemma lp_instr_side_bool_sound :
   forall L ins,
     lp_instr_side_bool L ins = true ->
     LPInstrSide L ins.
 Proof.
-  intros L ins H.
-  destruct ins; unfold lp_instr_side_bool in H; unfold LPInstrSide;
-    repeat rewrite andb_true_iff in H;
-    repeat match goal with H0 : _ /\ _ |- _ => destruct H0 end;
-    repeat match goal with
-    | H0 : Nat.ltb ?a ?b = true |- _ => apply Nat.ltb_lt in H0
-    | H0 : Nat.leb ?a ?b = true |- _ => apply Nat.leb_le in H0
-    | H0 : Nat.eqb ?a ?b = true |- _ => apply Nat.eqb_eq in H0
-    | H0 : negb (Nat.eqb ?a ?b) = true |- _ =>
-        apply negb_true_iff in H0; apply Nat.eqb_neq in H0
-    | H0 : N.eqb ?a ?b = true |- _ => apply N.eqb_eq in H0
-    end;
-    try (repeat split; try assumption; try exact I).
+  intros L ins. destruct ins.
+  - apply lp_side_cmp.
+  - apply lp_side_jmp.
+  - apply lp_side_shl.
+  - apply lp_side_shr.
+  - apply lp_side_add.
+  - apply lp_side_sub.
+  - apply lp_side_ld.
+  - apply lp_side_st.
+  - apply lp_side_movi.
+  - apply lp_side_bool.
+  - apply lp_side_putc.
+  - apply lp_side_call.
+  - apply lp_side_ret.
+  - apply lp_side_retp.
+  - apply lp_side_halt.
 Qed.
 
 Lemma nth_instr_eqb_sound :
