@@ -72,8 +72,7 @@ unchanged, while the literal `pCALL` writes the return address into
 `r15`.  The run certificate therefore needs every CALL site to
 establish this equation before the call.  The fixture's first CALL is
 at pc 6, after a prelude that leaves `r15 = 0`, so the equation fails
-there; this is recorded by `fixture_first_call_link_fails` (proved by
-computation).  Consequently the 21,025-step concrete certificate is
+there.  Consequently the 21,025-step concrete certificate is
 not derivable from the current `R` without reconciling `r15` with
 `vm_link` (or changing the VM CALL/RET equations).  The one-step and
 run theorems above remain valid under the stated invariant; this is a
