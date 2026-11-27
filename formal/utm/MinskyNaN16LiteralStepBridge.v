@@ -1979,10 +1979,9 @@ Qed.
 
 Lemma lp_side_call : forall L target,
   lp_instr_side_bool L (pCALL target) = true ->
-  LPInstrSide L (pCALL target).
+  S (lp_pc L) < 2 ^ 32.
 Proof.
   intros L target H. unfold lp_instr_side_bool in H.
-  unfold LPInstrSide.
   apply Nat.ltb_lt in H. exact H.
 Qed.
 
