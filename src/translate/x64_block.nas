@@ -1,7 +1,8 @@
 ; x64_block.nas - NaN-native 64-bit straight-line block driver.
 ; x64_block: r1=source NaN word ptr r2=count r3=out byte ptr r4=next pc
 ;            -> r1=emitted bytes (0 on unsupported op)
-; Supported: MOVI, ADD, SUB.  The block ends with set-XPC + RET.
+; Supported: the block translator instruction set, including OUTL/INL
+; through the native port helper at 0x18000.  The block ends with set-XPC + RET.
 .include "x86_64.nas"
 
 x64_block:
@@ -34,6 +35,12 @@ xb_loop:
   MOVI r11,0xFF
   CMP r7,r11
   JMP[EQ] @xb_halt
+  MOVI r11,0x43
+  CMP r7,r11
+  JMP[EQ] @xb_outl
+  MOVI r11,0x4D
+  CMP r7,r11
+  JMP[EQ] @xb_inl
   MOVI r11,0
   CMP r7,r11
   JMP[EQ] @xb_bool
@@ -498,6 +505,25 @@ xb_ldn:
   ADD r6,r9,r0
   ADD r7,r10,r0
   CALL @x64_ldn
+  ST r1,r0,@xb_out
+  JMP @xb_adv
+
+xb_outl:
+  LD r1,r0,@xb_out
+  ADD r5,r8,r0
+  CALL @x64_load_eax_r
+  ADD r5,r9,r0
+  CALL @x64_load_edx_r
+  CALL @x64_port_helper
+  ST r1,r0,@xb_out
+  JMP @xb_adv
+xb_inl:
+  LD r1,r0,@xb_out
+  ADD r5,r9,r0
+  CALL @x64_load_edx_r
+  CALL @x64_port_helper
+  ADD r5,r8,r0
+  CALL @x64_store_eax_r
   ST r1,r0,@xb_out
   JMP @xb_adv
 

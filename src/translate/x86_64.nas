@@ -170,6 +170,38 @@ x64_load_ecx_r:
   LD r15,r14,0
   RET
 
+; 8B 14 25 addr : edx = R[d]
+x64_load_edx_r:
+  ST r15,r14,0
+  ADD r14,r14,r13
+  MOVI r2,0x8B
+  CALL @x64_8
+  MOVI r2,0x14
+  CALL @x64_8
+  MOVI r2,0x25
+  CALL @x64_8
+  ADD r6,r5,r0
+  CALL @x64_addr
+  SUB r14,r14,r13
+  LD r15,r14,0
+  RET
+
+; BB imm32 ; FF D3 : mov ebx,helper ; call ebx
+x64_port_helper:
+  ST r15,r14,0
+  ADD r14,r14,r13
+  MOVI r2,0xBB
+  CALL @x64_8
+  LA r2,0x18000
+  CALL @x64_32
+  MOVI r2,0xFF
+  CALL @x64_8
+  MOVI r2,0xD3
+  CALL @x64_8
+  SUB r14,r14,r13
+  LD r15,r14,0
+  RET
+
 ; 89 04 25 addr : R[d] = eax
 x64_store_eax_r:
   ST r15,r14,0
