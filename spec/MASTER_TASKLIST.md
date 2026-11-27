@@ -59,9 +59,13 @@ each item needs a real gate, a short proof, and a frontier note.
       transport; emulated gate.
 - [ ] F12 Observability/ops: per-core stats, OOM/eviction, quotas, scheduler
       traces; gate.
-- [ ] F13 Frontier capabilities: speculative decoding, MoE routing,
+- [~] F13 Frontier capabilities: speculative decoding, MoE routing,
       long-context KV paging, live generations, symbiotic multi-agent
-      scheduling; design + prototype gate.
+      scheduling; design + prototype gate.  Paged KV + incremental decode
+      gated (`npaged_gate`: 2 MiB blocks, stable logical map, prefill+decode
+      bit-equal to full recompute, remap/generation, pressure/eviction).
+      Speculative decode, MoE, live generations and symbiotic scheduling
+      remain.
 - [ ] F14 Verification: Coq/UTM trace, translation validation, reproducible
       build; gate.
 - [ ] F15 Product raw substrate: replace C harnesses with raw assembly/NaN
@@ -126,6 +130,11 @@ Agent rule:
 - [ ] (nattn) Add an incremental decode path: append K/V to an nkv slab, apply RoPE at the new position, and gate prefill+decode logits against a full recompute for the same tokens.
 - [ ] (nattn) Build an nmodel loader from ngguf_blocks_to_nq4 plus nsafetensors tensors (dtype/shape/offset checked) and gate one real token step over imported weights.
 - [ ] (nattn) Replace truncating Q4/Q8 quantization with round-to-nearest and per-block scales; gate max error against f32 and keep fused QK bit-identical to nq4_dot32 on exact values.
+- [ ] (npaged) Extend npaged past the 512-token decode window with chunked/online softmax over blocks: per-block max/denominator, rescale the running accumulator, and gate a 4k/32k-token synthetic context against a full recompute with exact in-block f32 order.
+- [ ] (npaged) Add src/lib/nspec.nas: draft + verifier streams over one immutable weight root, deterministic accept/reject from the nreplay xorshift stream, KV rollback to the accepted prefix via npaged generation bump, a forced-rejection path, and exact token/logit equality with plain decode for a fixed seed/prompt.
+- [ ] (npaged) Add shared immutable paged prefixes with refcounts and copy-on-write fork: page-table entries carry a shared owner/refcount, a child publishes its own KV generation on first append, and a gate proves parent/child prefix reads plus divergent suffix isolation.
+- [ ] (npaged) Add a page eviction/tiering policy: recency + attention-mass + node-distance scoring, demotion of cold pages to a slower nheap class or swap capability with a small hot table, and a pressure-driven eviction/remap gate that re-checks exact post-remap logits and stable logical indices.
+- [ ] (npaged) Lift the 4 GiB decode limit: carry base_hi through the paged K/V view path (chunked byte/word access or a 64-bit nattn view entry) and gate one block allocated above 4 GiB with prefill/decode parity and remap across the boundary.
 <!-- AGENT-APPEND -->
 
 ## P0. ISO C parity (language + library + ABI)
