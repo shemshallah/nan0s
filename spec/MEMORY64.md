@@ -72,3 +72,38 @@ NaN layer owns placement, eviction, generations and checkpoint policy.
 - `nmem_scale_gate.sh`: 2 TiB object, 1 TiB 64-bit view, bounds/rights/node.
 - `mem64_gate.sh`: native 5-level tables, full 4 PiB direct map, 1 TiB
   mapping, 2 MiB/4 KiB pages, high-half read, max-physical rejection.
+
+## Implemented native builder
+
+`src/native64/mem64_boot.S` enters long mode with a PML5 when CPUID exposes
+LA57, or a PML4 otherwise.  `src/native64/mem64.c` owns the table pool
+(1 MiB..65 MiB), allocates 4 KiB tables, and maps 1 GiB / 2 MiB / 4 KiB
+leaves.  The active root is the boot root at `0x30000`; the C layer extends
+it and reloads CR3 after mapping.
+
+`tools/mem64_gate.sh` on QEMU TCG with `-cpu max,la57=on,phys-bits=52` and
+only 128 MiB of RAM proves:
+
+```
+MEM64 LEVELS=5 PHYS=52 VIRT=57
+MEM64 TABLES=8214 MAP=0x0010010000201000 1G=4195328 2M=1 4K=1
+MEM64 PASS
+```
+
+That is a full 4 PiB direct map (4,194,304 1 GiB entries, 8,214 tables),
+plus a 1 TiB object range, one 2 MiB leaf, one 4 KiB leaf, a high-half read
+through the active CR3, rejection of the first byte past MAXPHYADDR, and
+rejection of a non-canonical virtual address.  The 128 MiB guest is enough
+because only the tables are touched; non-present physical targets are never
+dereferenced.
+
+## Still required for production memory
+
+- Feed E820/ACPI SRAT ranges into the builder instead of the synthetic
+  full-physical test range; preserve holes and MMIO.
+- Per-NUMA-node free lists for 1 GiB/2 MiB/4 KiB pages, 64-bit counts.
+- `map`/`unmap`/`protect` calls from `nmem` capabilities, including
+  read-only weight objects and per-agent KV slabs.
+- 16 KiB per-core stacks with guard pages at 4096-core scale.
+- Memory-object generations, sealed checkpoint roots, eviction/tiering,
+  ECC/RAS, and hotplug.

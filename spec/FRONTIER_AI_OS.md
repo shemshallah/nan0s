@@ -57,8 +57,9 @@ interfaces:
 
 - Pointers/sizes/offsets are 64-bit `(lo,hi)`; TBs and 4 GiB crossings are
   normal.
-- 4-level paging, 1 GB pages, per-NUMA-node free lists, 16 KiB per-core
-  stacks for 4096-core scale.
+- 5-level paging, 52-bit physical (4 PiB), 57-bit virtual (128 PiB),
+  1 GiB direct-map pages, per-NUMA-node free lists, 16 KiB per-core stacks
+  for 4096-core scale.
 - Weight objects are read-only capabilities; KV/activation objects are
   per-agent, 64-byte aligned, zero-copy views; checkpoint roots are sealed.
 - The native substrate maps and protects; the NaN layer owns placement,
@@ -66,8 +67,9 @@ interfaces:
 
 ## Gates that would make a claim credible
 
-- `qgate64memscale`: 1 TB page-table construction.
-- `nmem_scale_gate`: 2 TB memory object + 1 TB view, 64-bit caps.
+- `mem64_gate`: native 5-level tables, full 4 PiB direct map, 1 TiB
+  mapping, 2 MiB/4 KiB leaves, MAXPHYADDR/canonical rejection. PASS.
+- `nmem_scale_gate`: 2 TiB memory object + 1 TiB view, 64-bit caps. PASS.
 - `nansmp`: 2/4 CPU now; 64/128 CPU on a suitable host.
 - `nan_q4lm`: exact Q4 GEMV/token loop; then measured tokens/s on real
   hardware.

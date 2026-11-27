@@ -62,3 +62,11 @@
   appliance.  Frontier training needs accelerators, fabric and ecosystem.
 - Next memory code: `nmem` 64-bit memory objects/caps, 1 TB page-table gate,
   NUMA/hugepage allocator; then model runtime and accelerator boundary.
+
+## Memory64
+- `src/native64/mem64_boot.S` + `mem64.c`: 5-level/4-level boot, 4 KiB table
+  pool, 1 GiB/2 MiB/4 KiB leaves, 52-bit physical / 57-bit virtual.
+- `tools/mem64_gate.sh` PASS: 4 PiB direct map, 8,214 tables, 1 TiB object,
+  high-half read, MAXPHYADDR/non-canonical rejection on a 128 MiB guest.
+- Next: E820/SRAT-driven ranges, per-NUMA page allocator, nmem map/unmap/
+  protect calls, 16 KiB per-core stacks, sealed checkpoint roots, tiering.
