@@ -1608,7 +1608,7 @@ Definition LPInstrSide (L : LPState) (ins : InstrP) : Prop :=
       tbl = 8 /\ d < 16 /\ d <> 15 /\ a < 16 /\ b < 16 /\
       lget_regN (lp_reg L) b = 255%N
   | pPUTC d => True
-  | pCALL target => S (lp_pc L) < 2 ^ 32
+  | pCALL target => lp_pc L < 99
   | pRET => True
   | pRETP p => lp_k L <> 3
   | pHALT => True
@@ -1672,7 +1672,10 @@ Proof.
     apply lp_exec_BOOL8_255_refines; assumption.
   - red in Hside.
     apply lp_exec_PUTC_refines; assumption.
-  - red in Hside. apply lp_exec_CALL_refines; assumption.
+  - red in Hside.
+    assert (Hpc32 : S (lp_pc L) < 2 ^ 32)
+      by (pose proof le_256_two32; lia).
+    apply lp_exec_CALL_refines; assumption.
   - red in Hside.
     apply lp_exec_RET_refines; assumption.
   - red in Hside.
@@ -1871,7 +1874,7 @@ Definition lp_instr_side_bool (L : LPState) (ins : InstrP) : bool :=
       (tbl =? 8) && (d <? 16) && negb (d =? 15) && (a <? 16) &&
       (b <? 16) && N.eqb (lget_regN (lp_reg L) b) 255%N
   | pPUTC d => true
-  | pCALL target => Nat.ltb (S (lp_pc L)) (2 ^ 32)
+  | pCALL target => Nat.ltb (lp_pc L) 99
   | pRET => true
   | pRETP p => negb (lp_k L =? 3)
   | pHALT => true
@@ -1979,10 +1982,10 @@ Qed.
 
 Lemma lp_side_call : forall L target,
   lp_instr_side_bool L (pCALL target) = true ->
-  S (lp_pc L) < 2 ^ 32.
+  LPInstrSide L (pCALL target).
 Proof.
   intros L target H. unfold lp_instr_side_bool in H.
-  apply Nat.ltb_lt in H. exact H.
+  unfold LPInstrSide. apply Nat.ltb_lt in H. exact H.
 Qed.
 
 Lemma lp_side_ret : forall L,
