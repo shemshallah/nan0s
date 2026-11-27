@@ -1325,7 +1325,7 @@ Proof.
   assert (HA' : vm_reg vm a = N.to_nat (lget_regN (lp_reg L) a)).
   { unfold l_reg, lp_to_LState in HA. exact HA. }
   unfold lp_exec, exec_instr_p.
-  rewrite Hnth. cbn.
+  rewrite Hnth. cbn -[e_bool_res bool_resN].
   rewrite Hval.
   unfold R, lp_to_LState.
   split_conj_step.
