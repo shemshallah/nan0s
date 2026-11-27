@@ -1659,16 +1659,16 @@ Proof.
         rewrite Hbn.
         change (255 mod 2 ^ 32 = 255).
         rewrite Nat.mod_small.
-        - reflexivity.
-        - pose proof le_256_two32. lia.
+        { reflexivity. }
+        { pose proof le_256_two32. lia. }
       - assert (Hb15' : b < 15) by lia.
         rewrite (Hregs b Hb15').
         change (N.to_nat (lget_regN (lp_reg L) b) mod 2 ^ 32 = 255).
         rewrite Hbn.
         change (255 mod 2 ^ 32 = 255).
         rewrite Nat.mod_small.
-        - reflexivity.
-        - pose proof le_256_two32. lia. }
+        { reflexivity. }
+        { pose proof le_256_two32. lia. } }
     apply lp_exec_BOOL8_255_refines; assumption.
   - red in Hside.
     apply lp_exec_PUTC_refines; assumption.
