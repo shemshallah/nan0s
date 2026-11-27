@@ -1432,7 +1432,6 @@ Proof.
         (N.land (lget_regN (lp_reg L) a) 255%N))
         by (rewrite Hlen; lia).
       rewrite N_land_255_to_nat.
-      rewrite Houter.
       exact Hmod_lt.
     + rewrite (lget_regN_lset_word_neq (lp_reg L) d
         (N.land (lget_regN (lp_reg L) a) 255%N) i Hne).
