@@ -166,7 +166,6 @@ Proof.
            apply Nat.ltb_lt in E4. exact E4.
         -- apply Nat.ltb_ge in E4.
            apply mem_get_mem_set_str; auto.
-           exact Ha.
 Qed.
 
 Print Assumptions mem_get_mem_set_eq.
