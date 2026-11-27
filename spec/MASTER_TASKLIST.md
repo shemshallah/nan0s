@@ -109,10 +109,18 @@ each item needs a real gate, a short proof, and a frontier note.
       exception/IST1 self-test; `noc_raw64_smp_gate` PASS (4/2 CPUs, no C
       linked).
 - [x] F18 Source-derived GOLD: raw n16i nasm1 boot slice (512/512 bytes),
-      native xgold.sh full GOLD (512+9913 bytes, 32+620 rows), nan_cli only
-      an optional comparator; `source_gold_gate` PASS.  Full-kernel n16i path
-      measured 621 s and matched 9913/9913 bytes; default gate uses the 36 s
-      boot slice plus the native-core full rebuild.
+      native xgold.sh full GOLD (512+12,368 bytes, 32+773 rows), nan_cli only
+      an optional comparator; `source_gold_gate` PASS in 76.6 s.  The n16i
+      slice now passes the 8M-word host mask; the old 256 KiB mask wrapped
+      nasm1's output at word 0x100000 and stack at 0x1F0000.  Full-kernel raw
+      n16i remains the slow reference path.
+- [x] F18b Block-cache GOLD build: translate nasm1's 2,992 compiled words to
+      native x86 slots plus a per-PC predicate-mask table, dispatch directly
+      in a multiboot 64-bit stub, and consume it from `tools/xgold.sh`.
+      `blockcache_gate` PASS: two deterministic cache builds, boot 512/512 and
+      kernel 12,368/12,368 byte-identical to GOLD, kernel 10.9 s and xgold
+      16.5 s (raw 621 s).  `USE_BLOCK_CACHE=0` keeps the raw native-kernel
+      path.  Multi-instruction blocks and a product-resident cache are queued.
 
 Agent rule:
 
@@ -501,7 +509,7 @@ for llama.cpp, not for tcc2.
 ## P1. Performance
 - [ ] AVX2/AVX-512/NEON/RVV tiers, CPUID steer, exact lanes.
 - [ ] VNNI / dot-product instructions where available.
-- [ ] Decoded-block cache and native block JIT.
+- [ ] Decoded-block cache and native block JIT (build-path threaded cache done, see F18b; product-resident/multi-instruction cache queued).
 - [ ] Prefetching, cache blocking, NUMA awareness.
 - [ ] Tokens/s and MAC/s benchmark gates on real hardware.
 

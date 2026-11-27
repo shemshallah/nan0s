@@ -27,7 +27,7 @@ mkdir -p "$T"
 STAGE_H="src/prog/_b11_f18_h.nas"
 STAGE_O="src/prog/_b11_f18_outer.nas"
 cleanup() {
-  rm -rf "$T"
+  [ "${SOURCE_GOLD_KEEP:-0}" = 1 ] || rm -rf "$T"
   rm -f "$STAGE_H" "$STAGE_O"
 }
 trap cleanup EXIT INT TERM
@@ -46,7 +46,7 @@ make_n16i_outer() { # h_nan inner out
     echo "MOVI r13,1"
     echo "MOVI r1,0"
     echo "LA r2,$2"
-    echo "LA r3,0x3FFFF"
+    echo "LA r3,0x7FFFFF"
     echo "CALL @n16i_run"
     echo "MOVI r5,79"
     echo "PUTC r5"
@@ -198,7 +198,7 @@ qemu-system-i386 -m 64 \
   -drive format=raw,if=floppy,file="$T/floppy_slice.img" \
   -drive format=raw,if=ide,index=0,file="$T/disk_slice.img" \
   -boot a -display none -serial "file:$T/qemu.ser" -no-reboot \
-  >/dev/null 2>&1 &
+  >/dev/null 2>"$T/qemu.err" &
 qpid=$!
 i=0
 wait_s=${SOURCE_GOLD_QEMU_WAIT:-300}

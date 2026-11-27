@@ -1,0 +1,6 @@
+gen.*
+nasm1.nan
+nasm1_words.nas
+cache_body.S
+cache.o
+run.*

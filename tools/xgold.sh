@@ -1,10 +1,11 @@
 #!/bin/sh
-# tools/xgold.sh - rebuild the native x86 gold stream with the native S1 core.
+# tools/xgold.sh - rebuild the native x86 gold stream.
 #
-# No C and no Python: gawk stages the source, the prebuilt native S1 runs the
-# NaN assembler (nasm1), QEMU captures its serial bytes, and awk emits the gold
-# text.  The S1 core is the only native layer; every instruction above it is
-# NaN16.
+# Default: gawk stages the source, the committed block cache executes nasm1's
+# NaN-translated x86 blocks under QEMU, and awk emits the gold text.  The cache
+# is a source-keyed build artifact; tools/blockcache_gate.sh proves it against
+# the checked-in GOLD.  USE_BLOCK_CACHE=0 selects the raw native-kernel path.
+# No C and no Python run in either GOLD producer.
 set -e
 cd "$(dirname "$0")/.."
 export LC_ALL=C
@@ -12,13 +13,27 @@ T="${TMPDIR:-/tmp}/xgold_native.$$"
 mkdir -p "$T"
 trap 'rm -rf "$T"' EXIT
 
-command -v qemu-system-i386 >/dev/null 2>&1 || {
-  echo "xgold: qemu-system-i386 is required" >&2; exit 1;
-}
+# Block-cache path: nasm1's compiled words are translated once by the NaN
+# translator and executed as native x86 blocks.  This produces the same bytes
+# as the raw native-kernel path; set USE_BLOCK_CACHE=0 to force the raw path.
+USE_BLOCK_CACHE=${USE_BLOCK_CACHE:-1}
+if [ "$USE_BLOCK_CACHE" = 1 ]; then
+  command -v qemu-system-x86_64 >/dev/null 2>&1 || {
+    echo "xgold: qemu-system-x86_64 is required for the block cache" >&2; exit 1;
+  }
+else
+  command -v qemu-system-i386 >/dev/null 2>&1 || {
+    echo "xgold: qemu-system-i386 is required" >&2; exit 1;
+  }
+fi
 [ -f src/native/nan16_x86.nan ] || { echo "xgold: missing native gold core" >&2; exit 1; }
 
 asm_one() { # src out.bin
   src="$1"; out="$2"
+  if [ "$USE_BLOCK_CACHE" = 1 ]; then
+    sh tools/blockcache_run.sh "$src" "$out"
+    return 0
+  fi
   awk -v SRC="$src" 'BEGIN {
     printf ".org 0\n.include \"nasm1.nas\"\n.org 0x20000\n.str \""
     while ((getline line < SRC) > 0) {

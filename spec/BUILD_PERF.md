@@ -59,23 +59,69 @@ The algorithm is not accidentally quadratic; the cost is nested
 interpretation plus QEMU TCG.  The raw path exists for source-derived GOLD and
 self-hosting verification, not for every edit.
 
+## Block cache (implemented 2026-11-27)
+
+The build path now translates nasm1's compiled words once into native x86
+blocks and executes them directly:
+
+```
+QEMU TCG -> native cache dispatcher -> cached x86 blocks
+```
+
+No NaN fetch, class gate, predicate check or opcode dispatch happens per
+instruction.  The translator is still the NaN-native `x64_block`; its output
+is cached by a key over `nasm1.nas`, the translator and the dispatcher.
+
+Measured on this host:
+
+| step | time |
+|---|---:|
+| cache build (one-time, 2,992 words + masks) | 3.3 s |
+| boot sector assembly through cache | 3.7 s |
+| full `kan16.xa` kernel through cache | 10.9 s |
+| `tools/xgold.sh` (boot + kernel + GOLD text) | 16.5 s |
+| `tools/source_gold_gate.sh` end-to-end | 76.6 s raw n16i slice included |
+
+The cache output is byte-identical to the checked-in GOLD (512-byte boot and
+12,368-byte kernel).  `tools/blockcache_gate.sh` rebuilds the cache twice and
+verifies determinism plus both byte streams.  Set `USE_BLOCK_CACHE=0` to force
+the old raw native-kernel path.
+
+Four real semantic bugs surfaced while wiring the cache:
+
+1. The initial word table kept payloads only.  NaN headers carry the
+   predicate class, so every instruction looked like class 10 and every
+   `JMP[EQ]` was false.  The table now preserves full `.raw` words.
+2. Predication is not jump-only: the kernel skips any instruction whose
+   header mask misses `FLAGM`.  A per-PC mask byte now makes the dispatcher
+   skip without entering a block (0xFF marks opcode 0, which is unpredicated).
+3. The dispatcher must start with `FLAGM=1`, as the kernel does.  Starting at
+   zero skipped `MOVI r13,1`, so the guest stack and every increment stayed 0.
+4. The n16i slice passed a 256 KiB word mask while nasm1's output starts at
+   word 0x100000 and stack at 0x1F0000.  Every high address wrapped and the
+   interpreter looped.  The slice now passes the 8M-word host mask.
+
 ## What is fast
 
 - A normal product build (`tools/mkall.sh`) consumes the checked-in GOLD and
   takes seconds; it does not run nasm1.
 - A product boot reaches `NANIX SHELL READY` in about 5 s under QEMU.
-- The translated 64-bit block path executes NaN-emitted blocks natively; that
-  is the intended long-term replacement for the flat interpreter.
+- A GOLD rebuild through the cache takes seconds, not minutes.
+- The translated block path executes NaN-emitted blocks natively; the current
+  cache is the build-path version, and the product-resident per-core cache
+  remains future work.
 
 ## Rules
 
 1. Do not regenerate GOLD on every product build.  Use the checked-in GOLD;
    regenerate only when kernel source changes.
-2. `xgold.sh`/`source_gold_gate.sh` are the raw, slow verification path.
-   Keep them in release gates, not in the inner edit loop.
+2. `xgold.sh` uses the block cache by default; `USE_BLOCK_CACHE=0` selects the
+   raw native-kernel path.  `source_gold_gate.sh` still proves the raw n16i
+   slice and the checked-in GOLD, so the cache is never the only witness.
 3. Development iterations may use the host `nan_cli` oracle only as a
    test bench.  It must never be the producer of a committed GOLD or product
    image.
 4. The real speed fix is translating nasm1/n16i into NaN-emitted x86-64 blocks
    and caching them, or finishing the self-hosted block translator.  Native C
-   is not the product answer.
+   is not the product answer.  The build-path cache is the first shipped step;
+   multi-instruction blocks and a product-resident cache remain queued.
