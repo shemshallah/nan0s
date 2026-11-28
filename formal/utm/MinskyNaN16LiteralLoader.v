@@ -98,11 +98,11 @@ Proof.
   - change (0%nat = Nat.modulo (N.to_nat (lget_regN regs0 15)) (2 ^ 32)%nat).
     rewrite lget_regN_regs0.
     symmetry. apply Nat.mod_0_l. exact two32_neq_0.
-  - change (0 = N.to_nat (lget_regN regs0 15)).
+  - change (0%nat = N.to_nat (lget_regN regs0 15)).
     rewrite lget_regN_regs0. reflexivity.
   - reflexivity.
   - reflexivity.
-  - change (0 < 4). lia.
+  - change (Nat.lt 0 4). lia.
   - reflexivity.
   - intros i Hi.
     change (Nat.lt (N.to_nat (lget_regN regs0 i)) (2 ^ 32)%nat).
