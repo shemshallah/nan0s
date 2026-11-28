@@ -92,10 +92,10 @@ Proof.
   intro tape. constructor.
   - reflexivity.
   - intros i Hi.
-    change (0 = N.to_nat (lget_regN regs0 i) mod 2 ^ 32).
+    change ((0 = N.to_nat (lget_regN regs0 i) mod 2 ^ 32)%nat).
     rewrite lget_regN_regs0.
     symmetry. apply Nat.mod_0_l. exact two32_neq_0.
-  - change (0 = N.to_nat (lget_regN regs0 15) mod 2 ^ 32).
+  - change ((0 = N.to_nat (lget_regN regs0 15) mod 2 ^ 32)%nat).
     rewrite lget_regN_regs0.
     symmetry. apply Nat.mod_0_l. exact two32_neq_0.
   - change (0 = N.to_nat (lget_regN regs0 15)).
@@ -105,7 +105,7 @@ Proof.
   - change (0 < 4). lia.
   - reflexivity.
   - intros i Hi.
-    change (N.to_nat (lget_regN regs0 i) < 2 ^ 32).
+    change ((N.to_nat (lget_regN regs0 i) < 2 ^ 32)%nat).
     rewrite lget_regN_regs0.
     pose proof one_lt_two32. lia.
 Qed.
