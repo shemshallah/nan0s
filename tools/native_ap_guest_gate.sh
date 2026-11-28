@@ -2,14 +2,12 @@
 # native_ap_guest_gate.sh - an AP executes real guest NaN code.
 #
 # CPU0 publishes entry PC 0x1000 and guest stack 0x3C000 through the nansmp
-# mailbox ports (0x4E10/0x4E11), fences, sets go (0x4E12), and HALTs.  APIC
-# id 1 wakes from the AP park loop, reuses the now-idle interpreter state,
-# and runs the guest program at word 0x1000: 1000 atomic fetch-adds on the
-# shared word 0x20000, then prints "AP 000003E8" and OK.  Other APs park.
-# A single CPU prints "AP 00000000" (no AP to run the program).
-#
-# This is the first real guest-context handoff to an AP.  Per-CPU interpreter
-# state/paging and multi-AP scheduling are the next step.
+# mailbox ports (0x4E10/0x4E11), fences, sets go (0x4E12), and HALTs.  Every
+# AP wakes from the park loop, aliases virtual 0x8000 to a private interpreter
+# state page via paging, and runs the guest program at word 0x1000: 1000
+# atomic fetch-adds on the shared word 0x20000.  APIC id 1 waits for all APs
+# and prints "AP <total>" (1000 on 2 CPUs, 3000 on 4) and OK.  A single CPU
+# prints "AP 00000000" (no AP to run the program).
 set -eu
 cd "$(dirname "$0")/.."
 export LC_ALL=C
@@ -62,8 +60,8 @@ cmp -s "$T/com.2" "$T/want.2" ||
   { echo "native_ap_guest: FAIL (-smp 2)"; cat -v "$T/com.2" >&2; exit 1; }
 
 run 4 "$T/com.4"
-printf 'AP 000003E8\nOK\n' > "$T/want.4"
+printf 'AP 00000BB8\nOK\n' > "$T/want.4"
 cmp -s "$T/com.4" "$T/want.4" ||
   { echo "native_ap_guest: FAIL (-smp 4)"; cat -v "$T/com.4" >&2; exit 1; }
 
-echo "native_ap_guest: PASS (APIC id 1 runs 1000 guest fetch-adds; 1/2/4 CPUs)"
+echo "native_ap_guest: PASS (every AP runs 1000 guest fetch-adds on private paged state; 1/2/4 CPUs)"

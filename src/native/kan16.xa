@@ -75,6 +75,7 @@
 .equ SM_ENTRY 0x5914
 .equ SM_STACK 0x5918
 .equ SM_FLAGS 0x5940
+.equ APID     0x8110
 _start:
   CLD
   CALL @sse_init
@@ -142,6 +143,7 @@ z_count:
   MOVL $0,[SM_GO]
   MOVL $0,[SM_ENTRY]
   MOVL $0,[SM_STACK]
+  MOVL $0,[APID]
   CALL @smp_start
   XOR %ESI,%ESI
 loop:
@@ -3087,7 +3089,7 @@ h_inl_full:
   AND $0xFFFF,%EDX
   CMP $0x4E00,%EDX
   JB @il_raw
-  CMP $0x4E13,%EDX
+  CMP $0x4E14,%EDX
   JA @il_raw
   CMP $0x4E00,%EDX
   JE @il_kentry
@@ -3127,6 +3129,8 @@ h_inl_full:
   JE @il_apgo
   CMP $0x4E13,%EDX
   JE @il_zero
+  CMP $0x4E14,%EDX
+  JE @il_apic
   MOV [KDATA],%EBX
   JMP @st
 il_apmap:
@@ -3143,6 +3147,9 @@ il_apstack:
   JMP @st
 il_apgo:
   MOV [SM_GO],%EBX
+  JMP @st
+il_apic:
+  MOV [APID],%EBX
   JMP @st
 il_kentry:
   MOV [KENTRY],%EBX
@@ -3970,33 +3977,81 @@ ap_pm:
   MOVL $1,[EDI]
   .byte 0xF0,0xFF,0x05        ; lock inc dword [SM_DONE]
   .long SM_DONE
-  ; Only APIC id 1 runs the handoff guest in this step; other APs park.
-  CMP $1,%EBX
-  JNE @ap_halt
 ap_wait_go:
   MOV [SM_GO],%EAX
   TEST %EAX,%EAX
   JZ @ap_wait_go
-  ; Give the BSP time to execute its HALT before reusing the interpreter state.
+  ; Let the BSP reach its HALT before copying the machine-state page.  The
+  ; AP then aliases virtual 0x8000 to a private 4 KiB copy, so R/STEPS/FLAGM
+  ; and the KABI words are per-CPU while G stays shared.
   MOV $0x100000,%ECX
 ap_delay:
   DEC %ECX
   JNZ @ap_delay
-  ; The BSP is halted, so the AP can reuse the single interpreter state page.
-  MOV $0x7C000,%ESP
-  MOVL $1,[0x8040]          ; FLAGM
-  MOVL $0,[0x8044]          ; STEPS
-  MOVL $0xFFFFFFFF,[0x80E8] ; KENTRY (no KABI entry on the AP)
-  MOVL $0,[0x80F0]          ; KTIMER
-  MOVL $0,[0x80F4]          ; KTIMERL
-  MOVL $0,[0x8104]          ; KIN
-  MOVL $0xF0000,[0x8108]    ; KDATA
-  MOVL $0,[0x810C]          ; KSTATUS
-  MOVL $0,[0x8000]          ; R0
-  MOVL $1,[0x8034]          ; R13
+  CLD
+  MOV %EBX,%EDX             ; EDX = APIC id
+  MOV %EDX,%EBP
+  SHL $12,%EBP
+  ADD $0x70000,%EBP         ; state page
+  MOV $0x8000,%ESI
+  MOV %EBP,%EDI
+  MOV $0x400,%ECX
+  REPMOVSD                  ; copy BSP machine state (MAXS, MASKM, DATAB...)
+  MOV %EBP,%ESI             ; ESI = state
+  MOV %ESI,%EBP
+  ADD $0x4000,%EBP          ; page directory
+  MOV %ESI,%EBX
+  ADD $0x8000,%EBX          ; page table
+  MOV %ESI,%ECX
+  ADD $0xC000,%ECX
+  MOV %ECX,%ESP             ; private host stack top
+  ; zero the page directory (the state page is a copy, not zeroed)
+  MOV %EBP,%EDI
+  XOR %EAX,%EAX
+  MOV $0x400,%ECX
+  REPSTOSD
+  ; identity-map 0..4 MiB, then alias virtual 0x8000 to the state page
+  MOV %EBX,%EDI
+  MOV $3,%EAX
+  MOV $0x400,%ECX
+ap_pt_l:
+  MOV %EAX,[EDI]
+  ADD $0x1000,%EAX
+  ADD $4,%EDI
+  DEC %ECX
+  JNZ @ap_pt_l
+  MOV %ESI,%EAX
+  OR $3,%EAX
+  MOV %EAX,[EBX+32]
+  MOV %EBX,%EAX
+  OR $3,%EAX
+  MOV %EAX,[EBP]
+  ; override the per-CPU interpreter fields
+  MOVL $1,[ESI+0x40]        ; FLAGM
+  MOVL $0,[ESI+0x44]        ; STEPS
+  MOVL $0xFFFFFFFF,[ESI+0xE8] ; KENTRY
+  MOVL $0,[ESI+0xF0]        ; KTIMER
+  MOVL $0,[ESI+0xF4]        ; KTIMERL
+  MOVL $0,[ESI+0x104]       ; KIN
+  MOVL $0xF0000,[ESI+0x108] ; KDATA
+  MOVL $0,[ESI+0x10C]       ; KSTATUS
+  MOVL $0,[ESI+0]           ; R0
+  MOVL $1,[ESI+0x34]        ; R13
+  MOVL $0,[ESI+0x3C]        ; R15
+  MOV %EDX,[ESI+0x110]      ; APID
+  ; guest stack = SM_STACK + (id-1)*0x1000
   MOV [SM_STACK],%EAX
-  MOV %EAX,[0x8038]         ; R14 = guest stack
-  MOVL $0,[0x803C]         ; R15
+  MOV %EDX,%ECX
+  DEC %ECX
+  SHL $12,%ECX
+  ADD %EAX,%ECX
+  MOV %ECX,[ESI+0x38]       ; R14
+  ; enable paging and enter the interpreter
+  MOV %EBP,%EAX
+  MOV %EAX,%CR3
+  MOV %CR0,%EAX
+  OR $0x80000000,%EAX
+  MOV %EAX,%CR0
   MOV [SM_ENTRY],%ESI
   MOV $loop,%EAX
   JMP %EAX
