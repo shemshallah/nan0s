@@ -24,7 +24,7 @@ Import ListNotations.
 From NaNLM Require Import MinskyNaN16VM MinskyNaN16LiteralMachine
   MinskyNaN16LiteralDecode MinskyNaN16LiteralBridge
   MinskyNaN16LiteralStepBridge MinskyNaN16LiteralMemory
-  MinskyNaN16LiteralPuts
+  MinskyNaN16LiteralImage MinskyNaN16LiteralPuts
   MinskyNaN16RunConcrete MinskyNaN16Window MinskyAddressRefinement.
 
 Open Scope nat_scope.
