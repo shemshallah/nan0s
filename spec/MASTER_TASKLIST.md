@@ -135,8 +135,11 @@ each item needs a real gate, a short proof, and a frontier note.
       LBA 2048.  Self-host is 4,532 words in 17 s with no `nan_cli`/S1 KABI;
       the full 530,842-word native run is opt-in (`NHOST_NATIVE_FULL=1`).
       `nhost_emit_guest.sh NHOST_NATIVE=1` exposes the same native chain.
+- [x] (nasm) Native-core full guest: nhost emitted 530,842/530,842 words,
+      err=0/pre=0/pre=0, exact `nmk.awk` stream in 1,736 s (~29 min) on the
+      raw 32-bit core; no `nan_cli`, no C harness.
 - [ ] (nasm) Make the native-core nhost the default producer: the full guest
-      is ~30 min on the 32-bit interpreter, so first add a faster native path
+      is ~29 min on the 32-bit interpreter, so first add a faster native path
       (cache/native in-product build); then remove `nmk.awk` from `build.sh`.
 - [x] GUI cart reuse: `src/gui/gui_cart.nas` is the one desktop/terminal
       source, embedded at word 8192 by `gui_sched_boot.nas`; the 32-bit
