@@ -141,6 +141,10 @@ each item needs a real gate, a short proof, and a frontier note.
 - [ ] (nasm) Make the native-core nhost the default producer: the full guest
       is ~29 min on the 32-bit interpreter, so first add a faster native path
       (cache/native in-product build); then remove `nmk.awk` from `build.sh`.
+- [x] (cpu) CPU-serious audit/aggregate: `cpu_serious_gate` PASS exercises
+      `nansmp`/`nansched_mp`/`nancore`/`ncscale` (2/4 CPUs, 4096 cores),
+      `nanthr` (oracle), `narena64`, `nten`, `nmat64`, `nmat64x64`, and the
+      32/64 host parity.  The 64-bit native test images are now signed.
 - [x] 64-bit host core parity: `kan16_x64` boots the same 530,842-word guest
       (`NANIX SHELL READY`); deterministic ISA guest output is identical to the
       32-bit core.  `core32_64_parity_gate` PASS.  The guest ABI remains

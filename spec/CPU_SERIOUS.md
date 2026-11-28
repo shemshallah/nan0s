@@ -189,6 +189,11 @@ them stays NaN.
 - `tools/narena.sh`: alignment, overlap, mark/release, reset, exhaustion. Done.
 - `tools/narena64.sh`: 64-bit arena, high-half base, 4 GiB crossing. Done.
 - `tools/nmat64.sh`: DP4B into a 64-bit accumulator past 2^32. Done.
+- `tools/cpu_serious_gate.sh`: runs the whole CPU-serious set in one place:
+  `core32_64_parity_gate`, `narena64`, `nten`, `nmat64`, `nmat64x64`,
+  `nancore_scale`, `ncscale`, `nansmp` (2/4 CPUs), and `nanthr` (oracle;
+  S1 acceptance optional).  PASS; the legacy 64-bit native images are now
+  manifest-signed instead of stopping at `!MAN`.
 - `tools/nmat64x64.sh`: 64-bit-descriptor matmul, both cores. Done.
 - `tools/nten.sh`: 64-bit tensor paths, 64-bit strides, 4 GiB crossing. Done.
 - `tools/nten.sh`: 64-bit tensor paths, 64-bit strides, 4 GiB crossing. Done.
