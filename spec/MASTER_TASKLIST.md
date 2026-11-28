@@ -141,6 +141,15 @@ each item needs a real gate, a short proof, and a frontier note.
 - [ ] (nasm) Make the native-core nhost the default producer: the full guest
       is ~29 min on the 32-bit interpreter, so first add a faster native path
       (cache/native in-product build); then remove `nmk.awk` from `build.sh`.
+- [x] 64-bit host core parity: `kan16_x64` boots the same 530,842-word guest
+      (`NANIX SHELL READY`); deterministic ISA guest output is identical to the
+      32-bit core.  `core32_64_parity_gate` PASS.  The guest ABI remains
+      32-bit; `ADDRH`/`(lo,hi)` is the next CPU-serious step.
+- [ ] (cpu) Native SMP services: add `nansmp` ports 0x4E08..0x4E0D (CPU,
+      steps, IPI, CAS, fetch-add, fence) to the native core and start APs;
+      bind `nansched_nansmp` in the product and use `nancore`/`ncscale`.
+- [ ] (cpu) 64-bit guest ABI: `ADDRH`/`(lo,hi)` pointers/sizes and product use
+      of `narena64`/`nten`/`nmat64` for KV/weights/tensors.
 - [x] GUI cart reuse: `src/gui/gui_cart.nas` is the one desktop/terminal
       source, embedded at word 8192 by `gui_sched_boot.nas`; the 32-bit
       product and the 64-bit-host image use the same guest.  `boot_chain_gate`
