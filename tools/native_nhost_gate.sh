@@ -6,7 +6,7 @@
 # LBA 2048 on the same IDE disk; nhost first probes LBA 0 and falls back to
 # the high bundle LBA when it sees boot sectors instead of ;@MAIN.
 #
-# Phase 1 (always): nhost assembles itself (4,530 words, ~16 s).
+# Phase 1 (always): nhost assembles itself (4,532 words, ~16 s).
 # Phase 2 (NHOST_NATIVE_FULL=1): nhost emits the full 530,842-word product
 # guest (~30 min on the 32-bit interpreter).
 set -eu
@@ -43,6 +43,9 @@ build_native_image() {
     { echo "native_nhost_gate: FAIL (mkall)" >&2; cat "$T/mk.err" >&2; exit 1; }
   truncate -s $((2048 * 512)) "$b_out"
   cat "$b_bundle" >> "$b_out"
+  # QEMU's auto CHS for a small raw disk can be shorter than the bundle;
+  # an 8 MiB image gives 16*16*63 sectors and covers LBA 2048 + the bundle.
+  truncate -s 8388608 "$b_out"
   truncate -s 1474560 "$T/floppy.img"
   dd if="$b_out" of="$T/floppy.img" conv=notrunc bs=512 count=2880 status=none
 }
@@ -88,8 +91,8 @@ cmp -s "$T/self.words" "$T/self.nmk.words" ||
   { echo "native_nhost_gate: FAIL (self-host differs)" >&2;
     diff -u "$T/self.nmk.words" "$T/self.words" | head -12 >&2; exit 1; }
 n=$(wc -l < "$T/self.words")
-[ "$n" -eq 4530 ] ||
-  { echo "native_nhost_gate: FAIL (self-host is $n words, want 4530)" >&2; exit 1; }
+[ "$n" -eq 4532 ] ||
+  { echo "native_nhost_gate: FAIL (self-host is $n words, want 4532)" >&2; exit 1; }
 echo "native_nhost_gate: PASS phase 1 ($n words; native core self-host)"
 
 if [ "${NHOST_NATIVE_FULL:-0}" = 1 ]; then

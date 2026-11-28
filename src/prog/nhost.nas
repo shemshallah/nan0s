@@ -16,12 +16,12 @@ JMP @main
 .equ P_DRIVE 0x1F6
 .equ P_CMD 0x1F7
 .equ P_STAT 0x1F7
-.equ B_BUN 0x80000
+.equ B_BUN 0x200000
 .equ B_LBA2 2048
-.equ B_SRC 0x280000
-.equ W_SRC 0xA0000
-.equ W_OUT 0x120000
-.equ W_LAB 0x220000
+.equ B_SRC 0x400000
+.equ W_SRC 0x100000
+.equ W_OUT 0x180000
+.equ W_LAB 0x280000
 .equ DIRB 16384
 .equ PB1 32768
 .equ PB2 33792
@@ -167,7 +167,9 @@ JMP[NE] @hl_w
 ADD r11,r11,r13
 CMP r9,r0
 JMP[NE] @hl_done
-MOVI r2,4095
+LD r2,r0,#H_LBA
+MOVI r3,4095
+ADD r2,r2,r3
 CMP r11,r2
 JMP[LT] @hl_sec
 hl_done:
