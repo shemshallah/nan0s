@@ -74,14 +74,25 @@ new x86 line unless a new *primitive* is missing.
 
 The x86-64 bring-up lives in `src/native64/`: a 32-bit boot-sector entry builds
 identity page tables for the first 1 GiB, enables PAE/LME/paging, loads a 64-bit
-GDT and prints a COM1 banner from 64-bit code (`tools/qgate64.sh`).  The NaN16
-execution core is still the 32-bit `kan16.xa`; porting it to `kan64.xa` is the
-next step and keeps the same guest ISA.
+GDT and prints a COM1 banner from 64-bit code (`tools/qgate64.sh`).  The x86-64
+host execution core (`src/native/kan16_x64.xa` / `nan16_x64.nan`) now boots the
+same 530,842-word product guest and reaches `NANIX SHELL READY`; the 32-bit and
+64-bit host cores are byte-parity on the ISA guest and the product guest
+(`tools/core32_64_parity_gate.sh`).  The guest ISA still uses 32-bit
+payload/pointers; the 64-bit guest ABI is the next step.
 
 The boot loader reserves a **128-sector (64 KiB) kernel window**; the guest
 image starts at LBA 129 and is staged at 0x20000.  The kernel can grow to
 64 KiB without moving the guest ABI again.
 
+- [x] x86-64 host core product boot: same guest, same ISA output, same
+      `NANIX SHELL READY`; `core32_64_parity_gate` PASS.  ATA loader now matches
+      the 32-bit gold (`G=0x200000`, `0x80` dwords/sector, no second pass).
+- [ ] 64-bit guest ABI: `ADDRH`/`(lo,hi)` pointers and sizes; use
+      `narena64`/`nten`/`nmat64` in product APIs, not only gates.
+- [ ] Native SMP services: `nansmp` ports `0x4E08..0x4E0D` are S1-only today.
+      Implement them in the native core (CPU id, steps, IPI, CAS, fetch-add,
+      fence) and start APs; then bind `nansched_nansmp` in the product.
 - [x] Runtime word count and mask (`mem_size`, CPUID `0x4E4D00FF`).
 - [x] Dynamic C address space and 100 MB heap.
 - [ ] Decoded block cache: decode once, validate once, execute tokens.
@@ -152,8 +163,12 @@ them stays NaN.
       proven past 2^32 and on negative vectors.
 - [x] `nmat_i8_64`: 64-bit tensor descriptors, strides and result words for
       the packed-i8 matmul.
-- [ ] NaN task scheduler: contexts, run queue, yield via a primitive. One
-      core first; SMP only when the native APIC/startup shim is real.
+- [x] NaN task scheduler: contexts, run queue, `nanthr` threads and the
+      `nansched_mp` per-CPU policy are compiled into the product; the S1
+      prototype binds them through `nansmp`.
+- [ ] Native SMP binding: implement the `nansmp` control ports and AP startup
+      in the native core, then bind `nansched_nansmp` and use
+      `nancore`/`ncscale` in the product.
 - [ ] Huge-page hint and zero-copy model load (`mmap` equivalent) once a
       storage-backed model loader exists.
 

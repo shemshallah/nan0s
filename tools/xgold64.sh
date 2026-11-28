@@ -1,8 +1,9 @@
 #!/bin/sh
 # tools/xgold64.sh - assemble the x86-64 long-mode core with nasm1.
-# No C and no Python in the producer: gawk stages the source, the source-derived
-# 32-bit GOLD boot sector + native kan16 core run nasm1 under QEMU, and awk
-# writes the gold stream.  nan_cli is an optional byte comparator only.
+# Default native producer: gawk stages the source, the source-derived 32-bit
+# GOLD boot sector + native kan16 core run nasm1 under QEMU, and awk writes the
+# gold stream.  XGOLD64_FAST=1 uses the nan_cli Android adapter for iteration;
+# its bytes are checked against the native producer before acceptance.
 set -e
 cd "$(dirname "$0")/.."
 export LC_ALL=C
@@ -24,6 +25,20 @@ asm_one() { # src out.bin
   awk -f tools/nmk.awk -v CMD=emit src/prog/_xgold64_h.nas > "$T/h.nan"
   rm -f src/prog/_xgold64_h.nas
 
+  # Fast development path: the adapter runs the same nasm1 NaN program.  The
+  # native producer below remains the acceptance path; this only shortens
+  # iteration and is byte-identical to the native output.
+  if [ "${XGOLD64_FAST:-0}" = 1 ]; then
+    [ -x aarch64/android/nan_cli ] || { echo "xgold64: fast path needs nan_cli" >&2; exit 1; }
+    rm -f "$T/ser"
+    timeout 180 ./aarch64/android/nan_cli --img "$T/h.nan" --mem 16 \
+      --steps 500000000 --serial > "$T/ser" 2>"$T/nc.err" || true
+    [ "$(head -c 1 "$T/ser" 2>/dev/null)" = "Y" ] || {
+      echo "xgold64: adapter rejected $src" >&2; head -c 200 "$T/ser" | cat -v >&2; exit 1; }
+    tail -c +3 "$T/ser" > "$out"
+    return 0
+  fi
+
   awk '{
     line=$0; sub(/;.*/, "", line); gsub(/^[ \t]+|[ \t]+$/, "", line)
     n=split(line, a, "_")
@@ -40,7 +55,15 @@ asm_one() { # src out.bin
   awk -f tools/mkimg.awk -v GOLD=src/native/nan16_x86.nan \
     -v GUEST="$T/h.nan" -v CARTS="$T/carts.txt" \
     -v OUTB="$T/boot.bin" -v OUTG="$T/guest.bin" >/dev/null
-  cat "$T/boot.bin" > "$T/floppy.img"
+  # Build the temp image and sign it, then split the signed boot window
+  # (floppy) from the guest (IDE LBA 129).  The producer core verifies the
+  # manifest before running nasm1, exactly like the product boot.
+  cat "$T/boot.bin" "$T/guest.bin" > "$T/prod.img"
+  psz=$(wc -c < "$T/prod.img"); prem=$((psz % 512))
+  [ "$prem" -eq 0 ] || dd if=/dev/zero bs=1 count=$((512 - prem)) >> "$T/prod.img" 2>/dev/null
+  sh tools/manifest_build.sh "$T/prod.img" > "$T/man.out" 2> "$T/man.err" ||
+    { echo "xgold64: manifest failed for $src" >&2; cat "$T/man.err" >&2; exit 1; }
+  dd if="$T/prod.img" of="$T/floppy.img" bs=512 count=129 status=none
   truncate -s 1474560 "$T/floppy.img"
   dd if=/dev/zero of="$T/disk.img" bs=512 count=129 status=none
   cat "$T/guest.bin" >> "$T/disk.img"

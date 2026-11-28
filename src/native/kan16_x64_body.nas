@@ -73,7 +73,7 @@ core64_entry:
   CLD
   CALL @sse_init
   CALL @mem_size
-  MOVL $0x7FFFFFFF,[MAXS]
+  MOVL $0xF0000000,[MAXS]
   MOVL $1,[FLAGM]
   MOVL $0,[STEPS]
   MOVL $0xF0000,[DATAB]
@@ -1852,7 +1852,7 @@ ata_load_guest:
   SHR $6,%EAX
   MOV %EAX,%EBP
   MOV $0x81,%EBX
-  MOV $0x4200000,%EDI
+  MOV $0x200000,%EDI
 ata_sector:
   MOV %EBX,%EAX
   SHR $24,%EAX
@@ -1891,19 +1891,11 @@ ata_drq:
   TEST $0x08,%AL
   JZ @ata_drq
   MOV $0x1F0,%DX
-  MOV $0x100,%ECX
+  MOV $0x80,%ECX
   .byte 0xF3,0x6D
   ADD $1,%EBX
   SUB $1,%EBP
   JNZ @ata_sector
-  MOV [ATAFLAG],%EAX
-  TEST %EAX,%EAX
-  JNZ @ata_done
-  MOVL $1,[ATAFLAG]
-  MOV $0x200000,%EDI
-  MOV $64,%EBP
-  JMP @ata_sector
-ata_done:
   RET
 ata_fallback:
   MOV $0x20000,%ESI
