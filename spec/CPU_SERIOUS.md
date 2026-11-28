@@ -114,15 +114,15 @@ image starts at LBA 129 and is staged at 0x20000.  The kernel can grow to
       `native_product_smp_gate` PASS for 1/2/4 CPUs.  The nansmp ports
       (0x4E08..0x4E0F) bypass the KABI KENTRY/KIN gate; without that they
       collide with a product that has a real kernel entry.
-- [x] Native AP guest handoff (single AP): CPU0 publishes an entry PC and
-      guest stack on ports 0x4E10/0x4E11, fences, and sets 0x4E12; APIC id 1
-      wakes and runs real guest code on the idle interpreter state.  The guest
-      performs 1000 atomic fetch-adds and prints `AP 000003E8`;
-      `native_ap_guest_gate` PASS for 1/2/4 CPUs (one AP executes; other APs
-      park).  Per-CPU interpreter state/paging, multi-AP contexts and the x64
-      long-mode trampoline remain.
-- [ ] Native multi-AP guest work: per-CPU interpreter state/paging and
-      scheduling guest contexts on every AP; add the x64 long-mode trampoline.
+- [x] Native multi-AP guest work (32-bit): every AP maps virtual 0x8000 to a
+      private 4 KiB interpreter state page and runs the guest concurrently.
+      The AP copies the BSP machine constants, overrides R/STEPS/FLAGM/KABI,
+      and enters the same interpreter loop; G stays shared.  The gate runs
+      1000 atomic fetch-adds per AP and APIC id 1 reports the total:
+      `AP 000003E8` on 2 CPUs, `AP 00000BB8` on 4; `native_ap_guest_gate`
+      PASS.  The x64 long-mode AP trampoline remains.
+- [ ] x64 long-mode AP trampoline: start APs in long mode with per-CPU state
+      pages so the 64-bit host core can run guest contexts on APs.
 - [x] Runtime word count and mask (`mem_size`, CPUID `0x4E4D00FF`).
 - [x] Dynamic C address space and 100 MB heap.
 - [ ] Decoded block cache: decode once, validate once, execute tokens.

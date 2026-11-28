@@ -245,13 +245,14 @@ and runs one add/push/pop on CPU 0.  Multicore boots print
 The nansmp ports bypass the KABI KENTRY/KIN gate because a product kernel has
 a real kernel entry.
 
-The single-AP guest handoff uses 0x4E10/0x4E11 to publish an entry PC and
-guest stack, then 0x4E12 to release APIC id 1.  The AP reuses the idle
-interpreter state page after CPU0 HALTs, so no paging or per-CPU state is
-needed yet; the guest runs 1000 atomic fetch-adds (`native_ap_guest_gate`).
-Per-CPU interpreter state/paging, multi-AP contexts and the x64 long-mode
-trampoline are the remaining steps.  The x64 host core is BSP-only in this
-revision.
+The multi-AP guest handoff uses 0x4E10/0x4E11 to publish an entry PC and
+guest stack, then 0x4E12 to release all APs.  Each AP copies the BSP machine
+constants into a private 4 KiB interpreter state page, overrides
+R/STEPS/FLAGM/KABI, and enables paging with virtual 0x8000 aliased to that
+page; the first 4 MiB is identity-mapped and G stays shared.  Every AP runs
+the guest concurrently; the gate executes 1000 atomic fetch-adds per AP and
+APIC id 1 reports the total (1000 on 2 CPUs, 3000 on 4).  The x64 long-mode
+AP trampoline remains.  The x64 host core is BSP-only in this revision.
 
 The atomics are sequentially consistent.  This is stronger than the final
 NaN memory model needs, and it is the only primitive the prototype lock

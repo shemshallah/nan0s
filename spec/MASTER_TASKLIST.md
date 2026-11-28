@@ -165,11 +165,12 @@ each item needs a real gate, a short proof, and a frontier note.
 - [x] (cpu) Native AP product binding on CPU 0: `nansched_nansmp` is bound
       in the product, the kernel reads 0x4E0F/0x4E0E, and multicore boots
       print `SMP <ncpu> AP <bitmap>`; `native_product_smp_gate` PASS.
-- [x] (cpu) Native AP guest handoff (single AP): ports 0x4E10/0x4E11/0x4E12
-      publish entry/stack/go; APIC id 1 runs real guest code (1000 atomic
-      fetch-adds) on the idle interpreter state; `native_ap_guest_gate` PASS.
-- [ ] (cpu) Native multi-AP guest work: per-CPU interpreter state/paging,
-      every AP scheduling contexts, and the x64 long-mode trampoline.
+- [x] (cpu) Native multi-AP guest work (32-bit): ports 0x4E10/0x4E11/0x4E12
+      publish entry/stack/go; every AP aliases virtual 0x8000 to a private
+      interpreter state page via paging and runs guest code concurrently.  The
+      gate totals 1000 increments on 2 CPUs and 3000 on 4.
+- [ ] (cpu) x64 long-mode AP trampoline: start APs in long mode with per-CPU
+      state pages on the 64-bit host core.
 - [ ] (cpu) 64-bit guest ABI: `ADDRH`/`(lo,hi)` pointers/sizes and product use
       of `narena64`/`nten`/`nmat64` for KV/weights/tensors.
 - [x] GUI cart reuse: `src/gui/gui_cart.nas` is the one desktop/terminal
