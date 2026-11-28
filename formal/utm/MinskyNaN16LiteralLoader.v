@@ -238,8 +238,9 @@ Proof.
     firstn 256 (mp_tape reset_mem ++ repeat 0%N 256) =
     mp_tape reset_mem).
   { rewrite firstn_app.
-    rewrite <- Htape.
-    rewrite firstn_all.
+    assert (Hf : firstn 256 (mp_tape reset_mem) = mp_tape reset_mem).
+    { rewrite <- Htape. apply firstn_all. }
+    rewrite Hf.
     replace (256 - length (mp_tape reset_mem)) with 0 by lia.
     cbn. rewrite app_nil_r. reflexivity. }
   rewrite Hfirst.
