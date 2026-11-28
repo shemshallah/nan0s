@@ -123,14 +123,17 @@ each item needs a real gate, a short proof, and a frontier note.
       was renamed `cx_tn_d`, fixing the in-shell `asm` operand hang;
       `tools/nixsh_asm_gate.sh` PASSes.
 - [x] (nasm) Self-hosted guest emission: `nhost` assembles itself to a
-      4,518-word fixed point; `tools/nhost_emit_guest.sh` emits the 530,842-word
+      4,530-word fixed point; `tools/nhost_emit_guest.sh` emits the 530,842-word
       guest, and `tools/nhost_product_gate.sh` proves it packs to the shipped
       `build/nan0s.img` byte-for-byte.  `NHOST_BUILD=1` selects it in
       `tools/build.sh` and `tools/mkn16iimg.sh`.
-- [ ] (nasm) Make the nhost emitter the default producer: run nhost on the
-      native core (or a portable x86_64 machine) with the source bundle on a
-      second IDE disk, so the hermetic build no longer depends on the aarch64
-      `nan_cli`; then remove `nmk.awk` from `build.sh`.
+- [x] (nasm) Native-core nhost: `native_nhost_gate.sh` boots the product boot
+      sector + GOLD kernel with nhost as the guest and the source bundle at
+      LBA 2048.  Self-host is 4,530 words in 17 s with no `nan_cli`/S1 KABI;
+      the full 530,842-word native run is opt-in (`NHOST_NATIVE_FULL=1`).
+- [ ] (nasm) Make the native-core nhost the default producer: the full guest
+      is ~30 min on the 32-bit interpreter, so first add a faster native path
+      (cache/native in-product build); then remove `nmk.awk` from `build.sh`.
 - [x] F18c Unified nasm: `src/prog/nasm.nas` is the single assembler with a
       NaN-word mode (z0, `run`/`V_*`) and an x86-byte mode (x1, `_start`);
       `nasm0.nas`/`nasm1.nas` are aliases.  x86 boot output is byte-identical

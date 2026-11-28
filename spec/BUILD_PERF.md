@@ -106,6 +106,8 @@ Four real semantic bugs surfaced while wiring the cache:
 - A normal product build (`tools/mkall.sh`) consumes the checked-in GOLD and
   takes seconds; it does not run nasm1.
 - A product boot reaches `NANIX SHELL READY` in about 5 s under QEMU.
+- `nhost` self-hosts on the raw native core in 17 s (no `nan_cli`); the full
+  530,842-word native guest run is ~30 min and stays an opt-in proof.
 - A GOLD rebuild through the cache takes seconds, not minutes.
 - The translated block path executes NaN-emitted blocks natively; the current
   cache is the build-path version, and the product-resident per-core cache
