@@ -138,9 +138,14 @@ each item needs a real gate, a short proof, and a frontier note.
 - [x] (nasm) Native-core full guest: nhost emitted 530,842/530,842 words,
       err=0/pre=0/pre=0, exact `nmk.awk` stream in 1,736 s (~29 min) on the
       raw 32-bit core; no `nan_cli`, no C harness.
-- [ ] (nasm) Make the native-core nhost the default producer: the full guest
-      is ~29 min on the 32-bit interpreter, so first add a faster native path
-      (cache/native in-product build); then remove `nmk.awk` from `build.sh`.
+- [x] (nasm) Native-core nhost is the default product guest producer:
+      stage0 uses `nmk.awk` only to bootstrap nhost; stage1 emits the guest on
+      the raw native core.  A source-keyed cache (`tools/nhost_guest_key.sh`)
+      skips the ~21 min native full-guest emit on repeat, and the native guest
+      packs byte-for-byte to the shipped image.  `NHOST_BUILD=0` remains an
+      explicit oracle path.
+- [ ] (nasm) Faster cold-cache native full-guest emit (in-product block
+      cache/translator); then drop the `NHOST_BUILD=0` oracle path.
 - [x] (cpu) CPU-serious audit/aggregate: `cpu_serious_gate` PASS exercises
       `nansmp`/`nansched_mp`/`nancore`/`ncscale` (2/4 CPUs, 4096 cores),
       `nanthr` (oracle), `narena64`, `nten`, `nmat64`, `nmat64x64`, and the
@@ -160,8 +165,11 @@ each item needs a real gate, a short proof, and a frontier note.
 - [x] (cpu) Native AP product binding on CPU 0: `nansched_nansmp` is bound
       in the product, the kernel reads 0x4E0F/0x4E0E, and multicore boots
       print `SMP <ncpu> AP <bitmap>`; `native_product_smp_gate` PASS.
-- [ ] (cpu) Native AP guest work: schedule guest contexts on APs and add the
-      x64 long-mode AP trampoline (the x64 host core is BSP-only today).
+- [x] (cpu) Native AP guest handoff (single AP): ports 0x4E10/0x4E11/0x4E12
+      publish entry/stack/go; APIC id 1 runs real guest code (1000 atomic
+      fetch-adds) on the idle interpreter state; `native_ap_guest_gate` PASS.
+- [ ] (cpu) Native multi-AP guest work: per-CPU interpreter state/paging,
+      every AP scheduling contexts, and the x64 long-mode trampoline.
 - [ ] (cpu) 64-bit guest ABI: `ADDRH`/`(lo,hi)` pointers/sizes and product use
       of `narena64`/`nten`/`nmat64` for KV/weights/tensors.
 - [x] GUI cart reuse: `src/gui/gui_cart.nas` is the one desktop/terminal

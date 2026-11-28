@@ -4,6 +4,11 @@
 MOVI r14,0xE000
 MOVI r1,126
 PUTC r1
+; Simulate a product kernel entry, so the KABI KENTRY/KIN gate is active.
+; The nansmp ports must bypass it or the first CAS is a bad-op trap.
+MOVI r1,0x1234
+MOVI r2,0x4E00
+OUTL r1,r2
 CALL @nsp_cpu
 ADDI r1,r1,48
 PUTC r1

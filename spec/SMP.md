@@ -215,6 +215,10 @@ Outside the frozen `KERNEL_ABI.md` 0x4E00-0x4E07 map:
 | 0x4E0D | OUT | acquire/release fence (`mfence`) |
 | 0x4E0E | IN | packed APIC-id bitmap of started APs (bit n = APIC id n) |
 | 0x4E0F | IN | logical CPU count reported by the host core |
+| 0x4E10 | OUT | AP guest entry word for the single-AP handoff |
+| 0x4E11 | OUT | AP guest stack base word |
+| 0x4E12 | OUT | AP guest go flag |
+| 0x4E13 | IN | reserved/zero |
 
 Descriptors live on the calling task's stack, so no CPU shares a mailbox:
 
@@ -239,8 +243,15 @@ the real nansmp ops at boot, initialises the F2 scheduler with the CPU count,
 and runs one add/push/pop on CPU 0.  Multicore boots print
 `SMP <ncpu> AP <bitmap>`; `native_product_smp_gate` covers 1/2/4 CPUs.
 The nansmp ports bypass the KABI KENTRY/KIN gate because a product kernel has
-a real kernel entry.  Guest work on APs and the x64 long-mode trampoline are
-the remaining steps.  The x64 host core is BSP-only in this revision.
+a real kernel entry.
+
+The single-AP guest handoff uses 0x4E10/0x4E11 to publish an entry PC and
+guest stack, then 0x4E12 to release APIC id 1.  The AP reuses the idle
+interpreter state page after CPU0 HALTs, so no paging or per-CPU state is
+needed yet; the guest runs 1000 atomic fetch-adds (`native_ap_guest_gate`).
+Per-CPU interpreter state/paging, multi-AP contexts and the x64 long-mode
+trampoline are the remaining steps.  The x64 host core is BSP-only in this
+revision.
 
 The atomics are sequentially consistent.  This is stronger than the final
 NaN memory model needs, and it is the only primitive the prototype lock
