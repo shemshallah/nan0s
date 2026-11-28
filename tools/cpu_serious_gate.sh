@@ -27,6 +27,7 @@ run tools/nmat64x64.sh
 run tools/nancore_scale_gate.sh
 run tools/ncscale_gate.sh
 run tools/nansmp_gate.sh
+run tools/nansmp_native_gate.sh
 run tools/nanthr_gate.sh
 
 echo "cpu_serious: PASS (host parity, 64-bit arena/tensor/matmul, 4096-core topology, 2/4-CPU nansmp, nanthr oracle)"

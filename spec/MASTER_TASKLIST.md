@@ -149,9 +149,12 @@ each item needs a real gate, a short proof, and a frontier note.
       (`NANIX SHELL READY`); deterministic ISA guest output is identical to the
       32-bit core.  `core32_64_parity_gate` PASS.  The guest ABI remains
       32-bit; `ADDRH`/`(lo,hi)` is the next CPU-serious step.
-- [ ] (cpu) Native SMP services: add `nansmp` ports 0x4E08..0x4E0D (CPU,
-      steps, IPI, CAS, fetch-add, fence) to the native core and start APs;
-      bind `nansched_nansmp` in the product and use `nancore`/`ncscale`.
+- [x] (cpu) Native nansmp control ports: 0x4E08..0x4E0D (CPU, steps, IPI,
+      CAS, fetch-add, fence) in both native cores; CAS/fetch-add use the
+      word+2 payload.  `nansmp_native_gate` PASS on 32-bit and 64-bit.
+- [ ] (cpu) Native AP startup: real CPU ids, locked CAS/fetch-add and AP
+      bring-up; bind `nansched_nansmp` in the product and use
+      `nancore`/`ncscale` across cores.
 - [ ] (cpu) 64-bit guest ABI: `ADDRH`/`(lo,hi)` pointers/sizes and product use
       of `narena64`/`nten`/`nmat64` for KV/weights/tensors.
 - [x] GUI cart reuse: `src/gui/gui_cart.nas` is the one desktop/terminal

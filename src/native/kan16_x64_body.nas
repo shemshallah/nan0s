@@ -2903,9 +2903,8 @@ h_outl_full:
   AND $0xFFFF,%EDX
   CMP $0x4E00,%EDX
   JB @ol_raw
-  CMP $0x4E07,%EDX
+  CMP $0x4E0D,%EDX
   JA @ol_raw
-  ; Control ports are writable during boot and by kernel code only.
   MOV [KENTRY],%EBX
   CMP $0xFFFFFFFF,%EBX
   JE @ol_store
@@ -2927,6 +2926,18 @@ ol_store:
   JE @ol_ktcb
   CMP $0x4E06,%EDX
   JE @loop
+  CMP $0x4E08,%EDX
+  JE @loop
+  CMP $0x4E09,%EDX
+  JE @loop
+  CMP $0x4E0A,%EDX
+  JE @ol_ipi
+  CMP $0x4E0B,%EDX
+  JE @ol_cas
+  CMP $0x4E0C,%EDX
+  JE @ol_fadd
+  CMP $0x4E0D,%EDX
+  JE @ol_fence
   MOV %EAX,[KDATA]
   MOV %EAX,[DATAB]
   JMP @loop
@@ -2949,6 +2960,44 @@ ol_kregions:
 ol_ktcb:
   MOV %EAX,[KTCB]
   JMP @loop
+ol_ipi:
+  MOVL $0,[KDATA]
+  JMP @loop
+ol_fence:
+  .byte 0x0F,0xAE,0xF0
+  MOVL $0,[KDATA]
+  JMP @loop
+; nansmp CAS: EAX=descriptor {addr,expected,new}; payload is at word+2
+ol_cas:
+  PUSH %ESI
+  PUSH %EDI
+  MOV %EAX,%ESI
+  MOV [G+ESI*8+2],%EBX
+  MOV [G+ESI*8+10],%EAX
+  MOV [G+ESI*8+18],%ECX
+  MOV [G+EBX*8+2],%EDI
+  CMP %EDI,%EAX
+  JNE @ol_cas_no
+  MOV %ECX,[G+EBX*8+2]
+ol_cas_no:
+  MOV %EDI,[KDATA]
+  POP %EDI
+  POP %ESI
+  JMP @loop
+; nansmp fetch-add: EAX=descriptor {addr,delta}
+ol_fadd:
+  PUSH %ESI
+  PUSH %EDI
+  MOV %EAX,%ESI
+  MOV [G+ESI*8+2],%EBX
+  MOV [G+ESI*8+10],%ECX
+  MOV [G+EBX*8+2],%EDI
+  MOV %EDI,[KDATA]
+  ADD %ECX,%EDI
+  MOV %EDI,[G+EBX*8+2]
+  POP %EDI
+  POP %ESI
+  JMP @loop
 ol_raw:
   OUT %EAX,%DX
   JMP @loop
@@ -2958,7 +3007,7 @@ h_inl_full:
   AND $0xFFFF,%EDX
   CMP $0x4E00,%EDX
   JB @il_raw
-  CMP $0x4E07,%EDX
+  CMP $0x4E0D,%EDX
   JA @il_raw
   CMP $0x4E00,%EDX
   JE @il_kentry
@@ -2974,6 +3023,18 @@ h_inl_full:
   JE @il_ktcb
   CMP $0x4E06,%EDX
   JE @il_status
+  CMP $0x4E08,%EDX
+  JE @il_cpu
+  CMP $0x4E09,%EDX
+  JE @il_steps
+  CMP $0x4E0A,%EDX
+  JE @il_zero
+  CMP $0x4E0B,%EDX
+  JE @il_kdata
+  CMP $0x4E0C,%EDX
+  JE @il_kdata
+  CMP $0x4E0D,%EDX
+  JE @il_zero
   MOV [KDATA],%EBX
   JMP @st
 il_kentry:
@@ -2996,6 +3057,18 @@ il_ktcb:
   JMP @st
 il_status:
   MOV [KSTATUS],%EBX
+  JMP @st
+il_cpu:
+  XOR %EBX,%EBX
+  JMP @st
+il_steps:
+  MOV [STEPS],%EBX
+  JMP @st
+il_zero:
+  XOR %EBX,%EBX
+  JMP @st
+il_kdata:
+  MOV [KDATA],%EBX
   JMP @st
 il_raw:
   IN %DX,%EAX
