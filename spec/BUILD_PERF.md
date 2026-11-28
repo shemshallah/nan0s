@@ -108,6 +108,8 @@ Four real semantic bugs surfaced while wiring the cache:
 - A product boot reaches `NANIX SHELL READY` in about 5 s under QEMU.
 - `nhost` self-hosts on the raw native core in 17 s (no `nan_cli`); the full
   530,842-word native guest run is ~30 min and stays an opt-in proof.
+- `tools/nhost_emit_guest.sh NHOST_NATIVE=1` runs the complete stage0 ->
+  stage1 -> guest chain natively; the two self-host stages take ~46 s.
 - A GOLD rebuild through the cache takes seconds, not minutes.
 - The translated block path executes NaN-emitted blocks natively; the current
   cache is the build-path version, and the product-resident per-core cache

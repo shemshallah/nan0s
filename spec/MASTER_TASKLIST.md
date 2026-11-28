@@ -131,6 +131,7 @@ each item needs a real gate, a short proof, and a frontier note.
       sector + GOLD kernel with nhost as the guest and the source bundle at
       LBA 2048.  Self-host is 4,532 words in 17 s with no `nan_cli`/S1 KABI;
       the full 530,842-word native run is opt-in (`NHOST_NATIVE_FULL=1`).
+      `nhost_emit_guest.sh NHOST_NATIVE=1` exposes the same native chain.
 - [ ] (nasm) Make the native-core nhost the default producer: the full guest
       is ~30 min on the 32-bit interpreter, so first add a faster native path
       (cache/native in-product build); then remove `nmk.awk` from `build.sh`.

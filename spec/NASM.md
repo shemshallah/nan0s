@@ -75,6 +75,11 @@ runs stage0 -> stage1 -> guest; the default `tools/build.sh` path remains
 hermetic, and `NHOST_BUILD=1` selects the nhost guest.  `nhost_product_gate.sh`
 packs that guest and compares the result to `build/nan0s.img`.
 
+`nhost_emit_guest.sh` also has `NHOST_NATIVE=1`: the same stage0/stage1/guest
+chain runs on the raw native core under QEMU, with no `nan_cli`.  The two
+native self-host stages take about 46 s; the full guest is the long opt-in
+run used by `native_nhost_gate.sh`.
+
 `nan_cli` is still the fast bootstrap machine for the default build.  The
 native core now runs the same nhost image directly: it boots the product boot
 sector + GOLD kernel, loads nhost from LBA 129, and nhost reads the source
