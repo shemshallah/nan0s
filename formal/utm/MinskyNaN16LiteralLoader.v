@@ -220,6 +220,7 @@ Proof.
   intros c K i Hi.
   rewrite mem_get_lp_load_window_lt by (unfold fixture_tape_base; lia).
   rewrite mem_get_reset by lia.
+  change (decode_word_p (literal_word_at i) = nth_error fixture_prog_full i).
   rewrite decode_full_pointwise by exact Hi.
   symmetry. apply nth_error_nth'.
   destruct literal_full_code_decodes as (_ & _ & Hlen).
