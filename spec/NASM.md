@@ -26,7 +26,7 @@ The x86 backend is namespaced `x1_*`/`Z1_*`; the NaN backend keeps `run` and
   12,368/12,368.
 - `tools/source_gold_gate.sh`: PASS in 73.7 s including the raw n16i slice.
 - `tools/nhost_gate.sh`: PASS, three phases: the `nrun_test` tree (4,842
-  words), nhost assembling itself (4,530 words, exact fixed point), and the
+  words), nhost assembling itself (4,532 words, exact fixed point), and the
   full 51-file product guest (530,842 words, exact `nmk.awk` stream).
 - `tools/nhost_product_gate.sh`: ORACLE MATCH; the nhost-emitted guest packs
   to the shipped `build/nan0s.img` byte-for-byte.
@@ -69,7 +69,7 @@ The full guest now assembles under `nhost` with 0 errors and is byte-identical
 to `nmk.awk` (same 530,842 words, SHA-256 match, ~34 s).
 `tools/nhost_bundle.awk` builds the flat `;@MAIN`/`;@FILE` disk bundle.
 
-`nhost` also assembles its own source to the same 4,530-word image: stage0 is
+`nhost` also assembles its own source to the same 4,532-word image: stage0 is
 built with `nmk.awk`, then stage1 is the fixed point.  `tools/nhost_emit_guest.sh`
 runs stage0 -> stage1 -> guest; the default `tools/build.sh` path remains
 hermetic, and `NHOST_BUILD=1` selects the nhost guest.  `nhost_product_gate.sh`

@@ -49,7 +49,7 @@ awk -f tools/nmk.awk -v CMD=emit src/prog/nhost.nas > "$T/stage0.nan" 2> "$T/sta
   { cat "$T/stage0.err" >&2; exit 1; }
 words "$T/stage0.nan" > "$T/stage0.words"
 
-# Stage 1: nhost assembles its own source; must be the same 4,530-word image.
+# Stage 1: nhost assembles its own source; must be the same 4,532-word image.
 bundle src/prog/nhost.nas
 run_nhost "$T/stage0.nan" "$T/bundle.img" 64 8000000000 "$T/self.out"
 cmp -s "$T/stage0.words" "$T/self.out.words" ||
