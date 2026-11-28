@@ -1,6 +1,7 @@
 ; nten_test.nas - 64-bit tensor path arithmetic, including a 4 GiB crossing.
 .org 0
 JMP @main
+.include "../lib/n64.nas"
 .include "../lib/nten.nas"
 main:
 MOVI r13,1

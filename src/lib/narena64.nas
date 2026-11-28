@@ -20,7 +20,7 @@
 ;   nar64_used    r1=ctx -> r1=off_lo r2=off_hi
 ;   nar64_capacity r1=ctx -> r1=size_lo r2=size_hi
 
-.include "n64.nas"
+
 
 nar64_init:
   ST r2,r1,0

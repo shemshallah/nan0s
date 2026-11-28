@@ -40,6 +40,10 @@ JMPR r1
 .include "../lib/nansched.nas"
 .include "../lib/nansmp.nas"
 .include "../lib/nansched_nansmp.nas"
+.include "../lib/n64.nas"
+.include "../lib/narena64.nas"
+.include "../lib/nten.nas"
+.include "../lib/nmat.nas"
 .include "../lib/memmap.nas"
 
 ; Kernel/process map (word addresses).  Later .equ wins in nmk.
@@ -56,6 +60,10 @@ JMPR r1
 .equ SMPT_CTX     0x2C0000
 .equ SMPT_OPS     0x2C0100
 .equ SMPT_ARENA   0x2C0200
+.equ N64_CTX      0x2D0000
+.equ N64_TEN      0x2D0100
+.equ N64_BASE     0x2E0000
+.equ N64_SIZE     0x1000
 ; The GUI's fixed compiler/terminal buffers end below this word; the SVC 2
 ; heap starts here and is clipped to every usable PMEM range above it.
 .equ HEAP_BASE    0xB00000
@@ -242,6 +250,7 @@ gui_shell_ser_done:
   ; Bind the F2 per-CPU policy to the real nansmp ops and prove it can
   ; place a task on CPU 0.  On -smp 1 this is a single-CPU run; on -smp 2/4
   ; the core has already started the APs and the probe sees the full map.
+  CALL @n64_probe
   CALL @smp_probe
 
   ; The kernel has no runnable context of its own: SVC 0 with no current
@@ -325,6 +334,10 @@ g_ncpu:
 g_apmap:
   .word 0
 g_smp_ok:
+  .word 0
+g_n64_ok:
+  .word 0
+g_n64_ptr:
   .word 0
 
 ; ---------------------------------------------------------------------------
@@ -431,6 +444,98 @@ smp_probe_out:
   ADDI r14,r14,-9
   LD r15,r14,0
   RET
+
+; ---------------------------------------------------------------------------
+; n64_probe - 64-bit product ABI self-test.
+; Allocates from an narena64 with (lo,hi) pointers, builds an nten descriptor,
+; checks a 64-bit tensor pointer, and runs an nmat DP4B dot.  Success prints
+; "N64 OK" before the shell starts; failure prints "N64 BAD".
+n64_probe:
+  ST r15,r14,0
+  ADDI r14,r14,9
+  LA r1,#N64_CTX
+  LA r2,#N64_BASE
+  MOVI r3,0
+  LA r4,#N64_SIZE
+  MOVI r5,0
+  CALL @nar64_init
+  LA r1,#N64_CTX
+  MOVI r2,64
+  MOVI r3,0
+  MOVI r4,8
+  CALL @nar64_alloc
+  CMP r1,r0
+  JMP[EQ] @n64_bad
+  CMP r2,r0
+  JMP[NE] @n64_bad
+  LA r3,@g_n64_ptr
+  ST r1,r3,0
+  LA r1,#N64_TEN
+  LA r2,@g_n64_ptr
+  LD r2,r2,0
+  MOVI r3,0
+  MOVI r4,4
+  MOVI r5,4
+  MOVI r6,4
+  MOVI r7,0
+  MOVI r8,1
+  MOVI r9,0
+  CALL @nten_init
+  LA r1,#N64_TEN
+  MOVI r2,1
+  MOVI r3,2
+  CALL @nten_ptr
+  LA r4,@g_n64_ptr
+  LD r4,r4,0
+  ADDI r4,r4,6
+  CMP r1,r4
+  JMP[NE] @n64_bad
+  CMP r2,r0
+  JMP[NE] @n64_bad
+  LA r10,@g_n64_ptr
+  LD r10,r10,0
+  LA r11,0x04030201
+  ST r11,r10,0
+  LA r11,0x01010101
+  ST r11,r10,4
+  MOVI r11,0
+  ST r11,r10,1
+  ST r11,r10,5
+  ADD r1,r10,r0
+  ADDI r2,r10,4
+  MOVI r3,2
+  CALL @nmat_dot
+  MOVI r4,10
+  CMP r1,r4
+  JMP[NE] @n64_bad
+  MOVI r1,1
+  LA r2,@g_n64_ok
+  ST r1,r2,0
+  LA r1,@n64_ok_msg
+  CALL @n64_puts
+  JMP @n64_probe_out
+n64_bad:
+  LA r1,@n64_bad_msg
+  CALL @n64_puts
+n64_probe_out:
+  ADDI r14,r14,-9
+  LD r15,r14,0
+  RET
+n64_puts:
+  SHL r1,r1,2
+n64_puts_l:
+  LDB r2,r1,0
+  CMP r2,r0
+  JMP[EQ] @n64_puts_d
+  PUTC r2
+  ADD r1,r1,r13
+  JMP @n64_puts_l
+n64_puts_d:
+  RET
+n64_ok_msg:
+  .str "N64 OK\n"
+n64_bad_msg:
+  .str "N64 BAD\n"
 
 ; ---------------------------------------------------------------------------
 ; NANIX POSIX shell (PID 2).  Separate image region so command growth cannot

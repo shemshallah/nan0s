@@ -144,16 +144,22 @@ each item needs a real gate, a short proof, and a frontier note.
       skips the ~21 min native full-guest emit on repeat, and the native guest
       packs byte-for-byte to the shipped image.  `NHOST_BUILD=0` remains an
       explicit oracle path.
-- [ ] (nasm) Faster cold-cache native full-guest emit (in-product block
-      cache/translator); then drop the `NHOST_BUILD=0` oracle path.
+- [x] (nasm) Native product-guest cache: repeat builds hit the source-keyed
+      cache in ~37 s; the cache is committed and the native guest matches the
+      oracle word stream.
+- [ ] (nasm) In-product decoded block cache/translator: make a cold native
+      full-guest emit fast; then drop the `NHOST_BUILD=0` oracle path.
 - [x] (cpu) CPU-serious audit/aggregate: `cpu_serious_gate` PASS exercises
       `nansmp`/`nansched_mp`/`nancore`/`ncscale` (2/4 CPUs, 4096 cores),
       `nanthr` (oracle), `narena64`, `nten`, `nmat64`, `nmat64x64`, and the
       32/64 host parity.  The 64-bit native test images are now signed.
 - [x] 64-bit host core parity: `kan16_x64` boots the same 530,842-word guest
       (`NANIX SHELL READY`); deterministic ISA guest output is identical to the
-      32-bit core.  `core32_64_parity_gate` PASS.  The guest ABI remains
-      32-bit; `ADDRH`/`(lo,hi)` is the next CPU-serious step.
+      32-bit core.  `core32_64_parity_gate` PASS.
+- [x] (cpu) 64-bit `(lo,hi)` product ABI: `n64_probe` uses
+      `narena64`/`nten`/`nmat` in the product and prints `N64 OK`;
+      `native_product_n64_gate` PASS.
+- [ ] (cpu) `ADDRH`/high-half guest addressing in the native cores.
 - [x] (cpu) Native nansmp control ports: 0x4E08..0x4E0D (CPU, steps, IPI,
       CAS, fetch-add, fence) in both native cores; CAS/fetch-add use the
       word+2 payload and real `LOCK CMPXCHG`/`LOCK XADD`.
@@ -169,10 +175,11 @@ each item needs a real gate, a short proof, and a frontier note.
       publish entry/stack/go; every AP aliases virtual 0x8000 to a private
       interpreter state page via paging and runs guest code concurrently.  The
       gate totals 1000 increments on 2 CPUs and 3000 on 4.
-- [ ] (cpu) x64 long-mode AP trampoline: start APs in long mode with per-CPU
-      state pages on the 64-bit host core.
-- [ ] (cpu) 64-bit guest ABI: `ADDRH`/`(lo,hi)` pointers/sizes and product use
-      of `narena64`/`nten`/`nmat64` for KV/weights/tensors.
+- [x] (cpu) x64 long-mode AP startup: real-mode trampoline -> PAE/LME ->
+      64-bit AP worker, xAPIC mapped with a 2 MiB page; APs report CPUID APIC
+      ids and park.  `native_ap_gate` PASS on x64 1/2/4.
+- [ ] (cpu) x64 AP guest contexts: per-CPU paged state and guest scheduling on
+      the 64-bit host core.
 - [x] GUI cart reuse: `src/gui/gui_cart.nas` is the one desktop/terminal
       source, embedded at word 8192 by `gui_sched_boot.nas`; the 32-bit
       product and the 64-bit-host image use the same guest.  `boot_chain_gate`

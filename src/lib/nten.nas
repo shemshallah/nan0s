@@ -14,7 +14,7 @@
 ; The current core dereferences the low half; the ADDRH revision consumes
 ; both.  Every offset is computed with 64-bit helpers, so a tensor may cross
 ; 4 GiB without changing this ABI.
-.include "n64.nas"
+
 
 nten_init:
   ST r2,r1,0
@@ -30,7 +30,7 @@ nten_init:
   RET
 
 nten_ptr:
-  ST r15,r0,@nt_ret
+  ST r15,r0,@nten_ret
   ADD r10,r1,r0
   ADD r11,r2,r0
   ADD r12,r3,r0
@@ -56,7 +56,7 @@ nten_ptr:
   LD r3,r10,0
   LD r4,r10,1
   CALL @n64_add
-  LD r15,r0,@nt_ret
+  LD r15,r0,@nten_ret
   RET
-nt_ret:
+nten_ret:
   .word 0
