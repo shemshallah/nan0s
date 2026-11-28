@@ -17,6 +17,7 @@ JMP @main
 .equ P_CMD 0x1F7
 .equ P_STAT 0x1F7
 .equ B_BUN 0x80000
+.equ B_LBA2 2048
 .equ B_SRC 0x280000
 .equ W_SRC 0xA0000
 .equ W_OUT 0x120000
@@ -32,11 +33,26 @@ JMP @main
 .equ H_NB 6305
 .equ H_T 6306
 .equ H_T2 6307
+.equ H_LBA 6308
 ; ---------------------------------------------------------------- main
 main:
 MOVI r13,1
 MOVI r14,#STACK
+ST r0,r0,#H_LBA
 CALL @h_load
+; nan_cli bundles start at LBA 0; native-core images have boot sectors there.
+; If the first load has no ;@MAIN, retry from the high bundle LBA.
+LA r1,#B_BUN
+MOVI r2,@m_main
+SHL r2,r2,2
+MOVI r3,7
+CALL @h_match
+CMP r1,r0
+JMP[NE] @mn_dir
+MOVI r1,#B_LBA2
+ST r1,r0,#H_LBA
+CALL @h_load
+mn_dir:
 CALL @h_mkdir
 CALL @h_pre
 LA r1,#W_SRC
@@ -97,7 +113,7 @@ h_load:
 ST r15,r14,0
 ADD r14,r14,r13
 LA r10,#B_BUN
-MOVI r11,0
+LD r11,r0,#H_LBA
 hl_sec:
 MOVI r1,#P_DRIVE
 MOVI r2,0xE0

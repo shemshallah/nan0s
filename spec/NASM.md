@@ -26,10 +26,13 @@ The x86 backend is namespaced `x1_*`/`Z1_*`; the NaN backend keeps `run` and
   12,368/12,368.
 - `tools/source_gold_gate.sh`: PASS in 73.7 s including the raw n16i slice.
 - `tools/nhost_gate.sh`: PASS, three phases: the `nrun_test` tree (4,842
-  words), nhost assembling itself (4,518 words, exact fixed point), and the
+  words), nhost assembling itself (4,530 words, exact fixed point), and the
   full 51-file product guest (530,842 words, exact `nmk.awk` stream).
 - `tools/nhost_product_gate.sh`: ORACLE MATCH; the nhost-emitted guest packs
   to the shipped `build/nan0s.img` byte-for-byte.
+- `tools/native_nhost_gate.sh`: PASS phase 1, nhost self-host on the raw native
+  NaN16 core in 17 s (QEMU, no `nan_cli`, no S1 KABI).  Phase 2 is the
+  opt-in full 530,842-word native run (`NHOST_NATIVE_FULL=1`).
 - `tools/nixsh_asm_gate.sh`: PASS, in-shell `asm` assembles an
   operand/label source and n16i runs it.
 - `src/tests/nrun_test.nas`: `HI` / `RUN PASS` after the merge.
@@ -66,13 +69,16 @@ The full guest now assembles under `nhost` with 0 errors and is byte-identical
 to `nmk.awk` (same 530,842 words, SHA-256 match, ~34 s).
 `tools/nhost_bundle.awk` builds the flat `;@MAIN`/`;@FILE` disk bundle.
 
-`nhost` also assembles its own source to the same 4,518-word image: stage0 is
+`nhost` also assembles its own source to the same 4,530-word image: stage0 is
 built with `nmk.awk`, then stage1 is the fixed point.  `tools/nhost_emit_guest.sh`
 runs stage0 -> stage1 -> guest; the default `tools/build.sh` path remains
 hermetic, and `NHOST_BUILD=1` selects the nhost guest.  `nhost_product_gate.sh`
 packs that guest and compares the result to `build/nan0s.img`.
 
-`nan_cli` is still the bootstrap machine for this path, so it is not yet the
-default producer (BUILD_PERF rule 3).  The remaining step is running the same
-nhost image on the native core or a portable x86_64 machine with the bundle
-on a second IDE disk, then making that the default.
+`nan_cli` is still the fast bootstrap machine for the default build.  The
+native core now runs the same nhost image directly: it boots the product boot
+sector + GOLD kernel, loads nhost from LBA 129, and nhost reads the source
+bundle from LBA 2048 after its LBA-0 probe finds boot sectors instead of
+`;@MAIN`.  Native self-host is 17 s; the full guest is an opt-in long run.
+Making the native core the default producer needs a faster full-guest path
+(or a native in-product build), not a different assembler.
