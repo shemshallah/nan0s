@@ -141,7 +141,9 @@ each item needs a real gate, a short proof, and a frontier note.
       to nasm1, `xgold.sh` matches GOLD, `blockcache_gate` PASS (3,913-word
       cache), and `source_gold_gate` PASS in 73.7 s.  In-shell `asm`
       operands/labels now assemble and run (`nixsh_asm_gate` PASS) after the
-      duplicate `tn_d` label fix.
+      duplicate `tn_d` label fix.  The earlier PID 2/shared-child hang was
+      that label hijack, not the process model; a private service process is
+      deferred until concurrent or much larger shell builds need it.
 - [x] F18b Block-cache GOLD build: translate nasm1's 2,992 compiled words to
       native x86 slots plus a per-PC predicate-mask table, dispatch directly
       in a multiboot 64-bit stub, and consume it from `tools/xgold.sh`.
