@@ -142,6 +142,22 @@ Proof.
   reflexivity.
 Qed.
 
+Lemma nth_window_tape :
+  forall c K i,
+    i < 256 ->
+    nth i (firstn 256 (window_tape c K ++ repeat 0%N 256)) 0%N =
+    tape_word (win_mem c fixture_tape_base K (fixture_tape_base + i)).
+Proof.
+  intros c K i Hi.
+  rewrite nth_firstn_lt by exact Hi.
+  rewrite app_nth1.
+  - unfold window_tape.
+    rewrite nth_map_seq_lt by exact Hi.
+    replace (0 + i) with i by lia.
+    reflexivity.
+  - rewrite app_length. cbn [length repeat]. lia.
+Qed.
+
 Lemma lp_load_window_tape :
   forall c K i,
     i < 256 ->
@@ -151,11 +167,12 @@ Lemma lp_load_window_tape :
     win_mem c fixture_tape_base K (fixture_tape_base + i).
 Proof.
   intros c K i Hi Hb.
-  unfold lp_load_window, lp_load_tape, window_tape.
+  unfold lp_load_window, lp_load_tape.
   rewrite mem_get_tape by exact Hi.
-  rewrite nth_firstn_lt by exact Hi.
-  rewrite nth_map_seq_lt by exact Hi.
-  replace (0 + i) with i by lia.
+  change (payload_word
+    (nth i (firstn 256 (window_tape c K ++ repeat 0%N 256)) 0%N) =
+    win_mem c fixture_tape_base K (fixture_tape_base + i)).
+  rewrite nth_window_tape by exact Hi.
   rewrite payload_word_tape_word.
   apply Nat.mod_small. exact Hb.
 Qed.
