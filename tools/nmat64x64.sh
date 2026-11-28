@@ -11,6 +11,8 @@ if command -v qemu-system-i386 >/dev/null 2>&1 && [ -f src/native/nan16_x86.nan 
   gawk -f tools/mkimg.awk -v GOLD=src/native/nan16_x86.nan -v GUEST="$T/t.nan" \
        -v CARTS=/dev/null -v OUTB="$T/b.bin" -v OUTG="$T/g.bin" 2>/dev/null
   cat "$T/b.bin" "$T/g.bin" > "$T/t.img"; truncate -s 1474560 "$T/t.img"
+  sh tools/manifest_build.sh "$T/t.img" >/dev/null 2>&1 ||
+    { echo "manifest signing failed"; exit 1; }
   rm -f "$T/n.com"
   timeout 30 qemu-system-i386 -m 512 -drive format=raw,if=floppy,file="$T/t.img" \
     -display none -serial "file:$T/n.com" -no-reboot >/dev/null 2>&1 || true
