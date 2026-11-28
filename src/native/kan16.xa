@@ -2957,6 +2957,11 @@ h_outl_full:
   JB @ol_raw
   CMP $0x4E0F,%EDX
   JA @ol_raw
+  ; 0x4E08..0x4E0F are the nansmp/SMP services, not KABI entry ports.
+  ; Skip the KENTRY/KIN gate so a product with a real kernel entry can use
+  ; the atomic and CPU services.
+  CMP $0x4E08,%EDX
+  JAE @ol_store
   MOV [KENTRY],%EBX
   CMP $0xFFFFFFFF,%EBX
   JE @ol_store

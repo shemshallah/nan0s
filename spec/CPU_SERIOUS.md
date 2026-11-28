@@ -107,8 +107,15 @@ image starts at LBA 129 and is staged at 0x20000.  The kernel can grow to
       0x4E0E (0x4E0F is the logical CPU count).  `native_ap_gate` PASS for
       i386 -smp 1/2/4 (`S1A0`, `S2A2`, `S4AE`).  The x64 host core remains
       BSP-only (its APs would need a long-mode trampoline).
-- [ ] Native AP product binding: bind `nansched_nansmp` in the product and
-      run guest work on APs; add the x64 long-mode AP trampoline.
+- [x] Native AP product binding on CPU 0: `gui_sched_boot.nas` reads the CPU
+      count and AP bitmap, initialises the F2 scheduler with the real nansmp
+      ops, binds `nansched_nansmp`, and runs one add/push/pop.  The product
+      prints `SMP <ncpu> AP <bitmap>` on multicore boots;
+      `native_product_smp_gate` PASS for 1/2/4 CPUs.  The nansmp ports
+      (0x4E08..0x4E0F) bypass the KABI KENTRY/KIN gate; without that they
+      collide with a product that has a real kernel entry.
+- [ ] Native AP guest work: run guest contexts on APs and add the x64
+      long-mode AP trampoline.
 - [x] Runtime word count and mask (`mem_size`, CPUID `0x4E4D00FF`).
 - [x] Dynamic C address space and 100 MB heap.
 - [ ] Decoded block cache: decode once, validate once, execute tokens.
@@ -188,7 +195,9 @@ them stays NaN.
 - [x] Native AP startup on the 32-bit core: real INIT-SIPI-SIPI, APIC ids and
       `LOCK INC` handshake; `nansched_mp`/`nansmp` remain the guest-side
       multicore ABI.
-- [ ] Native AP product binding: schedule guest work on APs and add the x64
+- [x] Native AP product binding on CPU 0: the product scheduler policy is
+      bound to the real nansmp ops and reports the AP bitmap.
+- [ ] Native AP guest work: schedule contexts on APs and add the x64
       long-mode trampoline.
 - [ ] Huge-page hint and zero-copy model load (`mmap` equivalent) once a
       storage-backed model loader exists.

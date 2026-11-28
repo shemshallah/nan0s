@@ -232,9 +232,15 @@ a 16-bit trampoline to physical 0x6000, sends INIT-SIPI-SIPI, and the APs
 enter flat protected mode at 0x6200.  Each AP records its LAPIC id in a
 per-id table and increments a shared counter with `LOCK INC`.  The BSP packs
 the ids into the bitmap returned by 0x4E0E; 0x4E0F reports the CPU count.
-APs park after the handshake, so the guest interpreter remains on the BSP
-until the product binds `nansched_nansmp` to real AP contexts.  The x64 host
-core is BSP-only in this revision.
+APs park after the handshake, so the guest interpreter remains on the BSP.
+
+The product kernel (`src/gui/gui_sched_boot.nas`) binds `nansched_nansmp` to
+the real nansmp ops at boot, initialises the F2 scheduler with the CPU count,
+and runs one add/push/pop on CPU 0.  Multicore boots print
+`SMP <ncpu> AP <bitmap>`; `native_product_smp_gate` covers 1/2/4 CPUs.
+The nansmp ports bypass the KABI KENTRY/KIN gate because a product kernel has
+a real kernel entry.  Guest work on APs and the x64 long-mode trampoline are
+the remaining steps.  The x64 host core is BSP-only in this revision.
 
 The atomics are sequentially consistent.  This is stronger than the final
 NaN memory model needs, and it is the only primitive the prototype lock

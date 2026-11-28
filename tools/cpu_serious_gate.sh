@@ -30,6 +30,7 @@ run tools/nansmp_gate.sh
 run tools/nansmp_native_gate.sh
 run tools/nansched_native_gate.sh
 run tools/native_ap_gate.sh
+run tools/native_product_smp_gate.sh
 run tools/nanthr_gate.sh
 
-echo "cpu_serious: PASS (host parity, 64-bit arena/tensor/matmul, 4096-core topology, 2/4-CPU nansmp, native AP startup, nanthr oracle)"
+echo "cpu_serious: PASS (host parity, 64-bit arena/tensor/matmul, 4096-core topology, 2/4-CPU nansmp, native AP startup, product SMP binding, nanthr oracle)"
