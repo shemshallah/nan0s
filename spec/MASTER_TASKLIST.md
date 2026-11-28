@@ -127,6 +127,9 @@ each item needs a real gate, a short proof, and a frontier note.
       guest, and `tools/nhost_product_gate.sh` proves it packs to the shipped
       `build/nan0s.img` byte-for-byte.  `NHOST_BUILD=1` selects it in
       `tools/build.sh` and `tools/mkn16iimg.sh`.
+- [x] (native) Product acceptance is native-only: `native_product_boot_gate`
+      and `native_nhost_gate` are the acceptance paths; `nan_cli` is an
+      Android host adapter, never a product producer or image member.
 - [x] (nasm) Native-core nhost: `native_nhost_gate.sh` boots the product boot
       sector + GOLD kernel with nhost as the guest and the source bundle at
       LBA 2048.  Self-host is 4,532 words in 17 s with no `nan_cli`/S1 KABI;
@@ -384,7 +387,10 @@ Agent rule:
       predicates, and self-hosting.  Remaining opcodes: FEXP/FTANH/FLOG
       and the wider platform I/O surface (ports/fb/keyboard/timer).
 - [ ] Port the native NaN16 execution core to 64-bit (`kan64`) only where the
-      bootstrap/EXECN substrate requires it; core policy stays NaN.
+      bootstrap/EXECN substrate requires it; core policy stays NaN.  The
+      x86-64 host core currently builds a 20,038-byte kernel and enters long
+      mode, but a product image stops after the `SPEL` stage at RIP
+      0x14089 in `ata_load_guest`; the guest is never entered.
 - [ ] 64-bit native shims for ports, CPUID, RDTSC, MSRs, page tables.
 
 ### P0.4.2 Virtual memory
