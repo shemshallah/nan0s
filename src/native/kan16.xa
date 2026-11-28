@@ -71,7 +71,7 @@ _start:
   CLD
   CALL @sse_init
   CALL @mem_size
-  MOVL $0x7FFFFFFF,[MAXS]
+  MOVL $0xF0000000,[MAXS]
   MOVL $1,[FLAGM]
   MOVL $0,[STEPS]
   MOVL $0xF0000,[DATAB]
