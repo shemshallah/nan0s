@@ -31,8 +31,9 @@ The x86 backend is namespaced `x1_*`/`Z1_*`; the NaN backend keeps `run` and
 - `tools/nhost_product_gate.sh`: ORACLE MATCH; the nhost-emitted guest packs
   to the shipped `build/nan0s.img` byte-for-byte.
 - `tools/native_nhost_gate.sh`: PASS phase 1, nhost self-host on the raw native
-  NaN16 core in 17 s (QEMU, no `nan_cli`, no S1 KABI).  Phase 2 is the
-  opt-in full 530,842-word native run (`NHOST_NATIVE_FULL=1`).
+  NaN16 core in 17 s (QEMU, no `nan_cli`, no S1 KABI).  The full guest also
+  completed natively: **530,842/530,842 words, err=0, pre=0, exact `nmk.awk`
+  stream, 1,736 s** (~29 min), no C harness.
 - `tools/nixsh_asm_gate.sh`: PASS, in-shell `asm` assembles an
   operand/.equ/#K/label source and n16i runs it.
 - `tools/nan0s_gui64_sched_gate.sh`: PASS, desktop+Terminal transcript,
