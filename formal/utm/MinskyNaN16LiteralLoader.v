@@ -286,7 +286,7 @@ Lemma lp_run_k_lt4_loaded :
 Proof.
   intros c K fuel.
   apply lp_run_k_lt4.
-  reflexivity.
+  rewrite lp_load_window_k. lia.
 Qed.
 
 Print Assumptions lp_run_k_lt4_loaded.
