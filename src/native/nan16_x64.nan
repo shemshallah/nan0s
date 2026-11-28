@@ -1,4 +1,4 @@
-; NaN16 gold: boot 512 + x86-64 long-mode kernel 20355 bytes
+; NaN16 gold: boot 512 + x86-64 long-mode kernel 20338 bytes
 fa 31 c0 8e d8 8e d0 bc 00 7c fb 88 16 f8 05 8e   ; boot+0000
 c0 66 31 db bf 00 06 b8 00 00 a3 fe 8f 31 c0 8e   ; boot+0010
 d8 8e c0 66 b8 20 e8 00 00 66 ba 50 41 4d 53 66   ; boot+0020
@@ -307,7 +307,7 @@ c7 04 25 d4 80 00 00 00 00 00 00 c7 04 25 e8 80   ; kernel+1260
 00 e8 ea 2e 00 00 90 90 90 90 90 90 90 90 90 90   ; kernel+1310
 90 90 e8 69 10 00 00 e8 31 37 00 00 31 f6 67 a1   ; kernel+1320
 44 80 00 00 3b 04 25 48 80 00 00 0f 83 d4 0f 00   ; kernel+1330
-00 83 c0 01 67 a3 44 80 00 00 e8 f4 3d 00 00 89   ; kernel+1340
+00 83 c0 01 67 a3 44 80 00 00 e8 e3 3d 00 00 89   ; kernel+1340
 f1 23 0c 25 c0 80 00 00 e8 8e 00 00 00 0f 82 56   ; kernel+1350
 0f 00 00 83 c6 01 0f ac d0 10 89 c3 c1 eb 18 81   ; kernel+1360
 fb ff 00 00 00 0f 84 9a 0f 00 00 83 fb 61 0f 87   ; kernel+1370
@@ -435,7 +435,7 @@ ca 81 e2 ff ff 00 00 66 ed 31 db 66 89 c3 e9 73   ; kernel+1B00
 f9 ff ff 56 89 cf 89 d3 c1 e3 03 81 c3 00 00 20   ; kernel+1B10
 00 83 c3 02 8b 8d 00 80 00 00 e3 0f 0f b7 03 89   ; kernel+1B20
 fa 66 ef 83 c3 08 83 e9 01 75 f1 5e e9 ed f7 ff   ; kernel+1B30
-ff e9 f7 32 00 00 e9 b2 34 00 00 89 cb 0f af da   ; kernel+1B40
+ff e9 f7 32 00 00 e9 a1 34 00 00 89 cb 0f af da   ; kernel+1B40
 e9 02 f9 ff ff 89 c8 f7 ea 89 d3 e9 f7 f8 ff ff   ; kernel+1B50
 89 c8 f7 e2 89 d3 e9 ec f8 ff ff 85 d2 74 60 83   ; kernel+1B60
 fa ff 75 09 89 cb f7 db e9 da f8 ff ff 89 d3 89   ; kernel+1B70
@@ -1252,7 +1252,7 @@ c0 17 e8 06 c6 ff ff 8b 1c 25 f8 80 00 00 83 fb   ; kernel+4E10
 ff 74 07 89 1c 25 38 80 00 00 c7 04 25 04 81 00   ; kernel+4E20
 00 01 00 00 00 8b 34 25 e8 80 00 00 c3 8b 85 00   ; kernel+4E30
 80 00 00 89 ca 81 e2 ff ff 00 00 81 fa 00 4e 00   ; kernel+4E40
-00 0f 82 a0 01 00 00 81 fa 0d 4e 00 00 0f 87 94   ; kernel+4E50
+00 0f 82 8f 01 00 00 81 fa 0d 4e 00 00 0f 87 83   ; kernel+4E50
 01 00 00 8b 1c 25 e8 80 00 00 83 fb ff 74 0f 8b   ; kernel+4E60
 1c 25 04 81 00 00 85 db 0f 84 45 d4 ff ff 81 fa   ; kernel+4E70
 00 4e 00 00 0f 84 99 00 00 00 81 fa 01 4e 00 00   ; kernel+4E80
@@ -1263,7 +1263,7 @@ ff 74 07 89 1c 25 38 80 00 00 c7 04 25 04 81 00   ; kernel+4E20
 ff ff 81 fa 08 4e 00 00 0f 84 50 c4 ff ff 81 fa   ; kernel+4ED0
 09 4e 00 00 0f 84 44 c4 ff ff 81 fa 0a 4e 00 00   ; kernel+4EE0
 74 79 81 fa 0b 4e 00 00 0f 84 90 00 00 00 81 fa   ; kernel+4EF0
-0c 4e 00 00 0f 84 bd 00 00 00 81 fa 0d 4e 00 00   ; kernel+4F00
+0c 4e 00 00 0f 84 b3 00 00 00 81 fa 0d 4e 00 00   ; kernel+4F00
 74 69 67 a3 08 81 00 00 67 a3 cc 80 00 00 e9 0b   ; kernel+4F10
 c4 ff ff 67 a3 e8 80 00 00 e9 00 c4 ff ff 67 a3   ; kernel+4F20
 ec 80 00 00 e9 f5 c3 ff ff 67 a3 f0 80 00 00 67   ; kernel+4F30
@@ -1273,34 +1273,33 @@ e9 d9 c3 ff ff 67 a3 fc 80 00 00 e9 ce c3 ff ff   ; kernel+4F50
 00 00 00 00 00 00 e9 b3 c3 ff ff 0f ae f0 c7 04   ; kernel+4F70
 25 08 81 00 00 00 00 00 00 e9 a0 c3 ff ff 56 57   ; kernel+4F80
 89 c6 8b 1c f5 02 00 20 00 8b 04 f5 0a 00 20 00   ; kernel+4F90
-8b 0c f5 12 00 20 00 8b 3c dd 02 00 20 00 39 f8   ; kernel+4FA0
-75 07 89 0c dd 02 00 20 00 89 3c 25 08 81 00 00   ; kernel+4FB0
-5f 5e e9 67 c3 ff ff 56 57 89 c6 8b 1c f5 02 00   ; kernel+4FC0
-20 00 8b 0c f5 0a 00 20 00 8b 3c dd 02 00 20 00   ; kernel+4FD0
-89 3c 25 08 81 00 00 01 cf 89 3c dd 02 00 20 00   ; kernel+4FE0
-5f 5e e9 37 c3 ff ff ef e9 31 c3 ff ff 89 ca 81   ; kernel+4FF0
-e2 ff ff 00 00 81 fa 00 4e 00 00 0f 82 2a 01 00   ; kernel+5000
-00 81 fa 0d 4e 00 00 0f 87 1e 01 00 00 81 fa 00   ; kernel+5010
-4e 00 00 0f 84 98 00 00 00 81 fa 01 4e 00 00 0f   ; kernel+5020
-84 98 00 00 00 81 fa 02 4e 00 00 0f 84 98 00 00   ; kernel+5030
-00 81 fa 03 4e 00 00 0f 84 98 00 00 00 81 fa 04   ; kernel+5040
-4e 00 00 0f 84 98 00 00 00 81 fa 05 4e 00 00 0f   ; kernel+5050
-84 98 00 00 00 81 fa 06 4e 00 00 0f 84 98 00 00   ; kernel+5060
-00 81 fa 08 4e 00 00 0f 84 98 00 00 00 81 fa 09   ; kernel+5070
-4e 00 00 0f 84 93 00 00 00 81 fa 0a 4e 00 00 0f   ; kernel+5080
-84 93 00 00 00 81 fa 0b 4e 00 00 0f 84 8e 00 00   ; kernel+5090
-00 81 fa 0c 4e 00 00 0f 84 82 00 00 00 81 fa 0d   ; kernel+50A0
-4e 00 00 74 73 8b 1c 25 08 81 00 00 e9 c5 c3 ff   ; kernel+50B0
-ff 8b 1c 25 e8 80 00 00 e9 b9 c3 ff ff 8b 1c 25   ; kernel+50C0
-ec 80 00 00 e9 ad c3 ff ff 8b 1c 25 f0 80 00 00   ; kernel+50D0
-e9 a1 c3 ff ff 8b 1c 25 f8 80 00 00 e9 95 c3 ff   ; kernel+50E0
-ff 8b 1c 25 fc 80 00 00 e9 89 c3 ff ff 8b 1c 25   ; kernel+50F0
-00 81 00 00 e9 7d c3 ff ff 8b 1c 25 0c 81 00 00   ; kernel+5100
-e9 71 c3 ff ff 31 db e9 6a c3 ff ff 8b 1c 25 44   ; kernel+5110
-80 00 00 e9 5e c3 ff ff 31 db e9 57 c3 ff ff 8b   ; kernel+5120
-1c 25 08 81 00 00 e9 4b c3 ff ff ed 89 c3 e9 43   ; kernel+5130
-c3 ff ff 67 a1 f0 80 00 00 85 c0 74 35 8b 1c 25   ; kernel+5140
-e8 80 00 00 83 fb ff 74 29 8b 1c 25 04 81 00 00   ; kernel+5150
-85 db 75 1e 8b 1c 25 f4 80 00 00 83 eb 01 89 1c   ; kernel+5160
-25 f4 80 00 00 75 0b 67 a3 f4 80 00 00 e8 09 fc   ; kernel+5170
-ff ff c3   ; kernel+5180
+8b 0c f5 12 00 20 00 f0 0f b1 0c dd 02 00 20 00   ; kernel+4FA0
+67 a3 08 81 00 00 5f 5e e9 71 c3 ff ff 56 57 89   ; kernel+4FB0
+c6 8b 1c f5 02 00 20 00 8b 0c f5 0a 00 20 00 f0   ; kernel+4FC0
+0f c1 0c dd 02 00 20 00 89 0c 25 08 81 00 00 5f   ; kernel+4FD0
+5e e9 48 c3 ff ff ef e9 42 c3 ff ff 89 ca 81 e2   ; kernel+4FE0
+ff ff 00 00 81 fa 00 4e 00 00 0f 82 2a 01 00 00   ; kernel+4FF0
+81 fa 0d 4e 00 00 0f 87 1e 01 00 00 81 fa 00 4e   ; kernel+5000
+00 00 0f 84 98 00 00 00 81 fa 01 4e 00 00 0f 84   ; kernel+5010
+98 00 00 00 81 fa 02 4e 00 00 0f 84 98 00 00 00   ; kernel+5020
+81 fa 03 4e 00 00 0f 84 98 00 00 00 81 fa 04 4e   ; kernel+5030
+00 00 0f 84 98 00 00 00 81 fa 05 4e 00 00 0f 84   ; kernel+5040
+98 00 00 00 81 fa 06 4e 00 00 0f 84 98 00 00 00   ; kernel+5050
+81 fa 08 4e 00 00 0f 84 98 00 00 00 81 fa 09 4e   ; kernel+5060
+00 00 0f 84 93 00 00 00 81 fa 0a 4e 00 00 0f 84   ; kernel+5070
+93 00 00 00 81 fa 0b 4e 00 00 0f 84 8e 00 00 00   ; kernel+5080
+81 fa 0c 4e 00 00 0f 84 82 00 00 00 81 fa 0d 4e   ; kernel+5090
+00 00 74 73 8b 1c 25 08 81 00 00 e9 d6 c3 ff ff   ; kernel+50A0
+8b 1c 25 e8 80 00 00 e9 ca c3 ff ff 8b 1c 25 ec   ; kernel+50B0
+80 00 00 e9 be c3 ff ff 8b 1c 25 f0 80 00 00 e9   ; kernel+50C0
+b2 c3 ff ff 8b 1c 25 f8 80 00 00 e9 a6 c3 ff ff   ; kernel+50D0
+8b 1c 25 fc 80 00 00 e9 9a c3 ff ff 8b 1c 25 00   ; kernel+50E0
+81 00 00 e9 8e c3 ff ff 8b 1c 25 0c 81 00 00 e9   ; kernel+50F0
+82 c3 ff ff 31 db e9 7b c3 ff ff 8b 1c 25 44 80   ; kernel+5100
+00 00 e9 6f c3 ff ff 31 db e9 68 c3 ff ff 8b 1c   ; kernel+5110
+25 08 81 00 00 e9 5c c3 ff ff ed 89 c3 e9 54 c3   ; kernel+5120
+ff ff 67 a1 f0 80 00 00 85 c0 74 35 8b 1c 25 e8   ; kernel+5130
+80 00 00 83 fb ff 74 29 8b 1c 25 04 81 00 00 85   ; kernel+5140
+db 75 1e 8b 1c 25 f4 80 00 00 83 eb 01 89 1c 25   ; kernel+5150
+f4 80 00 00 75 0b 67 a3 f4 80 00 00 e8 1a fc ff   ; kernel+5160
+ff c3   ; kernel+5170

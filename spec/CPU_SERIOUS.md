@@ -94,9 +94,9 @@ image starts at LBA 129 and is staged at 0x20000.  The kernel can grow to
       fence are implemented in both native cores (`0x4E08..0x4E0D`).  The
       nansmp CAS/fetch-add read the NaN payload at **word+2**; both cores pass
       the native CAS/fetch-add/CPU-id transcript (`nansmp_native_gate`).
-      The native CAS is single-core; AP startup and locked atomics follow.
-- [ ] Native AP startup: start APs, return real CPU ids, and enable the locked
-      CAS/fetch-add paths; then bind `nansched_nansmp` in the product.
+      CAS is real `LOCK CMPXCHG` and fetch-add is `LOCK XADD`.
+- [ ] Native AP startup: start APs, return real CPU ids and per-CPU state,
+      then bind `nansched_nansmp` in the product.
 - [x] Runtime word count and mask (`mem_size`, CPUID `0x4E4D00FF`).
 - [x] Dynamic C address space and 100 MB heap.
 - [ ] Decoded block cache: decode once, validate once, execute tokens.
