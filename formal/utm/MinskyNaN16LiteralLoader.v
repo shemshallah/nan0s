@@ -246,3 +246,47 @@ Proof.
 Qed.
 
 Print Assumptions bounded_window_bridge.
+
+(** ** A global flag-bound invariant
+
+    [lp_k] is always a two-bit packed flag word.  This holds for every
+    instruction and therefore for every run from a loaded window,
+    independent of the tape data. *)
+
+Lemma lp_exec_k_lt4 :
+  forall L ins,
+    lp_k L < 4 ->
+    lp_k (lp_exec L ins) < 4.
+Proof.
+  intros L ins H. destruct ins; cbn; try exact H;
+    try (apply pack_k_lt_4).
+Qed.
+
+Lemma lp_run_k_lt4 :
+  forall fuel L,
+    lp_k L < 4 ->
+    lp_k (lp_run fuel L) < 4.
+Proof.
+  induction fuel as [|fuel IH]; intros L H.
+  - cbn. exact H.
+  - cbn [lp_run]. destruct (lp_halted L) eqn:E.
+    + exact H.
+    + unfold lp_step.
+      destruct (decode_word_p (mem_get (lp_mem L) (lp_pc L))) as [ins|].
+      * apply IH. apply lp_exec_k_lt4. exact H.
+      * apply IH. exact H.
+Qed.
+
+Lemma lp_load_window_k :
+  forall c K, lp_k (lp_load_window c K) = 0.
+Proof. intros. reflexivity. Qed.
+
+Lemma lp_run_k_lt4_loaded :
+  forall c K fuel, lp_k (lp_run fuel (lp_load_window c K)) < 4.
+Proof.
+  intros c K fuel.
+  apply lp_run_k_lt4.
+  reflexivity.
+Qed.
+
+Print Assumptions lp_run_k_lt4_loaded.
