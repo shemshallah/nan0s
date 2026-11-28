@@ -155,7 +155,7 @@ Proof.
     rewrite nth_map_seq_lt by exact Hi.
     replace (0 + i) with i by lia.
     reflexivity.
-  - rewrite app_length. cbn [length repeat]. lia.
+  - unfold window_tape. rewrite length_map, length_seq. exact Hi.
 Qed.
 
 Lemma lp_load_window_tape :
