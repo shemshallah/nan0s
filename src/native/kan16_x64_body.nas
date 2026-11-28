@@ -69,6 +69,12 @@
 .equ KIN     0x8104
 .equ KDATA   0x8108
 .equ KSTATUS 0x810C
+; SMP mailbox (AP startup is 32-bit-core only for now; x64 reports one CPU).
+.equ SM_NCPU  0x5900
+.equ SM_DONE  0x5904
+.equ SM_MAP   0x5908
+.equ BOOLP    0x5910
+.equ SM_FLAGS 0x5940
 core64_entry:
   CLD
   CALL @sse_init
@@ -127,6 +133,13 @@ z_count:
   NOP
   CALL @hw_init
   CALL @memmap_build
+  MOV $SM_FLAGS,%EDI
+  XOR %EAX,%EAX
+  MOV $0x100,%ECX
+  REPSTOSD
+  MOVL $1,[SM_NCPU]
+  MOVL $0,[SM_DONE]
+  MOVL $0,[SM_MAP]
   XOR %ESI,%ESI
 loop:
   MOV [STEPS],%EAX
@@ -166,6 +179,8 @@ loop:
 L5:
   ; 64-bit mode: load the 32-bit table entry, then jump through the
   ; zero-extended register.  A qword table load would combine two entries.
+  ; The dispatch must not lose the BOOL predicate that nib left in EDI.
+  MOV %EDI,[BOOLP]
   MOV [tbl+EBX*4],%EDI
   JMP %EDI
 head:
@@ -243,6 +258,7 @@ stf:
   MOVL $1,[FLAGM]
   JMP @loop
 h_bool:
+  MOV [BOOLP],%EDI
   XOR %EBX,%EBX
   MOV %ECX,%EAX
   OR %EDX,%EAX
@@ -2903,7 +2919,7 @@ h_outl_full:
   AND $0xFFFF,%EDX
   CMP $0x4E00,%EDX
   JB @ol_raw
-  CMP $0x4E0D,%EDX
+  CMP $0x4E0F,%EDX
   JA @ol_raw
   MOV [KENTRY],%EBX
   CMP $0xFFFFFFFF,%EBX
@@ -2938,6 +2954,10 @@ ol_store:
   JE @ol_fadd
   CMP $0x4E0D,%EDX
   JE @ol_fence
+  CMP $0x4E0E,%EDX
+  JE @loop
+  CMP $0x4E0F,%EDX
+  JE @loop
   MOV %EAX,[KDATA]
   MOV %EAX,[DATAB]
   JMP @loop
@@ -3003,7 +3023,7 @@ h_inl_full:
   AND $0xFFFF,%EDX
   CMP $0x4E00,%EDX
   JB @il_raw
-  CMP $0x4E0D,%EDX
+  CMP $0x4E0F,%EDX
   JA @il_raw
   CMP $0x4E00,%EDX
   JE @il_kentry
@@ -3031,7 +3051,17 @@ h_inl_full:
   JE @il_kdata
   CMP $0x4E0D,%EDX
   JE @il_zero
+  CMP $0x4E0E,%EDX
+  JE @il_apmap
+  CMP $0x4E0F,%EDX
+  JE @il_ncpu
   MOV [KDATA],%EBX
+  JMP @st
+il_apmap:
+  MOV [SM_MAP],%EBX
+  JMP @st
+il_ncpu:
+  MOV [SM_NCPU],%EBX
   JMP @st
 il_kentry:
   MOV [KENTRY],%EBX

@@ -67,6 +67,11 @@
 .equ KIN     0x8104
 .equ KDATA   0x8108
 .equ KSTATUS 0x810C
+; SMP bring-up mailbox (low memory, below the AP trampoline at 0x6000).
+.equ SM_NCPU  0x5900
+.equ SM_DONE  0x5904
+.equ SM_MAP   0x5908
+.equ SM_FLAGS 0x5940
 _start:
   CLD
   CALL @sse_init
@@ -128,6 +133,10 @@ z_count:
   NOP
   CALL @hw_init
   CALL @memmap_build
+  MOVL $1,[SM_NCPU]
+  MOVL $0,[SM_DONE]
+  MOVL $0,[SM_MAP]
+  CALL @smp_start
   XOR %ESI,%ESI
 loop:
   MOV [STEPS],%EAX
@@ -1483,6 +1492,117 @@ sse_init:
   MOVB $1,[AVX2F]
 sse_no:
   RET
+; ---- SMP bring-up: start APs into protected mode at 0x6200 ------------
+; The BSP enumerates logical CPUs with CPUID.1, copies the real-mode
+; trampoline to 0x6000, enables its xAPIC, and sends INIT-SIPI-SIPI to all
+; APs.  Each AP records its LAPIC id in the SM_FLAGS table and increments
+; SM_DONE with LOCK INC; the BSP packs those ids into SM_MAP.  APs never run guest code; they park after the
+; handshake, so the single guest interpreter stays on the BSP.  A 1-CPU
+; machine takes the early exit and leaves SM_NCPU=1.
+smp_start:
+  PUSH %EAX
+  PUSH %EBX
+  PUSH %ECX
+  PUSH %EDX
+  PUSH %ESI
+  PUSH %EDI
+  MOV $1,%EAX
+  XOR %ECX,%ECX
+  .byte 0x0F,0xA2             ; cpuid.1
+  SHR $16,%EBX
+  AND $0xFF,%EBX
+  TEST %EBX,%EBX
+  JNZ @smp_have_count
+  MOV $1,%EBX
+smp_have_count:
+  MOV %EBX,[SM_NCPU]
+  CMP $1,%EBX
+  JBE @smp_out
+  ; clear the APIC-id bitmap (1 KiB)
+  MOV $SM_FLAGS,%EDI
+  XOR %EAX,%EAX
+  MOV $0x100,%ECX
+  REPSTOSD
+  ; copy the 16-bit stub + GDT + 32-bit AP worker to 0x6000
+  MOV $ap_stub,%ESI
+  MOV $0x6000,%EDI
+  MOV $0x100,%ECX
+  REPMOVSD
+  ; enable the BSP local APIC (MSR 0x1B bit 11) and the spurious vector
+  MOV $0x1B,%ECX
+  .byte 0x0F,0x32             ; rdmsr
+  OR $0x800,%EAX
+  .byte 0x0F,0x30             ; wrmsr
+  MOVL $0x1FF,[0xFEE000F0]
+  MOVL $0,[0xFEE00310]
+  ; INIT to all-excluding-self
+  MOVL $0x000C4500,[0xFEE00300]
+  CALL @smp_wait_delivery
+  MOV $0x200000,%ECX
+  CALL @smp_delay
+  ; SIPI vector 6 twice
+  MOVL $0x000C4606,[0xFEE00300]
+  CALL @smp_wait_delivery
+  MOV $0x200000,%ECX
+  CALL @smp_delay
+  MOVL $0x000C4606,[0xFEE00300]
+  CALL @smp_wait_delivery
+  ; wait until every AP has set its flag and incremented SM_DONE
+  MOV $0x8000000,%EDI
+smp_poll:
+  MOV [SM_DONE],%EAX
+  MOV [SM_NCPU],%EBX
+  DEC %EBX
+  CMP %EBX,%EAX
+  JE @smp_ready
+  DEC %EDI
+  JNZ @smp_poll
+  JMP @smp_out
+smp_ready:
+  ; pack the per-id flags into a 32-bit APIC bitmap for the guest
+  MOV $SM_FLAGS,%ESI
+  MOV [SM_NCPU],%EBX
+  XOR %EDI,%EDI
+smp_pack_l:
+  CMP %EBX,%EDI
+  JAE @smp_out
+  MOV [ESI+EDI*4],%EAX
+  TEST %EAX,%EAX
+  JZ @smp_pack_n
+  MOV $1,%EAX
+  MOV %EDI,%ECX
+  SHL %CL,%EAX
+  MOV [SM_MAP],%EDX
+  OR %EAX,%EDX
+  MOV %EDX,[SM_MAP]
+smp_pack_n:
+  INC %EDI
+  JMP @smp_pack_l
+smp_out:
+  POP %EDI
+  POP %ESI
+  POP %EDX
+  POP %ECX
+  POP %EBX
+  POP %EAX
+  RET
+
+smp_wait_delivery:
+  MOV $0x100000,%ECX
+smp_wd_l:
+  MOV [0xFEE00300],%EAX
+  TEST $0x1000,%EAX
+  JZ @smp_wd_out
+  DEC %ECX
+  JNZ @smp_wd_l
+smp_wd_out:
+  RET
+
+smp_delay:
+  DEC %ECX
+  JNZ @smp_delay
+  RET
+
 hw_init:
   MOV $IDT,%EDI
   XOR %EAX,%EAX
@@ -2835,7 +2955,7 @@ h_outl_full:
   AND $0xFFFF,%EDX
   CMP $0x4E00,%EDX
   JB @ol_raw
-  CMP $0x4E0D,%EDX
+  CMP $0x4E0F,%EDX
   JA @ol_raw
   MOV [KENTRY],%EBX
   CMP $0xFFFFFFFF,%EBX
@@ -2870,6 +2990,10 @@ ol_store:
   JE @ol_fadd
   CMP $0x4E0D,%EDX
   JE @ol_fence
+  CMP $0x4E0E,%EDX
+  JE @loop
+  CMP $0x4E0F,%EDX
+  JE @loop
   MOV %EAX,[KDATA]
   MOV %EAX,[DATAB]
   JMP @loop
@@ -2935,7 +3059,7 @@ h_inl_full:
   AND $0xFFFF,%EDX
   CMP $0x4E00,%EDX
   JB @il_raw
-  CMP $0x4E0D,%EDX
+  CMP $0x4E0F,%EDX
   JA @il_raw
   CMP $0x4E00,%EDX
   JE @il_kentry
@@ -2963,7 +3087,17 @@ h_inl_full:
   JE @il_kdata
   CMP $0x4E0D,%EDX
   JE @il_zero
+  CMP $0x4E0E,%EDX
+  JE @il_apmap
+  CMP $0x4E0F,%EDX
+  JE @il_ncpu
   MOV [KDATA],%EBX
+  JMP @st
+il_apmap:
+  MOV [SM_MAP],%EBX
+  JMP @st
+il_ncpu:
+  MOV [SM_NCPU],%EBX
   JMP @st
 il_kentry:
   MOV [KENTRY],%EBX
@@ -3743,3 +3877,55 @@ man_kopad:
   .byte 0x39,0x2F,0x28,0x71,0x3E,0x29,0x35,0x30,0x38,0x71,0x37,0x39,0x25,0x71,0x6C,0x6D
   .byte 0x5C,0x5C,0x5C,0x5C,0x5C,0x5C,0x5C,0x5C,0x5C,0x5C,0x5C,0x5C,0x5C,0x5C,0x5C,0x5C
   .byte 0x5C,0x5C,0x5C,0x5C,0x5C,0x5C,0x5C,0x5C,0x5C,0x5C,0x5C,0x5C,0x5C,0x5C,0x5C,0x5C
+
+; ---- AP startup blob: copied verbatim to 0x6000 by smp_start --------------
+; 0x6000: 16-bit trampoline (SIPI vector 6)
+; 0x6100: flat GDT + GDTR (LGDT operand points at 0x6118)
+; 0x6200: 32-bit AP worker; records its LAPIC id and parks
+.align 512
+ap_stub:
+  .code16
+  CLI
+  XOR %AX,%AX
+  MOV %AX,%DS
+  MOV %AX,%ES
+  MOV %AX,%SS
+  MOV $0x5800,%SP
+  IN $0x92,%AL
+  OR $2,%AL
+  OUT %AL,$0x92
+  LGDT [0x6118]
+  MOV %CR0,%EAX
+  OR $1,%EAX
+  MOV %EAX,%CR0
+  LJMP $8,$0x6200
+  .align 256
+ap_gdt:
+  .long 0,0
+  .long 0x0000FFFF,0x00CF9A00
+  .long 0x0000FFFF,0x00CF9200
+ap_gdtr:
+  .word 23
+  .long 0x6100
+  .align 512
+ap_pm:
+  .code32
+  MOV $0x10,%AX
+  MOV %AX,%DS
+  MOV %AX,%ES
+  MOV %AX,%SS
+  MOV %AX,%FS
+  MOV %AX,%GS
+  MOV $0x5F000,%ESP
+  MOV [0xFEE00020],%EBX       ; local APIC id
+  SHR $24,%EBX
+  MOV %EBX,%EDI
+  SHL $2,%EDI
+  ADD $SM_FLAGS,%EDI
+  MOVL $1,[EDI]
+  .byte 0xF0,0xFF,0x05        ; lock inc dword [SM_DONE]
+  .long SM_DONE
+ap_halt:
+  CLI
+  HLT
+  JMP @ap_halt

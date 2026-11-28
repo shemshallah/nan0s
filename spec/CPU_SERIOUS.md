@@ -95,8 +95,20 @@ image starts at LBA 129 and is staged at 0x20000.  The kernel can grow to
       nansmp CAS/fetch-add read the NaN payload at **word+2**; both cores pass
       the native CAS/fetch-add/CPU-id transcript (`nansmp_native_gate`).
       CAS is real `LOCK CMPXCHG` and fetch-add is `LOCK XADD`.
-- [ ] Native AP startup: start APs, return real CPU ids and per-CPU state,
-      then bind `nansched_nansmp` in the product.
+- [x] x64 dispatch preserves the `BOOL` predicate: the 64-bit near-jump
+      trampoline used `EDI` for the table target and clobbered the predicate
+      `nib` leaves there.  `BOOLP` now saves it across dispatch; `BOOL.8` is
+      exact and `nansched_native_gate` covers it.
+- [x] Native AP startup (32-bit core): the BSP enumerates logical CPUs with
+      CPUID.1, copies a 16-bit trampoline to 0x6000, sends INIT-SIPI-SIPI
+      through the xAPIC, and APs enter flat protected mode at 0x6200.  Each AP
+      records its LAPIC id in the SM_FLAGS table and increments SM_DONE with
+      `LOCK INC`; the BSP packs the ids into a 32-bit bitmap exposed on port
+      0x4E0E (0x4E0F is the logical CPU count).  `native_ap_gate` PASS for
+      i386 -smp 1/2/4 (`S1A0`, `S2A2`, `S4AE`).  The x64 host core remains
+      BSP-only (its APs would need a long-mode trampoline).
+- [ ] Native AP product binding: bind `nansched_nansmp` in the product and
+      run guest work on APs; add the x64 long-mode AP trampoline.
 - [x] Runtime word count and mask (`mem_size`, CPUID `0x4E4D00FF`).
 - [x] Dynamic C address space and 100 MB heap.
 - [ ] Decoded block cache: decode once, validate once, execute tokens.
@@ -171,9 +183,13 @@ them stays NaN.
       `nansched_mp` per-CPU policy are compiled into the product; the S1
       prototype binds them through `nansmp`.
 - [x] Native nansmp binding on CPU 0: both native cores implement the control
-      ports and pass the CAS/fetch-add/CPU-id transcript.
-- [ ] Native AP binding: start APs, real CPU ids and locked atomics, then bind
-      `nansched_nansmp` and use `nancore`/`ncscale` across cores.
+      ports and pass the CAS/fetch-add/CPU-id transcript.  `nansched_mp` binds
+      the production ops table through `nansched_nansmp` on the native cores.
+- [x] Native AP startup on the 32-bit core: real INIT-SIPI-SIPI, APIC ids and
+      `LOCK INC` handshake; `nansched_mp`/`nansmp` remain the guest-side
+      multicore ABI.
+- [ ] Native AP product binding: schedule guest work on APs and add the x64
+      long-mode trampoline.
 - [ ] Huge-page hint and zero-copy model load (`mmap` equivalent) once a
       storage-backed model loader exists.
 

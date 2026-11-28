@@ -153,9 +153,13 @@ each item needs a real gate, a short proof, and a frontier note.
       CAS, fetch-add, fence) in both native cores; CAS/fetch-add use the
       word+2 payload and real `LOCK CMPXCHG`/`LOCK XADD`.
       `nansmp_native_gate` PASS on 32-bit and 64-bit.
-- [ ] (cpu) Native AP startup: real CPU ids and per-CPU state, AP trampoline
-      and LAPIC/IPI; bind `nansched_nansmp` in the product and use
-      `nancore`/`ncscale` across cores.
+- [x] (cpu) Native AP startup on the 32-bit core: CPUID enumeration,
+      INIT-SIPI-SIPI, a 0x6000 real-mode trampoline, flat protected mode at
+      0x6200, real LAPIC ids, `LOCK INC` handshake, and packed id/count ports
+      0x4E0E/0x4E0F.  `native_ap_gate` PASS for i386 -smp 1/2/4.
+- [ ] (cpu) Native AP product binding: schedule guest work on APs, bind
+      `nansched_nansmp` in the product, and add the x64 long-mode AP
+      trampoline (the x64 host core is BSP-only today).
 - [ ] (cpu) 64-bit guest ABI: `ADDRH`/`(lo,hi)` pointers/sizes and product use
       of `narena64`/`nten`/`nmat64` for KV/weights/tensors.
 - [x] GUI cart reuse: `src/gui/gui_cart.nas` is the one desktop/terminal

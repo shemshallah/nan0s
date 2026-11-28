@@ -213,6 +213,8 @@ Outside the frozen `KERNEL_ABI.md` 0x4E00-0x4E07 map:
 | 0x4E0B | OUT/IN | CAS descriptor word address / old payload |
 | 0x4E0C | OUT/IN | fetch-add descriptor word address / old payload |
 | 0x4E0D | OUT | acquire/release fence (`mfence`) |
+| 0x4E0E | IN | packed APIC-id bitmap of started APs (bit n = APIC id n) |
+| 0x4E0F | IN | logical CPU count reported by the host core |
 
 Descriptors live on the calling task's stack, so no CPU shares a mailbox:
 
@@ -224,6 +226,15 @@ The S1 port body performs the whole RMW with one locked x86 operation
 NaN heads).  Fetch-add is a CAS loop that rebuilds the word with
 `mkword(old+delta, 10)`, because adding two NaN words would corrupt the
 head bytes.
+
+The native 32-bit core starts APs before entering the guest.  The BSP copies
+a 16-bit trampoline to physical 0x6000, sends INIT-SIPI-SIPI, and the APs
+enter flat protected mode at 0x6200.  Each AP records its LAPIC id in a
+per-id table and increments a shared counter with `LOCK INC`.  The BSP packs
+the ids into the bitmap returned by 0x4E0E; 0x4E0F reports the CPU count.
+APs park after the handshake, so the guest interpreter remains on the BSP
+until the product binds `nansched_nansmp` to real AP contexts.  The x64 host
+core is BSP-only in this revision.
 
 The atomics are sequentially consistent.  This is stronger than the final
 NaN memory model needs, and it is the only primitive the prototype lock
