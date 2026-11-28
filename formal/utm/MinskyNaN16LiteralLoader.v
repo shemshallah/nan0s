@@ -227,6 +227,40 @@ Proof.
   rewrite Hlen. exact Hi.
 Qed.
 
+(** ** The published reset tape is a loaded tape *)
+
+Lemma lp_load_tape_reset :
+  lp_load_tape (mp_tape reset_mem) = lp_reset.
+Proof.
+  unfold lp_load_tape, lp_reset.
+  destruct MemP_wf_reset as (_ & _ & _ & Htape & _).
+  assert (Hfirst :
+    firstn 256 (mp_tape reset_mem ++ repeat 0%N 256) =
+    mp_tape reset_mem).
+  { rewrite firstn_app.
+    rewrite <- Htape.
+    rewrite firstn_all.
+    replace (256 - length (mp_tape reset_mem)) with 0 by lia.
+    cbn. rewrite app_nil_r. reflexivity. }
+  rewrite Hfirst.
+  reflexivity.
+Qed.
+
+Theorem reset_loader_bridge :
+  Rlp (lp_run 21025 lp_reset)
+      (vm_run_p 21025 fixture_prog_full (vm_of_lp lp_reset)) /\
+  List.length (lp_reg (lp_run 21025 lp_reset)) = 16 /\
+  MemP_wf (lp_mem (lp_run 21025 lp_reset)).
+Proof.
+  rewrite <- lp_load_tape_reset.
+  apply lp_run_refines.
+  - apply Rlp_lp_load_tape.
+  - reflexivity.
+  - apply MemP_wf_lp_load_tape.
+  - rewrite lp_load_tape_reset.
+    apply lp_run_check_sound. exact fixture_run_check_true.
+Qed.
+
 (** ** Conditional bounded-window refinement *)
 
 Theorem bounded_window_bridge :
