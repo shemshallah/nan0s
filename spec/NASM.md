@@ -35,6 +35,9 @@ The x86 backend is namespaced `x1_*`/`Z1_*`; the NaN backend keeps `run` and
   opt-in full 530,842-word native run (`NHOST_NATIVE_FULL=1`).
 - `tools/nixsh_asm_gate.sh`: PASS, in-shell `asm` assembles an
   operand/.equ/#K/label source and n16i runs it.
+- `tools/nan0s_gui64_sched_gate.sh`: PASS, desktop+Terminal transcript,
+  PID 1/2 live, preemptions > 0.  `gui_cart.nas` is embedded at word 8192
+  and shared by the 32-bit product and the 64-bit-host image.
 - `src/tests/nrun_test.nas`: `HI` / `RUN PASS` after the merge.
 
 ## nhost and the full-guest label table (2026-11-27)

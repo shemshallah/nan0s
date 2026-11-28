@@ -138,6 +138,12 @@ each item needs a real gate, a short proof, and a frontier note.
 - [ ] (nasm) Make the native-core nhost the default producer: the full guest
       is ~30 min on the 32-bit interpreter, so first add a faster native path
       (cache/native in-product build); then remove `nmk.awk` from `build.sh`.
+- [x] GUI cart reuse: `src/gui/gui_cart.nas` is the one desktop/terminal
+      source, embedded at word 8192 by `gui_sched_boot.nas`; the 32-bit
+      product and the 64-bit-host image use the same guest.  `boot_chain_gate`
+      checks the cart source and word 8192, and
+      `nan0s_gui64_sched_gate` PASSes desktop+Terminal, PID 1/2 and
+      preemption.
 - [x] F18c Unified nasm: `src/prog/nasm.nas` is the single assembler with a
       NaN-word mode (z0, `run`/`V_*`) and an x86-byte mode (x1, `_start`);
       `nasm0.nas`/`nasm1.nas` are aliases.  x86 boot output is byte-identical
