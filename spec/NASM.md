@@ -56,7 +56,10 @@ semantics without a second name buffer.  This exposed a real guest bug:
 `tn_d` in `src/lib/libcx.nas` overwrote nasm's decimal-parser loop `tn_d`, so
 `JMP[NE] @tn_d` landed in libcx's `DIV` and hung in-shell assembly on any
 numeric operand.  The libcx loop is now `cx_tn_d`; the in-shell `asm` command
-assembles operands and labels and runs the result.
+assembles operands, `.equ`/`#` terms and labels and runs the result.  The
+earlier PID 2/shared-child diagnosis was that label hijack, not the process
+model; the private-service plan is deferred until concurrent/large builds
+need it.
 
 Two encoder differences were also brought into line with `nmk.awk`:
 
