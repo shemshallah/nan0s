@@ -79,9 +79,9 @@ Proof.
   cbn [lp_mem mp_low mp_data mp_pad mp_tape mp_str].
   destruct MemP_wf_reset as (H1 & H2 & H3 & H4 & H5).
   repeat split; try assumption.
-  rewrite firstn_length, length_app.
+  rewrite length_firstn, length_app.
   cbn [length repeat].
-  rewrite Nat.min_l by lia.
+  rewrite Nat.min_l by (rewrite Nat.add_comm; apply Nat.le_add_r).
   reflexivity.
 Qed.
 
