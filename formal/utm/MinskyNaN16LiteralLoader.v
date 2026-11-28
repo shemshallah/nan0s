@@ -189,6 +189,43 @@ Proof.
   apply lp_load_window_tape; assumption.
 Qed.
 
+(** ** Code and table preservation
+
+    The loader only replaces the tape block.  Every address below
+    [fixture_tape_base] therefore still reads the reset image, and the
+    fixture program decodes identically for every loaded window. *)
+
+Lemma mem_get_lp_load_window_lt :
+  forall c K a,
+    a < fixture_tape_base ->
+    mem_get (lp_mem (lp_load_window c K)) a = mem_get reset_mem a.
+Proof.
+  intros c K a Ha.
+  unfold lp_load_window, lp_load_tape.
+  unfold mem_get, tape_lo, data_hi, code_hi, pad_lo, tape_hi, str_lo,
+    fixture_tape_base in *.
+  assert (E1 : (a <? 4096) = true) by (apply Nat.ltb_lt; exact Ha).
+  rewrite E1.
+  destruct (a <? 1576) eqn:E2;
+    destruct (a <? 99) eqn:E3;
+    reflexivity.
+Qed.
+
+Lemma lp_load_window_decode :
+  forall c K i,
+    i < 99 ->
+    decode_word_p (mem_get (lp_mem (lp_load_window c K)) i) =
+    nth_error fixture_prog_full i.
+Proof.
+  intros c K i Hi.
+  rewrite mem_get_lp_load_window_lt by lia.
+  rewrite mem_get_reset by lia.
+  rewrite decode_full_pointwise by exact Hi.
+  symmetry. apply nth_error_nth'.
+  destruct literal_full_code_decodes as (_ & _ & Hlen).
+  rewrite Hlen. exact Hi.
+Qed.
+
 (** ** Conditional bounded-window refinement *)
 
 Theorem bounded_window_bridge :
