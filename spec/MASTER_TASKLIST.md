@@ -151,9 +151,10 @@ each item needs a real gate, a short proof, and a frontier note.
       32-bit; `ADDRH`/`(lo,hi)` is the next CPU-serious step.
 - [x] (cpu) Native nansmp control ports: 0x4E08..0x4E0D (CPU, steps, IPI,
       CAS, fetch-add, fence) in both native cores; CAS/fetch-add use the
-      word+2 payload.  `nansmp_native_gate` PASS on 32-bit and 64-bit.
-- [ ] (cpu) Native AP startup: real CPU ids, locked CAS/fetch-add and AP
-      bring-up; bind `nansched_nansmp` in the product and use
+      word+2 payload and real `LOCK CMPXCHG`/`LOCK XADD`.
+      `nansmp_native_gate` PASS on 32-bit and 64-bit.
+- [ ] (cpu) Native AP startup: real CPU ids and per-CPU state, AP trampoline
+      and LAPIC/IPI; bind `nansched_nansmp` in the product and use
       `nancore`/`ncscale` across cores.
 - [ ] (cpu) 64-bit guest ABI: `ADDRH`/`(lo,hi)` pointers/sizes and product use
       of `narena64`/`nten`/`nmat64` for KV/weights/tensors.

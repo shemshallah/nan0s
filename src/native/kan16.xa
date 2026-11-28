@@ -2907,12 +2907,9 @@ ol_cas:
   MOV [G+ESI*8+2],%EBX
   MOV [G+ESI*8+10],%EAX
   MOV [G+ESI*8+18],%ECX
-  MOV [G+EBX*8+2],%EDI
-  CMP %EDI,%EAX
-  JNE @ol_cas_no
-  MOV %ECX,[G+EBX*8+2]
-ol_cas_no:
-  MOV %EDI,[KDATA]
+  ; LOCK CMPXCHG ECX,[G+EBX*8+2]  (payload at word+2)
+  .byte 0xF0,0x0F,0xB1,0x0C,0xDD,0x02,0x00,0x20,0x00
+  MOV %EAX,[KDATA]
   POP %EDI
   POP %ESI
   JMP @loop
@@ -2923,10 +2920,9 @@ ol_fadd:
   MOV %EAX,%ESI
   MOV [G+ESI*8+2],%EBX
   MOV [G+ESI*8+10],%ECX
-  MOV [G+EBX*8+2],%EDI
-  MOV %EDI,[KDATA]
-  ADD %ECX,%EDI
-  MOV %EDI,[G+EBX*8+2]
+  ; LOCK XADD ECX,[G+EBX*8+2]  (payload at word+2)
+  .byte 0xF0,0x0F,0xC1,0x0C,0xDD,0x02,0x00,0x20,0x00
+  MOV %ECX,[KDATA]
   POP %EDI
   POP %ESI
   JMP @loop
