@@ -17,6 +17,9 @@ trap 'rm -rf "$T"' EXIT INT TERM
 [ -f build/nan0s.img ] || {
   echo "nhost_product_gate: FAIL (build/nan0s.img missing; run tools/build.sh)"; exit 1; }
 
+# NHOST_NATIVE=1 runs the complete stage0 -> stage1 -> full guest chain on the
+# raw native core (~21 min); the default uses the nan_cli bootstrap oracle.
+[ "${NHOST_NATIVE:-0}" = 1 ] && export NHOST_NATIVE
 sh tools/nhost_emit_guest.sh src/gui/gui_sched_boot.nas "$T/nixsched.nan"
 n=$(wc -l < "$T/nixsched.nan")
 [ "$n" -eq 530842 ] ||

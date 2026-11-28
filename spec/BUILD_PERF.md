@@ -128,11 +128,12 @@ Four real semantic bugs surfaced while wiring the cache:
    slice and the checked-in GOLD, so the cache is never the only witness.
 3. Development iterations may use the host `nan_cli` oracle only as a
    test bench.  It must never be the producer of the committed GOLD.  The
-   guest may be emitted by the self-hosted `nhost` under `nan_cli` as a
-   bootstrap (`NHOST_BUILD=1`), but only when the hermetic nmk path produces
-   the same word stream and `nhost_product_gate`/`noc_product_gate` verify the
-   packed image byte-for-byte.  The default product build stays hermetic until
-   nhost runs on the native core.
+   default product guest producer is the self-hosted native `nhost`
+   (`NHOST_BUILD=1`): stage0 uses `nmk.awk` only to bootstrap nhost, stage1
+   emits the guest on the raw native core.  A source-keyed cache
+   (`tools/nhost_guest_key.sh`) skips the ~21 min native full-guest emit on
+   repeat; a cold cache pays that once.  `NHOST_BUILD=0` is the explicit
+   oracle path and must keep producing the same word stream/image.
 4. The real speed fix is translating nasm1/n16i into NaN-emitted x86-64 blocks
    and caching them, or finishing the self-hosted block translator.  Native C
    is not the product answer.  The build-path cache is the first shipped step;

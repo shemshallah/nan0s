@@ -17,10 +17,24 @@ sh tools/rootfs_seed.sh
 # The product guest is the flat scheduler image: GUI desktop at 0x2000,
 # kernel/scheduler at 0x10000 and the NANIX shell at 0x80000.  It is packed
 # without a cart TOC so the desktop code at word 22000 is not overwritten.
-# NHOST_BUILD=1 selects the self-hosted nhost emitter (bootstrap/ORACLE
-# machine); the default hermetic path stays on nmk.awk for portability.
-if [ "${NHOST_BUILD:-0}" = 1 ]; then
-  sh tools/nhost_emit_guest.sh src/gui/gui_sched_boot.nas src/nan/nixsched.nan
+# Default producer: the self-hosted native nhost.  Stage0 uses nmk.awk only
+# to bootstrap nhost itself; stage1 emits this guest on the raw native core.
+# A source-keyed cache skips the ~21 min native full-guest emit on repeat.
+# NHOST_BUILD=0 is the explicit oracle path (nmk.awk) for development only.
+NHOST_BUILD=${NHOST_BUILD:-1}
+if [ "$NHOST_BUILD" = 1 ]; then
+  KEY=$(sh tools/nhost_guest_key.sh)
+  CACHE=build/nhost/nixsched.nan
+  if [ -s "$CACHE" ] && [ "$(cat "$CACHE.key" 2>/dev/null)" = "$KEY" ]; then
+    cp "$CACHE" src/nan/nixsched.nan
+  else
+    mkdir -p build/nhost
+    NHOST_NATIVE=1 sh tools/nhost_emit_guest.sh src/gui/gui_sched_boot.nas "$CACHE.tmp"
+    mv "$CACHE.tmp" "$CACHE"
+    printf '%s
+' "$KEY" > "$CACHE.key"
+    cp "$CACHE" src/nan/nixsched.nan
+  fi
 else
   awk -f tools/nmk.awk -v CMD=emit src/gui/gui_sched_boot.nas > src/nan/nixsched.nan
 fi

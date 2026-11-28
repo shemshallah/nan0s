@@ -12,9 +12,9 @@
 #   NHOST_NATIVE=1    raw native NaN16 core under QEMU, no nan_cli/S1 KABI
 #                     (self-host ~18 s; the full guest is ~30 min)
 #
-# The default product build uses the hermetic tools/mkall.sh path; use
-# tools/nhost_product_gate.sh to prove the emitted guest packs to the same
-# image.
+# The default product build (tools/build.sh) drives this script with
+# NHOST_NATIVE=1 and a source-keyed cache; use tools/nhost_product_gate.sh
+# to prove the emitted guest packs to the same image.
 set -eu
 cd "$(dirname "$0")/.."
 export LC_ALL=C
