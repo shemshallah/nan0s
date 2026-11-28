@@ -140,6 +140,7 @@ z_count:
   MOVL $1,[SM_NCPU]
   MOVL $0,[SM_DONE]
   MOVL $0,[SM_MAP]
+  CALL @smp_start
   XOR %ESI,%ESI
 loop:
   MOV [STEPS],%EAX
@@ -3124,3 +3125,187 @@ kabi_tick:
   CALL @kabi_irq
 kt_ret:
   RET
+
+; ---- x64 SMP startup: x2APIC INIT-SIPI-SIPI + long-mode AP trampoline ----
+; The AP starts in real mode at 0x6000, builds PAE/long mode with the BSP's
+; identity PML4 at 0x30000, and reports its CPUID initial APIC id before
+; parking.  Guest execution on x64 APs is a later step.
+smp_start:
+  PUSH %EAX
+  PUSH %EBX
+  PUSH %ECX
+  PUSH %EDX
+  PUSH %ESI
+  PUSH %EDI
+  MOV $1,%EAX
+  XOR %ECX,%ECX
+  .byte 0x0F,0xA2             ; cpuid.1
+  MOV %EBX,%EDX
+  SHR $16,%EDX
+  AND $0xFF,%EDX
+  TEST %EDX,%EDX
+  JNZ @smp_x_have
+  MOV $1,%EDX
+smp_x_have:
+  MOV %EDX,[SM_NCPU]
+  CMP $1,%EDX
+  JBE @smp_x_out
+  MOV $ap_stub,%ESI
+  MOV $0x6000,%EDI
+  MOV $0x200,%ECX
+  REPMOVSD
+  ; Map the xAPIC window at 0xFEE00000 with a 2 MiB page.  The boot shim's
+  ; tables cover 0..1 GiB in PDPT[0]; PDPT[3] gets a private PD2 at 0x33000.
+  MOVL $0x33003,[0x31018]
+  MOVL $0,[0x3101C]
+  MOV $0x33000,%EDI
+  XOR %EAX,%EAX
+  MOV $0x400,%ECX
+  REPSTOSD
+  MOVL $0xFEE00083,[0x33000+0xFB8]
+  MOVL $0,[0x33000+0xFBC]
+  ; enable xAPIC (IA32_APIC_BASE bit 11) and the spurious vector.  Long mode
+  ; sign-extends absolute disp32 operands, so use a zero-extended base.
+  MOV $0x1B,%ECX
+  .byte 0x0F,0x32
+  OR $0x800,%EAX
+  .byte 0x0F,0x30
+  MOV $0xFEE00000,%EBX
+  MOVL $0x1FF,[EBX+0xF0]
+  MOVL $0,[EBX+0x310]
+  ; INIT all-excluding-self
+  MOVL $0x000C4500,[EBX+0x300]
+  CALL @smp_x_delivery
+  MOV $0x200000,%ECX
+  CALL @smp_x_delay
+  ; SIPI vector 6 twice
+  MOVL $0x000C4606,[EBX+0x300]
+  CALL @smp_x_delivery
+  MOV $0x200000,%ECX
+  CALL @smp_x_delay
+  MOVL $0x000C4606,[EBX+0x300]
+  CALL @smp_x_delivery
+  MOV $0x4000000,%EDI
+smp_x_poll:
+  MOV [SM_DONE],%EAX
+  MOV [SM_NCPU],%EBX
+  SUB $1,%EBX
+  CMP %EBX,%EAX
+  JE @smp_x_ready
+  SUB $1,%EDI
+  JNZ @smp_x_poll
+  JMP @smp_x_out
+smp_x_ready:
+  MOV $SM_FLAGS,%ESI
+  MOV [SM_NCPU],%EBX
+  XOR %EDI,%EDI
+smp_x_pack_l:
+  CMP %EBX,%EDI
+  JAE @smp_x_out
+  MOV [ESI+EDI*4],%EAX
+  TEST %EAX,%EAX
+  JZ @smp_x_pack_n
+  MOV $1,%EAX
+  MOV %EDI,%ECX
+  SHL %CL,%EAX
+  MOV [SM_MAP],%EDX
+  OR %EAX,%EDX
+  MOV %EDX,[SM_MAP]
+smp_x_pack_n:
+  ADD $1,%EDI
+  JMP @smp_x_pack_l
+smp_x_out:
+  POP %EDI
+  POP %ESI
+  POP %EDX
+  POP %ECX
+  POP %EBX
+  POP %EAX
+  RET
+smp_x_delay:
+  SUB $1,%ECX
+  JNZ @smp_x_delay
+  RET
+smp_x_delivery:
+  MOV $0x100000,%ECX
+smp_x_dl:
+  MOV [EBX+0x300],%EAX
+  TEST $0x1000,%EAX
+  JZ @smp_x_dd
+  SUB $1,%ECX
+  JNZ @smp_x_dl
+smp_x_dd:
+  RET
+
+; AP long-mode blob: 0x6000 real-mode stub, 0x6100 GDT, 0x6200 PM32,
+; 0x6300 long mode.
+.align 512
+ap_stub:
+  .code16
+  CLI
+  XOR %AX,%AX
+  MOV %AX,%DS
+  MOV %AX,%ES
+  MOV %AX,%SS
+  MOV $0x5800,%SP
+  IN $0x92,%AL
+  OR $2,%AL
+  OUT %AL,$0x92
+  LGDT [0x6120]
+  MOV %CR0,%EAX
+  OR $1,%EAX
+  MOV %EAX,%CR0
+  LJMP $8,$0x6200
+  .align 256
+ap_gdt:
+  .long 0,0
+  .long 0x0000FFFF,0x00CF9A00
+  .long 0x0000FFFF,0x00CF9200
+  .long 0x0000FFFF,0x00AF9A00
+ap_gdtr:
+  .word 31
+  .long 0x6100
+  .align 512
+ap_pm32:
+  .code32
+  MOV $0x10,%AX
+  MOV %AX,%DS
+  MOV %AX,%ES
+  MOV %AX,%SS
+  MOV $0x30000,%EAX
+  MOV %EAX,%CR3
+  .byte 0x0F,0x20,0xE0      ; mov eax,cr4
+  OR $0x20,%EAX             ; PAE
+  .byte 0x0F,0x22,0xE0      ; mov cr4,eax
+  MOV $0xC0000080,%ECX
+  .byte 0x0F,0x32           ; rdmsr EFER
+  OR $0x100,%EAX            ; LME
+  .byte 0x0F,0x30
+  MOV %CR0,%EAX
+  OR $0x80000001,%EAX       ; PG|PE
+  MOV %EAX,%CR0
+  LJMP $0x18,$0x6400
+  .align 512
+ap64:
+  .code64
+  MOV $0x10,%AX
+  MOV %AX,%DS
+  MOV %AX,%ES
+  MOV %AX,%SS
+  MOV %AX,%FS
+  MOV %AX,%GS
+  MOV $0x7C000,%ESP
+  MOV $1,%EAX
+  XOR %ECX,%ECX
+  .byte 0x0F,0xA2           ; cpuid.1
+  SHR $24,%EBX
+  MOV %EBX,%EDI
+  SHL $2,%EDI
+  ADD $SM_FLAGS,%EDI
+  MOVL $1,[EDI]
+  MOV $SM_DONE,%EBX
+  .byte 0xF0,0xFF,0x03      ; lock inc dword [rbx]
+ap_halt:
+  CLI
+  HLT
+  JMP @ap_halt

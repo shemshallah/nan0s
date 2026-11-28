@@ -1,6 +1,7 @@
 ; narena64_test.nas - 64-bit arena sizing/alignment and high-half pointers.
 .org 0
 JMP @main
+.include "../lib/n64.nas"
 .include "../lib/narena64.nas"
 main:
 MOVI r13,1

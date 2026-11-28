@@ -78,8 +78,9 @@ GDT and prints a COM1 banner from 64-bit code (`tools/qgate64.sh`).  The x86-64
 host execution core (`src/native/kan16_x64.xa` / `nan16_x64.nan`) now boots the
 same 530,842-word product guest and reaches `NANIX SHELL READY`; the 32-bit and
 64-bit host cores are byte-parity on the ISA guest and the product guest
-(`tools/core32_64_parity_gate.sh`).  The guest ISA still uses 32-bit
-payload/pointers; the 64-bit guest ABI is the next step.
+(`tools/core32_64_parity_gate.sh`).  The product now exercises the 64-bit
+`(lo,hi)` APIs (`narena64`/`nten`/`nmat`); `ADDRH` high-half execution is the
+remaining guest-ABI step.
 
 The boot loader reserves a **128-sector (64 KiB) kernel window**; the guest
 image starts at LBA 129 and is staged at 0x20000.  The kernel can grow to
@@ -88,8 +89,13 @@ image starts at LBA 129 and is staged at 0x20000.  The kernel can grow to
 - [x] x86-64 host core product boot: same guest, same ISA output, same
       `NANIX SHELL READY`; `core32_64_parity_gate` PASS.  ATA loader now matches
       the 32-bit gold (`G=0x200000`, `0x80` dwords/sector, no second pass).
-- [ ] 64-bit guest ABI: `ADDRH`/`(lo,hi)` pointers and sizes; use
-      `narena64`/`nten`/`nmat64` in product APIs, not only gates.
+- [x] 64-bit `(lo,hi)` product ABI: `gui_sched_boot.nas` includes
+      `n64`/`narena64`/`nten`/`nmat`; `n64_probe` allocates from a 64-bit
+      arena, builds an `nten` descriptor, checks a 64-bit tensor pointer and
+      runs an `nmat` DP4B dot.  `native_product_n64_gate` PASS prints
+      `N64 OK`.  `ADDRH`/high-half execution remains.
+- [ ] `ADDRH`/64-bit guest addresses: per-context high half and high-memory
+      realization in the native cores.
 - [x] Native nansmp control ports: CPU id, steps, IPI, CAS, fetch-add and
       fence are implemented in both native cores (`0x4E08..0x4E0D`).  The
       nansmp CAS/fetch-add read the NaN payload at **word+2**; both cores pass
@@ -121,8 +127,11 @@ image starts at LBA 129 and is staged at 0x20000.  The kernel can grow to
       1000 atomic fetch-adds per AP and APIC id 1 reports the total:
       `AP 000003E8` on 2 CPUs, `AP 00000BB8` on 4; `native_ap_guest_gate`
       PASS.  The x64 long-mode AP trampoline remains.
-- [ ] x64 long-mode AP trampoline: start APs in long mode with per-CPU state
-      pages so the 64-bit host core can run guest contexts on APs.
+- [x] x64 long-mode AP startup: 16-bit trampoline -> PAE/LME -> 64-bit AP
+      worker, with the xAPIC window mapped by a 2 MiB page.  APs report their
+      CPUID initial APIC ids and park; `native_ap_gate` PASS on x64 1/2/4.
+- [ ] x64 AP guest contexts: per-CPU paged state and scheduling guest work on
+      the 64-bit host core.
 - [x] Runtime word count and mask (`mem_size`, CPUID `0x4E4D00FF`).
 - [x] Dynamic C address space and 100 MB heap.
 - [ ] Decoded block cache: decode once, validate once, execute tokens.

@@ -1,5 +1,4 @@
 ; nmat.nas - NaN-native packed-i8 matrix kernels built on DP4B (op 0x4A).
-.include "n64.nas"
 ;
 ; Packing: four signed i8 values per NaN payload, low byte first.  A is an
 ; M x (4*Kwords) row-major matrix, B is N x (4*Kwords) row-major, C is M x N.

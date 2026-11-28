@@ -1,6 +1,7 @@
 ; nmat64x64_test.nas - 8x8x8 packed-i8 matmul with 64-bit descriptors/results.
 .org 0
 JMP @main
+.include "../lib/n64.nas"
 .include "../lib/nmat.nas"
 main:
 MOVI r13,1

@@ -2,6 +2,7 @@
 ; Expected C[i][j] = 8*(i+1)*(j+1).  Exercises DP4B through the NaN kernel.
 .org 0
 JMP @main
+.include "../lib/n64.nas"
 .include "../lib/nmat.nas"
 main:
 MOVI r13,1

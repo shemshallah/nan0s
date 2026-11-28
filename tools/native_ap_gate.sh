@@ -11,7 +11,11 @@
 #   i386 -smp 1  S1A00000000C0
 #   i386 -smp 2  S2A00000002C0
 #   i386 -smp 4  S4A0000000EC0
-#   x64  -smp 1  S1A00000000C0   (x64 AP startup is still BSP-only)
+#   x64  -smp 1  S1A00000000C0
+#   x64  -smp 2  S2A00000002C0
+#   x64  -smp 4  S4A0000000EC0
+# x64 APs enter long mode through a real-mode trampoline; they report their
+# CPUID initial APIC ids and park (guest execution on x64 APs is next).
 #
 # Every transcript ends with "OK".  The x64 core's SPEL stage marker is
 # stripped before comparison.
@@ -90,4 +94,14 @@ check "x64 -smp 1" "$T/x64.1.com" 'S1A00000000C0
 OK
 '
 
-echo "native_ap: PASS (INIT-SIPI-SIPI, APIC ids, i386 1/2/4 CPUs; x64 BSP)"
+run "$CLI64" "$T/x64.img" 2 "$T/x64.2.com"
+check "x64 -smp 2" "$T/x64.2.com" 'S2A00000002C0
+OK
+'
+
+run "$CLI64" "$T/x64.img" 4 "$T/x64.4.com"
+check "x64 -smp 4" "$T/x64.4.com" 'S4A0000000EC0
+OK
+'
+
+echo "native_ap: PASS (INIT-SIPI-SIPI, real APIC ids, i386 and x64 1/2/4 CPUs)"

@@ -251,8 +251,13 @@ constants into a private 4 KiB interpreter state page, overrides
 R/STEPS/FLAGM/KABI, and enables paging with virtual 0x8000 aliased to that
 page; the first 4 MiB is identity-mapped and G stays shared.  Every AP runs
 the guest concurrently; the gate executes 1000 atomic fetch-adds per AP and
-APIC id 1 reports the total (1000 on 2 CPUs, 3000 on 4).  The x64 long-mode
-AP trampoline remains.  The x64 host core is BSP-only in this revision.
+APIC id 1 reports the total (1000 on 2 CPUs, 3000 on 4).
+
+The x64 host core starts APs through a 16-bit real-mode trampoline at 0x6000,
+builds PAE/LME and enters 64-bit code at 0x6400 with the BSP identity PML4.
+The xAPIC window at 0xFEE00000 is mapped by a 2 MiB page so the BSP can send
+INIT-SIPI-SIPI; APs report their CPUID initial APIC ids and park.  x64 AP
+guest contexts are the remaining step.
 
 The atomics are sequentially consistent.  This is stronger than the final
 NaN memory model needs, and it is the only primitive the prototype lock
