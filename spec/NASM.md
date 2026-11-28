@@ -34,7 +34,7 @@ The x86 backend is namespaced `x1_*`/`Z1_*`; the NaN backend keeps `run` and
   NaN16 core in 17 s (QEMU, no `nan_cli`, no S1 KABI).  Phase 2 is the
   opt-in full 530,842-word native run (`NHOST_NATIVE_FULL=1`).
 - `tools/nixsh_asm_gate.sh`: PASS, in-shell `asm` assembles an
-  operand/label source and n16i runs it.
+  operand/.equ/#K/label source and n16i runs it.
 - `src/tests/nrun_test.nas`: `HI` / `RUN PASS` after the merge.
 
 ## nhost and the full-guest label table (2026-11-27)

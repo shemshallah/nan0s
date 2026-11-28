@@ -2,15 +2,16 @@
 # nixsh_asm_gate.sh - in-shell nasm0 assembles operand/label source and n16i runs it.
 #
 # The Terminal creates /y.nas, then `asm /y.nas` assembles and runs it:
-#   MOVI r1,66
+#   .equ K 68
+#   MOVI r1,#K
 #   JMP @done
 #   MOVI r1,88
 # done:
 #   PUTC r1
 #   HALT
-# Serial must show "ASM OK" and the program's 'B' (not 'X'), then the
+# Serial must show "ASM OK" and the program's 'D' (not 'X'), then the
 # scheduler's "!S" halt marker.  This covers the decimal/term path (the old
-# tn_d label hijack hung pass 1), label definition and pass-2 resolution.
+# tn_d label hijack hung pass 1), .equ/#K resolution, and pass-2 labels.
 set -eu
 cd "$(dirname "$0")/.."
 export LC_ALL=C
@@ -70,7 +71,8 @@ def encode(text):
     return out
 
 commands = [
-    "echo MOVI r1,66 > /y.nas",
+    "echo .equ K 68 > /y.nas",
+    "echo MOVI r1,#K >> /y.nas",
     "echo JMP @done >> /y.nas",
     "echo MOVI r1,88 >> /y.nas",
     "echo done: >> /y.nas",
@@ -91,6 +93,6 @@ grep -q '^ASM OK$' "$T/run.out" || {
   echo "nixsh_asm_gate: FAIL (no ASM OK)"; tail -8 "$T/run.out"; tail -5 "$T/run.err"; exit 1; }
 grep -q 'ASM ERR' "$T/run.out" && {
   echo "nixsh_asm_gate: FAIL (assembler error)"; tail -8 "$T/run.out"; exit 1; }
-grep -q 'B!S' "$T/run.out" || {
-  echo "nixsh_asm_gate: FAIL (program did not print B and halt)"; tail -8 "$T/run.out"; exit 1; }
-echo "nixsh_asm_gate: PASS (in-shell asm: operands, label, pass 2, n16i run)"
+grep -q 'D!S' "$T/run.out" || {
+  echo "nixsh_asm_gate: FAIL (program did not print D and halt)"; tail -8 "$T/run.out"; exit 1; }
+echo "nixsh_asm_gate: PASS (in-shell asm: operands, .equ/#K, label, pass 2, n16i run)"
