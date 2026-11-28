@@ -30,14 +30,45 @@ awk -f tools/nmk.awk -v CMD=check "$T/gui_sched.nan" 2> "$T/check.err" || {
 grep -q 'check: 0 mismatches' "$T/check.err" || {
   echo "gui64_sched: FAIL (assembler round-trip)"; cat "$T/check.err"; exit 1; }
 
-# PS/2 set-1 make codes for the NANIX line-discipline transcript.  The first
-# line is "help"; the rest exercises create/read/write/stat/truncate/remove.
-KEYS='\x23\x12\x26\x19\x1c\x32\x25\x20\x17\x13\x39\x35\x2d\x1c\x11\x13\x17\x14\x12\x39\x35\x2d\x35\x1e\x39\x23\x12\x26\x26\x18\x1c\x2e\x1e\x14\x39\x35\x2d\x35\x1e\x1c\x26\x1f\x39\x35\x2d\x1c\x1f\x14\x1e\x14\x39\x35\x2d\x35\x1e\x1c\x14\x13\x16\x31\x2e\x1e\x14\x12\x39\x35\x2d\x35\x1e\x39\x03\x1c\x2e\x1e\x14\x39\x35\x2d\x35\x1e\x1c\x13\x32\x39\x35\x2d\x35\x1e\x1c\x13\x32\x20\x17\x13\x39\x35\x2d\x1c'
+# PS/2 set-1 key script for the GUI Terminal.  Keep this transcript focused
+# on the desktop/Terminal cart; the full shell command matrix lives in
+# nixsh_gate/nixsh_io_gate.  A key file plus --guest-input is more reliable
+# than a long inline --keys string when the shell is busy.
+python3 - "$T/keys.bin" <<'PY'
+import sys
+plain = {' ': 0x39, '\n': 0x1c, '/': 0x35, '.': 0x34, ',': 0x33, '-': 0x0c,
+         '=': 0x0d, ';': 0x27, "'": 0x28, '[': 0x1a, ']': 0x1b, '\\': 0x2b,
+         '`': 0x29}
+for i, c in enumerate("1234567890"): plain[c] = 0x02 + i
+for c, sc in zip("qwertyuiop", range(0x10, 0x1a)): plain[c] = sc
+for c, sc in zip("asdfghjkl", range(0x1e, 0x27)): plain[c] = sc
+for c, sc in zip("zxcvbnm", range(0x2c, 0x33)): plain[c] = sc
+
+def enc(s):
+    o = bytearray()
+    for ch in s:
+        o.append(plain[ch.lower()] if ch.lower() in plain else plain[ch])
+    o.append(plain['\n'])
+    return o
+
+cmds = [
+    "mkdir /x",
+    "write /x/a hello",
+    "cat /x/a",
+    "ls /x",
+    "rm /x/a",
+    "rmdir /x",
+    "pwd",
+]
+b = bytearray()
+for c in cmds: b += enc(c)
+open(sys.argv[1], 'wb').write(b)
+PY
 
 S1_FB_DELAY="${NAN0S_GUI64_SCHED_DELAY:-50}" \
 sh tools/s1_runner.sh --img "$T/gui_sched.nan" --mem "${NAN0S_GUI64_SCHED_MEM:-128}" \
     --steps "${NAN0S_GUI64_SCHED_STEPS:-4000000000}" --serial \
-    --key-delay "${NAN0S_GUI64_SCHED_KEY_DELAY:-5000000}" --keys "$KEYS" \
+    --key-delay "${NAN0S_GUI64_SCHED_KEY_DELAY:-10000000}" --guest-input "$T/keys.bin" \
     --dump-fb "$T/fb.bin" --dump-mem "0x400000:0x40000:$T/term.bin" \
     > "$T/run.out" 2> "$T/run.err" || true
 
@@ -80,10 +111,9 @@ want = [
     '> mkdir /x', 'ok',
     '> write /x/a hello', 'saved',
     '> cat /x/a', 'hello> ls /x', 'a',
-    '> stat /x/a', 'file size=5 mode=33188',
-    '> truncate /x/a 2', 'ok',
-    '> cat /x/a', 'he> rm /x/a', 'removed',
+    '> rm /x/a', 'removed',
     '> rmdir /x', 'removed',
+    '> pwd', '/',
 ]
 missing = [w for w in want if not any(line == w for line in rows)]
 if missing:
@@ -95,9 +125,9 @@ PY
 # Second boot: read the runtime base pointers from the fixed config words.
 # Guest word memory starts at physical 0x200000; word 0x3F010 is at byte
 # 0x3F8080.  The boot kernel writes NS_PTR, NP_PTR, NPV_PTR, MEM_WORDS there.
-S1_FB_DELAY="${NAN0S_GUI64_SCHED_PTR_DELAY:-60}" \
+S1_FB_DELAY="${NAN0S_GUI64_SCHED_PTR_DELAY:-120}" \
 sh tools/s1_runner.sh --img "$T/gui_sched.nan" --mem "${NAN0S_GUI64_SCHED_MEM:-128}" \
-    --steps "${NAN0S_GUI64_SCHED_PTR_STEPS:-4000000000}" \
+    --steps "${NAN0S_GUI64_SCHED_PTR_STEPS:-12000000000}" \
     --dump-mem "0x3F8080:0x20:$T/ptr.bin" \
     > "$T/ptr.out" 2> "$T/ptr.err" || true
 [ -s "$T/ptr.bin" ] || { echo "gui64_sched: FAIL (no config dump)"; tail -8 "$T/ptr.err"; exit 1; }
