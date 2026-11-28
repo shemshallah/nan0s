@@ -157,9 +157,11 @@ each item needs a real gate, a short proof, and a frontier note.
       INIT-SIPI-SIPI, a 0x6000 real-mode trampoline, flat protected mode at
       0x6200, real LAPIC ids, `LOCK INC` handshake, and packed id/count ports
       0x4E0E/0x4E0F.  `native_ap_gate` PASS for i386 -smp 1/2/4.
-- [ ] (cpu) Native AP product binding: schedule guest work on APs, bind
-      `nansched_nansmp` in the product, and add the x64 long-mode AP
-      trampoline (the x64 host core is BSP-only today).
+- [x] (cpu) Native AP product binding on CPU 0: `nansched_nansmp` is bound
+      in the product, the kernel reads 0x4E0F/0x4E0E, and multicore boots
+      print `SMP <ncpu> AP <bitmap>`; `native_product_smp_gate` PASS.
+- [ ] (cpu) Native AP guest work: schedule guest contexts on APs and add the
+      x64 long-mode AP trampoline (the x64 host core is BSP-only today).
 - [ ] (cpu) 64-bit guest ABI: `ADDRH`/`(lo,hi)` pointers/sizes and product use
       of `narena64`/`nten`/`nmat64` for KV/weights/tensors.
 - [x] GUI cart reuse: `src/gui/gui_cart.nas` is the one desktop/terminal

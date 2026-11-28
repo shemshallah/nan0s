@@ -38,6 +38,8 @@ JMPR r1
 .org 0x10000
 .include "../lib/nankernel.nas"
 .include "../lib/nansched.nas"
+.include "../lib/nansmp.nas"
+.include "../lib/nansched_nansmp.nas"
 .include "../lib/memmap.nas"
 
 ; Kernel/process map (word addresses).  Later .equ wins in nmk.
@@ -49,6 +51,11 @@ JMPR r1
 .equ SHELL_STACK  0x250000
 .equ KBOOT_STACK  0x2F0000
 .equ KERNEL_MEM   0x1000000
+; Boot SMP policy probe: task arena and nansmp ops table live below the
+; compiler/GUI buffers; the probe runs once before the first SVC.
+.equ SMPT_CTX     0x2C0000
+.equ SMPT_OPS     0x2C0100
+.equ SMPT_ARENA   0x2C0200
 ; The GUI's fixed compiler/terminal buffers end below this word; the SVC 2
 ; heap starts here and is clipped to every usable PMEM range above it.
 .equ HEAP_BASE    0xB00000
@@ -232,6 +239,11 @@ gui_shell_ser:
   JMP @gui_shell_ser
 gui_shell_ser_done:
 
+  ; Bind the F2 per-CPU policy to the real nansmp ops and prove it can
+  ; place a task on CPU 0.  On -smp 1 this is a single-CPU run; on -smp 2/4
+  ; the core has already started the APs and the probe sees the full map.
+  CALL @smp_probe
+
   ; The kernel has no runnable context of its own: SVC 0 with no current
   ; process starts the highest-priority ready process.
   SVC 0
@@ -308,6 +320,117 @@ g_heap_end:
   .word 0
 g_map_i:
   .word 0
+g_ncpu:
+  .word 0
+g_apmap:
+  .word 0
+g_smp_ok:
+  .word 0
+
+; ---------------------------------------------------------------------------
+; smp_probe - native multicore policy binding at boot.
+; Reads the CPU count (0x4E0F) and AP bitmap (0x4E0E), initialises the F2
+; scheduler with that many CPUs, binds the production nansmp ops table, and
+; runs one add/push/pop on CPU 0.  g_smp_ok records the result.  With more
+; than one CPU the kernel prints "SMP <ncpu> AP <bitmap-hex>" before the GUI.
+smp_probe:
+  ST r15,r14,0
+  ADDI r14,r14,9
+  MOVI r1,0x4E0F
+  INL r2,r1
+  LA r3,@g_ncpu
+  ST r2,r3,0
+  MOVI r1,0x4E0E
+  INL r2,r1
+  LA r3,@g_apmap
+  ST r2,r3,0
+  LA r1,#SMPT_CTX
+  LA r2,@g_ncpu
+  LD r2,r2,0
+  LA r3,#SMPT_ARENA
+  MOVI r4,16
+  MOVI r5,4
+  LA r6,#SMPT_OPS
+  CALL @nsched_init
+  CMP r1,r0
+  JMP[NE] @smp_probe_bad
+  LA r1,#SMPT_CTX
+  CALL @nsched_bind_nansmp
+  CMP r1,r0
+  JMP[NE] @smp_probe_bad
+  LA r1,#SMPT_CTX
+  MOVI r2,0
+  MOVI r3,0
+  MOVI r4,1
+  MOVI r5,5
+  MOVI r6,0
+  CALL @nsched_task_add
+  CMP r1,r0
+  JMP[NE] @smp_probe_bad
+  LA r1,#SMPT_CTX
+  MOVI r2,0
+  MOVI r3,0
+  CALL @nsched_push
+  CMP r1,r0
+  JMP[NE] @smp_probe_bad
+  LA r1,#SMPT_CTX
+  MOVI r2,0
+  CALL @nsched_pop
+  CMP r1,r0
+  JMP[NE] @smp_probe_bad
+  MOVI r1,1
+  LA r2,@g_smp_ok
+  ST r1,r2,0
+  JMP @smp_probe_print
+smp_probe_bad:
+  MOVI r1,0
+  LA r2,@g_smp_ok
+  ST r1,r2,0
+smp_probe_print:
+  LA r1,@g_smp_ok
+  LD r1,r1,0
+  CMP r1,r0
+  JMP[EQ] @smp_probe_out
+  LA r1,@g_ncpu
+  LD r1,r1,0
+  MOVI r2,1
+  CMP r1,r2
+  JMP[LE] @smp_probe_out
+  MOVI r1,83
+  PUTC r1
+  MOVI r1,77
+  PUTC r1
+  MOVI r1,80
+  PUTC r1
+  MOVI r1,32
+  PUTC r1
+  LA r1,@g_ncpu
+  LD r1,r1,0
+  ADDI r1,r1,48
+  PUTC r1
+  MOVI r1,32
+  PUTC r1
+  MOVI r1,65
+  PUTC r1
+  MOVI r1,80
+  PUTC r1
+  MOVI r1,32
+  PUTC r1
+  LA r1,@g_apmap
+  LD r1,r1,0
+  MOVI r2,10
+  CMP r1,r2
+  JMP[LT] @smp_probe_hex
+  ADDI r1,r1,7
+smp_probe_hex:
+  ADDI r1,r1,48
+  PUTC r1
+  MOVI r1,10
+  PUTC r1
+smp_probe_out:
+  ADDI r14,r14,-9
+  LD r15,r14,0
+  RET
 
 ; ---------------------------------------------------------------------------
 ; NANIX POSIX shell (PID 2).  Separate image region so command growth cannot
